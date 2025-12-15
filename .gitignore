@@ -1,103 +1,79 @@
-# Valence Shell - Git Ignore File
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# RSR-compliant .gitignore
 
-# Coq
-*.vo
-*.vok
-*.vos
-*.glob
-*.aux
-.*.aux
-.coq-native/
-*.cache/
-
-# Lean 4
-/lake-packages/
-/.lake/
-/build/
-*.olean
-*.trace
-
-# Agda
-*.agdai
-.Agda/
-
-# Isabelle
-*.thy~
-.isabelle/
-output/
-
-# Mizar
-*.xml
-*.err
-
-# Z3
-*.smt2.out
-
-# OCaml
-*.cmi
-*.cmo
-*.cmx
-*.cma
-*.cmxa
-*.o
-*.a
-*.so
-*.dylib
-_build/
-*.byte
-*.native
-*.opt
-
-# Elixir
-/_build/
-/cover/
-/deps/
-/doc/
-/.fetch
-erl_crash.dump
-*.ez
-*.beam
-/config/*.secret.exs
-.elixir_ls/
-
-# Nix
-result
-result-*
-
-# Container builds
-*.tar
-*.tar.gz
-
-# Editors
-.vscode/
-.idea/
+# OS & Editor
+.DS_Store
+Thumbs.db
 *.swp
 *.swo
 *~
-.DS_Store
-.#*
-\#*\#
+.idea/
+.vscode/
 
-# Build artifacts
+# Build
 /target/
+/_build/
+/build/
 /dist/
+/out/
+
+# Dependencies
+/node_modules/
+/vendor/
+/deps/
+/.elixir_ls/
+
+# Rust
+# Cargo.lock  # Keep for binaries
+
+# Elixir
+/cover/
+/doc/
+*.ez
+erl_crash.dump
+
+# Julia
+*.jl.cov
+*.jl.mem
+/Manifest.toml
+
+# ReScript
+/lib/bs/
+/.bsb.lock
+
+# Python (SaltStack only)
+__pycache__/
+*.py[cod]
+.venv/
+
+# Ada/SPARK
+*.ali
+/obj/
+/bin/
+
+# Haskell
+/.stack-work/
+/dist-newstyle/
+
+# Chapel
+*.chpl.tmp.*
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# Test/Coverage
+/coverage/
+htmlcov/
+
+# Logs
 *.log
+/logs/
 
-# Temporary files
-*.tmp
-*.temp
+# Temp
 /tmp/
-
-# OS files
-Thumbs.db
-Desktop.ini
-
-# Project-specific
-/experiments/
-/scratch/
-/local/
-
-# But keep some directories
-!.well-known/
-!.github/
-!.gitlab/
+*.tmp
+*.bak
