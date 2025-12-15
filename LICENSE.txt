@@ -1,20 +1,19 @@
-Valence Shell (vsh) - Triple License
-
-This software is triple-licensed. You may use this software under the terms
-of ANY ONE OR MORE of the following licenses at your choice:
-
-1. MIT License (permissive, OSI-approved)
-2. GNU General Public License v3.0 (copyleft)
-3. Palimpsest License v0.8 (attribution + history, RECOMMENDED)
-
-RECOMMENDED: Use MIT or GPL **WITH** Palimpsest as a dual license for
-attribution and modification history preservation.
+SPDX-License-Identifier: MIT OR AGPL-3.0-or-later
+SPDX-FileCopyrightText: 2024-2025 hyperpolymath
 
 ================================================================================
-Option 1: MIT License
+DUAL LICENSE: MIT OR AGPL-3.0-or-later
 ================================================================================
 
-Copyright (c) 2025 Valence Shell Contributors
+This project is dual-licensed under the MIT License OR the GNU Affero General
+Public License v3.0 or later. You may choose to use, copy, modify, and
+distribute this work under the terms of EITHER license (your choice).
+
+--------------------------------------------------------------------------------
+MIT LICENSE
+--------------------------------------------------------------------------------
+
+Copyright (c) 2024-2025 hyperpolymath
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -34,260 +33,59 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-================================================================================
-Option 2: GNU General Public License v3.0
-================================================================================
+--------------------------------------------------------------------------------
+GNU AFFERO GENERAL PUBLIC LICENSE v3.0 OR LATER
+--------------------------------------------------------------------------------
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+details.
 
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
+You should have received a copy of the GNU Affero General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>.
 
-Full GPL v3.0 text: https://www.gnu.org/licenses/gpl-3.0.txt
+The full text of the AGPL-3.0 is available at:
+  https://www.gnu.org/licenses/agpl-3.0.txt
 
-================================================================================
-Option 3: Palimpsest License v0.8 (RECOMMENDED as dual license)
-================================================================================
+--------------------------------------------------------------------------------
+CHOOSING YOUR LICENSE
+--------------------------------------------------------------------------------
 
-PREAMBLE
+You may choose to use this work under:
+  1. MIT License - Standard permissive open source license
+  2. AGPL-3.0-or-later - Copyleft license requiring source disclosure for
+     network services
 
-The Palimpsest License is designed to protect the historical record of software
-development while allowing maximum freedom for use and modification. It
-requires that derivative works preserve the original authorship information
-and modification history, creating a "palimpsest" of development.
-
-This license is compatible with and can be used alongside MIT or GPL.
-
-TERMS AND CONDITIONS
-
-1. DEFINITIONS
-
-   "Original Work" means the software and associated documentation files
-   as originally published by the copyright holder.
-
-   "Derivative Work" means any work based upon or derived from the Original
-   Work, including modifications, translations, or adaptations.
-
-   "Palimpsest Record" means the preserved history of authorship, modifications,
-   and attribution required by this license.
-
-2. GRANT OF RIGHTS
-
-   Subject to the terms of this license, you are granted:
-
-   a) The right to use, copy, modify, merge, publish, distribute, sublicense,
-      and/or sell copies of the Original Work or Derivative Works
-
-   b) The right to permit persons to whom the work is furnished to do the same
-
-   c) The right to create Derivative Works
-
-3. PALIMPSEST REQUIREMENTS
-
-   All Derivative Works must include:
-
-   a) A clear statement that the work is derived from the Original Work
-
-   b) Preservation of all original copyright notices and attribution
-
-   c) A record of significant modifications, including:
-      - Date of modification
-      - Author of modification
-      - Description of changes
-
-   d) This license file with both original and modification records intact
-
-4. ATTRIBUTION
-
-   You must give appropriate credit to the original authors, provide a link
-   to the license, and indicate if changes were made. You may do so in any
-   reasonable manner, but not in any way that suggests the licensor endorses
-   you or your use.
-
-5. NO WARRANTY
-
-   THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-   OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS IN THE
-   WORK.
-
-6. TERMINATION
-
-   This license automatically terminates if you fail to comply with its terms.
-   Upon termination, you must cease all use and distribution of the work.
-
-7. COMPATIBILITY
-
-   This license is explicitly compatible with:
-   - MIT License
-   - Apache License 2.0
-   - BSD licenses (2-clause and 3-clause)
-   - GPL v3 (when used as the more restrictive license)
-   - Creative Commons Attribution licenses
-
-   When dual-licensing with another license:
-   - The Palimpsest requirements apply IN ADDITION to the other license
-   - Users must comply with BOTH licenses
-   - The more restrictive terms apply where licenses conflict
+For most uses, MIT License provides maximum flexibility.
+For ensuring open source remains open (especially for SaaS/network services),
+AGPL-3.0-or-later provides stronger protections.
 
 ================================================================================
-USAGE RIGHTS - YOU MAY CHOOSE:
+PALIMPSEST PHILOSOPHICAL OVERLAY (NON-BINDING)
 ================================================================================
 
-Single License:
-  ✓ MIT only              (maximum permissiveness)
-  ✓ GPL v3 only           (strong copyleft)
-  ✓ Palimpsest only       (attribution + history)
+This project encourages (but does not legally require) adherence to the
+principles of the Palimpsest License - a framework for consent-based digital
+interaction and the future web.
 
-Dual License (RECOMMENDED):
-  ★ MIT + Palimpsest      (permissive + attribution)
-  ★ GPL + Palimpsest      (copyleft + attribution)
+Core Principles (Encouraged):
+  - Respect for emotional and creative lineage
+  - Transparent AI training practices with explicit consent
+  - Preservation of metadata and attribution
+  - Protection of narrative intent and cultural context
 
-Triple License:
-  ✓ MIT + GPL + Palimpsest (all protections)
+The Palimpsest principles represent our vision for a consent-based internet.
+While not legally binding for use of this software, we encourage all users
+and contributors to familiarize themselves with these principles.
 
-WHICH SHOULD I CHOOSE?
-
-For maximum adoption:           MIT only
-For ensuring freedom:           GPL v3 only
-For attribution/reproducibility: MIT + Palimpsest (RECOMMENDED ★)
-For copyleft + attribution:     GPL + Palimpsest
-For academic research:          MIT + Palimpsest (best citation practices)
+Learn more: https://github.com/hyperpolymath/palimpsest-license
 
 ================================================================================
-MODIFICATION HISTORY (Palimpsest Record)
+END OF LICENSE
 ================================================================================
-
-This section tracks the evolution of this project under Palimpsest License.
-Derivative works must append to this record.
-
-Original Work:
-- Copyright: 2025 Valence Shell Contributors
-- Initial Release: 2025-11-22
-- License: Triple (MIT / GPL v3 / Palimpsest v0.8)
-- Description: Formally verified shell implementing MAA framework
-- Repository: https://github.com/Hyperpolymath/valence-shell
-              https://gitlab.com/non-initiate/rhodinised/vsh
-- Formal Proofs: ~256 theorems across 6 verification systems
-- Proof Systems: Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3
-
-Development History:
-- 2025-11-19: Project inception, initial Coq proofs
-- 2025-11-20: Extended to Lean 4 and Agda
-- 2025-11-21: Added Isabelle/HOL and Mizar support
-- 2025-11-22: Phase 2 (composition), Phase 3 (content ops), RSR compliance
-- 2025-11-22: Triple licensing implemented (MIT/GPL/Palimpsest)
-
-Modifications (from derivative works):
-[None yet - this section will be populated by derivative works]
-
-Example entry format for derivative works:
----
-Modification Date: YYYY-MM-DD
-Modified By: [Name/Organization]
-License Choice: [MIT/GPL/Palimpsest combination]
-Changes:
-  - [Description of change 1]
-  - [Description of change 2]
-Repository: [URL if different]
----
-
-================================================================================
-CONTRIBUTOR ATTRIBUTION
-================================================================================
-
-Primary Development:
-- Formal verification framework (2025)
-- Proof development across 6 systems
-- MAA framework implementation
-- Phase 1-3 development
-
-AI Collaboration:
-- Claude (Anthropic) - Code generation assistance
-- Proof drafting and documentation
-- Human-guided, AI-accelerated development
-- See .well-known/humans.txt for details
-
-See MAINTAINERS.md, git history, and .well-known/humans.txt for complete
-contributor list and attribution.
-
-================================================================================
-SPDX LICENSE IDENTIFIERS
-================================================================================
-
-For SPDX compliance, use ONE OR MORE of:
-
-SPDX-License-Identifier: MIT
-SPDX-License-Identifier: GPL-3.0-or-later
-SPDX-License-Identifier: Palimpsest-0.8
-
-Dual licensing examples:
-SPDX-License-Identifier: MIT AND Palimpsest-0.8
-SPDX-License-Identifier: GPL-3.0-or-later AND Palimpsest-0.8
-
-Triple licensing:
-SPDX-License-Identifier: (MIT OR GPL-3.0-or-later) AND Palimpsest-0.8
-
-================================================================================
-ACADEMIC CITATION
-================================================================================
-
-If you use this software in academic work, please cite:
-
-@software{valence_shell_2025,
-  title = {Valence Shell: Formally Verified Shell with MAA Framework},
-  author = {{Valence Shell Contributors}},
-  year = {2025},
-  url = {https://github.com/Hyperpolymath/valence-shell},
-  note = {Polyglot verification across 6 proof systems},
-  version = {0.5.0},
-  license = {MIT OR GPL-3.0-or-later, with Palimpsest-0.8}
-}
-
-================================================================================
-QUESTIONS ABOUT LICENSING?
-================================================================================
-
-See CONTRIBUTING.md or contact the maintainers (see MAINTAINERS.md).
-
-For questions about:
-- MIT License: https://opensource.org/licenses/MIT
-- GPL v3: https://www.gnu.org/licenses/gpl-3.0.html
-- Palimpsest: This file contains full text
-- Dual licensing: Choose any combination that suits your needs
-
-================================================================================
-PHILOSOPHICAL ENCOURAGEMENT
-================================================================================
-
-While you are free to choose MIT only or GPL only, we ENCOURAGE dual licensing
-with Palimpsest v0.8 because:
-
-✓ It preserves attribution (credit where credit is due)
-✓ It tracks modification history (reproducibility and transparency)
-✓ It supports open science (understanding how software evolves)
-✓ It's compatible with your other license choice (no restrictions)
-✓ It helps future researchers understand the development process
-
-Using Palimpsest WITH MIT or GPL gives you permissiveness/copyleft PLUS
-the benefits of preserved history and attribution.
-
-We believe software should carry its history, like a palimpsest manuscript
-that reveals layers of development over time.
-
-================================================================================
-
-Copyright (c) 2025 Valence Shell Contributors
-
-Licensed under MIT OR GPL-3.0-or-later, Palimpsest-0.8 recommended as dual.
