@@ -1,0 +1,264 @@
+# ECHIDNA Configuration for Valence Shell
+# Neurosymbolic Theorem Proving Platform Integration
+# https://github.com/hyperpolymath/echidna
+
+[project]
+name = "valence-shell"
+version = "0.6.0"
+description = "Formally verified shell implementing MAA Framework"
+repository = "https://github.com/hyperpolymath/valence-shell"
+
+[provers]
+# Tier 1 - Primary provers (all enabled)
+enabled = ["coq", "lean4", "agda", "isabelle", "z3", "cvc5"]
+
+# Tier 2 - Secondary provers
+tier2 = ["mizar", "hol-light", "metamath"]
+
+# Default prover for neural suggestions
+default = "coq"
+
+[provers.coq]
+version = "8.18+"
+path = "proofs/coq"
+files = [
+  "filesystem_model.v",
+  "file_operations.v",
+  "filesystem_composition.v",
+  "filesystem_equivalence.v",
+  "posix_errors.v",
+  "file_content_operations.v",
+  "extraction.v"
+]
+extraction_target = "ocaml"
+
+[provers.lean4]
+version = "4.0+"
+path = "proofs/lean4"
+files = [
+  "FilesystemModel.lean",
+  "FileOperations.lean",
+  "FilesystemComposition.lean",
+  "FilesystemEquivalence.lean",
+  "FileContentOperations.lean"
+]
+
+[provers.agda]
+version = "2.6+"
+path = "proofs/agda"
+files = [
+  "FilesystemModel.agda",
+  "FileOperations.agda",
+  "FilesystemComposition.agda",
+  "FilesystemEquivalence.agda",
+  "FileContentOperations.agda"
+]
+
+[provers.isabelle]
+version = "2023+"
+path = "proofs/isabelle"
+files = [
+  "FilesystemModel.thy",
+  "FileOperations.thy",
+  "FilesystemComposition.thy",
+  "FilesystemEquivalence.thy",
+  "FileContentOperations.thy"
+]
+
+[provers.mizar]
+version = "8.1+"
+path = "proofs/mizar"
+files = [
+  "filesystem_model.miz",
+  "file_operations.miz",
+  "filesystem_composition.miz",
+  "filesystem_equivalence.miz",
+  "file_content_operations.miz"
+]
+
+[provers.z3]
+version = "4.12+"
+path = "proofs/z3"
+files = ["filesystem_operations.smt2"]
+mode = "smt"
+
+[provers.cvc5]
+version = "1.0+"
+path = "proofs/cvc5"
+files = []  # To be generated
+mode = "smt"
+
+[provers.hol-light]
+version = "latest"
+path = "proofs/hol-light"
+files = []  # To be generated
+
+[provers.metamath]
+version = "latest"
+path = "proofs/metamath"
+files = []  # To be generated
+
+# Theorem specifications for multi-prover generation
+[theorems]
+
+[theorems.mkdir_rmdir_reversible]
+description = "Directory creation is reversible"
+category = "reversibility"
+aspects = ["filesystem", "directory", "undo"]
+priority = 1
+proven_in = ["coq", "lean4", "agda", "isabelle", "mizar", "z3"]
+
+[theorems.create_delete_file_reversible]
+description = "File creation is reversible"
+category = "reversibility"
+aspects = ["filesystem", "file", "undo"]
+priority = 1
+proven_in = ["coq", "lean4", "agda", "isabelle", "mizar", "z3"]
+
+[theorems.operation_sequence_reversible]
+description = "Arbitrary operation sequences are reversible"
+category = "composition"
+aspects = ["filesystem", "sequence", "undo"]
+priority = 1
+proven_in = ["coq", "lean4", "agda", "isabelle", "mizar"]
+
+[theorems.reversible_creates_CNO]
+description = "Reversible operations create Certified Null Operation"
+category = "composition"
+aspects = ["cno", "identity", "algebraic"]
+priority = 2
+proven_in = ["coq", "lean4", "agda", "isabelle", "mizar"]
+
+[theorems.fs_equiv_refl]
+description = "Filesystem equivalence is reflexive"
+category = "equivalence"
+aspects = ["equivalence", "reflexive"]
+priority = 2
+proven_in = ["coq", "lean4", "agda", "isabelle", "mizar"]
+
+[theorems.fs_equiv_sym]
+description = "Filesystem equivalence is symmetric"
+category = "equivalence"
+aspects = ["equivalence", "symmetric"]
+priority = 2
+proven_in = ["coq", "lean4", "agda", "isabelle", "mizar"]
+
+[theorems.fs_equiv_trans]
+description = "Filesystem equivalence is transitive"
+category = "equivalence"
+aspects = ["equivalence", "transitive"]
+priority = 2
+proven_in = ["coq", "lean4", "agda", "isabelle", "mizar"]
+
+[theorems.write_file_reversible]
+description = "File write operations are reversible"
+category = "content"
+aspects = ["filesystem", "content", "undo"]
+priority = 1
+proven_in = ["coq", "lean4", "agda", "isabelle", "mizar"]
+
+[theorems.capture_restore_identity]
+description = "State capture and restore is identity"
+category = "content"
+aspects = ["state", "identity", "maa"]
+priority = 2
+proven_in = ["coq", "lean4", "agda", "isabelle", "mizar"]
+
+[theorems.modification_reversible]
+description = "MAA modification records are reversible"
+category = "maa"
+aspects = ["maa", "audit", "reversible"]
+priority = 1
+proven_in = ["coq", "lean4", "agda", "isabelle", "mizar"]
+
+[theorems.parent_path_ne_self]
+description = "Parent path is never equal to path for non-root"
+category = "path"
+aspects = ["path", "helper", "fundamental"]
+priority = 3
+proven_in = ["coq", "lean4"]
+
+# Neural completion configuration
+[neural]
+# Theorems that need neural completion assistance
+incomplete = [
+  { theorem = "is_empty_dir_semantics", prover = "coq", reason = "path prefix model refinement" }
+]
+
+# Training aspects for neural proof synthesis
+training_aspects = [
+  "filesystem",
+  "reversibility",
+  "composition",
+  "equivalence",
+  "maa"
+]
+
+# Generation configuration
+[generation]
+# Target provers for auto-generation from existing proofs
+targets = ["cvc5", "hol-light", "metamath"]
+
+# Source prover for translation
+source = "coq"
+
+# Aspect weighting for proof suggestions
+[generation.weights]
+filesystem = 1.0
+reversibility = 0.9
+composition = 0.8
+equivalence = 0.7
+maa = 0.6
+
+# Build configuration
+[build]
+# Verification command
+verify_command = "./scripts/verify-proofs.sh"
+
+# Build all proofs
+build_command = "just build-all"
+
+# Test command
+test_command = "just test-all"
+
+# CI/CD integration
+[ci]
+# Verification on commit
+verify_on_commit = true
+
+# Required provers for CI pass
+required_provers = ["coq", "lean4", "agda", "isabelle"]
+
+# Optional provers (warnings only)
+optional_provers = ["mizar", "z3"]
+
+# OpenCyc integration for semantic understanding
+[cyc]
+enabled = true
+ontology = [
+  "(isa FileSystemOperation Action)",
+  "(isa mkdir FileSystemOperation)",
+  "(isa rmdir FileSystemOperation)",
+  "(inverseOf mkdir rmdir)",
+  "(inverseOf createFile deleteFile)",
+  "(preconditionFor mkdir parentDirectoryExists)",
+  "(preconditionFor rmdir directoryIsEmpty)"
+]
+
+# DeepProbLog probabilistic reasoning
+[problog]
+enabled = true
+rules = [
+  "0.95::reverses(mkdir, rmdir).",
+  "0.95::reverses(createFile, deleteFile).",
+  "0.90::reverses(writeFile, writeOldContent).",
+  "composable(Op1, Op2) :- reverses(Op1, Rev1), reverses(Op2, Rev2)."
+]
+
+# Metadata
+[metadata]
+last_updated = "2025-12-17"
+proof_count = 294
+admitted_count = 1
+proof_systems = 6
+proof_files = 28
