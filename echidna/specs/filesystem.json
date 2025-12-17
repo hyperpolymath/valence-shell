@@ -1,0 +1,360 @@
+{
+  "$schema": "https://echidna.dev/schemas/proof-spec-v1.json",
+  "name": "valence-shell-filesystem",
+  "version": "0.6.0",
+  "description": "Formally verified filesystem operations for MAA Framework",
+
+  "types": {
+    "PathComponent": {
+      "kind": "alias",
+      "target": "String",
+      "description": "A single component of a filesystem path"
+    },
+    "Path": {
+      "kind": "alias",
+      "target": "List PathComponent",
+      "description": "A filesystem path as sequence of components"
+    },
+    "FSNodeType": {
+      "kind": "enum",
+      "variants": ["File", "Directory"],
+      "description": "Type of filesystem node"
+    },
+    "Permissions": {
+      "kind": "record",
+      "fields": {
+        "readable": "Bool",
+        "writable": "Bool",
+        "executable": "Bool"
+      }
+    },
+    "FSNode": {
+      "kind": "record",
+      "fields": {
+        "node_type": "FSNodeType",
+        "permissions": "Permissions"
+      }
+    },
+    "Filesystem": {
+      "kind": "function",
+      "domain": "Path",
+      "codomain": "Option FSNode",
+      "description": "Partial mapping from paths to nodes"
+    },
+    "FileContent": {
+      "kind": "alias",
+      "target": "String",
+      "description": "Content of a file"
+    },
+    "Operation": {
+      "kind": "enum",
+      "variants": [
+        {"name": "OpMkdir", "args": ["Path"]},
+        {"name": "OpRmdir", "args": ["Path"]},
+        {"name": "OpCreateFile", "args": ["Path"]},
+        {"name": "OpDeleteFile", "args": ["Path"]}
+      ]
+    }
+  },
+
+  "definitions": {
+    "root_path": {
+      "type": "Path",
+      "value": "[]",
+      "description": "The root path (empty list)"
+    },
+    "parent_path": {
+      "type": "Path -> Path",
+      "description": "Get parent directory of a path",
+      "implementation": {
+        "coq": "match rev p with [] => [] | _ :: rest => rev rest end",
+        "lean4": "match p.reverse with | [] => [] | _ :: rest => rest.reverse"
+      }
+    },
+    "default_perms": {
+      "type": "Permissions",
+      "value": "{readable: true, writable: true, executable: true}"
+    },
+    "empty_fs": {
+      "type": "Filesystem",
+      "description": "Empty filesystem with only root",
+      "implementation": "fun p => if p = root_path then Some(Directory, default_perms) else None"
+    },
+    "fs_update": {
+      "type": "Path -> Option FSNode -> Filesystem -> Filesystem",
+      "description": "Update filesystem at a path"
+    },
+    "mkdir": {
+      "type": "Path -> Filesystem -> Filesystem",
+      "description": "Create a directory"
+    },
+    "rmdir": {
+      "type": "Path -> Filesystem -> Filesystem",
+      "description": "Remove a directory"
+    },
+    "create_file": {
+      "type": "Path -> Filesystem -> Filesystem",
+      "description": "Create a file"
+    },
+    "delete_file": {
+      "type": "Path -> Filesystem -> Filesystem",
+      "description": "Delete a file"
+    },
+    "apply_op": {
+      "type": "Operation -> Filesystem -> Filesystem",
+      "description": "Apply an operation to filesystem"
+    },
+    "reverse_op": {
+      "type": "Operation -> Operation",
+      "description": "Get reverse of an operation"
+    }
+  },
+
+  "predicates": {
+    "path_exists": {
+      "type": "Path -> Filesystem -> Prop",
+      "description": "Path exists in filesystem"
+    },
+    "is_directory": {
+      "type": "Path -> Filesystem -> Prop",
+      "description": "Path is a directory"
+    },
+    "is_file": {
+      "type": "Path -> Filesystem -> Prop",
+      "description": "Path is a file"
+    },
+    "parent_exists": {
+      "type": "Path -> Filesystem -> Prop",
+      "description": "Parent directory exists"
+    },
+    "has_write_permission": {
+      "type": "Path -> Filesystem -> Prop",
+      "description": "Path has write permission"
+    },
+    "is_empty_dir": {
+      "type": "Path -> Filesystem -> Prop",
+      "description": "Directory is empty (no children)"
+    },
+    "mkdir_precondition": {
+      "type": "Path -> Filesystem -> Prop",
+      "description": "Preconditions for mkdir"
+    },
+    "rmdir_precondition": {
+      "type": "Path -> Filesystem -> Prop",
+      "description": "Preconditions for rmdir"
+    },
+    "fs_equiv": {
+      "type": "Filesystem -> Filesystem -> Prop",
+      "notation": "fs1 ≈ fs2",
+      "description": "Filesystem equivalence"
+    },
+    "reversible": {
+      "type": "Operation -> Filesystem -> Prop",
+      "description": "Operation is reversible at state"
+    }
+  },
+
+  "theorems": [
+    {
+      "name": "parent_path_ne_self",
+      "statement": "forall p, p ≠ root_path -> parent_path p ≠ p",
+      "category": "path",
+      "aspects": ["path", "helper"],
+      "priority": 3,
+      "status": {
+        "coq": "proven",
+        "lean4": "proven",
+        "agda": "not_needed",
+        "isabelle": "not_needed",
+        "mizar": "not_needed"
+      }
+    },
+    {
+      "name": "mkdir_rmdir_reversible",
+      "statement": "forall p fs, mkdir_precondition p fs -> rmdir p (mkdir p fs) = fs",
+      "category": "reversibility",
+      "aspects": ["filesystem", "directory", "undo"],
+      "priority": 1,
+      "status": {
+        "coq": "proven",
+        "lean4": "proven",
+        "agda": "proven",
+        "isabelle": "proven",
+        "mizar": "proven",
+        "z3": "proven"
+      }
+    },
+    {
+      "name": "create_delete_file_reversible",
+      "statement": "forall p fs, create_file_precondition p fs -> delete_file p (create_file p fs) = fs",
+      "category": "reversibility",
+      "aspects": ["filesystem", "file", "undo"],
+      "priority": 1,
+      "status": {
+        "coq": "proven",
+        "lean4": "proven",
+        "agda": "proven",
+        "isabelle": "proven",
+        "mizar": "proven",
+        "z3": "proven"
+      }
+    },
+    {
+      "name": "operation_sequence_reversible",
+      "statement": "forall ops fs, all_reversible ops fs -> apply_sequence (reverse_sequence ops) (apply_sequence ops fs) = fs",
+      "category": "composition",
+      "aspects": ["sequence", "undo"],
+      "priority": 1,
+      "status": {
+        "coq": "proven",
+        "lean4": "proven",
+        "agda": "proven",
+        "isabelle": "proven",
+        "mizar": "proven"
+      }
+    },
+    {
+      "name": "reversible_creates_CNO",
+      "statement": "forall op, is_CNO_sequence [op]",
+      "category": "composition",
+      "aspects": ["cno", "identity"],
+      "priority": 2,
+      "status": {
+        "coq": "proven",
+        "lean4": "proven",
+        "agda": "proven",
+        "isabelle": "proven",
+        "mizar": "proven"
+      }
+    },
+    {
+      "name": "fs_equiv_refl",
+      "statement": "forall fs, fs ≈ fs",
+      "category": "equivalence",
+      "aspects": ["equivalence", "reflexive"],
+      "priority": 2,
+      "status": {
+        "coq": "proven",
+        "lean4": "proven",
+        "agda": "proven",
+        "isabelle": "proven",
+        "mizar": "proven"
+      }
+    },
+    {
+      "name": "fs_equiv_sym",
+      "statement": "forall fs1 fs2, fs1 ≈ fs2 -> fs2 ≈ fs1",
+      "category": "equivalence",
+      "aspects": ["equivalence", "symmetric"],
+      "priority": 2,
+      "status": {
+        "coq": "proven",
+        "lean4": "proven",
+        "agda": "proven",
+        "isabelle": "proven",
+        "mizar": "proven"
+      }
+    },
+    {
+      "name": "fs_equiv_trans",
+      "statement": "forall fs1 fs2 fs3, fs1 ≈ fs2 -> fs2 ≈ fs3 -> fs1 ≈ fs3",
+      "category": "equivalence",
+      "aspects": ["equivalence", "transitive"],
+      "priority": 2,
+      "status": {
+        "coq": "proven",
+        "lean4": "proven",
+        "agda": "proven",
+        "isabelle": "proven",
+        "mizar": "proven"
+      }
+    },
+    {
+      "name": "cno_identity_element",
+      "statement": "forall op fs, reversible op fs -> apply_op (reverse_op op) (apply_op op fs) ≈ fs",
+      "category": "equivalence",
+      "aspects": ["cno", "identity"],
+      "priority": 2,
+      "status": {
+        "coq": "proven",
+        "lean4": "proven",
+        "agda": "proven",
+        "isabelle": "proven",
+        "mizar": "proven"
+      }
+    },
+    {
+      "name": "write_file_reversible",
+      "statement": "forall p fs old new, write_precondition p fs -> read_file p fs = old -> write_file p old (write_file p new fs) = fs",
+      "category": "content",
+      "aspects": ["content", "undo"],
+      "priority": 1,
+      "status": {
+        "coq": "proven",
+        "lean4": "proven",
+        "agda": "proven",
+        "isabelle": "proven",
+        "mizar": "proven"
+      }
+    },
+    {
+      "name": "capture_restore_identity",
+      "statement": "forall p fs, write_precondition p fs -> restore_state (capture_state p fs) fs = fs",
+      "category": "content",
+      "aspects": ["state", "identity"],
+      "priority": 2,
+      "status": {
+        "coq": "proven",
+        "lean4": "proven",
+        "agda": "proven",
+        "isabelle": "proven",
+        "mizar": "proven"
+      }
+    },
+    {
+      "name": "modification_reversible",
+      "statement": "forall record fs, precondition record fs -> reverse_modification record (apply_modification record fs) = fs",
+      "category": "maa",
+      "aspects": ["maa", "audit"],
+      "priority": 1,
+      "status": {
+        "coq": "proven",
+        "lean4": "proven",
+        "agda": "proven",
+        "isabelle": "proven",
+        "mizar": "proven"
+      }
+    }
+  ],
+
+  "incomplete": [
+    {
+      "name": "mkdir_creates_rmdir_precondition",
+      "location": "proofs/coq/filesystem_composition.v:333",
+      "reason": "is_empty_dir path prefix semantics need refinement",
+      "suggested_approach": "Add filesystem well-formedness axiom or refine path_prefix definition",
+      "aspects": ["helper", "precondition"]
+    }
+  ],
+
+  "generation_targets": [
+    {
+      "prover": "cvc5",
+      "theorems": ["mkdir_rmdir_reversible", "create_delete_file_reversible"],
+      "source": "z3",
+      "status": "pending"
+    },
+    {
+      "prover": "hol-light",
+      "theorems": ["fs_equiv_refl", "fs_equiv_sym", "fs_equiv_trans"],
+      "source": "isabelle",
+      "status": "pending"
+    },
+    {
+      "prover": "metamath",
+      "theorems": ["mkdir_rmdir_reversible"],
+      "source": "coq",
+      "status": "pending"
+    }
+  ]
+}
