@@ -16,10 +16,10 @@ proof systems (Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3).
 
 # Security Model
 
-Current version (0.5.0) is a RESEARCH PROTOTYPE.
+Current version (0.6.0) is a RESEARCH PROTOTYPE.
 
 ✅ Formally Proven:
-- Directory operations reversibility (~256 theorems)
+- Directory operations reversibility (~294 theorems)
 - File content operations reversibility
 - Operation independence and composition
 

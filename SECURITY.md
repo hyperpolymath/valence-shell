@@ -2,12 +2,12 @@
 
 ## Supported Versions
 
-Valence Shell is currently in **research prototype** status (version 0.5.0). Security updates are provided on a best-effort basis for the current development version.
+Valence Shell is currently in **research prototype** status (version 0.6.0). Security updates are provided on a best-effort basis for the current development version.
 
 | Version | Supported          | Status |
 | ------- | ------------------ | ------ |
-| 0.5.x   | :white_check_mark: | Current development branch |
-| < 0.5.0 | :x:                | Historical/superseded |
+| 0.6.x   | :white_check_mark: | Current development branch |
+| < 0.6.0 | :x:                | Historical/superseded |
 
 **Note**: This is research software with formal proofs but unverified implementation. See [Production Readiness](#production-readiness) below.
 
@@ -23,7 +23,7 @@ Valence Shell uses **polyglot verification** across 6 proof systems:
 - File content operations (read/write) reversibility
 - Operation independence
 - Composition correctness
-- ~256 theorems across Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3
+- ~294 theorems across Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3
 
 ⚠️ **Not Verified** (Manual Review Required):
 - OCaml FFI layer (filesystem_ffi.ml)
@@ -95,7 +95,7 @@ A good security report includes:
 
 ## Security Features
 
-### Current (v0.5.0)
+### Current (v0.6.0)
 
 ✅ **Proven Reversibility**
 - Directory creation/deletion
@@ -279,6 +279,6 @@ This security policy is inspired by:
 
 ---
 
-**Last Updated**: 2025-11-22
-**Version**: 0.5.0
-**Policy Version**: 1.0
+**Last Updated**: 2025-12-17
+**Version**: 0.6.0
+**Policy Version**: 1.1
