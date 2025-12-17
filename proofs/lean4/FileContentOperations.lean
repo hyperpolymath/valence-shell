@@ -137,8 +137,11 @@ theorem writeFileIndependence (p1 p2 : Path) (content : FileContent)
 theorem createFileEmptyContent (p : Path) (fs : Filesystem)
     (hpre : CreateFilePrecondition p fs) :
     readFile p (fsToFsWithContent (createFile p fs)) = some emptyContent := by
-  simp [readFile, fsToFsWithContent, createFile, fsUpdate]
-  sorry  -- Would need to expand definitions fully
+  simp only [readFile, fsToFsWithContent, createFile, fsUpdate]
+  simp only [if_pos rfl]
+  -- After createFile, fs p = some (file node with default perms)
+  -- After fsToFsWithContent, the node has nodeType = .file and nodeContent = some emptyContent
+  rfl
 
 -- State Tracking for Reversibility
 

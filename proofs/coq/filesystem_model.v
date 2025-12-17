@@ -11,6 +11,7 @@ Require Import String.
 Require Import List.
 Require Import Bool.
 Require Import Arith.
+Require Import Lia.
 Import ListNotations.
 
 (** * Path Model *)
@@ -105,6 +106,66 @@ Definition is_empty_dir (p : Path) (fs : Filesystem) : Prop :=
     path_prefix p child ->
     child <> p ->
     ~ path_exists child fs.
+
+(** * Path Lemmas *)
+
+(** Helper: rev l = [] implies l = [] *)
+Lemma rev_nil_iff :
+  forall {A : Type} (l : list A),
+    rev l = [] <-> l = [].
+Proof.
+  split; intros H.
+  - destruct l; [reflexivity | simpl in H].
+    destruct (rev l); discriminate.
+  - subst. reflexivity.
+Qed.
+
+(** Key lemma: parent_path p ≠ p for non-empty paths.
+    This is fundamental for proving operations preserve parent paths.
+*)
+Lemma parent_path_ne_self :
+  forall p : Path,
+    p <> root_path ->
+    parent_path p <> p.
+Proof.
+  intros p Hnoroot Heq.
+  unfold parent_path in Heq.
+  destruct (rev p) eqn:Hrev.
+  - (* rev p = [] means p = [] = root_path, contradiction *)
+    apply rev_nil_iff in Hrev.
+    unfold root_path in Hnoroot.
+    contradiction.
+  - (* rev p = s :: l *)
+    (* parent_path p = rev l, and Heq says rev l = p *)
+    (* This means rev l = p, so rev (rev l) = rev p, i.e., l = rev p *)
+    (* But rev p = s :: l, so l = s :: l, which is impossible *)
+    apply (f_equal (@rev PathComponent)) in Heq.
+    rewrite rev_involutive in Heq.
+    rewrite Hrev in Heq.
+    (* Now Heq : l = s :: l, which is a contradiction by induction on list length *)
+    assert (Hlen : length l = length (s :: l)) by (rewrite Heq; reflexivity).
+    simpl in Hlen.
+    lia.
+Qed.
+
+(** Non-root paths have non-root parents or are single-element *)
+Lemma mkdir_precondition_implies_nonroot :
+  forall p fs,
+    mkdir_precondition p fs ->
+    p <> root_path.
+Proof.
+  intros p fs [Hnotexists [Hparent _]].
+  intro Heq.
+  subst p.
+  unfold parent_exists, root_path, parent_path in Hparent.
+  simpl in Hparent.
+  (* parent_path [] = [], so parent_exists [] fs = path_exists [] fs *)
+  (* But mkdir_precondition requires ~ path_exists p fs *)
+  (* We have path_exists [] empty_fs always, so this depends on fs *)
+  destruct Hnotexists.
+  (* Need to show path_exists root_path fs *)
+  assumption.
+Qed.
 
 (** * Basic Lemmas *)
 
@@ -246,16 +307,26 @@ Theorem mkdir_parent_still_exists :
     mkdir_precondition p fs ->
     path_exists (parent_path p) (mkdir p fs).
 Proof.
-  intros p fs [_ [Hparent _]].
+  intros p fs Hpre.
+  destruct Hpre as [Hnotexists [Hparent [Hparentdir Hperms]]].
   unfold path_exists in *.
   destruct Hparent as [node Hnode].
   exists node.
   unfold mkdir, fs_update.
   destruct (list_eq_dec String.string_dec p (parent_path p)).
   - (* This would mean p = parent p, impossible for non-root *)
-    admit. (* Need to prove parent_path p <> p for non-root paths *)
+    exfalso.
+    assert (Hnonroot : p <> root_path).
+    { intro Heq. subst p.
+      unfold parent_exists, root_path, parent_path in Hnode.
+      simpl in Hnode.
+      apply Hnotexists.
+      exists node. assumption. }
+    apply parent_path_ne_self in Hnonroot.
+    symmetry in e.
+    contradiction.
   - assumption.
-Admitted.
+Qed.
 
 (** Helper axiom for functional extensionality
     In real development, import from Coq.Logic.FunctionalExtensionality *)
