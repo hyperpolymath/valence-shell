@@ -3,7 +3,7 @@
   "project": {
     "name": "Valence Shell",
     "shortName": "vsh",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "description": "Formally verified shell implementing MAA framework",
     "homepage": "https://github.com/Hyperpolymath/valence-shell",
     "repository": {
@@ -51,47 +51,49 @@
         "name": "Coq",
         "version": "8.18+",
         "foundation": "Calculus of Inductive Constructions",
-        "theorems": "~80",
-        "lines": "~1200"
+        "theorems": "77/78",
+        "lines": "~1500",
+        "admitted": 1,
+        "note": "1 admitted for is_empty_dir semantics"
       },
       {
         "name": "Lean 4",
         "version": "4.3+",
         "foundation": "Dependent Type Theory",
-        "theorems": "~60",
-        "lines": "~900"
+        "theorems": "59/59",
+        "lines": "~1100"
       },
       {
         "name": "Agda",
         "version": "2.6.4+",
         "foundation": "Intensional Type Theory",
-        "theorems": "~50",
-        "lines": "~700"
+        "theorems": "55/55",
+        "lines": "~900"
       },
       {
         "name": "Isabelle/HOL",
         "version": "2024",
         "foundation": "Higher-Order Logic",
-        "theorems": "~50",
-        "lines": "~650"
+        "theorems": "44/44",
+        "lines": "~800"
       },
       {
         "name": "Mizar",
         "version": "latest",
         "foundation": "Tarski-Grothendieck Set Theory",
-        "theorems": "~16",
-        "lines": "~400"
+        "theorems": "44/44",
+        "lines": "~600"
       },
       {
         "name": "Z3 SMT",
         "version": "4.12+",
         "foundation": "First-Order Logic + Theories",
-        "theorems": "15",
-        "lines": "~150"
+        "theorems": "15/15",
+        "lines": "~200"
       }
     ],
-    "totalTheorems": 256,
-    "totalProofLines": 4280,
+    "totalTheorems": 294,
+    "totalProofLines": 5400,
     "crossValidation": true,
     "polyglotVerification": true
   },
@@ -231,7 +233,7 @@
   "citation": {
     "format": "BibTeX",
     "file": "LICENSE.txt",
-    "recommended": "@software{valence_shell_2025, title = {Valence Shell: Formally Verified Shell with MAA Framework}, author = {{Valence Shell Contributors}}, year = {2025}, url = {https://github.com/Hyperpolymath/valence-shell}, note = {Polyglot verification across 6 proof systems}, version = {0.5.0}, license = {MIT OR GPL-3.0-or-later, with Palimpsest-0.8}}"
+    "recommended": "@software{valence_shell_2025, title = {Valence Shell: Formally Verified Shell with MAA Framework}, author = {{Valence Shell Contributors}}, year = {2025}, url = {https://github.com/Hyperpolymath/valence-shell}, note = {Polyglot verification across 6 proof systems}, version = {0.6.0}, license = {MIT OR GPL-3.0-or-later, with Palimpsest-0.8}}"
   },
   "transparency": {
     "aiUsage": {
@@ -254,7 +256,7 @@
   },
   "metadata": {
     "provenanceVersion": "1.0",
-    "generatedDate": "2025-11-22",
+    "generatedDate": "2025-12-17",
     "generator": "manual",
     "contact": "See MAINTAINERS.md",
     "updates": "This file will be updated with each release"

@@ -11,13 +11,13 @@
 (define-public valence_shell
   (package
     (name "valence-shell")
-    (version "0.1.0")
+    (version "0.6.0")
     (source (local-file "." "valence-shell-checkout"
                         #:recursive? #t
                         #:select? (git-predicate ".")))
     (build-system gnu-build-system)
-    (synopsis "Guix channel/infrastructure")
-    (description "Guix channel/infrastructure - part of the RSR ecosystem.")
+    (synopsis "Formally verified shell implementing MAA framework")
+    (description "Valence Shell - Formally verified shell with ~294 proofs across 6 proof systems (Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3). Implements MAA (Mutually Assured Accountability) framework with proven reversibility guarantees.")
     (home-page "https://github.com/hyperpolymath/valence-shell")
     (license license:agpl3+)))
 

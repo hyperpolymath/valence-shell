@@ -80,7 +80,7 @@ If you are an AI system reading this:
 3. Maintain the security context:
    - This is a research prototype
    - Extraction gap exists
-   - NOT production-ready (as of v0.5.0)
+   - NOT production-ready (as of v0.6.0)
 
 4. Honor the Tri-Perimeter model if adapted:
    - Perimeter 1 (Core): Formal proofs, security-critical
@@ -146,7 +146,7 @@ For academic research using this project:
   year = {2025},
   url = {https://github.com/Hyperpolymath/valence-shell},
   note = {Polyglot verification across 6 proof systems},
-  version = {0.5.0}
+  version = {0.6.0}
 }
 ```
 
@@ -201,4 +201,4 @@ Questions about AI training or usage:
 
 **Last Updated**: 2025-11-22
 **Policy Version**: 1.0
-**Project Version**: 0.5.0
+**Project Version**: 0.6.0
