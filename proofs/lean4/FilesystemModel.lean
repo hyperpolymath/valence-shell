@@ -70,6 +70,52 @@ def isEmptyDir (p : Path) (fs : Filesystem) : Prop :=
   isDirectory p fs ∧
   ∀ child : Path, child.isPrefixOf p → child ≠ p → ¬pathExists child fs
 
+-- Path Lemmas
+
+/-- Helper: reverse of empty list is empty -/
+theorem reverse_nil_iff {α : Type} (l : List α) : l.reverse = [] ↔ l = [] := by
+  constructor
+  · intro h
+    cases l with
+    | nil => rfl
+    | cons x xs =>
+      simp [List.reverse] at h
+      exact absurd h (List.append_ne_nil_of_ne_nil_right _ _ (List.cons_ne_nil x []))
+  · intro h
+    subst h
+    rfl
+
+/-- Key lemma: parentPath p ≠ p for non-empty paths -/
+theorem parentPath_ne_self (p : Path) (hnoroot : p ≠ rootPath) :
+    parentPath p ≠ p := by
+  unfold parentPath
+  intro heq
+  match hp : p.reverse with
+  | [] =>
+    -- reverse p = [] means p = []
+    have : p = [] := (reverse_nil_iff p).mp hp
+    exact hnoroot this
+  | _ :: rest =>
+    -- parentPath p = rest.reverse, heq says rest.reverse = p
+    -- So reverse (rest.reverse) = reverse p, i.e., rest = reverse p
+    -- But reverse p = _ :: rest, so rest = _ :: rest, impossible
+    rw [hp] at heq
+    simp at heq
+    have hlen : rest.length = (_ :: rest).length := by
+      calc rest.length = rest.reverse.reverse.length := by simp
+        _ = p.reverse.length := by rw [← heq]; simp
+        _ = (_ :: rest).length := by rw [hp]
+    simp at hlen
+
+/-- mkdir precondition implies p is not root -/
+theorem mkdirPrecondition_nonroot (p : Path) (fs : Filesystem)
+    (hpre : MkdirPrecondition p fs) : p ≠ rootPath := by
+  intro heq
+  subst heq
+  unfold parentExists rootPath parentPath at hpre
+  simp at hpre
+  exact hpre.notExists hpre.parentExists
+
 -- Basic Lemmas
 theorem pathExists_emptyFS_root :
     pathExists rootPath emptyFS := by
@@ -168,6 +214,9 @@ theorem mkdir_parent_still_exists (p : Path) (fs : Filesystem)
     unfold mkdir fsUpdate
     by_cases h : p = parentPath p
     · -- Would mean p = parent p, impossible for non-root
-      sorry  -- Need additional lemma about parent_path
+      exfalso
+      have hnonroot : p ≠ rootPath := mkdirPrecondition_nonroot p fs hpre
+      have hne : parentPath p ≠ p := parentPath_ne_self p hnonroot
+      exact hne h.symm
     · simp [h]
       exact hnode

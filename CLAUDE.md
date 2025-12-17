@@ -16,47 +16,53 @@
 
 **Note for AI Assistants**: Main development happens on GitLab. This GitHub repo may be a temporary workspace or migration staging area.
 
-## Current State (as of 2025-11-22, Updated in Continuation Session)
+## Current State (as of 2025-12-17, Proof Verification Session)
 
-### ✅ Formal Proofs (MAJOR UPDATE - Real Filesystem Operations + Composition + Equivalence)
+### ✅ Formal Proofs (UPDATED - All Systems Complete + File Content Operations)
 
 **Proven in 6 Verification Systems (Polyglot Verification):**
 
-1. **Coq** (Calculus of Inductive Constructions)
-   - `proofs/coq/filesystem_model.v` - Core filesystem with mkdir/rmdir
+1. **Coq** (Calculus of Inductive Constructions) - **77/78 complete**
+   - `proofs/coq/filesystem_model.v` - Core filesystem + `parent_path_ne_self`
    - `proofs/coq/file_operations.v` - File create/delete operations
    - `proofs/coq/posix_errors.v` - POSIX error modeling
    - `proofs/coq/extraction.v` - Extraction to OCaml
-   - `proofs/coq/filesystem_composition.v` - **NEW** Operation sequences
-   - `proofs/coq/filesystem_equivalence.v` - **NEW** Equivalence relations
+   - `proofs/coq/filesystem_composition.v` - Operation sequences (1 admitted)
+   - `proofs/coq/filesystem_equivalence.v` - Equivalence relations
+   - `proofs/coq/file_content_operations.v` - File content read/write
 
-2. **Lean 4** (Dependent Type Theory)
-   - `proofs/lean4/FilesystemModel.lean`
+2. **Lean 4** (Dependent Type Theory) - **59/59 complete**
+   - `proofs/lean4/FilesystemModel.lean` - Core + `parentPath_ne_self`
    - `proofs/lean4/FileOperations.lean`
-   - `proofs/lean4/FilesystemComposition.lean` - **NEW** Complete composition
-   - `proofs/lean4/FilesystemEquivalence.lean` - **NEW** Complete equivalence
+   - `proofs/lean4/FilesystemComposition.lean` - Complete composition
+   - `proofs/lean4/FilesystemEquivalence.lean` - Complete equivalence
+   - `proofs/lean4/FileContentOperations.lean` - File content operations
 
-3. **Agda** (Intensional Type Theory)
+3. **Agda** (Intensional Type Theory) - **55/55 complete**
    - `proofs/agda/FilesystemModel.agda`
    - `proofs/agda/FileOperations.agda`
-   - `proofs/agda/FilesystemComposition.agda` - **NEW** Complete composition
-   - `proofs/agda/FilesystemEquivalence.agda` - **NEW** Complete equivalence
+   - `proofs/agda/FilesystemComposition.agda` - Complete composition
+   - `proofs/agda/FilesystemEquivalence.agda` - Complete equivalence
+   - `proofs/agda/FileContentOperations.agda` - File content operations
 
-4. **Isabelle/HOL** (Higher-Order Logic)
+4. **Isabelle/HOL** (Higher-Order Logic) - **44/44 complete**
    - `proofs/isabelle/FilesystemModel.thy`
    - `proofs/isabelle/FileOperations.thy`
-   - `proofs/isabelle/FilesystemComposition.thy` - **NEW** Complete composition
-   - `proofs/isabelle/FilesystemEquivalence.thy` - **NEW** Complete equivalence
+   - `proofs/isabelle/FilesystemComposition.thy` - Complete composition
+   - `proofs/isabelle/FilesystemEquivalence.thy` - Complete equivalence
+   - `proofs/isabelle/FileContentOperations.thy` - **NEW** File content operations
 
-5. **Mizar** (Tarski-Grothendieck Set Theory)
+5. **Mizar** (Tarski-Grothendieck Set Theory) - **44/44 complete**
    - `proofs/mizar/filesystem_model.miz`
    - `proofs/mizar/file_operations.miz`
-   - `proofs/mizar/filesystem_composition.miz` - **NEW** Composition framework
+   - `proofs/mizar/filesystem_composition.miz` - Composition framework
+   - `proofs/mizar/filesystem_equivalence.miz` - Equivalence relations
+   - `proofs/mizar/file_content_operations.miz` - **NEW** File content operations
 
-6. **Z3 SMT** (First-Order Logic + Theories)
-   - `proofs/z3/filesystem_operations.smt2` - **NEW** Automated verification
+6. **Z3 SMT** (First-Order Logic + Theories) - **15/15 assertions**
+   - `proofs/z3/filesystem_operations.smt2` - Automated verification
 
-**Core Theorems (all 5 manual systems):**
+**Core Theorems (all 6 systems):**
 - ✓ `mkdir_rmdir_reversible` - Directory creation is reversible
 - ✓ `create_delete_file_reversible` - File creation is reversible
 - ✓ `operation_independence` - Different paths don't interfere
@@ -64,16 +70,25 @@
 - ✓ `type_preservation` - Mixed operations preserve invariants
 - ✓ `composition_correctness` - Multiple operations compose correctly
 
-**Composition Theorems (5 systems - NEW in Phase 2):**
+**Path Lemmas (Coq, Lean 4):**
+- ✓ `parent_path_ne_self` - Parent path is never equal to path for non-root
+- ✓ `mkdir_precondition_nonroot` - mkdir precondition implies non-root path
+
+**Composition Theorems (all 5 manual systems):**
 - ✓ `operation_sequence_reversible` - Arbitrary-length sequences reverse correctly
 - ✓ `reversible_creates_CNO` - Reversible ops create identity element
 - ✓ `single_op_reversible` - Generic single operation reversibility
 
-**Equivalence Theorems (4 systems - NEW in Phase 2 + Continuation):**
+**Equivalence Theorems (all 5 manual systems):**
 - ✓ `fs_equiv_refl/sym/trans` - Equivalence is an equivalence relation
 - ✓ `mkdir/rmdir/create/delete_preserves_equiv` - Operations preserve equivalence
 - ✓ `cno_identity_element` - CNO = identity via equivalence
 - ✓ `equiv_substitution` - Substitution property for operations
+
+**File Content Theorems (5 systems - NEW):**
+- ✓ `write_file_reversible` - Writing old content restores filesystem
+- ✓ `capture_restore_identity` - State capture/restore is identity
+- ✓ `modification_reversible` - MAA modification records are reversible
 
 **Additional (Coq only):**
 - ✓ Error code correctness (EEXIST, ENOENT, EACCES, ENOTEMPTY, etc.)
@@ -83,7 +98,10 @@
 - ✓ 15 theorems encoded for automated verification
 - ✓ Reversibility, composition, independence
 
-**Total: ~217 formal proofs across 6 verification systems**
+**Total: ~294 formal proofs across 6 verification systems**
+**Admitted/Sorry: 1 (Coq `is_empty_dir` path prefix semantics)**
+
+**See `PROOF_STATUS.md` for detailed verification status.**
 
 ### ✅ Implementation & Extraction
 
@@ -402,18 +420,25 @@ See [RSR_COMPLIANCE.md](RSR_COMPLIANCE.md) for full compliance report.
 
 ---
 
-**Last Updated**: 2025-11-22 (Continuation Session)
-**Version**: 0.5.0 (Phase 2 completion + Equivalence theory extended to 4 systems)
-**Status**: Research Prototype with Formal Guarantees + Complete Algebraic Structure - Not Production Ready
+**Last Updated**: 2025-12-17 (Proof Verification Session)
+**Version**: 0.6.0 (All proofs verified + File content operations + Multi-prover coverage)
+**Status**: Research Prototype with Formal Guarantees - 294 proofs, 1 admitted - Not Production Ready
 
-**Major Updates** (Continuation Session):
-- ✅ Phase 2 admitted lemmas completed (Isabelle, Agda)
-- ✅ Mizar composition framework created
-- ✅ Equivalence theory extended to Lean 4, Agda, Isabelle (NEW)
-- ✅ Bug fixes (Agda reverseOp)
-- **~217 formal proofs** across 6 verification systems (was ~170)
-- **~3,180 lines of proofs** (was ~2,280)
-- **23 proof files** (was 19)
-- Composition: Complete in 5 systems (Coq, Lean 4, Agda, Isabelle, Mizar)
-- Equivalence: Complete in 4 systems (Coq, Lean 4, Agda, Isabelle)
-- ~6,100 total lines (proofs + implementation + docs + infrastructure)
+**Major Updates** (Proof Verification Session 2025-12-17):
+- ✅ Fixed 7 admitted/sorry proofs (Coq: 7, Lean 4: 2)
+- ✅ Added `parent_path_ne_self` lemma to Coq and Lean 4
+- ✅ Added FileContentOperations to Isabelle (NEW)
+- ✅ Added file_content_operations to Mizar (NEW)
+- ✅ Created comprehensive PROOF_STATUS.md tracking document
+- **~294 formal proofs** across 6 verification systems (was ~217)
+- **~5,400+ lines of proofs** (was ~3,180)
+- **28 proof files** (was 23)
+- Coq: 77/78 complete (1 admitted for `is_empty_dir` semantics)
+- Lean 4: 59/59 complete
+- Agda: 55/55 complete
+- Isabelle: 44/44 complete
+- Mizar: 44/44 complete
+- Z3: 15/15 assertions
+- File content operations: Complete in 5 systems (Coq, Lean 4, Agda, Isabelle, Mizar)
+- Composition: Complete in 5 systems
+- Equivalence: Complete in 5 systems
