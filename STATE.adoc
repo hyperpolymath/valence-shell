@@ -1,0 +1,167 @@
+= Valence Shell — State Document
+:revdate: 2025-12-18
+:toc:
+
+== Purpose
+
+This document tracks the current state of Valence Shell development across conversation boundaries. It is **append-only** — new sessions add entries, they do not modify existing ones.
+
+== Current Status
+
+[cols="1,3"]
+|===
+| Phase | 1 — Hypervisor (Planning)
+| Completion | ~5%
+| Blocking | README was destroyed, now recovered
+| Next Action | Scaffold Elixir project structure
+|===
+
+== Session Log
+
+=== 2025-12-18 — Recovery Session
+
+**Context:** README.adoc was overwritten by AI assistant with RSR framework content, destroying the project vision. This session recovered the vision from conversation fragments.
+
+**Recovered:**
+
+* Thermodynamic shell concept
+* Saga pattern for shell commands
+* Three-phase roadmap (Hypervisor → Shim → AST)
+* Valence.Command behaviour (4 callbacks)
+* Zipper data structure for history
+* Ecto integration rationale
+* ECHIDNA proof verification integration
+* Svalinn/Cerro Torre container standards
+
+**Not recovered:**
+
+* Original wording and explanations
+* Specific implementation decisions that were documented
+* Any code that may have existed
+
+**Created:**
+
+* New README.adoc (reconstructed)
+* CLAUDE.md (protection file)
+* STATE.adoc (this file)
+* META.scm (project metadata)
+* ECOSYSTEM.scm entry
+
+**Protection measures added:**
+
+* Sacred files list in CLAUDE.md
+* Explicit modification rules
+* Loss context documented
+
+---
+
+== Architecture Decisions
+
+=== ADR-001: Elixir as Core Runtime
+
+**Decision:** Use Elixir/OTP as the primary implementation language.
+
+**Rationale:**
+
+* OTP supervision trees handle crash recovery naturally
+* Pattern matching ideal for command parsing
+* Ecto provides transaction semantics without database coupling
+* No Python contamination possible
+
+**Status:** Accepted
+
+=== ADR-002: Ecto for Transaction Semantics
+
+**Decision:** Use Ecto schemas and changesets even without a backing database.
+
+**Rationale:**
+
+* Changesets provide validation and transformation
+* Transaction semantics without SQL
+* Familiar patterns for rollback/commit
+* Can add persistence later without architectural change
+
+**Status:** Accepted
+
+=== ADR-003: Zipper for History
+
+**Decision:** Use a Zipper data structure for in-memory undo/redo.
+
+**Rationale:**
+
+* O(1) movement forward/backward
+* No copying of entire state
+* Functional, immutable
+* Well-understood from Haskell/Clojure ecosystems
+
+**Status:** Accepted
+
+=== ADR-004: Coq for Reversibility Proofs
+
+**Decision:** Prove the reversibility axiom (F⁻¹(F(s)) = s) in Coq.
+
+**Rationale:**
+
+* Machine-checked proofs
+* ECHIDNA can verify across multiple solvers
+* Academic credibility for MAA Framework RFC
+
+**Status:** Planned
+
+== Open Questions
+
+1. **Syscall interception method for Phase 2** — `LD_PRELOAD` vs `ptrace` vs eBPF?
+2. **Shell syntax parser for Phase 3** — Tree-sitter? Custom PEG?
+3. **Compensation storage** — Embedded SQLite? Mnesia? Plain files?
+
+== Dependencies
+
+[cols="1,1,2"]
+|===
+| Dependency | Version | Purpose
+
+| Elixir | >= 1.15 | Runtime
+| Ecto | ~> 3.11 | Transaction semantics
+| Bandit | ~> 1.0 | HTTP interface (optional)
+| UUID | ~> 1.1 | Idempotency keys
+| StreamData | ~> 1.0 | Property testing
+|===
+
+== Related Conversations
+
+[cols="1,2,1"]
+|===
+| Date | Topic | Link
+
+| 2025-12-18
+| README recovery session
+| (this conversation)
+
+| 2025-12-07
+| Python contamination discovery
+| https://claude.ai/chat/fe40f017-c771-421a-a1e2-b9fd2763dddc
+
+|===
+
+== Append Template
+
+When starting a new session, add:
+
+[source,asciidoc]
+----
+=== YYYY-MM-DD — Session Title
+
+**Context:** Why this session started
+
+**Accomplished:**
+* Item 1
+* Item 2
+
+**Decisions:**
+* Decision 1
+
+**Next:**
+* Next step 1
+
+---
+----

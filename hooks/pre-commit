@@ -1,0 +1,83 @@
+#!/bin/bash
+# pre-commit hook for Valence Shell
+# Install with: cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+# Sacred files that require confirmation before modification
+SACRED_FILES=(
+    "README.adoc"
+    "STATE.adoc"
+    "ARCHITECTURE.md"
+    "META.scm"
+)
+
+# Check if any sacred files are being modified
+MODIFIED_SACRED=()
+for file in "${SACRED_FILES[@]}"; do
+    if git diff --cached --name-only | grep -q "^${file}$"; then
+        MODIFIED_SACRED+=("$file")
+    fi
+done
+
+# If sacred files are modified, require confirmation
+if [ ${#MODIFIED_SACRED[@]} -gt 0 ]; then
+    echo ""
+    echo "⚠️  ═══════════════════════════════════════════════════════════════"
+    echo "⚠️  SACRED FILES MODIFIED"
+    echo "⚠️  ═══════════════════════════════════════════════════════════════"
+    echo ""
+    echo "The following vision documents are being modified:"
+    echo ""
+    for file in "${MODIFIED_SACRED[@]}"; do
+        echo "    📄 $file"
+    done
+    echo ""
+    echo "These files represent carefully refined thinking and should only"
+    echo "be modified intentionally, never by AI 'improvements'."
+    echo ""
+    echo "Changes to these files:"
+    echo "───────────────────────────────────────────────────────────────────"
+    for file in "${MODIFIED_SACRED[@]}"; do
+        git diff --cached "$file" | head -50
+        echo "..."
+    done
+    echo "───────────────────────────────────────────────────────────────────"
+    echo ""
+
+    # If running interactively, ask for confirmation
+    if [ -t 0 ]; then
+        read -p "Are you sure you want to commit these changes? [y/N] " -n 1 -r
+        echo ""
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "❌ Commit aborted."
+            echo ""
+            echo "To bypass this check, use: git commit --no-verify"
+            exit 1
+        fi
+    else
+        # Non-interactive (CI), warn but allow
+        echo "⚠️  Running non-interactively, allowing commit."
+        echo "⚠️  Please verify these changes were intentional."
+    fi
+
+    echo "✅ Proceeding with commit."
+    echo ""
+fi
+
+# Check for contamination
+if find . -name "*.py" -not -path "./_build/*" -not -path "./deps/*" -not -path "./.git/*" 2>/dev/null | grep -q .; then
+    echo ""
+    echo "❌ ═══════════════════════════════════════════════════════════════"
+    echo "❌ PYTHON CONTAMINATION DETECTED"
+    echo "❌ ═══════════════════════════════════════════════════════════════"
+    echo ""
+    echo "Python files found in repository:"
+    find . -name "*.py" -not -path "./_build/*" -not -path "./deps/*" -not -path "./.git/*"
+    echo ""
+    echo "This is an RSR (Rhodium Standard Repository) project."
+    echo "Python is banned. Remove these files before committing."
+    echo ""
+    echo "To bypass: git commit --no-verify (NOT RECOMMENDED)"
+    exit 1
+fi
+
+exit 0
