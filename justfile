@@ -1,197 +1,220 @@
-# Valence Shell - Just Build Automation
-# Inspired by Absolute Zero's justfile structure
+# justfile — Valence Shell Task Automation
+# https://github.com/casey/just
 
-# Default recipe - show available commands
+# Default recipe: show help
 default:
     @just --list
 
-# Build all proofs across all systems
-build-all: build-coq build-lean4 build-agda build-isabelle build-mizar
-    @echo "✓ All proofs built"
+# === SETUP ===
 
-# Verify all proofs
-verify-all:
-    @./scripts/verify-proofs.sh
+# Fetch all dependencies
+deps:
+    mix deps.get
 
-# Build Coq proofs
-build-coq:
-    @echo "Building Coq proofs..."
-    cd proofs/coq && coqc filesystem_model.v
-    cd proofs/coq && coqc file_operations.v
-    cd proofs/coq && coqc posix_errors.v
-    cd proofs/coq && coqc extraction.v
-    @echo "✓ Coq proofs compiled"
+# Create database (if using Ecto with backing store)
+db-setup:
+    mix ecto.create
+    mix ecto.migrate
 
-# Build Lean 4 proofs
-build-lean4:
-    @echo "Building Lean 4 proofs..."
-    cd proofs/lean4 && lean FilesystemModel.lean
-    cd proofs/lean4 && lean FileOperations.lean
-    @echo "✓ Lean 4 proofs checked"
+# === BUILD ===
 
-# Build Agda proofs
-build-agda:
-    @echo "Building Agda proofs..."
-    cd proofs/agda && agda FilesystemModel.agda
-    cd proofs/agda && agda FileOperations.agda
-    @echo "✓ Agda proofs type-checked"
-
-# Build Isabelle proofs
-build-isabelle:
-    @echo "Building Isabelle proofs..."
-    cd proofs/isabelle && isabelle build -D .
-    @echo "✓ Isabelle proofs verified"
-
-# Build Mizar proofs (requires Mizar setup)
-build-mizar:
-    @echo "Building Mizar proofs..."
-    cd proofs/mizar && mizf filesystem_model.miz || echo "⚠ Mizar not configured"
-    cd proofs/mizar && mizf file_operations.miz || echo "⚠ Mizar not configured"
-
-# Extract Coq to OCaml
-extract:
-    @echo "Extracting Coq to OCaml..."
-    cd proofs/coq && coqc extraction.v
-    @echo "✓ OCaml code extracted"
-
-# Build OCaml FFI
-build-ffi:
-    @echo "Building OCaml FFI..."
-    cd impl/ocaml && ocamlopt -c filesystem_ffi.ml
-    @echo "✓ OCaml FFI compiled"
-
-# Build Elixir implementation
-build-elixir:
-    @echo "Building Elixir implementation..."
-    cd impl/elixir && mix compile
-    @echo "✓ Elixir implementation compiled"
-
-# Run verification demo
-demo:
-    @echo "Running verified operations demo..."
-    @./scripts/demo_verified_operations.sh
-
-# Run FFI tests
-test-ffi: build-ffi
-    @echo "Testing OCaml FFI..."
-    cd impl/ocaml && ./test_ffi
-
-# Run Elixir tests
-test-elixir: build-elixir
-    @echo "Testing Elixir implementation..."
-    cd impl/elixir && mix test
-
-# Run all tests
-test-all: demo test-ffi test-elixir
-    @echo "✓ All tests passed"
+# Compile the project
+build:
+    mix compile
 
 # Clean build artifacts
 clean:
-    @echo "Cleaning build artifacts..."
-    find proofs -name "*.vo" -delete
-    find proofs -name "*.vok" -delete
-    find proofs -name "*.vos" -delete
-    find proofs -name "*.glob" -delete
-    find proofs -name ".lake" -type d -exec rm -rf {} + || true
-    find proofs -name "*.agdai" -delete
-    rm -rf impl/ocaml/*.cmi impl/ocaml/*.cmo impl/ocaml/*.cmx impl/ocaml/*.o
-    @echo "✓ Build artifacts cleaned"
+    mix clean
+    rm -rf _build deps
 
 # Deep clean (including generated files)
 clean-all: clean
-    @echo "Deep cleaning..."
     rm -rf proofs/coq/extracted/
-    rm -rf _build/
-    @echo "✓ Deep clean complete"
+    find proofs -name "*.vo" -delete 2>/dev/null || true
+    find proofs -name "*.vok" -delete 2>/dev/null || true
+    find proofs -name "*.vos" -delete 2>/dev/null || true
+    find proofs -name "*.glob" -delete 2>/dev/null || true
 
-# Container build with Podman
+# === TEST ===
+
+# Run all tests
+test:
+    mix test
+
+# Run tests with coverage
+test-cover:
+    mix test --cover
+
+# Run property-based tests only
+test-props:
+    mix test test/property/
+
+# Run tests continuously on file change
+test-watch:
+    mix test.watch
+
+# === VERIFICATION ===
+
+# Full verification: format + lint + test + typecheck
+verify: format-check lint test typecheck
+
+# Check code formatting
+format-check:
+    mix format --check-formatted
+
+# Format all code
+format:
+    mix format
+
+# Run Credo linter
+lint:
+    mix credo --strict
+
+# Run Dialyzer type checking
+typecheck:
+    mix dialyzer
+
+# === PROOFS ===
+
+# Run Coq proofs (requires coqc)
+prove:
+    @echo "Running Coq proofs..."
+    cd proofs/coq && coqc rmr.v
+    @echo "✅ Reversibility axiom verified"
+
+# Check proofs with ECHIDNA (if available)
+prove-echidna:
+    @echo "Verifying with ECHIDNA multi-solver..."
+    echidna verify proofs/coq/rmr.v --solvers=all
+
+# Build all proof systems (legacy proofs)
+build-proofs:
+    @echo "Building proof systems..."
+    @if [ -f proofs/coq/filesystem_model.v ]; then \
+        cd proofs/coq && coqc filesystem_model.v; \
+    fi
+    @echo "✅ Proofs built"
+
+# === RUN ===
+
+# Start the shell (interactive)
+run:
+    iex -S mix
+
+# Start with Phoenix endpoint (if GUI enabled)
+run-web:
+    mix phx.server
+
+# Start in production mode
+run-prod:
+    MIX_ENV=prod mix run --no-halt
+
+# === DEVELOPMENT ===
+
+# Open IEx with project loaded
+console:
+    iex -S mix
+
+# Generate documentation
+docs:
+    mix docs
+
+# Show outdated dependencies
+outdated:
+    mix hex.outdated
+
+# Update dependencies
+update:
+    mix deps.update --all
+
+# === CONTAINER ===
+
+# Build container image (Podman)
 container-build:
-    @echo "Building container with Podman..."
-    podman build -t valence-shell:latest -f Containerfile .
-    @echo "✓ Container built"
+    podman build -t valence-shell:latest .
 
-# Container run
+# Run in container
 container-run:
-    @echo "Running container..."
     podman run -it --rm valence-shell:latest
 
-# Container shell
-container-shell:
-    @echo "Opening container shell..."
-    podman run -it --rm valence-shell:latest /bin/bash
+# Push to registry
+container-push registry:
+    podman push valence-shell:latest {{registry}}/valence-shell:latest
 
-# Full CI pipeline (local)
-ci: clean build-all verify-all test-all
-    @echo "✓ CI pipeline completed successfully"
+# === RELEASE ===
+
+# Build release
+release:
+    MIX_ENV=prod mix release
+
+# === SAFETY ===
+
+# Check for Python contamination (should find nothing)
+check-contamination:
+    @echo "Checking for banned languages..."
+    @if find . -name "*.py" -not -path "./_build/*" -not -path "./deps/*" | grep -q .; then \
+        echo "❌ PYTHON CONTAMINATION DETECTED:"; \
+        find . -name "*.py" -not -path "./_build/*" -not -path "./deps/*"; \
+        exit 1; \
+    else \
+        echo "✅ No Python files found"; \
+    fi
+    @if find . -name "*.ts" -not -path "./node_modules/*" | grep -q .; then \
+        echo "❌ TYPESCRIPT CONTAMINATION DETECTED:"; \
+        find . -name "*.ts" -not -path "./node_modules/*"; \
+        exit 1; \
+    else \
+        echo "✅ No TypeScript files found"; \
+    fi
+    @echo "✅ Repository clean"
+
+# Verify sacred files haven't been tampered with
+check-sacred:
+    @echo "Verifying sacred files..."
+    @git diff --name-only HEAD~1 | grep -E "README.adoc|STATE.adoc|ARCHITECTURE.md|META.scm" && \
+        echo "⚠️  SACRED FILE MODIFIED - verify this was intentional" || \
+        echo "✅ Sacred files unchanged"
+
+# === CI ===
+
+# Full CI pipeline
+ci: check-contamination verify prove
+    @echo "✅ CI pipeline passed"
+
+# === STATS ===
 
 # Project statistics
 stats:
     @echo "=== Valence Shell Statistics ==="
     @echo ""
+    @echo "Elixir Code:"
+    @find lib -name "*.ex" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 || echo "  (not scaffolded yet)"
+    @echo ""
     @echo "Proof Code:"
-    @find proofs -name "*.v" -o -name "*.lean" -o -name "*.agda" -o -name "*.thy" -o -name "*.miz" | xargs wc -l | tail -1
+    @find proofs -name "*.v" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 || echo "  (not written yet)"
     @echo ""
-    @echo "Implementation Code:"
-    @find impl -name "*.ml" -o -name "*.ex" | xargs wc -l | tail -1
-    @echo ""
-    @echo "Scripts:"
-    @find scripts -name "*.sh" | xargs wc -l | tail -1
-    @echo ""
-    @echo "Documentation:"
-    @find docs -name "*.md" | xargs wc -l | tail -1
+    @echo "Tests:"
+    @find test -name "*.exs" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 || echo "  (not written yet)"
 
-# Generate documentation
-docs:
-    @echo "Generating documentation..."
-    @echo "See proofs/README.md for proof documentation"
-    @echo "See docs/PROGRESS_REPORT.md for development status"
-    @echo "See REVIEW.md for quick overview"
+# === HELP ===
 
-# Watch for changes and rebuild
-watch:
-    @echo "Watching for changes..."
-    @while true; do \
-        inotifywait -r -e modify proofs/ && just build-all; \
-    done
-
-# Integration with ECHIDNA (if available)
-echidna-verify:
-    @if command -v echidna &> /dev/null; then \
-        echo "Running ECHIDNA multi-prover verification..."; \
-        echidna verify --all --targets coq,lean4,agda,isabelle,mizar; \
-    else \
-        echo "⚠ ECHIDNA not installed. Using built-in verification."; \
-        just verify-all; \
-    fi
-
-# Generate proof certificates
-certify:
-    @echo "Generating proof certificates..."
-    @mkdir -p certs/
-    @echo "Proof certificates will be generated here"
-    @echo "TODO: Implement certificate generation"
-
-# Help
+# Show detailed help
 help:
-    @echo "Valence Shell - Build Automation"
+    @echo "Valence Shell - The Thermodynamic Shell"
+    @echo ""
+    @echo "Phase 1: Hypervisor (current)"
+    @echo "  Supervise /bin/sh, intercept reversible commands"
     @echo ""
     @echo "Common commands:"
-    @echo "  just build-all       - Build all proofs"
-    @echo "  just verify-all      - Verify all proofs"
-    @echo "  just demo            - Run demonstration"
-    @echo "  just test-all        - Run all tests"
-    @echo "  just clean           - Clean build artifacts"
-    @echo "  just ci              - Run full CI pipeline"
+    @echo "  just deps            - Fetch dependencies"
+    @echo "  just build           - Compile project"
+    @echo "  just test            - Run tests"
+    @echo "  just verify          - Full verification"
+    @echo "  just prove           - Run Coq proofs"
+    @echo "  just run             - Start the shell"
     @echo ""
-    @echo "Proof systems:"
-    @echo "  just build-coq       - Build Coq proofs"
-    @echo "  just build-lean4     - Build Lean 4 proofs"
-    @echo "  just build-agda      - Build Agda proofs"
-    @echo "  just build-isabelle  - Build Isabelle proofs"
-    @echo "  just build-mizar     - Build Mizar proofs"
-    @echo ""
-    @echo "Containers:"
-    @echo "  just container-build - Build Podman container"
-    @echo "  just container-run   - Run container"
+    @echo "Safety:"
+    @echo "  just check-contamination - Verify no Python/TS"
+    @echo "  just check-sacred        - Verify sacred files"
     @echo ""
     @echo "For full list: just --list"

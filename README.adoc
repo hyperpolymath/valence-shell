@@ -1,562 +1,230 @@
-= Valence Shell (vsh)
-:toc: macro
+= Valence Shell
+:author: Jonathan D.A. Jewell
+:email: jonathan.jewell@open.ac.uk
+:revdate: 2025-12-18
+:toc: left
 :toclevels: 3
 :icons: font
 :source-highlighter: rouge
 
-image:https://img.shields.io/badge/RSR-PLATINUM-blueviolet[RSR Compliance]
-image:https://img.shields.io/badge/License-MIT%20%2B%20Palimpsest-blue[License]
-image:https://img.shields.io/badge/Proofs-256%20theorems-brightgreen[Formal Proofs]
-image:https://img.shields.io/badge/Systems-6%20proof%20assistants-orange[Proof Systems]
+image::https://img.shields.io/badge/RSR-Rhodium_Standard-c0c0c0?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2MwYzBjMCIgZD0iTTEyIDJMNCA3djEwbDggNSA4LTVWN2wtOC01eiIvPjwvc3ZnPg==[Rhodium Standard Repository]
 
-**Formally verified shell implementing the MAA (Mutually Assured Accountability) Framework.**
+== The Thermodynamic Shell
 
-Every operation backed by machine-checkable proofs, enabling GDPR compliance with mathematical certainty.
+Valence Shell is a *reversible shell* that treats commands not as fire-and-forget instructions, but as *transactions with inverses*.
 
-[IMPORTANT]
-====
-**Current Status**: Research Prototype (v0.5.0) +
-⚠️ **NOT PRODUCTION READY** - Extraction gap exists between proofs and implementation. +
-See <<_verification_status>> for details.
-====
+Where traditional shells mutate state irreversibly, Valence expends computational resources to maintain a complete reversible history. Every operation can be undone. Every mutation is accountable.
 
-toc::[]
+[quote]
+Full reversibility: F⁻¹(F(s)) = s — without sacrificing POSIX compliance.
 
-== Overview
+== Why This Matters
 
-Valence Shell is a formally verified shell with proven reversibility guarantees. Unlike traditional shells where "undo" is a best-effort feature, vsh provides *mathematical proofs* that operations can be reversed.
+=== The Problem with Shells
 
-=== Key Features
+Traditional shells are *thermodynamically wasteful*. They:
 
-* ✅ **Formally Proven Reversibility**: `rmdir(mkdir(p, fs)) = fs`
-* ✅ **Polyglot Verification**: 6 proof systems (Coq, Lean 4, Agda, Isabelle, Mizar, Z3)
-* ✅ **~256 Theorems**: Proven across different logical foundations
-* ✅ **Content Operations**: File read/write with proven reversibility
-* ✅ **MAA Framework**: Mutually Assured Accountability with audit trails
-* ✅ **Zero Runtime Dependencies**: OCaml stdlib only
-* ✅ **Offline-First**: All proofs verifiable air-gapped
+* Destroy information (you cannot un-`rm`)
+* Provide no audit trail (what changed and when?)
+* Fail partially (half-completed pipelines leave debris)
+* Offer no compensation (external systems stay mutated)
 
-=== What Makes This Different?
+=== The Valence Solution
+
+Valence Shell implements the *Saga pattern* at the shell level:
 
 [cols="1,2,2"]
 |===
-|Feature |Traditional Shells |Valence Shell
+| Domain | Traditional Shell | Valence Shell
 
-|Undo
-|Best-effort, manual
-|*Mathematically proven correct*
+| Files
+| Destructive mutation
+| Shadow copies + Git integration
 
-|Verification
-|Testing only
-|*Formal proofs in 6 systems*
+| Network/DB
+| Fire and forget
+| Compensating transactions
 
-|Accountability
-|Logs (can be tampered)
-|*MAA framework with proofs*
+| Pipelines
+| Partial failure
+| All-or-nothing with rollback
 
-|Trust
-|"Hope it works"
-|*Mathematical guarantees*
+| History
+| Text log
+| Zipper structure with semantic undo
 |===
-
-== Quick Start
-
-=== Prerequisites
-
-**Minimum** (to run demonstrations):
-[source,bash]
-----
-# One of:
-OCaml 5.0+
-Elixir 1.15+
-Bash 4.0+
-----
-
-**Full Development** (to modify proofs):
-[source,bash]
-----
-Coq 8.18+
-Lean 4.3+
-Agda 2.6.4+
-Isabelle/HOL 2024
-Z3 4.12+
-Just (command runner)
-Nix (recommended)
-----
-
-=== Installation
-
-==== With Nix (Recommended)
-
-[source,bash]
-----
-# Clone repository
-git clone https://github.com/Hyperpolymath/valence-shell.git
-cd valence-shell
-
-# Enter development environment
-nix develop
-
-# Build all proof systems
-just build-all
-
-# Run comprehensive demonstration
-just demo
-----
-
-==== With Containers
-
-[source,bash]
-----
-# Build container
-podman build -t valence-shell .
-
-# Run verification
-podman run valence-shell just verify-proofs
-
-# Interactive shell
-podman run -it valence-shell bash
-----
-
-==== Manual Setup
-
-[source,bash]
-----
-# Install proof assistants (per their documentation)
-# Then:
-git clone https://github.com/Hyperpolymath/valence-shell.git
-cd valence-shell
-
-# Build Coq proofs
-just build-coq
-
-# Build Lean 4 proofs
-just build-lean4
-
-# Run tests
-just test-all
-----
-
-=== Basic Usage
-
-[source,bash]
-----
-# Verify all proofs compile
-just verify-proofs
-
-# Run demonstration showing all proven theorems
-./scripts/demo_verified_operations.sh
-
-# Build specific proof system
-just build-coq      # Coq proofs
-just build-lean4    # Lean 4 proofs
-just build-agda     # Agda proofs
-just build-isabelle # Isabelle proofs
-
-# Show available commands
-just --list
-----
-
-== What's Proven?
-
-=== Core Theorems (All 5 Manual Proof Systems)
-
-[source,coq]
-----
-Theorem mkdir_rmdir_reversible :
-  forall p fs,
-    mkdir_precondition p fs ->
-    rmdir p (mkdir p fs) = fs.
-
-Theorem create_delete_file_reversible :
-  forall p fs,
-    create_file_precondition p fs ->
-    delete_file p (create_file p fs) = fs.
-
-Theorem write_file_reversible :
-  forall p fs old_content new_content,
-    write_file_precondition p fs ->
-    read_file p fs = Some old_content ->
-    write_file p old_content (write_file p new_content fs) = fs.
-----
-
-=== Composition (Proven in 5 Systems)
-
-[source,coq]
-----
-Theorem operation_sequence_reversible :
-  forall ops fs,
-    all_reversible ops fs ->
-    apply_sequence (reverse_sequence ops)
-                   (apply_sequence ops fs) = fs.
-----
-
-=== Equivalence (Proven in 4 Systems)
-
-[source,coq]
-----
-Theorem cno_identity_element :
-  forall op fs,
-    reversible op fs ->
-    apply_op (reverse_op op) (apply_op op fs) ≈ fs.
-----
-
-[TIP]
-====
-**CNO = Certified Null Operation**: A reversible operation followed by its reverse provably does nothing (identity element).
-
-This connects to Absolute Zero's composition theory.
-====
 
 == Architecture
 
-=== Proof Systems
+=== Core Principles
 
-Valence Shell uses **polyglot verification** across 6 proof systems:
+1. **Ecto at Core** — Every shell operation is a database transaction. This isn't about storage; it's about transactional semantics, rollback, and query.
 
-[cols="2,2,3"]
-|===
-|System |Foundation |Lines
+2. **Zipper Memory** — In-memory history uses a Zipper (cursor in a list), enabling O(1) undo/redo without copying state.
 
-|Coq
-|Calculus of Inductive Constructions
-|~1,200
+3. **Idempotency Keys** — Every command gets a unique key (local CURP equivalent). Crash recovery checks the journal: did this command complete?
 
-|Lean 4
-|Dependent Type Theory
-|~900
+4. **Compensating Actions** — External systems (APIs, databases, network) cannot be "rolled back", so Valence generates and stores compensating transactions.
 
-|Agda
-|Intensional Type Theory
-|~700
+=== The Command Contract
 
-|Isabelle/HOL
-|Higher-Order Logic
-|~650
+Every atomic operation implements the `Valence.Command` behaviour:
 
-|Mizar
-|Tarski-Grothendieck Set Theory
-|~400
+[source,elixir]
+----
+@callback describe(args :: map()) :: :safe | :warn | :danger
+  # Thermodynamic cost assessment
 
-|Z3 SMT
-|First-Order Logic + Theories
-|~150
-|===
+@callback execute(args :: map(), idempotency_key :: binary()) ::
+  {:ok, result, compensation} | {:error, reason}
+  # Perform the action, return its inverse
 
-**Why 6 systems?**
+@callback compensate(args :: map(), idempotency_key :: binary()) ::
+  :ok | {:error, reason}
+  # The inverse function (undo)
 
-* Different logical foundations increase confidence
-* Cross-validation catches errors
-* Industry standard (seL4, CompCert)
+@callback verify(args :: map()) ::
+  :ok | {:drift, expected, actual}
+  # Two Generals check: does state match expectations?
+----
 
-=== Trust Boundaries
+=== Safety Net Layers
 
 [source]
 ----
-┌─────────────────────────────────────┐
-│ Formal Proofs (HIGH TRUST)          │ ← Mathematical guarantees
-│ ~256 theorems, ~4,280 lines         │
-└─────────────┬───────────────────────┘
-              │ Extraction (GAP) ⚠️
-┌─────────────▼───────────────────────┐
-│ OCaml Implementation (MEDIUM TRUST) │ ← Type safe, memory safe
-│ FFI to POSIX, audit logging         │
-└─────────────┬───────────────────────┘
-              │ FFI (GAP) ⚠️
-┌─────────────▼───────────────────────┐
-│ POSIX Syscalls (LOW TRUST)         │ ← Kernel guarantees only
-│ mkdir, rmdir, open, read, write     │
-└──────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Valence Shell                            │
+├─────────────────────────────────────────────────────────────┤
+│  In-Memory: Zipper structure for instant undo/redo          │
+├─────────────────────────────────────────────────────────────┤
+│  Files: Git (project) or Shadow Copies (system)             │
+├─────────────────────────────────────────────────────────────┤
+│  External: Compensating Transactions (Saga Pattern)         │
+├─────────────────────────────────────────────────────────────┤
+│  Crash Recovery: Idempotency journal with completion flags  │
+└─────────────────────────────────────────────────────────────┘
 ----
-
-[WARNING]
-====
-**Verification Gap**: The formal proofs operate on abstract models. The implementation (OCaml FFI + POSIX) is **not formally connected** to the proofs.
-
-**This means:**
-
-* Proofs guarantee *model* correctness ✅
-* Implementation *may have bugs* ⚠️
-* Extraction *may introduce errors* ⚠️
-
-To reach production: Close extraction gap (Coq → OCaml verification).
-====
-
-== Verification Status
-
-=== ✅ What IS Guaranteed (by proofs)
-
-* If preconditions hold, `rmdir(mkdir(p, fs)) = fs`
-* If preconditions hold, `write(p, old, write(p, new, fs)) = fs`
-* Operations on `p1` don't affect `p2` (when `p1 ≠ p2`)
-* Composition: sequences of operations reverse correctly
-* ~256 theorems proven across 6 verification systems
-
-=== ❌ What Is NOT Guaranteed
-
-* Implementation matches proofs (manual review required)
-* POSIX compliance beyond modeled operations
-* Performance (not optimized)
-* Concurrent access from multiple processes
-* File system integrity after crashes
-* Protection against malicious inputs to unverified code
-
-== MAA Framework
-
-**Mutually Assured Accountability**: Every action has a provable audit trail.
-
-=== RMR (Remove-Match-Reverse)
-
-**Status**: ✅ Proven for directories and files
-
-[source,coq]
-----
-RMR primitives:
-- mkdir/rmdir (proven reversible)
-- create_file/delete_file (proven reversible)
-- write_file (proven reversible)
-----
-
-**Use Case**: Safe operations with guaranteed rollback
-
-=== RMO (Remove-Match-Obliterate)
-
-**Status**: 🔄 Planned (not yet implemented)
-
-**Use Case**: GDPR "right to be forgotten" with mathematical guarantee of complete removal
-
-== Contributing
-
-We welcome contributions across three perimeters:
-
-=== 🔴 Perimeter 1: Core (Maintainers Only)
-
-* Formal proofs
-* Security-critical code
-* Requires: Proof assistant expertise
-
-=== 🟡 Perimeter 2: Extensions (Trusted Contributors)
-
-* Implementations
-* Optimizations
-* New features
-* Requires: Track record, review
-
-=== 🟢 Perimeter 3: Community (Open to All)
-
-* Examples
-* Tutorials
-* Documentation
-* Tools
-* Requires: Basic testing, clear docs
-
-See link:CONTRIBUTING.md[CONTRIBUTING.md] for details.
-
-== Documentation
-
-[cols="2,3"]
-|===
-|File |Description
-
-|link:CLAUDE.md[CLAUDE.md]
-|**START HERE** - Comprehensive AI assistant context
-
-|link:proofs/README.md[proofs/README.md]
-|Proof documentation, how to read proofs
-
-|link:SECURITY.md[SECURITY.md]
-|Security policy, vulnerability reporting
-
-|link:CONTRIBUTING.md[CONTRIBUTING.md]
-|Contribution guidelines, TPCF framework
-
-|link:CODE_OF_CONDUCT.md[CODE_OF_CONDUCT.md]
-|Community standards, emotional safety
-
-|link:CHANGELOG.md[CHANGELOG.md]
-|Version history, what's changed
-
-|link:RSR_COMPLIANCE.md[RSR_COMPLIANCE.md]
-|RSR Framework compliance report (PLATINUM)
-
-|link:docs/PROGRESS_REPORT.md[PROGRESS_REPORT.md]
-|Phase 1 detailed report
-
-|link:docs/PHASE2_REPORT.md[PHASE2_REPORT.md]
-|Composition & equivalence theory
-
-|link:docs/PHASE3_INITIAL_REPORT.md[PHASE3_INITIAL_REPORT.md]
-|File content operations
-|===
 
 == Roadmap
 
-=== Version 0.6.0 (Next Release)
+=== Phase 1: The Hypervisor (Current)
 
-* [ ] File copy/move operations
-* [ ] Symbolic link support
-* [ ] Content composition theorems
-* [ ] Isabelle and Mizar content operations
+Valence supervises a standard `/bin/sh` process:
 
-=== Version 0.7.0
+* "Native Reversible" commands (file ops, etc.) execute in Elixir with full transaction semantics
+* Unrecognised commands pass through to the underlying shell
+* All output captured for history
 
-* [ ] RMO (obliterative deletion) proofs
-* [ ] GDPR compliance primitives
-* [ ] Secure overwrite guarantees
+This provides immediate value: reversible file operations today, POSIX compatibility preserved.
 
-=== Version 1.0.0 (Production Ready)
+=== Phase 2: The Hybrid Shim
 
-* [ ] Close extraction gap (Coq → OCaml verification)
-* [ ] Verify FFI layer
-* [ ] Full POSIX compliance
-* [ ] Performance optimization
-* [ ] Security audit
-* [ ] Fuzzing campaign
+Intercept syscalls from standard binaries:
 
-== Licensing
+* `LD_PRELOAD` or `ptrace` to catch filesystem mutations
+* Copy-on-write enforcement at syscall level
+* Transparent to the binary being run
 
-**Triple-licensed** for maximum flexibility:
+This extends reversibility to *any* command, not just native ones.
 
-* **MIT License** (permissive, OSI-approved)
-* **GPL v3** (copyleft option)
-* **Palimpsest License v0.8** (recommended: attribution + history)
+=== Phase 3: The AST Transpiler (The Dream)
 
-[IMPORTANT]
-====
-**We encourage dual licensing with Palimpsest v0.8**, which adds:
+Parse shell syntax into Elixir AST:
 
-* ✅ Attribution preservation (credit original authors)
-* ✅ Modification history (palimpsest record)
-* ✅ Compatible with MIT and GPL
-* ✅ Supports reproducibility
+* Static analysis before execution
+* Identify side effects at parse time
+* Generate compensation automatically
+* Full semantic understanding of pipelines
 
-See link:LICENSE.txt[LICENSE.txt] for full text and usage rights.
+== Technology Stack
 
-**Choose**:
+[cols="1,3"]
+|===
+| Component | Technology
 
-* MIT only (maximum permissiveness)
-* GPL v3 only (strong copyleft)
-* MIT + Palimpsest (recommended: permissive + attribution)
-* GPL + Palimpsest (copyleft + attribution)
-====
+| Core Runtime
+| Elixir (OTP Application)
 
-== RSR Compliance
+| Transaction Semantics
+| Ecto (schemas, changesets, transactions)
 
-image:https://img.shields.io/badge/RSR-PLATINUM-blueviolet[RSR PLATINUM]
+| Web Interface
+| Bandit (HTTP server for optional GUI/API)
 
-Valence Shell achieves **PLATINUM-level** Rhodium Standard Repository (RSR) compliance (105/100):
+| Idempotency
+| UUID generation per command
 
-* ✅ Complete documentation (7 required files + 20 additional)
-* ✅ .well-known/ directory (RFC 9116 compliant)
-* ✅ Build systems (Just + Nix + Container + CI/CD)
-* ✅ TPCF (Tri-Perimeter Contribution Framework)
-* ✅ Formal verification (6 proof systems, ~256 theorems)
-* ✅ Zero runtime dependencies
-* ✅ Offline-first verification
-* ✅ Security guarantees (formal proofs + memory safety)
+| Property Testing
+| StreamData (statistically significant verification)
 
-See link:RSR_COMPLIANCE.md[RSR_COMPLIANCE.md] for full report.
+| Formal Proofs
+| Coq (reversibility axiom in `proofs/coq/rmr.v`)
 
-== Community
+| Containers
+| Svalinn base images, Cerro Torre orchestration
+|===
 
-* **Issues**: https://github.com/Hyperpolymath/valence-shell/issues
-* **GitLab**: https://gitlab.com/non-initiate/rhodinised/vsh (primary development)
-* **Security**: See link:.well-known/security.txt[.well-known/security.txt]
-* **Code of Conduct**: link:CODE_OF_CONDUCT.md[CODE_OF_CONDUCT.md]
-* **Humans**: link:.well-known/humans.txt[.well-known/humans.txt]
+== Integration with MAA Framework
 
-== FAQ
+Valence Shell is an instantiation of the link:https://gitlab.com/hyperpolymath/januskey/maa-framework[MAA (Mutually Assured Accountability) Framework]:
 
-=== Why 6 proof systems?
+* **RMR (Reversible Mutation Records)** — Every command generates a record containing its inverse function
+* **RMO (Reversible Mutation Obliteration)** — Secure deletion with cryptographic proof (when needed)
 
-Different logical foundations increase confidence. If all 6 systems prove the same theorem, it's highly unlikely all have the same bug.
+The formal properties are verified by link:https://github.com/hyperpolymath/echidna[ECHIDNA] multi-solver integration.
 
-=== Is this production-ready?
-
-**No.** Version 0.5.0 is a research prototype. The extraction gap (Coq → OCaml → POSIX) is not verified. Use for research, education, and experimentation only.
-
-=== Can I use this in my project?
-
-**For research/education**: Yes! +
-**For production**: Not yet (wait for v1.0.0) +
-**License**: MIT or GPL or Palimpsest (your choice)
-
-=== How do I verify the proofs?
+== Building
 
 [source,bash]
 ----
-# Install proof assistants (via Nix or manually)
-nix develop  # if using Nix
+# Dependencies
+mix deps.get
 
-# Verify all proofs compile
-just verify-proofs
+# Verify (tests + property checks)
+just verify
 
-# This compiles ~4,280 lines of proofs and checks:
-# - Coq: generates .vo certificate files
-# - Lean 4: compiles to executable
-# - Agda: type-checks and generates interface files
-# - Isabelle: builds heap image
-# - Z3: checks SMT assertions
+# Run proofs (requires Coq)
+just prove
+
+# Start shell
+just run
 ----
 
-=== What's the difference between algorithmic and thermodynamic reversibility?
+== Project Structure
 
-**Algorithmic** (what we have): `F⁻¹(F(s)) = s` - operations can be undone, information preserved
-
-**Thermodynamic** (what we DON'T have): Energy → 0 (Landauer limit), Bennett's reversible computing
-
-We prove the former, not the latter.
-
-=== How does this relate to Absolute Zero?
-
-Absolute Zero provided the CNO (Certified Null Operation) theory showing that reversible operations create identity elements. Valence Shell implements this theory for filesystem operations.
-
-== Citation
-
-If you use Valence Shell in academic work:
-
-[source,bibtex]
+[source]
 ----
-@software{valence_shell_2025,
-  title = {Valence Shell: Formally Verified Shell with MAA Framework},
-  author = {{Valence Shell Contributors}},
-  year = {2025},
-  url = {https://github.com/Hyperpolymath/valence-shell},
-  note = {Polyglot verification across 6 proof systems},
-  version = {0.5.0}
-}
+valence-shell/
+├── lib/
+│   ├── valence/
+│   │   ├── command.ex          # Behaviour definition
+│   │   ├── commands/           # Native reversible commands
+│   │   │   ├── file_ops.ex
+│   │   │   ├── directory.ex
+│   │   │   └── ...
+│   │   ├── history/
+│   │   │   ├── zipper.ex       # In-memory undo/redo
+│   │   │   └── journal.ex      # Persistent idempotency log
+│   │   ├── saga.ex             # Compensation orchestration
+│   │   └── supervisor.ex       # OTP supervision tree
+│   └── valence.ex
+├── proofs/
+│   └── coq/
+│       └── rmr.v               # Reversibility axiom
+├── test/
+├── mix.exs
+├── justfile
+└── README.adoc                 # You are here
 ----
 
-== Acknowledgments
+== Licence
 
-* **Software Foundations** - Benjamin Pierce et al.
-* **seL4 Verified Kernel** - NICTA/Data61
-* **CompCert Compiler** - Xavier Leroy
-* **Absolute Zero** - CNO composition theory
-* **Coq, Lean 4, Agda, Isabelle, Mizar, Z3 teams**
-* **RSR Framework** - Repository standards
+AGPL-3.0 with link:https://github.com/hyperpolymath/palimpsest-license[Palimpsest] overlay.
 
-See link:.well-known/humans.txt[humans.txt] for complete attribution.
+== Related Projects
 
-== License
-
-Copyright (c) 2025 Valence Shell Contributors
-
-Triple-licensed under:
-
-* MIT License
-* GNU General Public License v3.0
-* Palimpsest License v0.8 (recommended)
-
-See link:LICENSE.txt[LICENSE.txt] for full text.
-
-**Recommended**: Use MIT or GPL **with** Palimpsest for attribution and modification history preservation.
-
----
-
-**Made with ❤️ by humans and AI, for humans who value formal correctness.**
-
-**Status**: Research Prototype (v0.5.0) | **RSR**: PLATINUM (105/100) | **Proofs**: ~256 theorems
-
-[.text-center]
-_"Every operation reversible. Every claim proven. Every contributor valued."_
+* link:https://github.com/hyperpolymath/svalinn[Svalinn] — Container security standards
+* link:https://github.com/hyperpolymath/cerro-torre[Cerro Torre] — Container orchestration
+* link:https://github.com/hyperpolymath/echidna[ECHIDNA] — Multi-solver proof verification
+* link:https://github.com/hyperpolymath/conative-gating[Conative Gating] — AI enforcement layer
+* link:https://gitlab.com/hyperpolymath/januskey[JanusKey] — MAA Framework reference implementation
