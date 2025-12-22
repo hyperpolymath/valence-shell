@@ -11,6 +11,14 @@ default:
 deps:
     mix deps.get
 
+# Install git hooks (sacred file protection, contamination blocking)
+install-hooks:
+    @./scripts/install-hooks.sh
+
+# Full setup: deps + hooks
+setup: deps install-hooks
+    @echo "✅ Valence Shell ready for development"
+
 # Create database (if using Ecto with backing store)
 db-setup:
     mix ecto.create

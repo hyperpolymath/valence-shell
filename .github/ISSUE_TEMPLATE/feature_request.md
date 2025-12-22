@@ -1,20 +1,41 @@
 ---
-name: Feature request
-about: Suggest an idea for this project
-title: ''
-labels: 'enhancement, priority: unset, triage'
+name: Feature Request
+about: Suggest a new feature for Valence Shell
+title: '[FEATURE] '
+labels: enhancement
 assignees: ''
-
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+## Feature Description
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+<!-- Clear description of the feature you'd like -->
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
+## Use Case
 
-**Additional context**
-Add any other context or screenshots about the feature request here.
+<!-- Why is this feature needed? What problem does it solve? -->
+
+## Proposed Solution
+
+<!-- How do you think this should work? -->
+
+## Alternatives Considered
+
+<!-- Any alternative solutions you've considered -->
+
+## Reversibility Considerations
+
+<!-- For shell commands: How would this operation be reversed? -->
+
+- Can this operation be undone?
+- What state needs to be captured for compensation?
+- Any edge cases for reversibility?
+
+## Additional Context
+
+<!-- Any other context, mockups, or examples -->
+
+## Checklist
+
+- [ ] I have searched existing issues for duplicates
+- [ ] I have considered reversibility implications
+- [ ] This aligns with the project's goals (reversible, POSIX-compatible shell)
