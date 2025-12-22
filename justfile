@@ -214,6 +214,7 @@ help:
     @echo "  Supervise /bin/sh, intercept reversible commands"
     @echo ""
     @echo "Common commands:"
+    @echo "  just setup           - Full setup (deps + hooks)"
     @echo "  just deps            - Fetch dependencies"
     @echo "  just build           - Compile project"
     @echo "  just test            - Run tests"
