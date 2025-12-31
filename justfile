@@ -159,8 +159,20 @@ stop-daemon:
     @rm -f /tmp/vsh-daemon.sock
     @echo "Daemon stopped"
 
+# Run Rust integration tests
+test-integration-rust:
+    @echo "Running Rust integration tests..."
+    cd impl/rust-cli && cargo test --test integration_test
+    @echo "✓ Rust integration tests passed"
+
+# Run end-to-end integration tests (all implementations)
+test-integration: build-ffi-zig build-cli
+    @echo "Running end-to-end integration tests..."
+    ./tests/integration_test.sh
+    @echo "✓ Integration tests passed"
+
 # Run all tests
-test-all: demo test-ffi-zig test-cli test-elixir
+test-all: demo test-ffi-zig test-cli test-elixir test-integration-rust
     @echo "✓ All tests passed"
 
 # Clean build artifacts
