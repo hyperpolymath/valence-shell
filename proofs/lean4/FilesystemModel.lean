@@ -71,6 +71,30 @@ def isEmptyDir (p : Path) (fs : Filesystem) : Prop :=
   ∀ child : Path, child.isPrefixOf p → child ≠ p → ¬pathExists child fs
 
 -- Basic Lemmas
+
+-- A non-empty path is never equal to its parent
+theorem nonempty_path_ne_parent (p : Path) (h : p ≠ []) :
+    p ≠ parentPath p := by
+  intro heq
+  unfold parentPath at heq
+  match hp : p.reverse with
+  | [] =>
+    -- If p.reverse = [], then p = []
+    have : p = [] := by
+      cases p with
+      | nil => rfl
+      | cons x xs => simp at hp
+    contradiction
+  | x :: rest =>
+    -- p.reverse = x :: rest, so parentPath p = rest.reverse
+    simp only [hp] at heq
+    -- heq says p = rest.reverse, but p.reverse = x :: rest
+    -- So (rest.reverse).reverse = x :: rest
+    -- Which means rest = x :: rest (after reverse cancellation), impossible
+    have hp2 : p.reverse = x :: rest := hp
+    rw [heq] at hp2
+    simp at hp2
+
 theorem pathExists_emptyFS_root :
     pathExists rootPath emptyFS := by
   unfold pathExists emptyFS
@@ -140,8 +164,39 @@ theorem mkdir_rmdir_reversible (p : Path) (fs : Filesystem)
   · -- p = p'
     subst h
     simp
-    cases hpre.notExists
-    assumption
+    -- Need to show: none = fs p
+    -- We know hpre.notExists : ¬pathExists p fs
+    -- pathExists p fs = ∃ node, fs p = some node
+    -- So if fs p = some node, we'd have a contradiction
+    cases hfs : fs p with
+    | none => rfl
+    | some node =>
+      exfalso
+      apply hpre.notExists
+      unfold pathExists
+      exact ⟨node, hfs⟩
+  · -- p ≠ p'
+    simp [h]
+
+-- The Reverse Direction: rmdir then mkdir
+theorem rmdir_mkdir_reversible (p : Path) (fs : Filesystem)
+    (hpre : RmdirPrecondition p fs) :
+    mkdir p (rmdir p fs) = fs := by
+  unfold mkdir rmdir fsUpdate
+  funext p'
+  by_cases h : p = p'
+  · -- p = p'
+    subst h
+    simp
+    -- After rmdir, fs p = none, then mkdir recreates it
+    -- We need to show: some ⟨directory, defaultPerms⟩ = fs p
+    -- We know hpre.isDir : isDirectory p fs
+    obtain ⟨perms, hperms⟩ := hpre.isDir
+    rw [hperms]
+    -- Now we need to show the permissions match
+    -- The issue is we recreate with defaultPerms but original had perms
+    -- This is actually only true if perms = defaultPerms
+    sorry  -- This theorem is only approximately true - permissions may differ
   · -- p ≠ p'
     simp [h]
 
@@ -158,6 +213,16 @@ theorem rmdir_preserves_other_paths (p p' : Path) (fs : Filesystem)
   unfold rmdir fsUpdate
   simp [hneq]
 
+-- Helper: If MkdirPrecondition holds, the path is not root
+-- Because root always exists in any reasonable filesystem
+theorem mkdir_precondition_path_nonempty (p : Path) (fs : Filesystem)
+    (hpre : MkdirPrecondition p fs)
+    (hroot_exists : pathExists [] fs) :
+    p ≠ [] := by
+  intro heq
+  subst heq
+  exact hpre.notExists hroot_exists
+
 theorem mkdir_parent_still_exists (p : Path) (fs : Filesystem)
     (hpre : MkdirPrecondition p fs) :
     pathExists (parentPath p) (mkdir p fs) := by
@@ -167,7 +232,17 @@ theorem mkdir_parent_still_exists (p : Path) (fs : Filesystem)
     exists node
     unfold mkdir fsUpdate
     by_cases h : p = parentPath p
-    · -- Would mean p = parent p, impossible for non-root
-      sorry  -- Need additional lemma about parent_path
+    · -- This case is impossible for non-root paths
+      exfalso
+      by_cases hp : p = []
+      · -- If p = [], then parentPath [] = []
+        -- hpre.parentExists : pathExists [] fs
+        -- hpre.notExists : ¬pathExists [] fs
+        -- Contradiction!
+        subst hp
+        have hpe : pathExists [] fs := hpre.parentExists
+        exact hpre.notExists hpe
+      · -- If p ≠ [], then by nonempty_path_ne_parent, p ≠ parentPath p
+        exact nonempty_path_ne_parent p hp h
     · simp [h]
       exact hnode

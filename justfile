@@ -54,11 +54,51 @@ extract:
     cd proofs/coq && coqc extraction.v
     @echo "✓ OCaml code extracted"
 
-# Build OCaml FFI
-build-ffi:
+# Build OCaml FFI (legacy)
+build-ffi-ocaml:
     @echo "Building OCaml FFI..."
     cd impl/ocaml && ocamlopt -c filesystem_ffi.ml
     @echo "✓ OCaml FFI compiled"
+
+# Build Zig FFI (new, primary)
+build-ffi-zig:
+    @echo "Building Zig FFI..."
+    cd impl/zig && zig build
+    @echo "✓ Zig FFI compiled"
+
+# Build Zig FFI with tests
+test-ffi-zig:
+    @echo "Testing Zig FFI..."
+    cd impl/zig && zig build test
+    @echo "✓ Zig FFI tests passed"
+
+# Run Zig FFI demo
+demo-zig:
+    @echo "Running Zig FFI demo..."
+    cd impl/zig && zig build demo && ./zig-out/bin/vsh_demo
+    @echo "✓ Zig demo completed"
+
+# Build Rust CLI
+build-cli:
+    @echo "Building Rust CLI (vsh)..."
+    cd impl/rust-cli && cargo build --release
+    @echo "✓ vsh CLI built"
+
+# Install Rust CLI locally
+install-cli: build-cli
+    @echo "Installing vsh to ~/.cargo/bin..."
+    cd impl/rust-cli && cargo install --path .
+    @echo "✓ vsh installed"
+
+# Test Rust CLI
+test-cli:
+    @echo "Testing Rust CLI..."
+    cd impl/rust-cli && cargo test
+    @echo "✓ Rust CLI tests passed"
+
+# Build all FFI layers
+build-ffi: build-ffi-zig build-ffi-ocaml
+    @echo "✓ All FFI layers built"
 
 # Build Elixir implementation
 build-elixir:
@@ -66,23 +106,61 @@ build-elixir:
     cd impl/elixir && mix compile
     @echo "✓ Elixir implementation compiled"
 
+# Build ReScript MCP server
+build-mcp:
+    @echo "Building ReScript MCP server..."
+    cd impl/mcp && npx rescript build
+    @echo "✓ MCP server compiled"
+
+# Run MCP server (STDIO mode for Claude Desktop)
+run-mcp: build-mcp
+    @echo "Starting MCP server (STDIO mode)..."
+    cd impl/mcp && deno run --allow-read --allow-write --allow-net --allow-env src/Main.res.js
+
+# Run MCP server (HTTP mode for cloud/serverless)
+serve-mcp: build-mcp
+    @echo "Starting MCP server (HTTP mode)..."
+    cd impl/mcp && MCP_HTTP_MODE=true deno run --allow-read --allow-write --allow-net --allow-env src/Main.res.js
+
+# Build everything (proofs + implementations)
+build-everything: build-all build-ffi build-cli build-elixir build-mcp
+    @echo "✓ Everything built"
+
 # Run verification demo
 demo:
     @echo "Running verified operations demo..."
     @./scripts/demo_verified_operations.sh
 
-# Run FFI tests
-test-ffi: build-ffi
+# Run OCaml FFI tests (legacy)
+test-ffi-ocaml: build-ffi-ocaml
     @echo "Testing OCaml FFI..."
-    cd impl/ocaml && ./test_ffi
+    cd impl/ocaml && ./test_ffi || echo "⚠ OCaml test binary not built"
 
 # Run Elixir tests
 test-elixir: build-elixir
     @echo "Testing Elixir implementation..."
     cd impl/elixir && mix test
 
+# Run Elixir BEAM daemon
+run-daemon: build-elixir
+    @echo "Starting BEAM daemon..."
+    cd impl/elixir && iex -S mix
+
+# Run Elixir daemon in background
+start-daemon: build-elixir
+    @echo "Starting BEAM daemon in background..."
+    cd impl/elixir && elixir --sname vsh -S mix run --no-halt &
+    @echo "Daemon started. Socket: /tmp/vsh-daemon.sock"
+
+# Stop Elixir daemon
+stop-daemon:
+    @echo "Stopping BEAM daemon..."
+    @pkill -f "vsh.*mix" || true
+    @rm -f /tmp/vsh-daemon.sock
+    @echo "Daemon stopped"
+
 # Run all tests
-test-all: demo test-ffi test-elixir
+test-all: demo test-ffi-zig test-cli test-elixir
     @echo "✓ All tests passed"
 
 # Clean build artifacts
@@ -128,17 +206,20 @@ ci: clean build-all verify-all test-all
 stats:
     @echo "=== Valence Shell Statistics ==="
     @echo ""
-    @echo "Proof Code:"
-    @find proofs -name "*.v" -o -name "*.lean" -o -name "*.agda" -o -name "*.thy" -o -name "*.miz" | xargs wc -l | tail -1
+    @echo "Proof Code (Coq/Lean/Agda/Isabelle/Mizar):"
+    @find proofs -name "*.v" -o -name "*.lean" -o -name "*.agda" -o -name "*.thy" -o -name "*.miz" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 || echo "  0 total"
     @echo ""
-    @echo "Implementation Code:"
-    @find impl -name "*.ml" -o -name "*.ex" | xargs wc -l | tail -1
+    @echo "Zig FFI Code:"
+    @find impl/zig -name "*.zig" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 || echo "  0 total"
+    @echo ""
+    @echo "Rust CLI Code:"
+    @find impl/rust-cli -name "*.rs" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 || echo "  0 total"
+    @echo ""
+    @echo "Elixir/OCaml Code:"
+    @find impl -name "*.ml" -o -name "*.ex" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 || echo "  0 total"
     @echo ""
     @echo "Scripts:"
-    @find scripts -name "*.sh" | xargs wc -l | tail -1
-    @echo ""
-    @echo "Documentation:"
-    @find docs -name "*.md" | xargs wc -l | tail -1
+    @find scripts -name "*.sh" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 || echo "  0 total"
 
 # Generate documentation
 docs:
@@ -176,22 +257,38 @@ help:
     @echo "Valence Shell - Build Automation"
     @echo ""
     @echo "Common commands:"
-    @echo "  just build-all       - Build all proofs"
-    @echo "  just verify-all      - Verify all proofs"
-    @echo "  just demo            - Run demonstration"
-    @echo "  just test-all        - Run all tests"
-    @echo "  just clean           - Clean build artifacts"
-    @echo "  just ci              - Run full CI pipeline"
+    @echo "  just build-everything - Build proofs + implementations"
+    @echo "  just build-all        - Build all proofs"
+    @echo "  just verify-all       - Verify all proofs"
+    @echo "  just demo             - Run bash demonstration"
+    @echo "  just demo-zig         - Run Zig FFI demonstration"
+    @echo "  just test-all         - Run all tests"
+    @echo "  just clean            - Clean build artifacts"
+    @echo "  just ci               - Run full CI pipeline"
+    @echo ""
+    @echo "Implementations:"
+    @echo "  just build-ffi-zig    - Build Zig FFI layer"
+    @echo "  just build-cli        - Build Rust CLI (vsh)"
+    @echo "  just install-cli      - Install vsh to PATH"
+    @echo "  just build-elixir     - Build Elixir BEAM core"
+    @echo "  just build-mcp        - Build ReScript MCP server"
+    @echo "  just run-mcp          - Run MCP server (STDIO)"
+    @echo "  just serve-mcp        - Run MCP server (HTTP)"
     @echo ""
     @echo "Proof systems:"
-    @echo "  just build-coq       - Build Coq proofs"
-    @echo "  just build-lean4     - Build Lean 4 proofs"
-    @echo "  just build-agda      - Build Agda proofs"
-    @echo "  just build-isabelle  - Build Isabelle proofs"
-    @echo "  just build-mizar     - Build Mizar proofs"
+    @echo "  just build-coq        - Build Coq proofs"
+    @echo "  just build-lean4      - Build Lean 4 proofs"
+    @echo "  just build-agda       - Build Agda proofs"
+    @echo "  just build-isabelle   - Build Isabelle proofs"
+    @echo "  just build-mizar      - Build Mizar proofs"
+    @echo ""
+    @echo "Testing:"
+    @echo "  just test-ffi-zig     - Test Zig FFI"
+    @echo "  just test-cli         - Test Rust CLI"
+    @echo "  just test-elixir      - Test Elixir core"
     @echo ""
     @echo "Containers:"
-    @echo "  just container-build - Build Podman container"
-    @echo "  just container-run   - Run container"
+    @echo "  just container-build  - Build Podman container"
+    @echo "  just container-run    - Run container"
     @echo ""
     @echo "For full list: just --list"

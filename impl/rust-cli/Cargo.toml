@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+[package]
+name = "vsh"
+version = "0.6.0"
+edition = "2021"
+authors = ["Hyperpolymath <hyperpolymath@pm.me>"]
+description = "Valence Shell - A formally verified reversible shell"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/hyperpolymath/valence-shell"
+keywords = ["shell", "reversible", "formal-verification", "undo"]
+categories = ["command-line-utilities", "filesystem"]
+
+[dependencies]
+# CLI framework
+clap = { version = "4.4", features = ["derive", "env"] }
+
+# Terminal UI
+crossterm = "0.27"
+ratatui = "0.25"
+
+# Async runtime (for BEAM communication)
+tokio = { version = "1.35", features = ["full"] }
+
+# Serialization (for IPC with BEAM)
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Directory operations
+dirs = "5.0"
+
+# Colored output
+colored = "2.1"
+
+# UUID for operation IDs
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Unix socket for BEAM IPC
+# (tokio already provides this)
+
+[build-dependencies]
+# Link to Zig FFI library
+cc = "1.0"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+[[bin]]
+name = "vsh"
+path = "src/main.rs"

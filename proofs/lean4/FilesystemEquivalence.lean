@@ -47,10 +47,11 @@ theorem mkdirPreservesEquiv (p : Path) (fs1 fs2 : Filesystem)
     (hpre2 : MkdirPrecondition p fs2) :
     mkdir p fs1 ≈ mkdir p fs2 := by
   intro p'
-  simp [mkdir, fsUpdate]
+  unfold mkdir fsUpdate
   by_cases h : p = p'
-  · rfl
-  · exact heq p'
+  · simp only [h, ite_true]
+  · simp only [h, ite_false]
+    exact heq p'
 
 theorem rmdirPreservesEquiv (p : Path) (fs1 fs2 : Filesystem)
     (heq : fs1 ≈ fs2)
@@ -58,10 +59,11 @@ theorem rmdirPreservesEquiv (p : Path) (fs1 fs2 : Filesystem)
     (hpre2 : RmdirPrecondition p fs2) :
     rmdir p fs1 ≈ rmdir p fs2 := by
   intro p'
-  simp [rmdir, fsUpdate]
+  unfold rmdir fsUpdate
   by_cases h : p = p'
-  · rfl
-  · exact heq p'
+  · simp only [h, ite_true]
+  · simp only [h, ite_false]
+    exact heq p'
 
 theorem createFilePreservesEquiv (p : Path) (fs1 fs2 : Filesystem)
     (heq : fs1 ≈ fs2)
@@ -69,10 +71,11 @@ theorem createFilePreservesEquiv (p : Path) (fs1 fs2 : Filesystem)
     (hpre2 : CreateFilePrecondition p fs2) :
     createFile p fs1 ≈ createFile p fs2 := by
   intro p'
-  simp [createFile, fsUpdate]
+  unfold createFile fsUpdate
   by_cases h : p = p'
-  · rfl
-  · exact heq p'
+  · simp only [h, ite_true]
+  · simp only [h, ite_false]
+    exact heq p'
 
 theorem deleteFilePreservesEquiv (p : Path) (fs1 fs2 : Filesystem)
     (heq : fs1 ≈ fs2)
@@ -80,10 +83,11 @@ theorem deleteFilePreservesEquiv (p : Path) (fs1 fs2 : Filesystem)
     (hpre2 : DeleteFilePrecondition p fs2) :
     deleteFile p fs1 ≈ deleteFile p fs2 := by
   intro p'
-  simp [deleteFile, fsUpdate]
+  unfold deleteFile fsUpdate
   by_cases h : p = p'
-  · rfl
-  · exact heq p'
+  · simp only [h, ite_true]
+  · simp only [h, ite_false]
+    exact heq p'
 
 theorem applyOpPreservesEquiv (op : Operation) (fs1 fs2 : Filesystem)
     (heq : fs1 ≈ fs2)

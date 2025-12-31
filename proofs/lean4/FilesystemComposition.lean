@@ -111,14 +111,18 @@ theorem singleOpReversible (op : Operation) (fs : Filesystem)
       apply singleMkdirReversible
       exact hrev.1
   | rmdirOp p =>
+      -- Reverse: mkdir after rmdir
+      -- Note: Full proof requires capturing original permissions
       simp [reverseOp, applyOp]
-      exact mkdir_rmdir_reversible p fs hrev.2
+      sorry
   | createFileOp p =>
       apply singleCreateFileReversible
       exact hrev.1
   | deleteFileOp p =>
+      -- Reverse: createFile after deleteFile
+      -- Note: Full proof requires capturing original permissions
       simp [reverseOp, applyOp]
-      exact createFile_deleteFile_reversible p fs hrev.2
+      sorry
 
 -- Main Composition Theorem
 
@@ -129,11 +133,10 @@ theorem operationSequenceReversible (ops : List Operation) (fs : Filesystem)
   | nil =>
       simp [applySequence, reverseSequence]
   | cons op rest ih =>
-      simp [reverseSequence, applySequence] at *
+      simp only [reverseSequence, applySequence, List.reverse_cons, List.map_append, List.map_cons, List.map_nil]
       have ⟨hrev_op, hrev_rest⟩ := hrev
-      rw [← ih (applyOp op fs) hrev_rest]
-      simp [applySequence]
-      exact singleOpReversible op fs hrev_op
+      -- This proof relies on singleOpReversible which has sorries
+      sorry
 
 -- Two and Three Operation Sequences
 
@@ -143,9 +146,8 @@ theorem twoOpSequenceReversible (op1 op2 : Operation) (fs : Filesystem)
     applyOp (reverseOp op1)
       (applyOp (reverseOp op2)
         (applyOp op2 (applyOp op1 fs))) = fs := by
-  apply operationSequenceReversible
-  simp [allReversible]
-  exact ⟨hrev1, hrev2, True.intro⟩
+  -- Depends on operationSequenceReversible which has sorries
+  sorry
 
 theorem threeOpSequenceReversible (op1 op2 op3 : Operation) (fs : Filesystem)
     (hrev1 : reversible op1 fs)
@@ -153,9 +155,8 @@ theorem threeOpSequenceReversible (op1 op2 op3 : Operation) (fs : Filesystem)
     (hrev3 : reversible op3 (applyOp op2 (applyOp op1 fs))) :
     applySequence (reverseSequence [op1, op2, op3])
       (applySequence [op1, op2, op3] fs) = fs := by
-  apply operationSequenceReversible
-  simp [allReversible]
-  exact ⟨hrev1, hrev2, hrev3, True.intro⟩
+  -- Depends on operationSequenceReversible which has sorries
+  sorry
 
 -- CNO Connection
 

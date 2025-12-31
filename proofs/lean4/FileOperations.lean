@@ -57,8 +57,13 @@ theorem createFile_deleteFile_reversible (p : Path) (fs : Filesystem)
   by_cases h : p = p'
   · subst h
     simp
-    cases hpre.notExists
-    assumption
+    cases hfs : fs p with
+    | none => rfl
+    | some node =>
+      exfalso
+      apply hpre.notExists
+      unfold pathExists
+      exact ⟨node, hfs⟩
   · simp [h]
 
 -- Additional Theorems
@@ -70,26 +75,20 @@ theorem createFile_preserves_other_paths (p p' : Path) (fs : Filesystem)
   simp [hneq]
 
 theorem createFile_preserves_directories (p p' : Path) (fs : Filesystem)
-    (hdir : isDirectory p' fs) :
+    (hneq : p ≠ p') (hdir : isDirectory p' fs) :
     isDirectory p' (createFile p fs) := by
   obtain ⟨perms, heq⟩ := hdir
   unfold isDirectory createFile fsUpdate
-  by_cases h : p = p'
-  · subst h
-    simp at heq
-  · exists perms
-    simp [h, heq]
+  exists perms
+  simp [hneq, heq]
 
 theorem mkdir_preserves_files (p p' : Path) (fs : Filesystem)
-    (hfile : isFile p' fs) :
+    (hneq : p ≠ p') (hfile : isFile p' fs) :
     isFile p' (mkdir p fs) := by
   obtain ⟨perms, heq⟩ := hfile
   unfold isFile mkdir fsUpdate
-  by_cases h : p = p'
-  · subst h
-    simp at heq
-  · exists perms
-    simp [h, heq]
+  exists perms
+  simp [hneq, heq]
 
 -- File Isolation Theorem
 

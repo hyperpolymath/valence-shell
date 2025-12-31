@@ -1,0 +1,17 @@
+{
+  "name": "@valence/shell-mcp",
+  "version": "0.1.0",
+  "exports": "./src/Main.res.js",
+  "tasks": {
+    "build": "npx rescript build",
+    "start": "deno run --allow-read --allow-write --allow-net --allow-env src/Main.res.js",
+    "serve": "MCP_HTTP_MODE=true deno run --allow-read --allow-write --allow-net --allow-env src/Main.res.js"
+  },
+  "imports": {
+    "@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk@latest",
+    "@rescript/core": "npm:@rescript/core@latest"
+  },
+  "compilerOptions": {
+    "lib": ["deno.ns", "deno.unstable"]
+  }
+}
