@@ -6,12 +6,16 @@
 *.cho
 *.dct
 *.dcx
+*.dfe
+*.dfs
+*.dfx
 *.ecl
 *.eid
 *.eno
 *.epr
 *.erd
 *.ere
+*.eth
 *.evl
 *.fil
 *.frm
