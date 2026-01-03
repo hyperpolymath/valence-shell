@@ -55,10 +55,14 @@ def allPreconditions : List Operation → Filesystem → Prop
       opPrecondition op fs ∧
       allPreconditions rest (applyOp op fs)
 
--- Operation is reversible
+-- Operation is reversible (includes permission requirements for exact reversal)
 def reversible (op : Operation) (fs : Filesystem) : Prop :=
   opPrecondition op fs ∧
-  opPrecondition (reverseOp op) (applyOp op fs)
+  opPrecondition (reverseOp op) (applyOp op fs) ∧
+  (match op with
+   | .rmdirOp p => fs p = some ⟨FSNodeType.directory, defaultPerms⟩
+   | .deleteFileOp p => fs p = some ⟨FSNodeType.file, defaultPerms⟩
+   | _ => True)
 
 -- All operations are reversible
 def allReversible : List Operation → Filesystem → Prop
@@ -89,6 +93,15 @@ theorem reverseSequenceSingleton (op : Operation) :
     reverseSequence [op] = [reverseOp op] := by
   rfl
 
+-- Sequence append lemma
+theorem applySequence_append (xs ys : List Operation) (fs : Filesystem) :
+    applySequence (xs ++ ys) fs = applySequence ys (applySequence xs fs) := by
+  induction xs generalizing fs with
+  | nil => simp [applySequence]
+  | cons op rest ih =>
+      simp only [List.cons_append, applySequence]
+      exact ih (applyOp op fs)
+
 -- Single Operation Reversibility
 
 theorem singleMkdirReversible (p : Path) (fs : Filesystem)
@@ -112,17 +125,21 @@ theorem singleOpReversible (op : Operation) (fs : Filesystem)
       exact hrev.1
   | rmdirOp p =>
       -- Reverse: mkdir after rmdir
-      -- Note: Full proof requires capturing original permissions
-      simp [reverseOp, applyOp]
-      sorry
+      simp only [reverseOp, applyOp]
+      -- hrev.2.2 gives us: fs p = some ⟨directory, defaultPerms⟩
+      apply rmdir_mkdir_reversible
+      · exact hrev.1
+      · exact hrev.2.2
   | createFileOp p =>
       apply singleCreateFileReversible
       exact hrev.1
   | deleteFileOp p =>
       -- Reverse: createFile after deleteFile
-      -- Note: Full proof requires capturing original permissions
-      simp [reverseOp, applyOp]
-      sorry
+      simp only [reverseOp, applyOp]
+      -- hrev.2.2 gives us: fs p = some ⟨file, defaultPerms⟩
+      apply deleteFile_createFile_reversible
+      · exact hrev.1
+      · exact hrev.2.2
 
 -- Main Composition Theorem
 
@@ -133,10 +150,23 @@ theorem operationSequenceReversible (ops : List Operation) (fs : Filesystem)
   | nil =>
       simp [applySequence, reverseSequence]
   | cons op rest ih =>
+      -- reverseSequence (op :: rest) = map reverseOp (reverse (op :: rest))
+      --                              = map reverseOp (reverse rest ++ [op])
+      --                              = map reverseOp (reverse rest) ++ [reverseOp op]
+      --                              = reverseSequence rest ++ [reverseOp op]
       simp only [reverseSequence, applySequence, List.reverse_cons, List.map_append, List.map_cons, List.map_nil]
       have ⟨hrev_op, hrev_rest⟩ := hrev
-      -- This proof relies on singleOpReversible which has sorries
-      sorry
+      -- Step 1: Apply rest operations then reverse rest
+      have ih_result := ih (applyOp op fs) hrev_rest
+      -- ih_result: applySequence (reverseSequence rest) (applySequence rest (applyOp op fs)) = applyOp op fs
+      -- Step 2: Apply reverseOp op to get back to fs
+      have single := singleOpReversible op fs hrev_op
+      -- single: applyOp (reverseOp op) (applyOp op fs) = fs
+      -- Now combine: applySequence (reverseSequence rest ++ [reverseOp op]) (applySequence (op :: rest) fs)
+      rw [applySequence_append]
+      simp only [applySequence]
+      rw [ih_result]
+      exact single
 
 -- Two and Three Operation Sequences
 
@@ -146,8 +176,11 @@ theorem twoOpSequenceReversible (op1 op2 : Operation) (fs : Filesystem)
     applyOp (reverseOp op1)
       (applyOp (reverseOp op2)
         (applyOp op2 (applyOp op1 fs))) = fs := by
-  -- Depends on operationSequenceReversible which has sorries
-  sorry
+  -- First undo op2
+  have h2 := singleOpReversible op2 (applyOp op1 fs) hrev2
+  rw [h2]
+  -- Then undo op1
+  exact singleOpReversible op1 fs hrev1
 
 theorem threeOpSequenceReversible (op1 op2 op3 : Operation) (fs : Filesystem)
     (hrev1 : reversible op1 fs)
@@ -155,8 +188,11 @@ theorem threeOpSequenceReversible (op1 op2 op3 : Operation) (fs : Filesystem)
     (hrev3 : reversible op3 (applyOp op2 (applyOp op1 fs))) :
     applySequence (reverseSequence [op1, op2, op3])
       (applySequence [op1, op2, op3] fs) = fs := by
-  -- Depends on operationSequenceReversible which has sorries
-  sorry
+  -- Use the general theorem
+  apply operationSequenceReversible
+  -- Need to show allReversible [op1, op2, op3] fs
+  simp only [allReversible]
+  exact ⟨hrev1, hrev2, hrev3, trivial⟩
 
 -- CNO Connection
 

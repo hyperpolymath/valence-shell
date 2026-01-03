@@ -179,8 +179,10 @@ theorem mkdir_rmdir_reversible (p : Path) (fs : Filesystem)
     simp [h]
 
 -- The Reverse Direction: rmdir then mkdir
+-- Note: Requires original directory had defaultPerms for exact equality
 theorem rmdir_mkdir_reversible (p : Path) (fs : Filesystem)
-    (hpre : RmdirPrecondition p fs) :
+    (hpre : RmdirPrecondition p fs)
+    (hperms : fs p = some ⟨FSNodeType.directory, defaultPerms⟩) :
     mkdir p (rmdir p fs) = fs := by
   unfold mkdir rmdir fsUpdate
   funext p'
@@ -190,13 +192,8 @@ theorem rmdir_mkdir_reversible (p : Path) (fs : Filesystem)
     simp
     -- After rmdir, fs p = none, then mkdir recreates it
     -- We need to show: some ⟨directory, defaultPerms⟩ = fs p
-    -- We know hpre.isDir : isDirectory p fs
-    obtain ⟨perms, hperms⟩ := hpre.isDir
+    -- By assumption, fs p = some ⟨directory, defaultPerms⟩
     rw [hperms]
-    -- Now we need to show the permissions match
-    -- The issue is we recreate with defaultPerms but original had perms
-    -- This is actually only true if perms = defaultPerms
-    sorry  -- This theorem is only approximately true - permissions may differ
   · -- p ≠ p'
     simp [h]
 

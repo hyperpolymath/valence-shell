@@ -106,4 +106,23 @@ theorem file_isolation (p1 p2 : Path) (fs : Filesystem)
     exists node
     simp [hneq, heq]
 
+-- Reverse Direction: deleteFile then createFile
+-- Note: Requires original file had defaultPerms for exact equality
+theorem deleteFile_createFile_reversible (p : Path) (fs : Filesystem)
+    (hpre : DeleteFilePrecondition p fs)
+    (hperms : fs p = some ⟨FSNodeType.file, defaultPerms⟩) :
+    createFile p (deleteFile p fs) = fs := by
+  unfold createFile deleteFile fsUpdate
+  funext p'
+  by_cases h : p = p'
+  · -- p = p'
+    subst h
+    simp
+    -- After deleteFile, fs p = none, then createFile recreates it
+    -- We need to show: some ⟨file, defaultPerms⟩ = fs p
+    -- By assumption, fs p = some ⟨file, defaultPerms⟩
+    rw [hperms]
+  · -- p ≠ p'
+    simp [h]
+
 -- Summary: File operations proven reversible in Lean 4
