@@ -101,7 +101,7 @@ pub const AuditLog = struct {
     pub fn init(allocator: Allocator, backing_path: ?[]const u8) !Self {
         var log = Self{
             .allocator = allocator,
-            .entries = std.ArrayList(AuditEntry).init(allocator),
+            .entries = .empty,
             .next_id = 1,
             .backing_file = null,
         };
@@ -112,10 +112,8 @@ pub const AuditLog = struct {
             });
 
             // Write header
-            try log.backing_file.?.writer().print(
-                "# Valence Shell Audit Log\n# Format: ID|TIMESTAMP|OP|PATH|STATUS|PROOF\n",
-                .{},
-            );
+            const header = "# Valence Shell Audit Log\n# Format: ID|TIMESTAMP|OP|PATH|STATUS|PROOF\n";
+            _ = try log.backing_file.?.write(header);
         }
 
         return log;
@@ -126,7 +124,7 @@ pub const AuditLog = struct {
         if (self.backing_file) |*f| {
             f.close();
         }
-        self.entries.deinit();
+        self.entries.deinit(self.allocator);
     }
 
     /// Log an operation
@@ -146,7 +144,7 @@ pub const AuditLog = struct {
             .inverse_id = null,
         };
 
-        self.entries.append(entry) catch return;
+        self.entries.append(self.allocator, entry) catch return;
         self.next_id += 1;
 
         // Write to backing file if present
@@ -157,17 +155,17 @@ pub const AuditLog = struct {
                 .failed => |e| @tagName(e),
             };
 
-            f.writer().print(
-                "{d}|{d}|{s}|{s}|{s}|{s}\n",
-                .{
-                    entry.id,
-                    entry.timestamp,
-                    @tagName(operation),
-                    path,
-                    status_str,
-                    entry.proof_ref,
-                },
-            ) catch {};
+            // Format log entry to buffer
+            var buf: [512]u8 = undefined;
+            const line = std.fmt.bufPrint(&buf, "{d}|{d}|{s}|{s}|{s}|{s}\n", .{
+                entry.id,
+                entry.timestamp,
+                @tagName(operation),
+                path,
+                status_str,
+                entry.proof_ref,
+            }) catch return;
+            _ = f.write(line) catch {};
         }
     }
 
@@ -201,18 +199,18 @@ pub const AuditLog = struct {
 
     /// Get all operations that can be undone (succeeded, has inverse, not yet undone)
     pub fn getUndoableOperations(self: *const Self) []const AuditEntry {
-        var result = std.ArrayList(AuditEntry).init(self.allocator);
+        var result: std.ArrayList(AuditEntry) = .empty;
 
         for (self.entries.items) |entry| {
             if (entry.status == .succeeded and
                 entry.operation.inverse() != null and
                 entry.inverse_id == null)
             {
-                result.append(entry) catch continue;
+                result.append(self.allocator, entry) catch continue;
             }
         }
 
-        return result.toOwnedSlice() catch &[_]AuditEntry{};
+        return result.toOwnedSlice(self.allocator) catch &[_]AuditEntry{};
     }
 
     /// Generate human-readable audit report

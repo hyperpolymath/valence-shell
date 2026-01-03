@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+.{
+    .name = .valence_shell,
+    .version = "0.5.0",
+    .fingerprint = 0xa6b16f990c00251e,
+    .minimum_zig_version = "0.14.0",
+
+    .dependencies = .{
+        .zig_prover_ffi = .{
+            .url = "https://github.com/hyperpolymath/zig-prover-ffi/archive/refs/heads/main.tar.gz",
+            .hash = "zig_prover_ffi-0.1.0-D9I95bQ3AABYxeH-Tx4hG5nd6ynNw0zh5M5UiNMLo0FY",
+        },
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
