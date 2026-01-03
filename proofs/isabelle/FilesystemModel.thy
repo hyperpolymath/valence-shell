@@ -8,7 +8,7 @@
 *)
 
 theory FilesystemModel
-  imports Main
+  imports Main "HOL-Library.Sublist"
 begin
 
 (* Path Model *)

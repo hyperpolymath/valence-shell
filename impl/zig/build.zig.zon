@@ -8,7 +8,7 @@
     .dependencies = .{
         .zig_prover_ffi = .{
             .url = "https://github.com/hyperpolymath/zig-prover-ffi/archive/refs/heads/main.tar.gz",
-            .hash = "zig_prover_ffi-0.1.0-D9I95bQ3AABYxeH-Tx4hG5nd6ynNw0zh5M5UiNMLo0FY",
+            .hash = "zig_prover_ffi-0.1.0-D9I95cE4AADDVzxQx3FoWP_cG_sD7JrDIE6f3ZvkCsi3",
         },
     },
 

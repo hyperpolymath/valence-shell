@@ -22,6 +22,7 @@
 ; ===== Preconditions =====
 
 (declare-fun path-exists (Path Filesystem) Bool)
+(declare-fun parent-path (Path) Path)
 (declare-fun parent-exists (Path Filesystem) Bool)
 (declare-fun is-directory (Path Filesystem) Bool)
 (declare-fun is-file (Path Filesystem) Bool)
@@ -38,25 +39,25 @@
   (= (mkdir-precondition p fs)
      (and (not (path-exists p fs))
           (parent-exists p fs)
-          (is-directory (parent-exists p fs) fs)
-          (has-write-permission (parent-exists p fs) fs)))))
+          (is-directory (parent-path p) fs)
+          (has-write-permission (parent-path p) fs)))))
 
 (assert (forall ((p Path) (fs Filesystem))
   (= (rmdir-precondition p fs)
      (and (is-directory p fs)
           (is-empty-dir p fs)
-          (has-write-permission (parent-exists p fs) fs)))))
+          (has-write-permission (parent-path p) fs)))))
 
 (assert (forall ((p Path) (fs Filesystem))
   (= (create-file-precondition p fs)
      (and (not (path-exists p fs))
           (parent-exists p fs)
-          (has-write-permission (parent-exists p fs) fs)))))
+          (has-write-permission (parent-path p) fs)))))
 
 (assert (forall ((p Path) (fs Filesystem))
   (= (delete-file-precondition p fs)
      (and (is-file p fs)
-          (has-write-permission (parent-exists p fs) fs)))))
+          (has-write-permission (parent-path p) fs)))))
 
 ; ===== Main Reversibility Theorems =====
 
