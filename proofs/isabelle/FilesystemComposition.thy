@@ -37,6 +37,11 @@ fun apply_sequence :: "operation list \<Rightarrow> filesystem \<Rightarrow> fil
 definition reverse_sequence :: "operation list \<Rightarrow> operation list" where
   "reverse_sequence ops = map reverse_op (rev ops)"
 
+(* Sequence composition *)
+lemma apply_sequence_append:
+  "apply_sequence (xs @ ys) fs = apply_sequence ys (apply_sequence xs fs)"
+  by (induction xs arbitrary: fs; simp)
+
 (* Preconditions *)
 fun op_precondition :: "operation \<Rightarrow> filesystem \<Rightarrow> bool" where
   "op_precondition (MkdirOp p) fs = mkdir_precondition p fs"
@@ -44,11 +49,15 @@ fun op_precondition :: "operation \<Rightarrow> filesystem \<Rightarrow> bool" w
 | "op_precondition (CreateFileOp p) fs = create_file_precondition p fs"
 | "op_precondition (DeleteFileOp p) fs = delete_file_precondition p fs"
 
-(* Reversible *)
+(* Reversible - includes permission requirements for exact reversal *)
 definition reversible :: "operation \<Rightarrow> filesystem \<Rightarrow> bool" where
   "reversible op fs = (
     op_precondition op fs \<and>
-    op_precondition (reverse_op op) (apply_op op fs))"
+    op_precondition (reverse_op op) (apply_op op fs) \<and>
+    (case op of
+       RmdirOp p \<Rightarrow> fs p = Some \<lparr> node_type = Directory, node_permissions = default_perms \<rparr>
+     | DeleteFileOp p \<Rightarrow> fs p = Some \<lparr> node_type = File, node_permissions = default_perms \<rparr>
+     | _ \<Rightarrow> True))"
 
 (* All reversible *)
 fun all_reversible :: "operation list \<Rightarrow> filesystem \<Rightarrow> bool" where
@@ -87,17 +96,38 @@ next
     using Cons.IH[OF split(2)] by auto
 
   have single: "apply_op (reverse_op op) (apply_op op fs) = fs"
-  proof -
-    obtain hpre hrev where "op_precondition op fs" "op_precondition (reverse_op op) (apply_op op fs)"
+  proof (cases op)
+    case (MkdirOp p)
+    then have "mkdir_precondition p fs"
+      using split(1) unfolding reversible_def by simp
+    then show ?thesis using MkdirOp mkdir_rmdir_reversible by simp
+  next
+    case (RmdirOp p)
+    then have pre: "rmdir_precondition p fs" "mkdir_precondition p (rmdir p fs)"
+              and perm: "fs p = Some \<lparr> node_type = Directory, node_permissions = default_perms \<rparr>"
       using split(1) unfolding reversible_def by auto
-    show ?thesis
-      using \<open>op_precondition op fs\<close> \<open>op_precondition (reverse_op op) (apply_op op fs)\<close>
-      by (cases op; simp add: mkdir_rmdir_reversible create_file_delete_file_reversible)
+    then show ?thesis using RmdirOp rmdir_mkdir_reversible by simp
+  next
+    case (CreateFileOp p)
+    then have "create_file_precondition p fs"
+      using split(1) unfolding reversible_def by simp
+    then show ?thesis using CreateFileOp create_file_delete_file_reversible by simp
+  next
+    case (DeleteFileOp p)
+    then have pre: "delete_file_precondition p fs" "create_file_precondition p (delete_file p fs)"
+              and perm: "fs p = Some \<lparr> node_type = File, node_permissions = default_perms \<rparr>"
+      using split(1) unfolding reversible_def by auto
+    then show ?thesis using DeleteFileOp delete_file_create_file_reversible by simp
   qed
 
+  have step1: "apply_sequence (map reverse_op (rev ops')) (apply_sequence ops' (apply_op op fs)) = apply_op op fs"
+    using ih unfolding reverse_sequence_def by simp
+  have step2: "apply_op (reverse_op op) (apply_op op fs) = fs"
+    using single by simp
   show ?case
     unfolding reverse_sequence_def
-    by (simp add: ih single)
+    using step1 step2
+    by (simp add: apply_sequence_append)
 qed
 
 end

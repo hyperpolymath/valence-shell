@@ -100,9 +100,29 @@ theorem reversible_creates_equiv:
   shows "apply_op (reverse_op op) (apply_op op fs) \<approx> fs"
 proof -
   have "apply_op (reverse_op op) (apply_op op fs) = fs"
-    using assms
-    by (cases op; auto simp add: reversible_def
-                     mkdir_rmdir_reversible create_file_delete_file_reversible)
+  proof (cases op)
+    case (MkdirOp p)
+    then have "mkdir_precondition p fs"
+      using assms unfolding reversible_def by simp
+    then show ?thesis using MkdirOp mkdir_rmdir_reversible by simp
+  next
+    case (RmdirOp p)
+    then have pre: "rmdir_precondition p fs" "mkdir_precondition p (rmdir p fs)"
+              and perm: "fs p = Some \<lparr> node_type = Directory, node_permissions = default_perms \<rparr>"
+      using assms unfolding reversible_def by auto
+    then show ?thesis using RmdirOp rmdir_mkdir_reversible by simp
+  next
+    case (CreateFileOp p)
+    then have "create_file_precondition p fs"
+      using assms unfolding reversible_def by simp
+    then show ?thesis using CreateFileOp create_file_delete_file_reversible by simp
+  next
+    case (DeleteFileOp p)
+    then have pre: "delete_file_precondition p fs" "create_file_precondition p (delete_file p fs)"
+              and perm: "fs p = Some \<lparr> node_type = File, node_permissions = default_perms \<rparr>"
+      using assms unfolding reversible_def by auto
+    then show ?thesis using DeleteFileOp delete_file_create_file_reversible by simp
+  qed
   thus ?thesis
     unfolding fs_equiv_def by simp
 qed

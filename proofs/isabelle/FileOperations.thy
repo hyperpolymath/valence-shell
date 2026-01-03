@@ -83,25 +83,73 @@ theorem create_file_preserves_other_paths:
   by auto
 
 theorem create_file_preserves_directories:
-  assumes "is_directory p' fs"
+  assumes "is_directory p' fs" "p \<noteq> p'"
   shows "is_directory p' (create_file p fs)"
-proof -
-  obtain perms where "fs p' = Some \<lparr> node_type = Directory, node_permissions = perms \<rparr>"
-    using assms is_directory_def by auto
-  then show ?thesis
-    unfolding is_directory_def create_file_def fs_update_def
-    by (cases "p = p'"; auto)
-qed
+  using assms
+  unfolding is_directory_def create_file_def fs_update_def
+  by auto
 
 theorem mkdir_preserves_files:
-  assumes "is_file p' fs"
+  assumes "is_file p' fs" "p \<noteq> p'"
   shows "is_file p' (mkdir p fs)"
+  using assms
+  unfolding is_file_def mkdir_def fs_update_def
+  by auto
+
+(* Reverse direction reversibility - rmdir then mkdir *)
+(* Note: requires original directory had default_perms for exact equality *)
+theorem rmdir_mkdir_reversible:
+  assumes "rmdir_precondition p fs"
+      and "mkdir_precondition p (rmdir p fs)"
+      and "fs p = Some \<lparr> node_type = Directory, node_permissions = default_perms \<rparr>"
+  shows "mkdir p (rmdir p fs) = fs"
 proof -
-  obtain perms where "fs p' = Some \<lparr> node_type = File, node_permissions = perms \<rparr>"
-    using assms is_file_def by auto
-  then show ?thesis
-    unfolding is_file_def mkdir_def fs_update_def
-    by (cases "p = p'"; auto)
+  have "\<And>p'. (mkdir p (rmdir p fs)) p' = fs p'"
+  proof -
+    fix p'
+    show "(mkdir p (rmdir p fs)) p' = fs p'"
+    proof (cases "p = p'")
+      case True
+      then show ?thesis
+        unfolding mkdir_def rmdir_def fs_update_def
+        using assms(3) True
+        by auto
+    next
+      case False
+      then show ?thesis
+        unfolding mkdir_def rmdir_def fs_update_def
+        by auto
+    qed
+  qed
+  then show ?thesis by auto
+qed
+
+(* Reverse direction reversibility - delete then create *)
+(* Note: requires original file had default_perms for exact equality *)
+theorem delete_file_create_file_reversible:
+  assumes "delete_file_precondition p fs"
+      and "create_file_precondition p (delete_file p fs)"
+      and "fs p = Some \<lparr> node_type = File, node_permissions = default_perms \<rparr>"
+  shows "create_file p (delete_file p fs) = fs"
+proof -
+  have "\<And>p'. (create_file p (delete_file p fs)) p' = fs p'"
+  proof -
+    fix p'
+    show "(create_file p (delete_file p fs)) p' = fs p'"
+    proof (cases "p = p'")
+      case True
+      then show ?thesis
+        unfolding create_file_def delete_file_def fs_update_def
+        using assms(3) True
+        by auto
+    next
+      case False
+      then show ?thesis
+        unfolding create_file_def delete_file_def fs_update_def
+        by auto
+    qed
+  qed
+  then show ?thesis by auto
 qed
 
 (* File Isolation Theorem *)
