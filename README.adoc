@@ -1,13 +1,15 @@
 = Valence Shell (vsh)
 
-image:https://img.shields.io/badge/license-AGPL--3.0-blue.svg[AGPL-3.0,link="https://www.gnu.org/licenses/agpl-3.0"] image:https://img.shields.io/badge/philosophy-Palimpsest-purple.svg[Palimpsest,link="https://github.com/hyperpolymath/palimpsest-licence"]
+image:https://img.shields.io/badge/License-MPL_2.0-blue.svg[MPL-2.0,link="https://opensource.org/licenses/MPL-2.0"]
+image:https://img.shields.io/badge/Philosophy-Palimpsest-purple.svg[Palimpsest,link="https://github.com/hyperpolymath/palimpsest-licence"]
+
+
 :toc: macro
 :toclevels: 3
 :icons: font
 :source-highlighter: rouge
 
 image:https://img.shields.io/badge/RSR-PLATINUM-blueviolet[RSR Compliance]
-image:https://img.shields.io/badge/License-MIT%20%2B%20Palimpsest-blue[License]
 image:https://img.shields.io/badge/Proofs-256%20theorems-brightgreen[Formal Proofs]
 image:https://img.shields.io/badge/Systems-6%20proof%20assistants-orange[Proof Systems]
 
