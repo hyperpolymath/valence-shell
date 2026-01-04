@@ -1,0 +1,17 @@
+{"log":
+ [{"message":
+   ".> LEAN_PATH=././.lake/build/lib LD_LIBRARY_PATH= /var/home/hyper/.elan/toolchains/leanprover--lean4---v4.12.0/bin/lean ././././FilesystemModel.lean -R ./././. -o ././.lake/build/lib/FilesystemModel.olean -i ././.lake/build/lib/FilesystemModel.ilean -c ././.lake/build/ir/FilesystemModel.c --json",
+   "level": "trace"},
+  {"message":
+   "././././FilesystemModel.lean:137:5: unused variable `hpre`\nnote: this linter can be disabled with `set_option linter.unusedVariables false`",
+   "level": "warning"},
+  {"message":
+   "././././FilesystemModel.lean:144:5: unused variable `hpre`\nnote: this linter can be disabled with `set_option linter.unusedVariables false`",
+   "level": "warning"},
+  {"message":
+   "././././FilesystemModel.lean:151:5: unused variable `hpre`\nnote: this linter can be disabled with `set_option linter.unusedVariables false`",
+   "level": "warning"},
+  {"message":
+   "././././FilesystemModel.lean:184:5: unused variable `hpre`\nnote: this linter can be disabled with `set_option linter.unusedVariables false`",
+   "level": "warning"}],
+ "depHash": "5568278547779996330"}
