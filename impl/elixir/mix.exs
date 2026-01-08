@@ -9,9 +9,6 @@ defmodule VSH.MixProject do
       version: "0.1.0",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
-      compilers: [:elixir_make] ++ Mix.compilers(),
-      make_targets: ["all"],
-      make_clean: ["clean"],
       deps: deps(),
       description: "Valence Shell - Formally Verified Reversible Shell",
       package: package(),
@@ -29,7 +26,7 @@ defmodule VSH.MixProject do
   defp deps do
     [
       {:jason, "~> 1.4"},
-      {:elixir_make, "~> 0.8", runtime: false},
+      {:zigler, "~> 0.13", runtime: false},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false}
     ]
   end
