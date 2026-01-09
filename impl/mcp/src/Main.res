@@ -107,10 +107,10 @@ let startHttpMode = async (): promise<unit> => {
         Dict.set(error, "error", JSON.Encode.string("Use POST for MCP requests"))
         Http.jsonResponse(JSON.Encode.object(error), {status: 405})
       } else {
-        // TODO: Implement JSON-RPC handling for HTTP mode
-        let error = Dict.make()
-        Dict.set(error, "error", JSON.Encode.string("HTTP MCP mode not yet implemented - use STDIO"))
-        Http.jsonResponse(JSON.Encode.object(error), {status: 501})
+        // Handle JSON-RPC request
+        let body = await Http.text(request)
+        let response = await handleHttpRequest(body)
+        Http.jsonResponse(response, {status: 200})
       }
     } else {
       Http.textResponse("Not Found", {status: 404})

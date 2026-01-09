@@ -41,6 +41,39 @@ defmodule VSH.NIF do
   var g_fs: ?*Filesystem = null;
   var g_allocator: std.mem.Allocator = undefined;
 
+  // Audit log entry
+  const AuditEntry = struct {
+      operation: []const u8,
+      path: []const u8,
+      result: PosixError,
+      timestamp: i64,
+  };
+
+  // Simple audit log (ring buffer of last 100 entries)
+  const AUDIT_LOG_SIZE = 100;
+  var g_audit_log: [AUDIT_LOG_SIZE]?AuditEntry = [_]?AuditEntry{null} ** AUDIT_LOG_SIZE;
+  var g_audit_index: usize = 0;
+  var g_audit_count: usize = 0;
+
+  fn recordAudit(operation: []const u8, path: []const u8, result: PosixError) void {
+      g_audit_log[g_audit_index] = AuditEntry{
+          .operation = operation,
+          .path = path,
+          .result = result,
+          .timestamp = std.time.timestamp(),
+      };
+      g_audit_index = (g_audit_index + 1) % AUDIT_LOG_SIZE;
+      if (g_audit_count < AUDIT_LOG_SIZE) {
+          g_audit_count += 1;
+      }
+  }
+
+  fn getLastAudit() ?AuditEntry {
+      if (g_audit_count == 0) return null;
+      const last_index = if (g_audit_index == 0) AUDIT_LOG_SIZE - 1 else g_audit_index - 1;
+      return g_audit_log[last_index];
+  }
+
   // POSIX error codes matching Coq's posix_errors.v
   const PosixError = enum(i32) {
       success = 0,
@@ -167,6 +200,7 @@ defmodule VSH.NIF do
   pub fn mkdir(path: []const u8) beam.term {
       const fs = ensureFs() catch return beam.make_error_tuple("init_failed");
       const result = fs.mkdir(path);
+      recordAudit("mkdir", path, result);
       if (result == .success) {
           return beam.make_atom("ok");
       }
@@ -177,6 +211,7 @@ defmodule VSH.NIF do
   pub fn rmdir(path: []const u8) beam.term {
       const fs = ensureFs() catch return beam.make_error_tuple("init_failed");
       const result = fs.rmdir(path);
+      recordAudit("rmdir", path, result);
       if (result == .success) {
           return beam.make_atom("ok");
       }
@@ -187,6 +222,7 @@ defmodule VSH.NIF do
   pub fn create_file(path: []const u8) beam.term {
       const fs = ensureFs() catch return beam.make_error_tuple("init_failed");
       const result = fs.createFile(path);
+      recordAudit("create_file", path, result);
       if (result == .success) {
           return beam.make_atom("ok");
       }
@@ -197,6 +233,7 @@ defmodule VSH.NIF do
   pub fn delete_file(path: []const u8) beam.term {
       const fs = ensureFs() catch return beam.make_error_tuple("init_failed");
       const result = fs.deleteFile(path);
+      recordAudit("delete_file", path, result);
       if (result == .success) {
           return beam.make_atom("ok");
       }
@@ -205,8 +242,14 @@ defmodule VSH.NIF do
 
   // NIF: get_last_audit/0
   pub fn get_last_audit() beam.term {
-      // TODO: Implement audit log retrieval
-      return beam.make_error_tuple("no_entries");
+      const entry = getLastAudit() orelse return beam.make_error_tuple("no_entries");
+      // Return as {operation, path, result, timestamp}
+      return beam.make_tuple(.{
+          beam.make_binary(entry.operation),
+          beam.make_binary(entry.path),
+          errorToAtom(entry.result),
+          beam.make_i64(entry.timestamp),
+      });
   }
   """
 

@@ -496,3 +496,108 @@ let createServer = (): mcpServer => {
 
   server
 }
+
+// ============================================================================
+// HTTP Mode Handler
+// ============================================================================
+
+// Handle MCP JSON-RPC request over HTTP
+let handleHttpRequest = async (body: string): promise<JSON.t> => {
+  // Parse request
+  let request = try {
+    JSON.parseExn(body)
+  } catch {
+  | _ =>
+    let error = Dict.make()
+    Dict.set(error, "jsonrpc", JSON.Encode.string("2.0"))
+    Dict.set(error, "error", JSON.Encode.object({
+      let e = Dict.make()
+      Dict.set(e, "code", JSON.Encode.int(-32700))
+      Dict.set(e, "message", JSON.Encode.string("Parse error"))
+      e
+    }))
+    Dict.set(error, "id", JSON.Encode.null)
+    return JSON.Encode.object(error)
+  }
+
+  // Extract method and params
+  let obj = JSON.Decode.object(request)->Option.getOr(Dict.make())
+  let method = Dict.get(obj, "method")->Option.flatMap(JSON.Decode.string)->Option.getOr("")
+  let params = Dict.get(obj, "params")->Option.getOr(JSON.Encode.object(Dict.make()))
+  let id = Dict.get(obj, "id")->Option.getOr(JSON.Encode.null)
+
+  // Route to handler
+  let result = switch method {
+  | "tools/call" =>
+    // MCP tools/call - extract tool name from params
+    let paramsObj = JSON.Decode.object(params)->Option.getOr(Dict.make())
+    let toolName = Dict.get(paramsObj, "name")->Option.flatMap(JSON.Decode.string)->Option.getOr("")
+    let toolParams = Dict.get(paramsObj, "arguments")->Option.getOr(JSON.Encode.object(Dict.make()))
+
+    switch toolName {
+    | "vsh_mkdir" => await mkdirHandler(toolParams)
+    | "vsh_rmdir" => await rmdirHandler(toolParams)
+    | "vsh_touch" => await touchHandler(toolParams)
+    | "vsh_rm" => await rmHandler(toolParams)
+    | "vsh_undo" => await undoHandler(toolParams)
+    | "vsh_history" => await historyHandler(toolParams)
+    | "vsh_status" => await statusHandler(toolParams)
+    | "vsh_proofs" => await proofsHandler(toolParams)
+    | "vsh_begin" => await beginHandler(toolParams)
+    | "vsh_commit" => await commitHandler(toolParams)
+    | "vsh_rollback" => await rollbackHandler(toolParams)
+    | _ => Obj.magic(makeToolResult("Unknown tool: " ++ toolName, ~isError=true))
+    }
+  | "tools/list" =>
+    // Return available tools
+    let tools = [
+      {"name": "vsh_mkdir", "description": "Create directory (reversible)"},
+      {"name": "vsh_rmdir", "description": "Remove empty directory (reversible)"},
+      {"name": "vsh_touch", "description": "Create empty file (reversible)"},
+      {"name": "vsh_rm", "description": "Remove file (reversible)"},
+      {"name": "vsh_undo", "description": "Undo last N operations"},
+      {"name": "vsh_history", "description": "Show operation history"},
+      {"name": "vsh_status", "description": "Show shell state"},
+      {"name": "vsh_proofs", "description": "Show verification info"},
+      {"name": "vsh_begin", "description": "Begin transaction"},
+      {"name": "vsh_commit", "description": "Commit transaction"},
+      {"name": "vsh_rollback", "description": "Rollback transaction"},
+    ]
+    let toolsJson = Array.map(tools, t => {
+      let obj = Dict.make()
+      Dict.set(obj, "name", JSON.Encode.string(t["name"]))
+      Dict.set(obj, "description", JSON.Encode.string(t["description"]))
+      JSON.Encode.object(obj)
+    })
+    let result = Dict.make()
+    Dict.set(result, "tools", JSON.Encode.array(toolsJson))
+    JSON.Encode.object(result)
+  | "initialize" =>
+    let result = Dict.make()
+    Dict.set(result, "protocolVersion", JSON.Encode.string("2024-11-05"))
+    Dict.set(result, "capabilities", JSON.Encode.object({
+      let caps = Dict.make()
+      Dict.set(caps, "tools", JSON.Encode.object(Dict.make()))
+      caps
+    }))
+    Dict.set(result, "serverInfo", JSON.Encode.object({
+      let info = Dict.make()
+      Dict.set(info, "name", JSON.Encode.string("valence-shell-mcp"))
+      Dict.set(info, "version", JSON.Encode.string(packageVersion))
+      info
+    }))
+    JSON.Encode.object(result)
+  | _ =>
+    let error = Dict.make()
+    Dict.set(error, "code", JSON.Encode.int(-32601))
+    Dict.set(error, "message", JSON.Encode.string("Method not found: " ++ method))
+    JSON.Encode.object(error)
+  }
+
+  // Build response
+  let response = Dict.make()
+  Dict.set(response, "jsonrpc", JSON.Encode.string("2.0"))
+  Dict.set(response, "result", result)
+  Dict.set(response, "id", id)
+  JSON.Encode.object(response)
+}
