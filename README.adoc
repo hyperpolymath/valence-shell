@@ -421,7 +421,7 @@ See link:CONTRIBUTING.md[CONTRIBUTING.md] for details.
 
 **Triple-licensed** for maximum flexibility:
 
-* **MIT License** (permissive, OSI-approved)
+* **Palimpsest-MPL-1.0 License** (permissive, OSI-approved)
 * **GPL v3** (copyleft option)
 * **Palimpsest License v0.8** (recommended: attribution + history)
 
@@ -548,7 +548,7 @@ Copyright (c) 2025 Valence Shell Contributors
 
 Triple-licensed under:
 
-* MIT License
+* Palimpsest-MPL-1.0 License
 * GNU General Public License v3.0
 * Palimpsest License v0.8 (recommended)
 
