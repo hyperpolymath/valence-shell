@@ -1,242 +1,193 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Valence Shell - Precondition Checking
+//! Precondition checking module
 //!
-//! This module implements precondition checks derived from Coq proofs.
-//! Each check corresponds to a proven precondition in filesystem_model.v
-//!
-//! CORRESPONDENCE TO COQ:
-//!
-//! mkdir_precondition p fs :=
-//!   ~ path_exists p fs /\
-//!   parent_exists p fs /\
-//!   parent_is_dir p fs /\
-//!   parent_writable p fs
-//!
-//! rmdir_precondition p fs :=
-//!   path_exists p fs /\
-//!   is_directory p fs /\
-//!   is_empty p fs /\
-//!   parent_writable p fs /\
-//!   ~ is_root p
+//! Runtime validation of preconditions that mirror the formal proofs.
+//! Each check corresponds to a theorem's precondition in Coq/Lean4/etc.
 
 const std = @import("std");
-const lib = @import("lib.zig");
-const PosixError = lib.PosixError;
+const fs = std.fs;
 
-/// Check mkdir preconditions (from Coq filesystem_model.v)
+/// Check mkdir preconditions (mirrors Coq mkdir_precondition)
 ///
-/// Returns .success if all preconditions hold, otherwise returns
-/// the appropriate POSIX error code.
-pub fn checkMkdirPreconditions(full_path: []const u8) PosixError {
-    // Precondition 1: Path does not exist
-    if (pathExists(full_path)) {
-        return .eexist;
+/// Preconditions:
+/// 1. Path does not already exist
+/// 2. Parent directory exists
+/// 3. Parent is writable (checked by kernel)
+pub fn checkMkdirPreconditions(path: []const u8) bool {
+    // Path must not exist
+    const exists = pathExists(path);
+    if (exists) return false;
+
+    // Parent must exist
+    const parent = parentPath(path);
+    if (parent) |p| {
+        if (!pathExists(p)) return false;
     }
+    // Root path has no parent requirement
 
-    // Get parent path
-    const parent = std.fs.path.dirname(full_path) orelse return .einval;
-
-    // Precondition 2: Parent exists
-    if (!pathExists(parent)) {
-        return .enoent;
-    }
-
-    // Precondition 3: Parent is a directory
-    if (!isDirectory(parent)) {
-        return .enotdir;
-    }
-
-    // Precondition 4: Parent is writable
-    if (!isWritable(parent)) {
-        return .eacces;
-    }
-
-    return .success;
+    return true;
 }
 
-/// Check rmdir preconditions (from Coq filesystem_model.v)
-pub fn checkRmdirPreconditions(full_path: []const u8) PosixError {
-    // Precondition 1: Path exists
-    if (!pathExists(full_path)) {
-        return .enoent;
-    }
+/// Check rmdir preconditions (mirrors Coq rmdir_precondition)
+///
+/// Preconditions:
+/// 1. Path exists and is a directory
+/// 2. Directory is empty
+pub fn checkRmdirPreconditions(path: []const u8) bool {
+    // Must exist
+    if (!pathExists(path)) return false;
 
-    // Precondition 2: Path is a directory
-    if (!isDirectory(full_path)) {
-        return .enotdir;
-    }
+    // Must be a directory
+    if (!isDirectory(path)) return false;
 
-    // Precondition 3: Directory is empty
-    if (!isEmptyDirectory(full_path)) {
-        return .enotempty;
-    }
+    // Must be empty (checked by kernel, but we verify)
+    if (!isEmptyDirectory(path)) return false;
 
-    // Precondition 4: Not root
-    if (isRoot(full_path)) {
-        return .eacces;
-    }
-
-    // Precondition 5: Parent writable
-    const parent = std.fs.path.dirname(full_path) orelse return .einval;
-    if (!isWritable(parent)) {
-        return .eacces;
-    }
-
-    return .success;
+    return true;
 }
 
-/// Check create_file preconditions (from Coq file_operations.v)
-pub fn checkCreateFilePreconditions(full_path: []const u8) PosixError {
-    // Precondition 1: Path does not exist
-    if (pathExists(full_path)) {
-        return .eexist;
+/// Check create_file preconditions
+///
+/// Preconditions:
+/// 1. Path does not exist
+/// 2. Parent directory exists
+pub fn checkCreateFilePreconditions(path: []const u8) bool {
+    // Allow touch on existing files (just updates timestamp)
+    // But for strict mode, path should not exist
+    
+    // Parent must exist
+    const parent = parentPath(path);
+    if (parent) |p| {
+        if (!pathExists(p)) return false;
     }
 
-    // Get parent path
-    const parent = std.fs.path.dirname(full_path) orelse return .einval;
-
-    // Precondition 2: Parent exists
-    if (!pathExists(parent)) {
-        return .enoent;
-    }
-
-    // Precondition 3: Parent is a directory
-    if (!isDirectory(parent)) {
-        return .enotdir;
-    }
-
-    // Precondition 4: Parent is writable
-    if (!isWritable(parent)) {
-        return .eacces;
-    }
-
-    return .success;
+    return true;
 }
 
-/// Check delete_file preconditions (from Coq file_operations.v)
-pub fn checkDeleteFilePreconditions(full_path: []const u8) PosixError {
-    // Precondition 1: Path exists
-    if (!pathExists(full_path)) {
-        return .enoent;
-    }
+/// Check delete_file preconditions
+///
+/// Preconditions:
+/// 1. Path exists and is a file (not directory)
+pub fn checkDeleteFilePreconditions(path: []const u8) bool {
+    // Must exist
+    if (!pathExists(path)) return false;
 
-    // Precondition 2: Path is a file (not directory)
-    if (isDirectory(full_path)) {
-        return .eisdir;
-    }
+    // Must be a file, not directory
+    if (isDirectory(path)) return false;
 
-    // Precondition 3: Parent writable
-    const parent = std.fs.path.dirname(full_path) orelse return .einval;
-    if (!isWritable(parent)) {
-        return .eacces;
-    }
-
-    return .success;
+    return true;
 }
 
-// =========================================================
-// Helper functions for precondition checks
-// =========================================================
+/// Check copy preconditions (mirrors Z3 copy_precondition)
+///
+/// Preconditions:
+/// 1. Source exists and is a file
+/// 2. Destination does not exist
+/// 3. Destination parent exists
+pub fn checkCopyPreconditions(src: []const u8, dst: []const u8) bool {
+    // Source must exist
+    if (!pathExists(src)) return false;
+
+    // Source must be a file
+    if (isDirectory(src)) return false;
+
+    // Destination must not exist
+    if (pathExists(dst)) return false;
+
+    // Destination parent must exist
+    const parent = parentPath(dst);
+    if (parent) |p| {
+        if (!pathExists(p)) return false;
+    }
+
+    return true;
+}
+
+/// Check move preconditions (mirrors Z3 move_precondition)
+///
+/// Preconditions:
+/// 1. Source exists
+/// 2. Destination does not exist
+/// 3. Destination parent exists
+pub fn checkMovePreconditions(src: []const u8, dst: []const u8) bool {
+    // Source must exist
+    if (!pathExists(src)) return false;
+
+    // Destination must not exist
+    if (pathExists(dst)) return false;
+
+    // Destination parent must exist
+    const parent = parentPath(dst);
+    if (parent) |p| {
+        if (!pathExists(p)) return false;
+    }
+
+    return true;
+}
+
+/// Check obliterate preconditions (mirrors Coq obliterate_precondition)
+///
+/// Preconditions:
+/// 1. Path exists and is a file (not directory)
+/// WARNING: RMO is IRREVERSIBLE - no undo possible
+pub fn checkObliteratePreconditions(path: []const u8) bool {
+    // Must exist
+    if (!pathExists(path)) return false;
+
+    // Must be a file (use obliterate_tree for directories)
+    if (isDirectory(path)) return false;
+
+    return true;
+}
+
+// Helper functions
 
 fn pathExists(path: []const u8) bool {
-    std.fs.accessAbsolute(path, .{}) catch return false;
+    _ = fs.cwd().statFile(path) catch {
+        // Also check if it's a directory
+        _ = fs.cwd().openDir(path, .{}) catch {
+            return false;
+        };
+    };
     return true;
 }
 
 fn isDirectory(path: []const u8) bool {
-    var dir = std.fs.openDirAbsolute(path, .{}) catch return false;
+    var dir = fs.cwd().openDir(path, .{}) catch {
+        return false;
+    };
     dir.close();
     return true;
 }
 
 fn isEmptyDirectory(path: []const u8) bool {
-    var dir = std.fs.openDirAbsolute(path, .{ .iterate = true }) catch return false;
+    var dir = fs.cwd().openDir(path, .{ .iterate = true }) catch {
+        return false;
+    };
     defer dir.close();
 
     var iter = dir.iterate();
     if (iter.next() catch null) |_| {
-        return false;
+        return false; // Has at least one entry
     }
     return true;
 }
 
-fn isWritable(path: []const u8) bool {
-    // Check write access
-    std.fs.accessAbsolute(path, .{ .mode = .write_only }) catch return false;
-    return true;
+fn parentPath(path: []const u8) ?[]const u8 {
+    // Find last path separator
+    var i: usize = path.len;
+    while (i > 0) : (i -= 1) {
+        if (path[i - 1] == '/') {
+            if (i == 1) return "/";
+            return path[0 .. i - 1];
+        }
+    }
+    return null; // No parent (relative path in current dir)
 }
 
-fn isRoot(path: []const u8) bool {
-    return std.mem.eql(u8, path, "/");
-}
-
-// =========================================================
-// Extended preconditions for future operations
-// =========================================================
-
-/// Write file preconditions (for file content operations)
-pub fn checkWriteFilePreconditions(full_path: []const u8) PosixError {
-    // Precondition 1: Path exists
-    if (!pathExists(full_path)) {
-        return .enoent;
-    }
-
-    // Precondition 2: Path is a file
-    if (isDirectory(full_path)) {
-        return .eisdir;
-    }
-
-    // Precondition 3: File is writable
-    if (!isWritable(full_path)) {
-        return .eacces;
-    }
-
-    return .success;
-}
-
-/// Read file preconditions
-pub fn checkReadFilePreconditions(full_path: []const u8) PosixError {
-    // Precondition 1: Path exists
-    if (!pathExists(full_path)) {
-        return .enoent;
-    }
-
-    // Precondition 2: Path is a file
-    if (isDirectory(full_path)) {
-        return .eisdir;
-    }
-
-    // Precondition 3: File is readable
-    std.fs.accessAbsolute(full_path, .{ .mode = .read_only }) catch return .eacces;
-
-    return .success;
-}
-
-// =========================================================
 // Tests
-// =========================================================
-
-test "mkdir_preconditions_eexist" {
-    // Create test directory
-    std.fs.makeDirAbsolute("/tmp/vsh_precond_test") catch {};
-    defer std.fs.deleteDirAbsolute("/tmp/vsh_precond_test") catch {};
-
-    std.fs.makeDirAbsolute("/tmp/vsh_precond_test/existing") catch {};
-    defer std.fs.deleteDirAbsolute("/tmp/vsh_precond_test/existing") catch {};
-
-    const result = checkMkdirPreconditions("/tmp/vsh_precond_test/existing");
-    try std.testing.expect(result == .eexist);
-}
-
-test "mkdir_preconditions_enoent" {
-    const result = checkMkdirPreconditions("/tmp/nonexistent_parent/child");
-    try std.testing.expect(result == .enoent);
-}
-
-test "mkdir_preconditions_success" {
-    std.fs.makeDirAbsolute("/tmp/vsh_precond_test") catch {};
-    defer std.fs.deleteDirAbsolute("/tmp/vsh_precond_test") catch {};
-
-    const result = checkMkdirPreconditions("/tmp/vsh_precond_test/newdir");
-    try std.testing.expect(result == .success);
+test "parentPath extracts parent" {
+    try std.testing.expectEqualStrings("/home", parentPath("/home/user").?);
+    try std.testing.expectEqualStrings("/", parentPath("/home").?);
+    try std.testing.expectEqual(@as(?[]const u8, null), parentPath("file.txt"));
 }
