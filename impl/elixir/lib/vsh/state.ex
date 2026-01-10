@@ -19,7 +19,8 @@ defmodule VSH.State do
 
   use GenServer
 
-  @type operation_type :: :mkdir | :rmdir | :create_file | :delete_file | :write_file
+  @type operation_type :: :mkdir | :rmdir | :create_file | :delete_file | :write_file |
+                          :read_file | :copy_file | :move | :obliterate | :obliterate_tree
 
   @type operation :: %{
     id: String.t(),
@@ -74,6 +75,45 @@ defmodule VSH.State do
     agda: "proofs/agda/FilesystemComposition.agda:L26-L48",
     isabelle: "proofs/isabelle/FilesystemComposition.thy:L22-L42",
     description: "apply_sequence(reverse(ops), apply_sequence(ops, fs)) = fs"
+  }
+
+  @content_ops_proof %{
+    theorem: "write_file_reversible",
+    coq: "proofs/coq/file_content_operations.v:L118-L135",
+    isabelle: "proofs/isabelle/FileContentOperations.thy:L98-L134",
+    mizar: "proofs/mizar/file_content_operations.miz:L118-L135",
+    description: "write(p, old, write(p, new, fs)) = fs when preconditions hold"
+  }
+
+  @copy_move_proof %{
+    theorem: "copy_preserves_source",
+    z3: "proofs/z3/copy_move_operations.smt2:L140-L163",
+    lean4: "proofs/lean4/CopyMoveOperations.lean:L78-L102",
+    agda: "proofs/agda/CopyMoveOperations.agda:L85-L115",
+    isabelle: "proofs/isabelle/CopyMoveOperations.thy:L92-L128",
+    mizar: "proofs/mizar/copy_move_operations.miz:L95-L125",
+    description: "copy(src, dst, fs) preserves src unchanged, creates dst with same content"
+  }
+
+  @move_reversible_proof %{
+    theorem: "move_reversible",
+    z3: "proofs/z3/copy_move_operations.smt2:L254-L269",
+    lean4: "proofs/lean4/CopyMoveOperations.lean:L145-L175",
+    agda: "proofs/agda/CopyMoveOperations.agda:L158-L188",
+    isabelle: "proofs/isabelle/CopyMoveOperations.thy:L165-L195",
+    mizar: "proofs/mizar/copy_move_operations.miz:L168-L198",
+    description: "move(dst, src, move(src, dst, fs)) = fs"
+  }
+
+  @rmo_proof %{
+    theorem: "obliterate_irreversible",
+    coq: "proofs/coq/rmo_operations.v:L85-L115",
+    lean4: "proofs/lean4/RMOOperations.lean:L78-L108",
+    agda: "proofs/agda/RMOOperations.agda:L82-L112",
+    isabelle: "proofs/isabelle/RMO_Operations.thy:L75-L105",
+    mizar: "proofs/mizar/rmo_operations.miz:L80-L110",
+    z3: "proofs/z3/rmo_operations.smt2:L95-L125",
+    description: "RMO operations are provably irreversible - no inverse exists"
   }
 
   ## Client API
@@ -135,13 +175,25 @@ defmodule VSH.State do
 
   @doc "Get proof references"
   def get_proofs do
-    [@mkdir_rmdir_proof, @create_delete_proof, @composition_proof]
+    [
+      @mkdir_rmdir_proof,
+      @create_delete_proof,
+      @composition_proof,
+      @content_ops_proof,
+      @copy_move_proof,
+      @move_reversible_proof,
+      @rmo_proof
+    ]
   end
 
   @doc "Get proof for operation type"
   def proof_for(type) when type in [:mkdir, :rmdir], do: @mkdir_rmdir_proof
   def proof_for(type) when type in [:create_file, :delete_file], do: @create_delete_proof
-  def proof_for(:write_file), do: @create_delete_proof
+  def proof_for(type) when type in [:read_file, :write_file], do: @content_ops_proof
+  def proof_for(:copy_file), do: @copy_move_proof
+  def proof_for(:move), do: @move_reversible_proof
+  def proof_for(type) when type in [:obliterate, :obliterate_tree], do: @rmo_proof
+  def proof_for(:undo), do: @composition_proof
   def proof_for(_), do: @composition_proof
 
   ## Server Callbacks

@@ -12,11 +12,26 @@ defmodule VSH.Daemon do
   ## Protocol
 
   JSON-RPC 2.0 over Unix socket with methods:
-  - `mkdir`, `rmdir`, `touch`, `rm` - Filesystem operations
-  - `undo`, `redo` - Reversibility
+
+  ### Filesystem Operations (RMR - Reversible)
+  - `mkdir`, `rmdir` - Directory operations
+  - `touch`, `rm` - File operations
+  - `read`, `write` - Content operations
+  - `copy`, `move` - Copy/move operations
+
+  ### RMO Operations (Irreversible - GDPR)
+  - `obliterate` - Secure file deletion (DoD/Gutmann patterns)
+  - `obliterate_tree` - Recursive secure deletion
+
+  ### Reversibility
+  - `undo`, `redo` - Undo/redo operations
   - `history`, `status` - Introspection
-  - `begin`, `commit`, `rollback` - Transactions
-  - `proofs` - Verification info
+
+  ### Transactions
+  - `begin`, `commit`, `rollback` - Transaction control
+
+  ### Verification
+  - `proofs` - Get proof references for operations
   """
 
   use GenServer
@@ -114,18 +129,40 @@ defmodule VSH.Daemon do
     params = Map.get(request, "params", %{})
 
     result = case method do
+      # Directory operations
       "mkdir" -> handle_mkdir(params)
       "rmdir" -> handle_rmdir(params)
+
+      # File operations
       "touch" -> handle_touch(params)
       "rm" -> handle_rm(params)
+
+      # Content operations
+      "read" -> handle_read(params)
+      "write" -> handle_write(params)
+
+      # Copy/move operations
+      "copy" -> handle_copy(params)
+      "move" -> handle_move(params)
+
+      # RMO operations (irreversible - GDPR)
+      "obliterate" -> handle_obliterate(params)
+      "obliterate_tree" -> handle_obliterate_tree(params)
+
+      # Reversibility
       "undo" -> handle_undo(params)
       "redo" -> handle_redo(params)
       "history" -> handle_history(params)
       "status" -> handle_status(params)
+
+      # Transactions
       "begin" -> handle_begin(params)
       "commit" -> handle_commit(params)
       "rollback" -> handle_rollback(params)
+
+      # Verification
       "proofs" -> handle_proofs(params)
+
       _ -> {:error, -32601, "Method not found"}
     end
 
@@ -240,6 +277,211 @@ defmodule VSH.Daemon do
   end
 
   defp handle_rm(_), do: {:error, -32602, "Invalid params: path required"}
+
+  ## Content Operations
+
+  defp handle_read(%{"path" => path}) do
+    path_list = String.split(path, "/", trim: true)
+
+    case VSH.Filesystem.read_file(path_list, audit: true) do
+      {:ok, content} ->
+        {:ok, op} = VSH.State.record_operation(:read_file, path_list)
+        proof = VSH.State.proof_for(:read_file)
+
+        {:ok, %{
+          success: true,
+          operation: "read",
+          path: path,
+          operationId: op.id,
+          content: Base.encode64(content),
+          contentSize: byte_size(content),
+          proof: %{
+            theorem: proof.theorem,
+            location: proof.coq
+          }
+        }}
+
+      {:error, reason} ->
+        {:error, -32000, "read failed: #{reason}"}
+    end
+  end
+
+  defp handle_read(_), do: {:error, -32602, "Invalid params: path required"}
+
+  defp handle_write(%{"path" => path, "content" => content}) do
+    path_list = String.split(path, "/", trim: true)
+    path_str = VSH.Filesystem.path_to_string(path_list)
+
+    # Decode base64 content
+    decoded = case Base.decode64(content) do
+      {:ok, data} -> data
+      :error -> content  # Assume plain text if not base64
+    end
+
+    # Capture old content for undo
+    old_content = case File.read(path_str) do
+      {:ok, data} -> data
+      _ -> nil
+    end
+
+    case VSH.Filesystem.write_file(path_list, decoded, audit: true) do
+      {:ok, :written} ->
+        {:ok, op} = VSH.State.record_operation(:write_file, path_list, undo_data: old_content)
+        proof = VSH.State.proof_for(:write_file)
+
+        {:ok, %{
+          success: true,
+          operation: "write",
+          path: path,
+          operationId: op.id,
+          bytesWritten: byte_size(decoded),
+          canUndo: old_content != nil,
+          proof: %{
+            theorem: proof.theorem,
+            location: proof.coq
+          }
+        }}
+
+      {:error, reason} ->
+        {:error, -32000, "write failed: #{reason}"}
+    end
+  end
+
+  defp handle_write(_), do: {:error, -32602, "Invalid params: path and content required"}
+
+  ## Copy/Move Operations
+
+  defp handle_copy(%{"src" => src, "dst" => dst}) do
+    src_list = String.split(src, "/", trim: true)
+    dst_list = String.split(dst, "/", trim: true)
+
+    case VSH.Filesystem.copy_file(src_list, dst_list, audit: true) do
+      {:ok, :copied} ->
+        {:ok, op} = VSH.State.record_operation(:copy_file, {src_list, dst_list})
+        proof = VSH.State.proof_for(:copy_file)
+
+        {:ok, %{
+          success: true,
+          operation: "copy",
+          src: src,
+          dst: dst,
+          operationId: op.id,
+          undoCommand: "rm #{dst}",
+          proof: %{
+            theorem: proof.theorem,
+            location: proof.z3
+          }
+        }}
+
+      {:error, reason} ->
+        {:error, -32000, "copy failed: #{reason}"}
+    end
+  end
+
+  defp handle_copy(_), do: {:error, -32602, "Invalid params: src and dst required"}
+
+  defp handle_move(%{"src" => src, "dst" => dst}) do
+    src_list = String.split(src, "/", trim: true)
+    dst_list = String.split(dst, "/", trim: true)
+
+    case VSH.Filesystem.move(src_list, dst_list, audit: true) do
+      {:ok, :moved} ->
+        {:ok, op} = VSH.State.record_operation(:move, {src_list, dst_list})
+        proof = VSH.State.proof_for(:move)
+
+        {:ok, %{
+          success: true,
+          operation: "move",
+          src: src,
+          dst: dst,
+          operationId: op.id,
+          undoCommand: "move #{dst} #{src}",
+          proof: %{
+            theorem: proof.theorem,
+            location: proof.z3
+          }
+        }}
+
+      {:error, reason} ->
+        {:error, -32000, "move failed: #{reason}"}
+    end
+  end
+
+  defp handle_move(_), do: {:error, -32602, "Invalid params: src and dst required"}
+
+  ## RMO Operations (Secure Deletion)
+
+  defp handle_obliterate(%{"path" => path} = params) do
+    path_list = String.split(path, "/", trim: true)
+    pattern = case Map.get(params, "pattern", "dod") do
+      "gutmann" -> :gutmann
+      "simple" -> :simple
+      _ -> :dod
+    end
+    verify = Map.get(params, "verify", false)
+
+    case VSH.Filesystem.obliterate_file(path_list, pattern: pattern, verify: verify, audit: true) do
+      {:ok, :obliterated} ->
+        {:ok, op} = VSH.State.record_operation(:obliterate, path_list)
+        proof = VSH.State.proof_for(:obliterate)
+
+        {:ok, %{
+          success: true,
+          operation: "obliterate",
+          path: path,
+          operationId: op.id,
+          pattern: to_string(pattern),
+          verified: verify,
+          canUndo: false,
+          warning: "IRREVERSIBLE - data permanently destroyed",
+          proof: %{
+            theorem: proof.theorem,
+            location: proof.coq
+          }
+        }}
+
+      {:error, reason} ->
+        {:error, -32000, "obliterate failed: #{reason}"}
+    end
+  end
+
+  defp handle_obliterate(_), do: {:error, -32602, "Invalid params: path required"}
+
+  defp handle_obliterate_tree(%{"path" => path} = params) do
+    path_list = String.split(path, "/", trim: true)
+    pattern = case Map.get(params, "pattern", "dod") do
+      "gutmann" -> :gutmann
+      "simple" -> :simple
+      _ -> :dod
+    end
+
+    case VSH.Filesystem.obliterate_tree(path_list, pattern: pattern, audit: true) do
+      {:ok, :obliterated} ->
+        {:ok, op} = VSH.State.record_operation(:obliterate_tree, path_list)
+        proof = VSH.State.proof_for(:obliterate_tree)
+
+        {:ok, %{
+          success: true,
+          operation: "obliterate_tree",
+          path: path,
+          operationId: op.id,
+          pattern: to_string(pattern),
+          canUndo: false,
+          warning: "IRREVERSIBLE - entire tree permanently destroyed",
+          proof: %{
+            theorem: proof.theorem,
+            location: proof.coq
+          }
+        }}
+
+      {:error, reason} ->
+        {:error, -32000, "obliterate_tree failed: #{reason}"}
+    end
+  end
+
+  defp handle_obliterate_tree(_), do: {:error, -32602, "Invalid params: path required"}
+
+  ## Reversibility Operations
 
   defp handle_undo(params) do
     count = Map.get(params, "count", 1)
@@ -427,10 +669,20 @@ defmodule VSH.Daemon do
     proofs = VSH.State.get_proofs()
 
     {:ok, %{
-      totalTheorems: 256,
+      totalTheorems: 280,
       proofSystems: 6,
+      proofSystemsList: ["Coq", "Lean 4", "Agda", "Isabelle/HOL", "Mizar", "Z3 SMT"],
+      operationCategories: %{
+        rmr: ["mkdir", "rmdir", "touch", "rm", "read", "write", "copy", "move"],
+        rmo: ["obliterate", "obliterate_tree"]
+      },
       coreTheorems: proofs,
-      verificationGap: "FFI layer implements precondition checks but is not mechanically verified"
+      verificationStatus: %{
+        proofs: "Formally verified in 6 systems",
+        ffi: "Precondition checks - manual review required",
+        daemon: "Reference implementation - matches spec",
+        gap: "No mechanical proof of correspondence between daemon and Coq spec"
+      }
     }}
   end
 
@@ -441,6 +693,12 @@ defmodule VSH.Daemon do
   defp inverse_op(:create_file), do: :delete_file
   defp inverse_op(:delete_file), do: :create_file
   defp inverse_op(:write_file), do: :write_file
+  defp inverse_op(:copy_file), do: :delete_file  # Delete the copy
+  defp inverse_op(:move), do: :move  # Move back
+  defp inverse_op(:read_file), do: nil  # Read has no inverse (doesn't modify)
+  defp inverse_op(:obliterate), do: nil  # RMO has NO inverse - irreversible
+  defp inverse_op(:obliterate_tree), do: nil  # RMO has NO inverse - irreversible
+  defp inverse_op(_), do: nil
 
   defp success_response(id, result) do
     Jason.encode!(%{
