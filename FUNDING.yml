@@ -1,0 +1,34 @@
+# Funding and Support for Valence Shell
+
+# This project is currently unfunded research.
+# Support options will be added as the project matures.
+
+# GitHub Sponsors
+# github: [username]
+
+# Open Collective
+# open_collective: valence-shell
+
+# Liberapay
+# liberapay: valence-shell
+
+# Ko-fi
+# ko_fi: valence-shell
+
+# Custom funding URLs
+custom:
+  - "https://github.com/Hyperpolymath/valence-shell"
+  - "https://gitlab.com/non-initiate/rhodinised/vsh"
+
+# Note: This is a research project focused on formal verification.
+# Financial support is not currently sought.
+#
+# Ways to support:
+# - Contribute code (see CONTRIBUTING.md)
+# - Report bugs and issues
+# - Share with researchers and developers
+# - Cite in academic work
+# - Review formal proofs
+# - Improve documentation
+#
+# For enterprise support or consulting: See MAINTAINERS.md

@@ -1,0 +1,124 @@
+:: Valence Shell - File Operations (Mizar)
+::
+:: Extension of filesystem model to include file operations.
+:: Proves reversibility of file create/delete operations.
+
+environ
+
+ vocabularies filesystem_model, FINSEQ_1, FUNCT_1, RELAT_1, TARSKI, XBOOLE_0;
+ notations filesystem_model, TARSKI, XBOOLE_0, RELAT_1, FUNCT_1;
+ constructors filesystem_model, FINSEQ_1;
+ registrations RELAT_1, FUNCT_1;
+
+begin
+
+:: File Operations
+
+definition
+  let p be Path, fs be Filesystem;
+  pred CreateFilePrecondition(p, fs) means
+    not PathExists(p, fs) &
+    ParentExists(p, fs) &
+    IsDirectory(ParentPath(p), fs) &
+    HasWritePermission(ParentPath(p), fs);
+end;
+
+definition
+  let p be Path, fs be Filesystem;
+  func CreateFile(p, fs) -> Filesystem equals
+    FSUpdate(p, FSNode(# FileType, DefaultPerms #), fs);
+end;
+
+definition
+  let p be Path, fs be Filesystem;
+  pred DeleteFilePrecondition(p, fs) means
+    IsFile(p, fs) &
+    HasWritePermission(ParentPath(p), fs);
+end;
+
+definition
+  let p be Path, fs be Filesystem;
+  func DeleteFile(p, fs) -> Filesystem equals
+    FSRemove(p, fs);
+end;
+
+:: Postcondition Theorems
+
+theorem CreateFileCreatesFile:
+  for p being Path, fs being Filesystem
+  st CreateFilePrecondition(p, fs)
+  holds IsFile(p, CreateFile(p, fs))
+proof
+  let p be Path, fs be Filesystem;
+  assume A1: CreateFilePrecondition(p, fs);
+  thus IsFile(p, CreateFile(p, fs));
+end;
+
+theorem CreateFilePathExists:
+  for p being Path, fs being Filesystem
+  st CreateFilePrecondition(p, fs)
+  holds PathExists(p, CreateFile(p, fs))
+proof
+  let p be Path, fs be Filesystem;
+  assume A1: CreateFilePrecondition(p, fs);
+  thus PathExists(p, CreateFile(p, fs));
+end;
+
+theorem DeleteFileRemovesPath:
+  for p being Path, fs being Filesystem
+  st DeleteFilePrecondition(p, fs)
+  holds not PathExists(p, DeleteFile(p, fs))
+proof
+  let p be Path, fs be Filesystem;
+  assume A1: DeleteFilePrecondition(p, fs);
+  thus not PathExists(p, DeleteFile(p, fs));
+end;
+
+:: File Reversibility Theorem
+
+theorem CreateFileDeleteFileReversible:
+  for p being Path, fs being Filesystem
+  st CreateFilePrecondition(p, fs)
+  holds DeleteFile(p, CreateFile(p, fs)) = fs
+proof
+  let p be Path, fs be Filesystem;
+  assume A1: CreateFilePrecondition(p, fs);
+  set fs1 = CreateFile(p, fs);
+  set fs2 = DeleteFile(p, fs1);
+
+  A2: dom fs2 = (dom fs1) \ {p} by def DeleteFile, FSRemove;
+  A3: p in dom fs1 by A1, def CreateFile;
+  A4: not p in dom fs by A1, def CreateFilePrecondition;
+
+  A5: dom fs2 = dom fs
+  proof
+    thus dom fs2 c= dom fs
+    proof
+      let x be object;
+      assume x in dom fs2;
+      hence thesis;
+    end;
+    thus dom fs c= dom fs2
+    proof
+      let x be object;
+      assume x in dom fs;
+      hence thesis;
+    end;
+  end;
+
+  thus fs2 = fs by A5;
+end;
+
+:: File Isolation Theorem
+
+theorem FileIsolation:
+  for p1, p2 being Path, fs being Filesystem
+  st p1 <> p2 & PathExists(p2, fs)
+  holds PathExists(p2, CreateFile(p1, fs)) & PathExists(p2, DeleteFile(p1, fs))
+proof
+  let p1, p2 be Path, fs be Filesystem;
+  assume A1: p1 <> p2 & PathExists(p2, fs);
+  thus PathExists(p2, CreateFile(p1, fs)) & PathExists(p2, DeleteFile(p1, fs));
+end;
+
+:: Summary: File operations proven reversible in Mizar

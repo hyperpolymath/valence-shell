@@ -1,0 +1,15 @@
+(* SPDX-License-Identifier: AGPL-3.0-or-later *)
+(* Valence Shell - Isabelle/HOL Proofs *)
+
+session ValenceShell = "HOL-Library" +
+  description "
+    Formally verified filesystem operations for the MAA (Mutually Assured Accountability)
+    framework. Proves reversibility, composition, and equivalence properties for
+    POSIX-like directory and file operations.
+  "
+  options [document = false, timeout = 300]
+  theories
+    FilesystemModel
+    FileOperations
+    FilesystemComposition
+    FilesystemEquivalence

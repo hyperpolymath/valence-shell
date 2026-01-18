@@ -1,0 +1,12 @@
+{application,makeup_erlang,
+             [{config_mtime,1767139155},
+              {optional_applications,[]},
+              {applications,[kernel,stdlib,elixir,logger,makeup]},
+              {description,"Erlang lexer for the Makeup syntax highlighter.\n"},
+              {modules,['Elixir.Makeup.Lexers.ErlangLexer',
+                        'Elixir.Makeup.Lexers.ErlangLexer.Application',
+                        'Elixir.Makeup.Lexers.ErlangLexer.Helper',
+                        'Elixir.Makeup.Lexers.ErlangLexer.Testing']},
+              {registered,[]},
+              {vsn,"1.0.2"},
+              {mod,{'Elixir.Makeup.Lexers.ErlangLexer.Application',[]}}]}.

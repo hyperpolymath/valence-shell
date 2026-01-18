@@ -1,0 +1,294 @@
+= Governance Model
+:toc:
+:toclevels: 2
+
+== Overview
+
+Valence Shell follows a **Tri-Perimeter Governance Model** aligned with the TPCF (Tri-Perimeter Contribution Framework).
+
+== Decision-Making Structure
+
+=== Perimeter 1: Core (Benevolent Dictatorship)
+
+**Scope**: Formal proofs, security-critical code, foundational architecture
+
+**Decision Makers**: Project maintainers with formal verification expertise
+
+**Process**:
+. Proposal via RFC (Request for Comments)
+. Technical review by all core maintainers
+. Proof verification
+. Consensus required (all maintainers must approve)
+. Implementation with tests
+. Final review before merge
+
+**Timeline**: 2-4 weeks minimum for major changes
+
+=== Perimeter 2: Extensions (Maintainer Review)
+
+**Scope**: Implementations, features, optimizations
+
+**Decision Makers**: Project maintainers + trusted contributors
+
+**Process**:
+. Feature proposal via GitHub/GitLab issue
+. Design discussion
+. Implementation by contributor
+. Code review by at least 1 maintainer
+. CI/CD must pass
+. Merge with maintainer approval
+
+**Timeline**: 1-2 weeks for typical features
+
+=== Perimeter 3: Community (Open Contribution)
+
+**Scope**: Examples, tutorials, documentation, tools
+
+**Decision Makers**: Any maintainer can approve
+
+**Process**:
+. Submit pull/merge request
+. Self-document the contribution
+. Basic tests pass
+. Quick review by any maintainer
+. Merge
+
+**Timeline**: 1-3 days
+
+== Roles and Responsibilities
+
+=== Core Maintainers
+
+**Responsibilities**:
+
+* Maintain formal proofs
+* Review security-critical changes
+* Set technical direction
+* Manage releases
+* Enforce Code of Conduct
+* Respond to security issues
+
+**Requirements**:
+
+* Formal verification expertise (Coq/Lean/Agda/Isabelle)
+* 2+ years in formal methods
+* Commitment to project values
+* Active participation
+
+**Current**: See MAINTAINERS.md
+
+=== Trusted Contributors
+
+**Responsibilities**:
+
+* Implement features per specifications
+* Review community contributions
+* Help newcomers
+* Maintain test coverage
+* Update documentation
+
+**Path to Becoming**:
+
+. 5+ quality contributions to Perimeter 3
+. Demonstrate understanding of formal specifications
+. Follow coding standards
+. Help community members
+. Nomination by core maintainer
+. Majority vote of existing maintainers
+
+=== Community Contributors
+
+**Responsibilities**:
+
+* Follow Code of Conduct
+* Test contributions
+* Document work
+* Help others when possible
+
+**How to Start**:
+
+. Read CONTRIBUTING.md
+. Find `good-first-issue` tag
+. Submit PR to Perimeter 3
+. Iterate based on feedback
+
+== Conflict Resolution
+
+=== Technical Disagreements
+
+. Discussion in GitHub/GitLab issue
+. Present evidence (benchmarks, formal proofs, citations)
+. Seek consensus
+. If no consensus: Core maintainers vote
+. Benevolent dictator (project lead) breaks ties
+. Document decision rationale
+
+=== Interpersonal Conflicts
+
+. Follow CODE_OF_CONDUCT.md
+. Private discussion first
+. Escalate to maintainers if needed
+. Formal Code of Conduct process
+. Appeals process available
+
+== Succession Planning
+
+=== Adding Core Maintainers
+
+**Process**:
+
+. Nomination by existing core maintainer
+. Must have:
+   - Formal verification expertise
+   - 1+ year as trusted contributor
+   - Significant proof contributions
+   - Community respect
+. Discussion period (2 weeks)
+. **Consensus vote** (all core maintainers must approve)
+. Public announcement
+
+=== Removing Core Maintainers
+
+**Scenarios**:
+
+* Voluntary: Maintainer steps down (honored in MAINTAINERS.md as emeritus)
+* Inactivity: No activity for 6+ months (gentle inquiry first)
+* Code of Conduct violation: Per enforcement process
+
+**Process**: Consensus of remaining core maintainers
+
+=== Project Continuity
+
+. All knowledge documented (not in heads)
+. Proofs are self-documenting
+. Regular succession planning discussions
+. Bus factor mitigation (train multiple maintainers)
+. Emergency contact: See SECURITY.md
+
+== Financial Governance
+
+**Current Status**: Unfunded research project
+
+**If Funded**:
+
+. Transparent budgeting
+. Quarterly financial reports
+. OpenCollective or similar (public ledger)
+. Spending decisions: Core maintainers consensus
+. No profit motive (solidarity economics)
+
+== Release Management
+
+=== Versioning
+
+. **Semantic Versioning 2.0**
+. Major.Minor.Patch (e.g., 0.5.0)
+. Pre-1.0: Research prototype
+. 1.0+: Production-ready (after extraction gap closed)
+
+=== Release Process
+
+. Version bump in CHANGELOG.md
+. Tag commit: `git tag -a v0.x.x`
+. CI/CD runs full verification
+. All proofs must compile
+. All tests must pass
+. Security audit (for major versions)
+. Announce on GitHub/GitLab
+. Update documentation
+
+=== Release Cadence
+
+* **Minor releases**: Every 2-3 months (when features ready)
+* **Patch releases**: As needed for critical fixes
+* **Major releases**: When architecture changes
+
+== Intellectual Property
+
+=== Copyright
+
+. Contributors retain copyright
+. License: MIT OR GPL, Palimpsest recommended (see LICENSE.txt)
+. No copyright assignment required
+. Attribution preserved (Palimpsest requirement)
+
+=== Patents
+
+. No patent trolling
+. If contributor holds patents on contributed code, grant royalty-free license
+. Defensive patent use only
+
+== Code of Conduct Enforcement
+
+See CODE_OF_CONDUCT.md for full details.
+
+**Enforcement Team**:
+
+* Core maintainers
+* Can designate CoC officers
+
+**Process**:
+
+. Report received (confidential)
+. Investigation (1-2 weeks)
+. Decision: Correction, Warning, Temporary Ban, Permanent Ban
+. Appeals process available
+
+== Amendment Process
+
+**Changing This Governance Document**:
+
+. Proposal via GitHub/GitLab issue
+. Discussion period (4 weeks minimum)
+. Consensus of core maintainers
+. Update GOVERNANCE.adoc
+. Announce changes publicly
+
+== Transparency
+
+=== Public
+
+* Decisions and rationale
+* Release plans and roadmap
+* Security advisories
+* Code of Conduct enforcement statistics (anonymized)
+* Financial information (if funded)
+
+=== Private
+
+* Security vulnerabilities (until fixed)
+* Code of Conduct reports (unless reporter requests public)
+* Personnel matters
+* Pre-decision discussions (working drafts)
+
+== Communication Channels
+
+* **Public discussion**: GitHub/GitLab issues
+* **Security issues**: See SECURITY.md
+* **Code of Conduct**: See CODE_OF_CONDUCT.md
+* **General email**: See MAINTAINERS.md
+
+== Values and Principles
+
+. **Formal correctness** over speed
+. **Mathematical guarantees** over testing alone
+. **Transparency** over secrecy
+. **Community** over ego
+. **Documentation** over oral tradition
+. **Reproducibility** over "works on my machine"
+. **Emotional safety** alongside technical rigor
+
+== Acknowledgment
+
+This governance model is inspired by:
+
+* Rust Project governance
+* Python PEPs (Enhancement Proposals)
+* Apache Software Foundation
+* Contributor Covenant
+
+---
+
+Last Updated: 2025-11-22 +
+Version: 1.0 +
+Maintainer: See MAINTAINERS.md

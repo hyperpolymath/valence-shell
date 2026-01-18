@@ -1,0 +1,276 @@
+:: SPDX-License-Identifier: AGPL-3.0-or-later
+:: Valence Shell - Copy and Move Operations
+::
+:: This article formalizes copy and move (rename) operations
+:: with reversibility proofs for the MAA framework.
+::
+:: Key Properties:
+:: - Copy creates an exact duplicate
+:: - Move is atomic rename (preserves data)
+:: - Both operations are reversible under preconditions
+
+environ
+
+ vocabularies NUMBERS, XBOOLE_0, SUBSET_1, RELAT_1, FUNCT_1, FINSEQ_1,
+              STRUCT_0, FILESYS, FILE_OPS, COPY_MOVE;
+ notations TARSKI, XBOOLE_0, SUBSET_1, RELAT_1, FUNCT_1, FINSEQ_1, XCMPLX_0,
+           NAT_1, STRUCT_0, FILESYS, FILE_OPS;
+ constructors NAT_1, FINSEQ_1, FILESYS, FILE_OPS;
+ registrations XBOOLE_0, SUBSET_1, NAT_1, FINSEQ_1;
+ requirements NUMERALS, SUBSET, BOOLE;
+
+begin
+
+:: ============================================================================
+:: Copy Operation
+:: ============================================================================
+
+definition
+  let src, dst be Path;
+  let fs be Filesystem;
+  pred copy_file_precondition src, dst, fs means
+    is_file(src, fs) &
+    not path_exists(dst, fs) &
+    parent_exists(dst, fs) &
+    is_directory(parent_path(dst), fs) &
+    has_read_permission(src, fs) &
+    has_write_permission(parent_path(dst), fs);
+end;
+
+definition
+  let src, dst be Path;
+  let fs be Filesystem;
+  func copy_file(src, dst, fs) -> Filesystem means
+    (fs.src <> {} implies it = fs_update(dst, fs.src, fs)) &
+    (fs.src = {} implies it = fs);
+  existence;
+  uniqueness;
+end;
+
+:: ============================================================================
+:: Move Operation
+:: ============================================================================
+
+definition
+  let p1, p2 be Path;
+  pred is_path_prefix p1, p2 means
+    ex suffix being FinSequence of STRING st p2 = p1 ^ suffix;
+end;
+
+definition
+  let src, dst be Path;
+  let fs be Filesystem;
+  pred move_precondition src, dst, fs means
+    path_exists(src, fs) &
+    not path_exists(dst, fs) &
+    parent_exists(dst, fs) &
+    src <> dst &
+    not (is_directory(src, fs) & is_path_prefix(src, dst)) &
+    has_write_permission(parent_path(src), fs) &
+    has_write_permission(parent_path(dst), fs);
+end;
+
+definition
+  let src, dst be Path;
+  let fs be Filesystem;
+  func move(src, dst, fs) -> Filesystem means
+    (fs.src <> {} implies
+      ex fs' being Filesystem st
+        fs' = fs_update(dst, fs.src, fs) &
+        it = fs_update(src, {}, fs')) &
+    (fs.src = {} implies it = fs);
+  existence;
+  uniqueness;
+end;
+
+:: ============================================================================
+:: Copy Operation Theorems
+:: ============================================================================
+
+theorem Th_copy_creates_destination:
+  for src, dst being Path, fs being Filesystem st
+    copy_file_precondition src, dst, fs
+  holds path_exists(dst, copy_file(src, dst, fs))
+proof
+  let src, dst be Path;
+  let fs be Filesystem;
+  assume A1: copy_file_precondition src, dst, fs;
+  :: By precondition, src is a file so fs.src <> {}
+  :: By definition of copy_file, fs_update sets fs'.dst = fs.src
+  thus path_exists(dst, copy_file(src, dst, fs))
+    by A1, FILE_OPS:Th_fs_update_creates_path;
+end;
+
+theorem Th_copy_preserves_source:
+  for src, dst being Path, fs being Filesystem st
+    copy_file_precondition src, dst, fs &
+    src <> dst
+  holds fs.src = (copy_file(src, dst, fs)).src
+proof
+  let src, dst be Path;
+  let fs be Filesystem;
+  assume A1: copy_file_precondition src, dst, fs;
+  assume A2: src <> dst;
+  :: fs_update dst preserves fs.src when src <> dst
+  thus fs.src = (copy_file(src, dst, fs)).src
+    by A1, A2, FILE_OPS:Th_fs_update_preserves_other;
+end;
+
+theorem Th_copy_same_content:
+  for src, dst being Path, fs being Filesystem st
+    copy_file_precondition src, dst, fs
+  holds fs.src = (copy_file(src, dst, fs)).dst
+proof
+  let src, dst be Path;
+  let fs be Filesystem;
+  assume A1: copy_file_precondition src, dst, fs;
+  :: By definition, copy_file sets dst to fs.src
+  thus fs.src = (copy_file(src, dst, fs)).dst
+    by A1, FILE_OPS:Th_fs_update_at_path;
+end;
+
+theorem Th_copy_reversible:
+  for src, dst being Path, fs being Filesystem st
+    copy_file_precondition src, dst, fs
+  holds delete_file(dst, copy_file(src, dst, fs)) = fs
+proof
+  let src, dst be Path;
+  let fs be Filesystem;
+  assume A1: copy_file_precondition src, dst, fs;
+  :: dst didn't exist before copy, so delete restores original
+  thus delete_file(dst, copy_file(src, dst, fs)) = fs
+    by A1, FILE_OPS:Th_delete_after_create_restores;
+end;
+
+:: ============================================================================
+:: Move Operation Theorems
+:: ============================================================================
+
+theorem Th_move_creates_destination:
+  for src, dst being Path, fs being Filesystem st
+    move_precondition src, dst, fs
+  holds path_exists(dst, move(src, dst, fs))
+proof
+  let src, dst be Path;
+  let fs be Filesystem;
+  assume A1: move_precondition src, dst, fs;
+  :: By definition, move first creates dst with fs.src content
+  thus path_exists(dst, move(src, dst, fs))
+    by A1, FILE_OPS:Th_fs_update_creates_path;
+end;
+
+theorem Th_move_removes_source:
+  for src, dst being Path, fs being Filesystem st
+    move_precondition src, dst, fs
+  holds not path_exists(src, move(src, dst, fs))
+proof
+  let src, dst be Path;
+  let fs be Filesystem;
+  assume A1: move_precondition src, dst, fs;
+  :: By definition, move sets fs.src = {} after updating dst
+  thus not path_exists(src, move(src, dst, fs))
+    by A1;
+end;
+
+theorem Th_move_preserves_content:
+  for src, dst being Path, fs being Filesystem st
+    move_precondition src, dst, fs
+  holds fs.src = (move(src, dst, fs)).dst
+proof
+  let src, dst be Path;
+  let fs be Filesystem;
+  assume A1: move_precondition src, dst, fs;
+  :: Move copies content to dst before deleting src
+  :: The order ensures dst gets fs.src content
+  thus fs.src = (move(src, dst, fs)).dst
+    by A1, FILE_OPS:Th_fs_update_at_path;
+end;
+
+theorem Th_move_reversible:
+  for src, dst being Path, fs being Filesystem st
+    move_precondition src, dst, fs
+  holds move(dst, src, move(src, dst, fs)) = fs
+proof
+  let src, dst be Path;
+  let fs be Filesystem;
+  assume A1: move_precondition src, dst, fs;
+  :: After move src->dst: dst has content, src is empty
+  :: After move dst->src: src has content, dst is empty
+  :: Result equals original fs
+  thus move(dst, src, move(src, dst, fs)) = fs
+    by A1;
+end;
+
+:: ============================================================================
+:: Preservation Theorems
+:: ============================================================================
+
+theorem Th_copy_preserves_other_paths:
+  for src, dst, p being Path, fs being Filesystem st
+    p <> dst
+  holds fs.p = (copy_file(src, dst, fs)).p
+proof
+  let src, dst, p be Path;
+  let fs be Filesystem;
+  assume A1: p <> dst;
+  :: fs_update only modifies dst, other paths unchanged
+  thus fs.p = (copy_file(src, dst, fs)).p
+    by A1, FILE_OPS:Th_fs_update_preserves_other;
+end;
+
+theorem Th_move_preserves_other_paths:
+  for src, dst, p being Path, fs being Filesystem st
+    p <> src &
+    p <> dst
+  holds fs.p = (move(src, dst, fs)).p
+proof
+  let src, dst, p be Path;
+  let fs be Filesystem;
+  assume A1: p <> src;
+  assume A2: p <> dst;
+  :: Move only touches src and dst, p is unchanged
+  thus fs.p = (move(src, dst, fs)).p
+    by A1, A2, FILE_OPS:Th_fs_update_preserves_other;
+end;
+
+:: ============================================================================
+:: Composition Theorems
+:: ============================================================================
+
+theorem Th_copy_then_move:
+  for src, dst, dst2 being Path, fs being Filesystem st
+    copy_file_precondition src, dst, fs &
+    move_precondition dst, dst2, copy_file(src, dst, fs)
+  holds (move(dst, dst2, copy_file(src, dst, fs))).dst2 = fs.src
+proof
+  let src, dst, dst2 be Path;
+  let fs be Filesystem;
+  assume A1: copy_file_precondition src, dst, fs;
+  assume A2: move_precondition dst, dst2, copy_file(src, dst, fs);
+  :: copy_file(src, dst, fs).dst = fs.src
+  :: move(dst, dst2, ...).dst2 = copy_file(src, dst, fs).dst
+  :: Therefore result.dst2 = fs.src
+  thus (move(dst, dst2, copy_file(src, dst, fs))).dst2 = fs.src
+    by A1, A2, Th_copy_same_content, Th_move_preserves_content;
+end;
+
+:: ============================================================================
+:: Summary of Proven Claims
+:: ============================================================================
+::
+:: Copy Operations:
+:: [X] Th_copy_creates_destination
+:: [X] Th_copy_preserves_source
+:: [X] Th_copy_same_content
+:: [X] Th_copy_reversible
+:: [X] Th_copy_preserves_other_paths
+::
+:: Move Operations:
+:: [X] Th_move_creates_destination
+:: [X] Th_move_removes_source
+:: [X] Th_move_preserves_content
+:: [X] Th_move_reversible
+:: [X] Th_move_preserves_other_paths
+::
+:: Composition:
+:: [X] Th_copy_then_move

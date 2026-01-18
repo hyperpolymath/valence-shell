@@ -1,0 +1,122 @@
+:: Valence Shell - Filesystem Model (Mizar)
+:: SPDX-License-Identifier: AGPL-3.0-or-later
+::
+:: A minimal formal model demonstrating MAA set-theoretic properties.
+:: Compatible with Mizar 8.1.15 / MML 5.94
+
+environ
+
+ vocabularies TARSKI, XBOOLE_0;
+ notations TARSKI, XBOOLE_0;
+ constructors TARSKI, XBOOLE_0;
+ registrations XBOOLE_0;
+ definitions TARSKI, XBOOLE_0;
+ equalities XBOOLE_0;
+ expansions TARSKI, XBOOLE_0;
+ theorems TARSKI, XBOOLE_0;
+ requirements BOOLE;
+
+begin
+
+:: ===== Membership Lemmas =====
+
+theorem LemmaMembershipUnion:
+  for A, B being set, x being object
+  st x in A
+  holds x in A \/ B
+proof
+  let A, B be set, x be object;
+  assume A1: x in A;
+  x in A or x in B by A1;
+  hence thesis by XBOOLE_0:def 3;
+end;
+
+theorem LemmaMembershipSingleton:
+  for e being object
+  holds e in {e}
+proof
+  let e be object;
+  e = e;
+  hence thesis by TARSKI:def 1;
+end;
+
+theorem LemmaNonMembershipSingleton:
+  for e, x being object
+  st x <> e
+  holds not x in {e}
+proof
+  let e, x be object;
+  assume A1: x <> e;
+  assume A2: x in {e};
+  x = e by A2, TARSKI:def 1;
+  hence contradiction by A1;
+end;
+
+:: ===== Subset Lemmas =====
+
+theorem LemmaSubsetSelf:
+  for A being set holds A c= A;
+
+theorem LemmaSubsetUnion:
+  for A, B being set
+  holds A c= A \/ B
+proof
+  let A, B be set;
+  for x being object st x in A holds x in A \/ B
+  proof
+    let x be object;
+    assume A1: x in A;
+    x in A or x in B by A1;
+    hence thesis by XBOOLE_0:def 3;
+  end;
+  hence thesis;
+end;
+
+theorem LemmaSubsetDifference:
+  for A, B being set
+  holds A \ B c= A
+proof
+  let A, B be set;
+  for x being object st x in A \ B holds x in A
+  proof
+    let x be object;
+    assume A1: x in A \ B;
+    x in A & not x in B by A1, XBOOLE_0:def 5;
+    hence thesis;
+  end;
+  hence thesis;
+end;
+
+:: ===== MAA Foundation Theorem =====
+
+theorem MAAReversibility:
+  for S being set, e being object
+  st not e in S
+  holds (S \/ {e}) \ {e} = S
+proof
+  let S be set, e be object;
+  assume A1: not e in S;
+
+  A2: (S \/ {e}) \ {e} c= S
+  proof
+    let x be object;
+    assume A3: x in (S \/ {e}) \ {e};
+    A4: x in S \/ {e} & not x in {e} by A3, XBOOLE_0:def 5;
+    A5: x in S or x in {e} by A4, XBOOLE_0:def 3;
+    thus thesis by A4, A5;
+  end;
+
+  A6: S c= (S \/ {e}) \ {e}
+  proof
+    let x be object;
+    assume A7: x in S;
+    A8: x in S or x in {e} by A7;
+    A9: x in S \/ {e} by A8, XBOOLE_0:def 3;
+    A10: x <> e by A1, A7;
+    A11: not x in {e} by A10, TARSKI:def 1;
+    thus thesis by A9, A11, XBOOLE_0:def 5;
+  end;
+
+  thus thesis by A2, A6, XBOOLE_0:def 10;
+end;
+

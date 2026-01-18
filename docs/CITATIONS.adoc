@@ -1,0 +1,36 @@
+= valence-shell - Citation Guide
+:toc:
+
+== BibTeX
+
+[source,bibtex]
+----
+@software{valence-shell_2025,
+  author = {Polymath, Hyper},
+  title = {valence-shell},
+  year = {2025},
+  url = {https://github.com/hyperpolymath/valence-shell},
+  license = {AGPL-3.0-or-later}
+}
+----
+
+== Harvard Style
+
+Polymath, H. (2025) _valence-shell_ [Computer software]. Available at: https://github.com/hyperpolymath/valence-shell
+
+== OSCOLA
+
+Hyper Polymath, 'valence-shell' (2025) <https://github.com/hyperpolymath/valence-shell>
+
+== MLA
+
+Polymath, Hyper. "valence-shell." 2025, github.com/hyperpolymath/valence-shell.
+
+== APA 7
+
+Polymath, H. (2025). _valence-shell_ [Computer software]. GitHub. https://github.com/hyperpolymath/valence-shell
+
+== See Also
+
+* link:../CITATION.cff[CITATION.cff]
+* link:../codemeta.json[codemeta.json]

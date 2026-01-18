@@ -1,0 +1,5 @@
+/run/media/hyper/eclipse/repos/valence-shell/impl/rust-cli/target/debug/build/serde_core-c44f039cd676198c/build_script_build-c44f039cd676198c.d: /home/hyper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/build.rs
+
+/run/media/hyper/eclipse/repos/valence-shell/impl/rust-cli/target/debug/build/serde_core-c44f039cd676198c/build_script_build-c44f039cd676198c: /home/hyper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/build.rs
+
+/home/hyper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/build.rs:
