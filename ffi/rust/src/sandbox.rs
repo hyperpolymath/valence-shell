@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Path Sandboxing and Security
 //!
 //! This module ensures all filesystem operations are confined to a sandbox root.

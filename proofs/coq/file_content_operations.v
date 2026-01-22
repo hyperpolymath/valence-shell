@@ -161,6 +161,54 @@ Proof.
     reflexivity.
 Qed.
 
+(** * Content Composition Theorems *)
+
+(** Last write wins when writing the same path twice *)
+Theorem write_file_last_write_wins :
+  forall p fs c1 c2,
+    write_file p c2 (write_file p c1 fs) = write_file p c2 fs.
+Proof.
+  intros p fs c1 c2.
+  unfold write_file.
+  apply functional_extensionality.
+  intros p'.
+  destruct (list_eq_dec String.string_dec p p') as [Heq|Hneq].
+  - subst p'.
+    unfold write_file.
+    destruct (list_eq_dec String.string_dec p p) as [_|Hcontra].
+    + destruct (fs p) as [node|] eqn:Hfs.
+      * simpl. destruct (node_type node); reflexivity.
+      * simpl. reflexivity.
+    + contradiction.
+  - reflexivity.
+Qed.
+
+(** Writes to different paths commute *)
+Theorem write_file_commute :
+  forall p1 p2 c1 c2 fs,
+    p1 <> p2 ->
+    write_file p1 c1 (write_file p2 c2 fs) =
+    write_file p2 c2 (write_file p1 c1 fs).
+Proof.
+  intros p1 p2 c1 c2 fs Hneq.
+  unfold write_file.
+  apply functional_extensionality.
+  intros p.
+  destruct (list_eq_dec String.string_dec p2 p) as [Hp2|Hp2].
+  - subst p.
+    destruct (list_eq_dec String.string_dec p1 p2) as [Hcontra|_].
+    + contradiction.
+    + destruct (fs p2) as [node|] eqn:Hfs.
+      * simpl. destruct (node_type node); reflexivity.
+      * simpl. reflexivity.
+  - destruct (list_eq_dec String.string_dec p1 p) as [Hp1|Hp1].
+    + subst p.
+      destruct (fs p1) as [node|] eqn:Hfs.
+      * simpl. destruct (node_type node); reflexivity.
+      * simpl. reflexivity.
+    + reflexivity.
+Qed.
+
 (** * Content Operations and Basic Operations *)
 
 (** Creating a file initializes empty content *)
@@ -282,6 +330,7 @@ Qed.
     ✓ Preconditions for safe file access
     ✓ Reversibility: write(p, old, write(p, new, fs)) = fs
     ✓ Independence: write(p1, c, fs) doesn't affect p2
+    ✓ Composition: last-write-wins and commuting writes
     ✓ Integration with basic operations
     ✓ State capture/restore for undo/redo
     ✓ MAA modification records with reversibility

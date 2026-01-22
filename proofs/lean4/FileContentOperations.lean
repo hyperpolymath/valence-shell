@@ -149,6 +149,44 @@ theorem writeFileIndependence (p1 p2 : Path) (content : FileContent)
   unfold writeFile readFile
   simp only [hneq, ite_false]
 
+-- Content Composition Theorems
+
+/-- Last write wins when writing the same path twice -/
+theorem writeFileLastWriteWins (p : Path) (fs : FilesystemWithContent)
+    (c1 c2 : FileContent) :
+    writeFile p c2 (writeFile p c1 fs) = writeFile p c2 fs := by
+  funext p'
+  unfold writeFile
+  by_cases h : p = p'
+  · subst h
+    cases hfs : fs p with
+    | none => simp [hfs]
+    | some node =>
+        cases hnt : node.nodeType <;> simp [hfs, hnt]
+  · simp [h]
+
+/-- Writes to different paths commute -/
+theorem writeFileCommute (p1 p2 : Path) (fs : FilesystemWithContent)
+    (c1 c2 : FileContent) (hneq : p1 ≠ p2) :
+    writeFile p1 c1 (writeFile p2 c2 fs) =
+    writeFile p2 c2 (writeFile p1 c1 fs) := by
+  funext p'
+  unfold writeFile
+  by_cases h2 : p2 = p'
+  · subst h2
+    have h1 : p1 ≠ p2 := hneq
+    cases hfs : fs p2 with
+    | none => simp [hfs, h1]
+    | some node =>
+        cases hnt : node.nodeType <;> simp [hfs, hnt, h1]
+  · by_cases h1 : p1 = p'
+    · subst h1
+      cases hfs : fs p1 with
+      | none => simp [hfs, h2]
+      | some node =>
+          cases hnt : node.nodeType <;> simp [hfs, hnt, h2]
+    · simp [h2, h1]
+
 -- Content Operations and Basic Operations
 
 /-- Creating a file initializes empty content -/

@@ -43,7 +43,7 @@ Valence Shell achieves **Bronze-level RSR compliance** with several **Silver-lev
 | Document | Status | Location |
 |----------|--------|----------|
 | **README** | ✅ COMPLETE | `README.md` (to be created from CLAUDE.md) |
-| **LICENSE** | ✅ COMPLETE | `LICENSE.txt` (dual MIT + Palimpsest v0.8) |
+| **LICENSE** | ✅ COMPLETE | `LICENSE` (Palimpsest-MPL 1.0 or later) |
 | **SECURITY.md** | ✅ COMPLETE | `SECURITY.md` (comprehensive, RFC 9116 aligned) |
 | **CONTRIBUTING.md** | ✅ COMPLETE | `CONTRIBUTING.md` (with TPCF framework) |
 | **CODE_OF_CONDUCT.md** | ✅ COMPLETE | `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1 + CCCP) |
@@ -146,19 +146,18 @@ just clean           # Clean build artifacts
 
 | Requirement | Status | Details |
 |-------------|--------|---------|
-| **Open Source License** | ✅ COMPLETE | MIT License (OSI-approved) |
-| **License File** | ✅ COMPLETE | `LICENSE.txt` |
-| **Dual Licensing** | ✅ BONUS | MIT + Palimpsest v0.8 |
-| **SPDX Identifiers** | ✅ COMPLETE | `MIT AND Palimpsest-0.8` |
-| **Copyright Notices** | ✅ COMPLETE | In LICENSE.txt and file headers |
+| **Open Source License** | ✅ COMPLETE | Palimpsest-MPL 1.0 or later |
+| **License File** | ✅ COMPLETE | `LICENSE` |
+| **Dual Licensing** | ✅ N/A | Single-license (Palimpsest-MPL 1.0 or later) |
+| **SPDX Identifiers** | ✅ COMPLETE | `PLMP-1.0-or-later` |
+| **Copyright Notices** | ✅ COMPLETE | In LICENSE and file headers |
 | **Attribution** | ✅ EXCEEDS | Palimpsest License mandates attribution + history |
 
-**Score**: 10/10 (Exceeds - dual licensing provides more options)
+**Score**: 10/10 (Exceeds - clear single license with strong attribution and provenance requirements)
 
-**Palimpsest License v0.8**:
+**Palimpsest-MPL 1.0 or later (PLMP-1.0-or-later)**:
 - Requires preservation of authorship
 - Mandates modification history (palimpsest record)
-- Compatible with MIT, Apache 2.0, GPL v3
 - Supports reproducibility and attribution
 
 ### 8. Security ✅ **EXCEEDS**
@@ -320,7 +319,7 @@ just verify-proofs  # ✅ PASSES
 just test-all  # ✅ PASSES
 
 # Check documentation
-ls LICENSE.txt SECURITY.md CONTRIBUTING.md CODE_OF_CONDUCT.md  # ✅ ALL EXIST
+ls LICENSE SECURITY.md CONTRIBUTING.md CODE_OF_CONDUCT.md  # ✅ ALL EXIST
 
 # Check well-known
 ls .well-known/security.txt .well-known/ai.txt .well-known/humans.txt  # ✅ ALL EXIST
@@ -329,7 +328,7 @@ ls .well-known/security.txt .well-known/ai.txt .well-known/humans.txt  # ✅ ALL
 ### Manual Verification
 
 **Documentation Checklist**:
-- [x] LICENSE.txt exists and is dual-licensed
+- [x] LICENSE exists and is Palimpsest-MPL 1.0 or later
 - [x] SECURITY.md exists and is comprehensive
 - [x] CONTRIBUTING.md exists with TPCF documentation
 - [x] CODE_OF_CONDUCT.md exists (Contributor Covenant 2.1)

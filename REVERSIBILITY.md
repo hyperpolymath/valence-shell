@@ -272,10 +272,10 @@ Theorem cno_identity_element :
 - ✅ File operations
 - ✅ Content read/write
 - ✅ Operation sequences
+- ✅ File copy/move
+- ✅ Symbolic links (abstract model)
 
 **NOT Proven**:
-- ❌ File copy/move
-- ❌ Symbolic links
 - ❌ Network operations
 - ❌ Implementation (OCaml FFI)
 
@@ -283,7 +283,6 @@ Theorem cno_identity_element :
 
 - Close extraction gap (Coq → OCaml verification)
 - Verify FFI layer
-- Add more operations (copy, move, symlinks)
 - RMO (obliterative deletion) proofs
 
 ## References

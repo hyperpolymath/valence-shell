@@ -80,4 +80,4 @@ Each operation is backed by formal proofs:
 
 ## License
 
-AGPL-3.0-or-later
+PLMP-1.0-or-later

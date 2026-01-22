@@ -96,6 +96,13 @@ All proof files contain:
 - ✅ `rmdir_preserves_other_paths`: rmdir doesn't affect other paths
 - ✅ `mkdir_parent_still_exists`: parent still exists after mkdir
 
+## Additional Proven Operations
+
+- ✅ File content operations (read/write) with reversibility
+- ✅ Copy/move operations (abstract model)
+- ✅ Symlink create/unlink operations (abstract model)
+- ✅ Content composition theorems (last-write-wins, commuting writes)
+
 ## Compilation Instructions
 
 ### Coq
@@ -154,8 +161,8 @@ mizf filesystem_model.miz
 
 ### Immediate (High Priority)
 1. **POSIX Error Conditions**: Model EEXIST, ENOENT, EACCES, ENOTEMPTY
-2. **File Operations**: Add file create/delete with proofs
-3. **Path Resolution**: Prove symbolic link and .. handling
+2. **Path Resolution**: Prove symlink target traversal and .. handling
+3. **Extraction**: Coq → OCaml → POSIX FFI
 
 ### Near-Term
 4. **Extraction**: Coq → OCaml → POSIX FFI
@@ -229,4 +236,4 @@ Theorem mkdir_rmdir_reversible : ∀ path fs,
 ---
 
 **Status**: Research phase - Formal specifications complete, extraction pending
-**Last Updated**: 2025-11-22
+**Last Updated**: 2026-01-18

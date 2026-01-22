@@ -10,7 +10,7 @@
   title = {valence-shell},
   year = {2025},
   url = {https://github.com/hyperpolymath/valence-shell},
-  license = {AGPL-3.0-or-later}
+  license = {PLMP-1.0-or-later}
 }
 ----
 

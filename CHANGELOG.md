@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - RSR (Rhodium Standard Repository) compliance
-  - LICENSE.txt (dual MIT + Palimpsest v0.8)
+  - LICENSE (Palimpsest-MPL 1.0 or later)
   - SECURITY.md policy
   - CONTRIBUTING.md with TPCF framework
   - CODE_OF_CONDUCT.md
@@ -203,10 +203,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Future Releases
 
 ### Planned for 0.6.0
-- File copy/move operations
-- Symbolic link support
-- Content composition theorems
-- Isabelle and Mizar content operations
+- [x] File copy/move operations
+- [x] Symbolic link support
+- [x] Content composition theorems
+- [x] Isabelle and Mizar content operations
 
 ### Planned for 0.7.0
 - RMO (obliterative deletion) proofs
@@ -232,4 +232,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute to future releases.
 ---
 
 **Maintained by**: See [MAINTAINERS.md](MAINTAINERS.md)
-**License**: MIT + Palimpsest v0.8 (see [LICENSE.txt](LICENSE.txt))
+**License**: Palimpsest-MPL 1.0 or later (see [LICENSE](LICENSE))

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Precondition checking module
 //!
 //! Runtime validation of preconditions that mirror the formal proofs.

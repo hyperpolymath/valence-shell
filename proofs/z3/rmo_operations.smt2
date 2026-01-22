@@ -1,4 +1,4 @@
-; SPDX-License-Identifier: AGPL-3.0-or-later
+; SPDX-License-Identifier: PLMP-1.0-or-later
 ; Valence Shell - RMO (Remove-Match-Obliterate) Operations in Z3/SMT-LIB
 ;
 ; This module formalizes secure deletion for GDPR compliance.

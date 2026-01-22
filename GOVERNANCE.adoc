@@ -208,7 +208,7 @@ Valence Shell follows a **Tri-Perimeter Governance Model** aligned with the TPCF
 === Copyright
 
 . Contributors retain copyright
-. License: MIT OR GPL, Palimpsest recommended (see LICENSE.txt)
+. License: Palimpsest-MPL 1.0 or later (see LICENSE)
 . No copyright assignment required
 . Attribution preserved (Palimpsest requirement)
 

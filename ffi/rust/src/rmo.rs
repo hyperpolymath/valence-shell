@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! RMO (Remove-Match-Obliterate) Secure Deletion
 //!
 //! This module implements secure file deletion for GDPR "right to be forgotten"

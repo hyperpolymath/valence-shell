@@ -1,4 +1,4 @@
-(* SPDX-License-Identifier: AGPL-3.0-or-later *)
+(* SPDX-License-Identifier: PLMP-1.0-or-later *)
 theory FileContentOperations
   imports Main FilesystemModel FileOperations
 begin
@@ -142,6 +142,23 @@ theorem write_file_independence:
   using assms
   unfolding write_file_def read_file_def
   by simp
+
+section \<open>Content Composition Theorems\<close>
+
+text \<open>Last write wins when writing the same path twice\<close>
+theorem write_file_last_write_wins:
+  "write_file p c2 (write_file p c1 fs) = write_file p c2 fs"
+  unfolding write_file_def
+  by (rule ext, auto)
+
+text \<open>Writes to different paths commute\<close>
+theorem write_file_commute:
+  assumes "p1 \<noteq> p2"
+  shows "write_file p1 c1 (write_file p2 c2 fs) =
+         write_file p2 c2 (write_file p1 c1 fs)"
+  using assms
+  unfolding write_file_def
+  by (rule ext, auto)
 
 section \<open>Content Operations and Basic Operations\<close>
 

@@ -371,12 +371,11 @@ Must pass before merge.
 ## Licensing
 
 All contributions must be compatible with:
-- **MIT License** (permissive)
-- **Palimpsest License v0.8** (attribution + history)
+- **Palimpsest-MPL 1.0 or later** (`PLMP-1.0-or-later`)
 
-By contributing, you agree to license your contributions under both licenses.
+By contributing, you agree to license your contributions under this license.
 
-See [LICENSE.txt](LICENSE.txt) for full text.
+See [LICENSE](LICENSE) for full text.
 
 ## Recognition
 

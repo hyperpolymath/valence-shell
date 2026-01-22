@@ -1,0 +1,97 @@
+= Valence Shell — Vision and Progress
+:toc:
+:toclevels: 2
+
+== Status Snapshot (2026-01-19)
+
+*Phase:* Research prototype
+
+*What is done (verified):*
+
+* Structural ops (mkdir/rmdir, create/delete) across 6 systems
+* Composition theorems across 5 systems
+* Equivalence theory across 5 systems
+* Content operations (read/write + reversible modification) across 5 systems
+
+*What is not yet verified end-to-end:*
+
+* OCaml FFI layer and runtime syscall correspondence
+* Extraction pipeline proofs from Coq to executable behavior
+* Full POSIX surface and shell parsing/execution
+
+== Current Claims (Honest)
+
+* Polyglot proofs for core filesystem reversibility and composition
+* Content-aware reversible operations with audit records
+* Research-grade prototype, not production ready
+
+== Key Gaps
+
+* Verification gap between proofs and real syscalls
+* No end-to-end verified implementation pipeline
+* No full shell surface (parsing, pipelines, job control)
+
+== Roadmap (Phase 0–6)
+
+=== Phase 0 — Foundations
+*Status:* Complete
+
+* Repo structure, docs, governance, licensing
+* Build/test scaffolding (justfile, scripts)
+* Multi-prover baseline wiring
+
+=== Phase 1 — Abstract Proofs
+*Status:* Complete
+
+* Core filesystem model
+* mkdir/rmdir reversibility
+* file create/delete reversibility
+* Polyglot proofs across 6 systems
+
+=== Phase 2 — Composition & Equivalence
+*Status:* Complete
+
+* Operation sequences and reversibility
+* Equivalence relations and CNO identity
+* Proofs across 5 manual systems (+ Z3)
+
+=== Phase 3 — Extended Operations (Content)
+*Status:* In progress (proofs complete; verification across tools pending)
+
+* Done: content ops across Coq, Lean 4, Agda, Isabelle, Mizar
+* Next: run proof suites across all systems and record results
+
+=== Phase 4 — Verified Implementation
+*Status:* Not started
+
+* Coq extraction to OCaml
+* Prove correspondence: Coq model ↔ OCaml ↔ POSIX syscalls
+* Integration tests showing proof-to-runtime alignment
+
+=== Phase 5 — RMO / GDPR Compliance
+*Status:* Not started
+
+* Secure deletion model and proofs
+* Obliterative operations and audit trail extensions
+* Compliance claims: explicitly scoped and verified
+
+=== Phase 6 — Shell Surface (Kickoff)
+*Status:* Planned
+
+* Define minimal verifiable shell subset (commands, args, redirects)
+* Formal command semantics aligned to filesystem proofs
+* Parser + evaluator for the minimal subset
+* Proof obligations linking command execution to filesystem theorems
+* Build a demonstrator: safe builtins with verified behavior
+
+== Phase 6 Entry Criteria
+
+* Proof suites pass across all systems for content operations
+* Extraction or correspondence plan agreed for the filesystem core
+* Clear safety boundary: which shell features are verified vs. unverified
+
+== Phase 6 Next Actions (Start Now)
+
+* Draft the minimal shell grammar and semantics (spec-only)
+* Identify which builtins map to existing proofs
+* Decide verification approach for parser correctness

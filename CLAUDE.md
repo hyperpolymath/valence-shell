@@ -292,7 +292,7 @@ Using both Coq (Calculus of Inductive Constructions) and Isabelle (Higher-Order 
 Valence Shell achieves **PLATINUM-level RSR compliance** (105/100):
 
 ✅ **Complete Documentation**
-- LICENSE.txt (dual MIT + Palimpsest v0.8)
+- LICENSE (Palimpsest-MPL 1.0 or later)
 - SECURITY.md (comprehensive security policy)
 - CONTRIBUTING.md (TPCF framework)
 - CODE_OF_CONDUCT.md (Contributor Covenant 2.1 + CCCP)

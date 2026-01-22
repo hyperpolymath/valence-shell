@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: AGPL-3.0-or-later
+-- SPDX-License-Identifier: PLMP-1.0-or-later
 import Lake
 open Lake DSL
 
@@ -19,4 +19,7 @@ lean_lib FilesystemComposition where
   srcDir := "."
 
 lean_lib FilesystemEquivalence where
+  srcDir := "."
+
+lean_lib SymlinkOperations where
   srcDir := "."

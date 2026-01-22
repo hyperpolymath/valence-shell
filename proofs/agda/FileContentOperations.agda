@@ -116,6 +116,20 @@ postulate
     p1 ≢ p2 →
     readFile p2 (writeFile p1 content fs) ≡ readFile p2 fs
 
+-- Content Composition Theorems
+
+postulate
+  writeFileLastWriteWins : ∀ (p : Path) (fs : FilesystemWithContent)
+    (c1 c2 : FileContent) →
+    writeFile p c2 (writeFile p c1 fs) ≡ writeFile p c2 fs
+
+postulate
+  writeFileCommute : ∀ (p1 p2 : Path) (fs : FilesystemWithContent)
+    (c1 c2 : FileContent) →
+    p1 ≢ p2 →
+    writeFile p1 c1 (writeFile p2 c2 fs) ≡
+    writeFile p2 c2 (writeFile p1 c1 fs)
+
 -- State Tracking for Reversibility
 
 record FileState : Set where

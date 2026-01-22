@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 // Valence Shell MCP Server
 // Exposes formally verified reversible filesystem operations via MCP
 

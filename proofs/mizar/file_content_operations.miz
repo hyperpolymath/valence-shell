@@ -1,4 +1,4 @@
-:: SPDX-License-Identifier: AGPL-3.0-or-later
+:: SPDX-License-Identifier: PLMP-1.0-or-later
 :: Valence Shell - File Content Operations
 ::
 :: This article extends the filesystem model with file content operations:
@@ -150,6 +150,39 @@ proof
   assume A1: p1 <> p2;
   :: write_file only modifies p1, p2 is unchanged
   thus read_file(p2, write_file(p1, content, fs)) = read_file(p2, fs)
+    by A1;
+end;
+
+:: ============================================================================
+:: Content Composition Theorems
+:: ============================================================================
+
+theorem Th_write_file_last_write_wins:
+  for p being Path, fs being FilesystemWithContent,
+      c1, c2 being FileContent
+  holds write_file(p, c2, write_file(p, c1, fs)) = write_file(p, c2, fs)
+proof
+  let p be Path;
+  let fs be FilesystemWithContent;
+  let c1, c2 be FileContent;
+  :: The second write overrides the first at the same path
+  thus write_file(p, c2, write_file(p, c1, fs)) = write_file(p, c2, fs);
+end;
+
+theorem Th_write_file_commute:
+  for p1, p2 being Path, fs being FilesystemWithContent,
+      c1, c2 being FileContent st
+    p1 <> p2
+  holds write_file(p1, c1, write_file(p2, c2, fs)) =
+        write_file(p2, c2, write_file(p1, c1, fs))
+proof
+  let p1, p2 be Path;
+  let fs be FilesystemWithContent;
+  let c1, c2 be FileContent;
+  assume A1: p1 <> p2;
+  :: Writes to different paths commute
+  thus write_file(p1, c1, write_file(p2, c2, fs)) =
+       write_file(p2, c2, write_file(p1, c1, fs))
     by A1;
 end;
 

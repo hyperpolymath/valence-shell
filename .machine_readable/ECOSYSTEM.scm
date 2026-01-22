@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: AGPL-3.0-or-later
+;; SPDX-License-Identifier: PLMP-1.0-or-later
 ;; ECOSYSTEM.scm - Ecosystem position for valence-shell
 ;; Media-Type: application/vnd.ecosystem+scm
 
