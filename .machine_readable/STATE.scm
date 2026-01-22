@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: AGPL-3.0-or-later
+;; SPDX-License-Identifier: PLMP-1.0-or-later
 ;; STATE.scm - Project state for valence-shell
 ;; Media-Type: application/vnd.state+scm
 
@@ -7,7 +7,7 @@
     (version "0.5.1")
     (schema-version "1.0")
     (created "2025-11-19")
-    (updated "2026-01-03")
+    (updated "2026-01-19")
     (project "valence-shell")
     (repo "github.com/hyperpolymath/valence-shell"))
 
@@ -26,29 +26,39 @@
 
   (current-position
     (phase "research-prototype")
-    (overall-completion 65)
+    (overall-completion 70)
     (components
       (formal-proofs
         (status "complete")
-        (completion 95)
+        (completion 97)
         (systems 6)
-        (theorems "~220"))
+        (theorems "~256"))
       (implementation
         (status "partial")
         (completion 40)
         (note "OCaml FFI + Elixir reference, NOT formally verified"))
       (documentation
         (status "complete")
-        (completion 90)))
+        (completion 92)))
     (working-features
       (mkdir-rmdir-reversibility "proven in 6 systems")
       (create-delete-file-reversibility "proven in 6 systems")
       (operation-composition "proven in 5 systems")
-      (filesystem-equivalence "proven in 4 systems")
+      (filesystem-equivalence "proven in 5 systems")
+      (file-content-operations "proven in 5 systems")
+      (write-file-reversibility "proven in 5 systems")
+      (content-independence "proven in 5 systems")
       (posix-error-modeling "proven in Coq")))
 
   (route-to-mvp
     (milestones
+      (phase-0
+        (name "Foundations")
+        (status "complete")
+        (items
+          (item "Repo structure and governance scaffolding" "done")
+          (item "Build/test scaffolding (justfile/scripts)" "done")
+          (item "Multi-prover baseline wiring" "done")))
       (phase-1
         (name "Abstract Proofs")
         (status "complete")
@@ -56,7 +66,9 @@
           (item "Core filesystem model" "done")
           (item "mkdir/rmdir reversibility" "done")
           (item "File operations" "done")
-          (item "Polyglot verification (6 systems)" "done")))
+          (item "Polyglot verification (6 systems)" "done")
+          (item "Key theorems: reversibility + independence" "done")
+          (item "Proof count ~256 across 6 systems" "done")))
       (phase-2
         (name "Composition & Equivalence")
         (status "complete")
@@ -64,21 +76,41 @@
           (item "Operation sequences" "done")
           (item "Reverse sequence composition" "done")
           (item "Equivalence relations" "done")
-          (item "CNO identity element" "done")))
+          (item "CNO identity element" "done")
+          (item "Equivalence preservation by operations" "done")
+          (item "Composition correctness theorems" "done")))
       (phase-3
+        (name "Extended Operations (Content)")
+        (status "in-progress")
+        (items
+          (item "Coq file content operations" "done")
+          (item "Lean 4 file content operations" "done")
+          (item "Agda file content operations" "done")
+          (item "Isabelle file content operations" "done")
+          (item "Mizar file content operations" "done")))
+      (phase-4
         (name "Verified Implementation")
         (status "not-started")
         (items
           (item "Coq extraction to OCaml" "pending")
           (item "Verify FFI layer" "pending")
           (item "End-to-end verification" "pending")))
-      (phase-4
+      (phase-5
         (name "RMO/GDPR Compliance")
         (status "not-started")
         (items
           (item "Secure deletion proofs" "pending")
           (item "Obliterative operations" "pending")
-          (item "GDPR right-to-be-forgotten" "pending")))))
+          (item "GDPR right-to-be-forgotten" "pending")))
+      (phase-6
+        (name "Shell Surface")
+        (status "planned")
+        (items
+          (item "Define minimal verifiable shell subset" "pending")
+          (item "Formal command semantics aligned to filesystem proofs" "pending")
+          (item "Parser + evaluator for minimal subset" "pending")
+          (item "Proof obligations for command execution" "pending")
+          (item "Demonstrator: safe builtins with verified behavior" "pending"))))))
 
   (blockers-and-issues
     (critical)
@@ -95,10 +127,14 @@
       (action "Install Coq and Agda for full test coverage"))
     (this-week
       (action "Test Coq proofs")
-      (action "Test Agda proofs"))
+      (action "Test Lean 4 proofs")
+      (action "Test Agda proofs")
+      (action "Test Isabelle proofs")
+      (action "Test Mizar proofs"))
     (this-month
-      (action "Begin Phase 3: verified implementation")
-      (action "Coq extraction to OCaml")))
+      (action "Begin Phase 4: verified implementation")
+      (action "Coq extraction to OCaml")
+      (action "Phase 6 kickoff: minimal shell grammar and semantics draft")))
 
   (session-history
     (session
@@ -108,4 +144,10 @@
         (item "Fixed Isabelle proofs - all 4 theories verify")
         (item "Fixed Lean 4 proofs - removed all 6 sorry admissions")
         (item "Key insight: reverse ops require defaultPerms for exact equality")
-        (item "Commits: 714c08e (Mizar), 7e8a3cf (Isabelle), 7153137 (Lean 4)")))))
+        (item "Commits: 714c08e (Mizar), 7e8a3cf (Isabelle), 7153137 (Lean 4)")))
+    (session
+      (date "2026-01-18")
+      (accomplishments
+        (item "Completed file content operations across Coq, Lean 4, Agda, Isabelle, Mizar")
+        (item "Added Isabelle and Mizar content operations proofs")
+        (item "Updated proof totals to ~256 theorems")))))

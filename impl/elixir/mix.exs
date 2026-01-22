@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PLMP-1.0-or-later
 
 defmodule VSH.MixProject do
   use Mix.Project
@@ -34,7 +34,7 @@ defmodule VSH.MixProject do
   defp package do
     [
       name: "vsh",
-      licenses: ["AGPL-3.0-or-later"],
+      licenses: ["PLMP-1.0-or-later"],
       links: %{
         "GitHub" => "https://github.com/hyperpolymath/valence-shell"
       }

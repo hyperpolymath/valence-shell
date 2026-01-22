@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Integration Tests for Valence Shell
 //!
 //! These tests verify that the formally proven properties hold at runtime.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Valence Shell - Zig Fast Path
 //!
 //! Fast startup path for simple operations (~5ms cold start).
@@ -359,7 +359,7 @@ fn printVersion() !void {
         \\
         \\Formally verified shell operations.
         \\Proofs: ~256 theorems across 6 verification systems
-        \\License: AGPL-3.0-or-later
+        \\License: PLMP-1.0-or-later
         \\
     ;
     try std.io.getStdOut().writeAll(version);

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Error types matching Coq POSIX error definitions
 //!
 //! These error types correspond exactly to the POSIX errors modeled in:

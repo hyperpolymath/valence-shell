@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PLMP-1.0-or-later
 # Valence Shell FFI Layer
 # Provides verified POSIX operations with precondition checking
 
@@ -8,7 +8,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Hyperpolymath <hyperpolymath@pm.me>"]
 description = "FFI layer for Valence Shell - bridges Coq proofs to POSIX syscalls"
-license = "AGPL-3.0-or-later"
+license = "PLMP-1.0-or-later"
 repository = "https://github.com/hyperpolymath/valence-shell"
 keywords = ["ffi", "posix", "formal-verification", "filesystem"]
 categories = ["filesystem", "os"]

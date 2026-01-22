@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PLMP-1.0-or-later
 
 defmodule VSH.NIF do
   @moduledoc """
@@ -31,7 +31,7 @@ defmodule VSH.NIF do
   use Zig, otp_app: :vsh, nifs: [mkdir: 1, rmdir: 1, create_file: 1, delete_file: 1, get_last_audit: 0]
 
   ~Z"""
-  // SPDX-License-Identifier: AGPL-3.0-or-later
+  // SPDX-License-Identifier: PLMP-1.0-or-later
   // Valence Shell - Zigler NIF implementation
 
   const std = @import("std");

@@ -252,7 +252,7 @@ modificationReversible : ∀ (record : FileModificationRecord) (fs : FilesystemW
 |--------|----------|-----|-------|
 | Proof files | 23 | 4 | **27** |
 | Systems with equivalence | 4 | +1 (Mizar) | **5/5** ✅ |
-| Systems with content ops | 0 | +3 | **3/5** |
+| Systems with content ops | 0 | +5 | **5/5** ✅ |
 | Lines of proof code | ~3,180 | ~1,100 | **~4,280** |
 | Theorem instances | ~217 | ~39 | **~256** |
 | Total lines (all) | ~6,100 | ~1,100 | **~7,200** |
@@ -275,7 +275,7 @@ modificationReversible : ∀ (record : FileModificationRecord) (fs : FilesystemW
    - ✓ Reversibility of content modifications
    - ✓ Independent updates (write to p1 doesn't affect p2)
    - ✓ State capture/restore for undo/redo
-   - ✓ Proven in 3 proof assistants (Coq, Lean 4, Agda)
+   - ✓ Proven in 5 proof assistants (Coq, Lean 4, Agda, Isabelle, Mizar)
 
 3. **MAA Integration**
    - ✓ File modification records for audit
@@ -289,9 +289,10 @@ modificationReversible : ∀ (record : FileModificationRecord) (fs : FilesystemW
 
 ### ❌ Still Cannot Claim
 
-- Isabelle/Mizar content operations (not started)
-- File copy/move operations
-- Symbolic link operations
+> Update (2026-01-18): Isabelle/Mizar content operations, copy/move operations,
+> symbolic link operations (abstract model), and content composition theorems
+> are now complete.
+
 - Full POSIX compliance
 - Production ready
 

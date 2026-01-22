@@ -2,7 +2,7 @@
 
 image:[License,link="https://github.com/hyperpolymath/palimpsest-license"]
 
-// SPDX-License-Identifier: PMPL-1.0
+// SPDX-License-Identifier: PLMP-1.0-or-later
 // SPDX-FileCopyrightText: 2025 Jonathan D.A. Jewell
 
 
@@ -399,10 +399,10 @@ See link:CONTRIBUTING.md[CONTRIBUTING.md] for details.
 
 === Version 0.6.0 (Next Release)
 
-* [ ] File copy/move operations
-* [ ] Symbolic link support
-* [ ] Content composition theorems
-* [ ] Isabelle and Mizar content operations
+* [x] File copy/move operations
+* [x] Symbolic link support
+* [x] Content composition theorems
+* [x] Isabelle and Mizar content operations
 
 === Version 0.7.0
 
@@ -421,30 +421,10 @@ See link:CONTRIBUTING.md[CONTRIBUTING.md] for details.
 
 == Licensing
 
-**Triple-licensed** for maximum flexibility:
+**License**: Palimpsest-MPL 1.0 or later (SPDX: `PLMP-1.0-or-later`)
 
-* **Palimpsest-MPL-1.0 License** (permissive, OSI-approved)
-* **GPL v3** (copyleft option)
-* **Palimpsest License v0.8** (recommended: attribution + history)
-
-[IMPORTANT]
-====
-**We encourage dual licensing with Palimpsest v0.8**, which adds:
-
-* ✅ Attribution preservation (credit original authors)
-* ✅ Modification history (palimpsest record)
-* ✅ Compatible with MIT and GPL
-* ✅ Supports reproducibility
-
-See link:LICENSE.txt[LICENSE.txt] for full text and usage rights.
-
-**Choose**:
-
-* MIT only (maximum permissiveness)
-* GPL v3 only (strong copyleft)
-* MIT + Palimpsest (recommended: permissive + attribution)
-* GPL + Palimpsest (copyleft + attribution)
-====
+See link:LICENSE[LICENSE] for full text and usage rights.
+Third-party notices: link:THIRD_PARTY_NOTICES.md[THIRD_PARTY_NOTICES.md].
 
 == RSR Compliance
 
@@ -485,7 +465,7 @@ Different logical foundations increase confidence. If all 6 systems prove the sa
 
 **For research/education**: Yes! +
 **For production**: Not yet (wait for v1.0.0) +
-**License**: MIT or GPL or Palimpsest (your choice)
+**License**: Palimpsest-MPL 1.0 or later (`PLMP-1.0-or-later`)
 
 === How do I verify the proofs?
 
@@ -548,15 +528,8 @@ See link:.well-known/humans.txt[humans.txt] for complete attribution.
 
 Copyright (c) 2025 Valence Shell Contributors
 
-Triple-licensed under:
-
-* Palimpsest-MPL-1.0 License
-* GNU General Public License v3.0
-* Palimpsest License v0.8 (recommended)
-
-See link:LICENSE.txt[LICENSE.txt] for full text.
-
-**Recommended**: Use MIT or GPL **with** Palimpsest for attribution and modification history preservation.
+Licensed under **Palimpsest-MPL 1.0 or later** (SPDX: `PLMP-1.0-or-later`).
+See link:LICENSE[LICENSE] for full text.
 
 ---
 

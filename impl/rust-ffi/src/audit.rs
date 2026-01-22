@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! MAA-Compliant Audit Logging
 //!
 //! This module provides audit logging for the MAA (Mutually Assured Accountability)

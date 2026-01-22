@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Runtime Precondition Checking
 //!
 //! This module mirrors the precondition definitions from the Coq proofs.
@@ -246,7 +246,7 @@ impl Preconditions {
     /// Check preconditions for copy_file
     ///
     /// # Proof Status
-    /// PENDING - copy_file_precondition to be added to Coq
+    /// Covered by copy_file_precondition in proofs/coq/copy_move_operations.v
     pub fn copy_file(src: &Path, dst: &Path) -> FfiResult<()> {
         // 1. Source must exist
         if !src.exists() {
@@ -283,7 +283,7 @@ impl Preconditions {
     /// Check preconditions for move (rename)
     ///
     /// # Proof Status
-    /// PENDING - move_path_precondition to be added to Coq
+    /// Covered by move_precondition in proofs/coq/copy_move_operations.v
     pub fn move_path(src: &Path, dst: &Path) -> FfiResult<()> {
         // 1. Source must exist
         if !src.exists() {
@@ -328,7 +328,7 @@ impl Preconditions {
     /// Check preconditions for symlink
     ///
     /// # Proof Status
-    /// PENDING - symlink_precondition to be added to Coq
+    /// Covered by symlink_precondition in proofs/coq/symlink_operations.v
     pub fn symlink(link_path: &Path) -> FfiResult<()> {
         // 1. Link path must not exist
         if link_path.exists() || link_path.symlink_metadata().is_ok() {

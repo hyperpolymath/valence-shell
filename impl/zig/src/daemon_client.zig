@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Daemon Client - Unix Socket Communication
 //!
 //! JSON-RPC 2.0 client for communicating with the BEAM daemon.

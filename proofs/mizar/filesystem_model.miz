@@ -1,5 +1,5 @@
 :: Valence Shell - Filesystem Model (Mizar)
-:: SPDX-License-Identifier: AGPL-3.0-or-later
+:: SPDX-License-Identifier: PLMP-1.0-or-later
 ::
 :: A minimal formal model demonstrating MAA set-theoretic properties.
 :: Compatible with Mizar 8.1.15 / MML 5.94

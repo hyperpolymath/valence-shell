@@ -95,10 +95,9 @@ This continuation session successfully completed **three major initiatives**:
 **Deliverables**:
 
 #### Documentation (7 new files):
-1. ✅ **LICENSE.txt** (~150 lines)
-   - Dual licensing: MIT + Palimpsest v0.8
-   - MIT: Permissive, OSI-approved
-   - Palimpsest v0.8: Attribution + modification history
+1. ✅ **LICENSE** (~150 lines)
+   - Single license: Palimpsest-MPL 1.0 or later (PLMP-1.0-or-later)
+   - Attribution + modification history required
    - Modification history section (palimpsest record)
 
 2. ✅ **SECURITY.md** (~300 lines)
@@ -178,8 +177,7 @@ This continuation session successfully completed **three major initiatives**:
 **Key Features Implemented**:
 
 1. **Dual Licensing**:
-   - MIT (permissive, wide compatibility)
-   - Palimpsest v0.8 (attribution + history preservation)
+   - Palimpsest-MPL 1.0 or later (attribution + history preservation)
    - Supports open science and reproducibility
 
 2. **TPCF Framework**:
@@ -268,7 +266,7 @@ This continuation session successfully completed **three major initiatives**:
 9. docs/PHASE3_INITIAL_REPORT.md
 
 **RSR Compliance (11)**:
-10. LICENSE.txt
+10. LICENSE
 11. SECURITY.md
 12. CONTRIBUTING.md
 13. CODE_OF_CONDUCT.md
@@ -338,7 +336,7 @@ This continuation session successfully completed **three major initiatives**:
 - ✅ PLATINUM-level compliance (105/100)
 - ✅ Complete documentation suite (7 files)
 - ✅ RFC 9116 compliant .well-known/ directory
-- ✅ Dual licensing (MIT + Palimpsest v0.8)
+- ✅ Clear single licensing (Palimpsest-MPL 1.0 or later)
 - ✅ TPCF framework documented
 - ✅ AI training policy established
 - ✅ Human-AI collaboration model documented
@@ -576,5 +574,5 @@ This continuation session successfully:
 **Next**: Phase 3 continuation or production hardening
 
 **Maintainer**: See [MAINTAINERS.md](MAINTAINERS.md)
-**License**: MIT + Palimpsest v0.8 (see [LICENSE.txt](LICENSE.txt))
+**License**: Palimpsest-MPL 1.0 or later (see [LICENSE](LICENSE))
 **RSR Compliance**: PLATINUM (see [RSR_COMPLIANCE.md](RSR_COMPLIANCE.md))

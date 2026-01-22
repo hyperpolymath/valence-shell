@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PLMP-1.0-or-later
 
 [package]
 name = "vsh"
@@ -6,7 +6,7 @@ version = "0.6.0"
 edition = "2021"
 authors = ["Hyperpolymath <hyperpolymath@pm.me>"]
 description = "Valence Shell - A formally verified reversible shell"
-license = "AGPL-3.0-or-later"
+license = "PLMP-1.0-or-later"
 repository = "https://github.com/hyperpolymath/valence-shell"
 keywords = ["shell", "reversible", "formal-verification", "undo"]
 categories = ["command-line-utilities", "filesystem"]

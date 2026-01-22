@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PLMP-1.0-or-later
 //! Valence Shell FFI Layer
 //!
 //! This crate provides the FFI (Foreign Function Interface) layer that bridges
@@ -241,7 +241,7 @@ impl FfiContext {
     /// Copy a file
     ///
     /// # Proof Status
-    /// Theorem `copy_file_reversible` - PENDING (to be added)
+    /// Theorem `copy_file_reversible` (abstract model)
     pub fn copy_file(&mut self, src: &str, dst: &str) -> FfiResult<()> {
         let src_path = self.resolve_path(src)?;
         let dst_path = self.resolve_path(dst)?;
@@ -260,7 +260,7 @@ impl FfiContext {
     /// Move/rename a file or directory
     ///
     /// # Proof Status
-    /// Theorem `move_file_reversible` - PENDING (to be added)
+    /// Theorem `move_reversible` (abstract model)
     pub fn move_path(&mut self, src: &str, dst: &str) -> FfiResult<()> {
         let src_path = self.resolve_path(src)?;
         let dst_path = self.resolve_path(dst)?;
@@ -279,7 +279,7 @@ impl FfiContext {
     /// Create a symbolic link
     ///
     /// # Proof Status
-    /// Theorem `symlink_reversible` - PENDING (to be added)
+    /// Theorem `symlink_unlink_reversible` (abstract model)
     #[cfg(unix)]
     pub fn symlink(&mut self, target: &str, link: &str) -> FfiResult<()> {
         let link_path = self.resolve_path(link)?;
