@@ -9,6 +9,7 @@
 use anyhow::Result;
 use colored::Colorize;
 use std::io::{self, BufRead, Write};
+use std::sync::atomic::Ordering;
 
 use crate::executable::{ExecutableCommand, ExecutionResult};
 use crate::parser;
@@ -16,6 +17,12 @@ use crate::state::ShellState;
 
 /// Run the interactive REPL
 pub fn run(state: &mut ShellState) -> Result<()> {
+    // Install SIGINT handler for graceful Ctrl+C handling
+    ctrlc::set_handler(move || {
+        crate::INTERRUPT_REQUESTED.store(true, Ordering::Relaxed);
+    })
+    .expect("Error setting Ctrl-C handler");
+
     let stdin = io::stdin();
     let mut stdout = io::stdout();
 

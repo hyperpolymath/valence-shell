@@ -25,6 +25,10 @@ mod state;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Global flag set by SIGINT handler to interrupt running commands
+pub static INTERRUPT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 /// Valence Shell - Every operation is reversible
 #[derive(Parser)]
