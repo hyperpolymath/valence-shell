@@ -451,10 +451,11 @@ pub fn show_graph(state: &ShellState) -> Result<()> {
             if i > 0 {
                 print!(" → ");
             }
-            print!(
-                "{}",
-                format!("{} {}", op.op_type.inverse().unwrap(), op.path).bright_yellow()
-            );
+            // Defensive: handle operations without inverses (shouldn't happen currently)
+            let inverse_str = op.op_type.inverse()
+                .map(|inv| format!("{} {}", inv, op.path))
+                .unwrap_or_else(|| format!("[non-reversible: {}]", op.path));
+            print!("{}", inverse_str.bright_yellow());
         }
         print!(" → [initial]\n");
     }

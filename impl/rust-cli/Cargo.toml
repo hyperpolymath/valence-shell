@@ -1,10 +1,10 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 
 [package]
 name = "vsh"
-version = "0.6.0"
+version = "0.7.1"
 edition = "2021"
-authors = ["Hyperpolymath <hyperpolymath@pm.me>"]
+authors = ["Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>"]
 description = "Valence Shell - A formally verified reversible shell"
 license = "PLMP-1.0-or-later"
 repository = "https://github.com/hyperpolymath/valence-shell"
@@ -44,6 +44,11 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Unix socket for BEAM IPC
 # (tokio already provides this)
+
+[dev-dependencies]
+# Property-based testing (validates Lean 4 theorems)
+proptest = "1.4"
+tempfile = "3.8"
 
 [build-dependencies]
 # Link to Zig FFI library

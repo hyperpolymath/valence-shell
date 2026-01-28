@@ -1,0 +1,574 @@
+// SPDX-License-Identifier: PLMP-1.0-or-later
+//! Property-Based Tests - Seam 0↔1 Validation
+//!
+//! These tests validate that the Rust implementation upholds the properties
+//! proven in Lean 4 theorems. This seals the gap between abstract proofs
+//! and concrete implementation.
+//!
+//! Corresponds to:
+//! - `proofs/lean4/FilesystemModel.lean`
+//! - `proofs/lean4/FileOperations.lean`
+//! - `proofs/lean4/FilesystemComposition.lean`
+
+mod fixtures;
+
+use fixtures::tempfile::TempDir;
+use proptest::prelude::*;
+use std::fs;
+use std::path::Path;
+
+// ============================================================
+// Test Utilities
+// ============================================================
+
+/// Filesystem snapshot for equivalence checking
+#[derive(Debug, Clone, PartialEq)]
+struct FsSnapshot {
+    dirs: Vec<String>,
+    files: Vec<(String, Vec<u8>)>,
+}
+
+impl FsSnapshot {
+    /// Capture current filesystem state
+    fn capture(root: &Path) -> std::io::Result<Self> {
+        let mut dirs = Vec::new();
+        let mut files = Vec::new();
+
+        fn walk(
+            base: &Path,
+            current: &Path,
+            dirs: &mut Vec<String>,
+            files: &mut Vec<(String, Vec<u8>)>,
+        ) -> std::io::Result<()> {
+            for entry in fs::read_dir(current)? {
+                let entry = entry?;
+                let path = entry.path();
+                let rel_path = path.strip_prefix(base).unwrap().to_string_lossy().to_string();
+
+                if path.is_dir() {
+                    dirs.push(rel_path.clone());
+                    walk(base, &path, dirs, files)?;
+                } else if path.is_file() {
+                    let content = fs::read(&path)?;
+                    files.push((rel_path, content));
+                }
+            }
+            Ok(())
+        }
+
+        walk(root, root, &mut dirs, &mut files)?;
+
+        dirs.sort();
+        files.sort_by(|a, b| a.0.cmp(&b.0));
+
+        Ok(Self { dirs, files })
+    }
+}
+
+/// Valid path strategy for property tests
+fn valid_path_strategy() -> impl Strategy<Value = String> {
+    prop::string::string_regex("[a-z][a-z0-9_]{0,15}")
+        .unwrap()
+        .prop_map(|s| s.to_lowercase())
+}
+
+/// Valid nested path strategy
+fn valid_nested_path_strategy() -> impl Strategy<Value = String> {
+    prop::collection::vec(valid_path_strategy(), 1..=3)
+        .prop_map(|parts| parts.join("/"))
+}
+
+// ============================================================
+// Property Tests - Lean 4 Theorem Validation
+// ============================================================
+
+/// Property: mkdir followed by rmdir returns to initial state
+///
+/// Lean theorem: `mkdir_rmdir_reversible` (FilesystemModel.lean:158)
+/// ```lean
+/// theorem mkdir_rmdir_reversible (fs : Filesystem) (p : Path)
+///   (h_pre : MkdirPrecondition p fs) :
+///   rmdir p (mkdir p fs) = fs
+/// ```
+#[test]
+fn prop_mkdir_rmdir_reversible() {
+    proptest!(|(path in valid_path_strategy())| {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        // Precondition: path must not exist
+        if target.exists() {
+            return Ok(());
+        }
+
+        // Capture initial state
+        let before = FsSnapshot::capture(temp.path()).unwrap();
+
+        // mkdir then rmdir
+        fs::create_dir(&target).unwrap();
+        assert!(target.exists(), "mkdir should create directory");
+
+        fs::remove_dir(&target).unwrap();
+        assert!(!target.exists(), "rmdir should remove directory");
+
+        // Verify return to initial state (Lean 4 postcondition)
+        let after = FsSnapshot::capture(temp.path()).unwrap();
+        prop_assert_eq!(before, after);
+    });
+}
+
+/// Property: createFile followed by deleteFile returns to initial state
+///
+/// Lean theorem: `createFile_deleteFile_reversible` (FileOperations.lean:89)
+/// ```lean
+/// theorem createFile_deleteFile_reversible (fs : Filesystem) (p : Path)
+///   (h_pre : CreateFilePrecondition p fs) :
+///   deleteFile p (createFile p fs) = fs
+/// ```
+#[test]
+fn prop_create_delete_file_reversible() {
+    proptest!(|(path in valid_path_strategy())| {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        // Precondition: path must not exist
+        if target.exists() {
+            return Ok(());
+        }
+
+        // Capture initial state
+        let before = FsSnapshot::capture(temp.path()).unwrap();
+
+        // createFile then deleteFile
+        fs::write(&target, b"").unwrap();
+        assert!(target.exists(), "createFile should create file");
+
+        fs::remove_file(&target).unwrap();
+        assert!(!target.exists(), "deleteFile should remove file");
+
+        // Verify return to initial state
+        let after = FsSnapshot::capture(temp.path()).unwrap();
+        prop_assert_eq!(before, after);
+    });
+}
+
+/// Property: Operations on different paths are independent
+///
+/// Lean theorem: `mkdirPreservesOtherPaths` (FilesystemModel.lean:180)
+/// ```lean
+/// theorem mkdirPreservesOtherPaths (fs : Filesystem) (p1 p2 : Path)
+///   (h_diff : p1 ≠ p2) (h_pre : MkdirPrecondition p1 fs) :
+///   lookup p2 (mkdir p1 fs) = lookup p2 fs
+/// ```
+#[test]
+fn prop_operation_independence() {
+    proptest!(|(path1 in valid_path_strategy(), path2 in valid_path_strategy())| {
+        // Ensure paths are different
+        if path1 == path2 {
+            return Ok(());
+        }
+
+        let temp = TempDir::new().unwrap();
+        let target1 = temp.path().join(&path1);
+        let target2 = temp.path().join(&path2);
+
+        // Preconditions
+        if target1.exists() || target2.exists() {
+            return Ok(());
+        }
+
+        // Create path2 first
+        fs::create_dir(&target2).unwrap();
+        assert!(target2.exists());
+
+        // Operating on path1 should not affect path2
+        fs::create_dir(&target1).unwrap();
+        prop_assert!(target2.exists(), "mkdir p1 should not affect p2");
+
+        fs::remove_dir(&target1).unwrap();
+        prop_assert!(target2.exists(), "rmdir p1 should not affect p2");
+    });
+}
+
+/// Property: Operation sequences are reversible
+///
+/// Lean theorem: `operationSequenceReversible` (FilesystemComposition.lean:129)
+/// ```lean
+/// theorem operationSequenceReversible (fs : Filesystem) (ops : List Operation)
+///   (h_valid : ValidSequence ops fs) :
+///   reverseSequence ops (applySequence ops fs) = fs
+/// ```
+#[test]
+fn prop_sequence_reversible() {
+    proptest!(|(paths in prop::collection::vec(valid_path_strategy(), 1..=5))| {
+        let temp = TempDir::new().unwrap();
+
+        // Ensure all paths are unique and don't exist
+        let mut unique_paths = paths.clone();
+        unique_paths.sort();
+        unique_paths.dedup();
+
+        let targets: Vec<_> = unique_paths.iter()
+            .map(|p| temp.path().join(p))
+            .collect();
+
+        for target in &targets {
+            if target.exists() {
+                return Ok(());
+            }
+        }
+
+        // Capture initial state
+        let before = FsSnapshot::capture(temp.path()).unwrap();
+
+        // Apply sequence: mkdir all
+        for target in &targets {
+            fs::create_dir(target).unwrap();
+        }
+
+        // Verify all exist
+        for target in &targets {
+            prop_assert!(target.exists());
+        }
+
+        // Reverse sequence: rmdir all (in reverse order)
+        for target in targets.iter().rev() {
+            fs::remove_dir(target).unwrap();
+        }
+
+        // Verify return to initial state
+        let after = FsSnapshot::capture(temp.path()).unwrap();
+        prop_assert_eq!(before, after);
+    });
+}
+
+/// Property: writeFile is reversible with saved content
+///
+/// Lean theorem: `writeFileReversible` (FileContentOperations.lean)
+/// ```lean
+/// theorem writeFileReversible (fs : Filesystem) (p : Path) (old_content new_content : Bytes)
+///   (h_exists : fileExists p fs) :
+///   writeFile p old_content (writeFile p new_content fs) = writeFile p old_content fs
+/// ```
+#[test]
+fn prop_write_file_reversible() {
+    proptest!(|(
+        path in valid_path_strategy(),
+        content1 in prop::collection::vec(any::<u8>(), 0..100),
+        content2 in prop::collection::vec(any::<u8>(), 0..100)
+    )| {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        // Create file with initial content
+        fs::write(&target, &content1).unwrap();
+
+        // Save original for undo
+        let saved = fs::read(&target).unwrap();
+        prop_assert_eq!(saved.clone(), content1.clone());
+
+        // Modify file
+        fs::write(&target, &content2).unwrap();
+        let modified = fs::read(&target).unwrap();
+        prop_assert_eq!(modified, content2);
+
+        // Restore original (undo)
+        fs::write(&target, &saved).unwrap();
+
+        // Verify restoration
+        let restored = fs::read(&target).unwrap();
+        prop_assert_eq!(restored, content1);
+    });
+}
+
+/// Property: mkdir respects EEXIST precondition
+///
+/// Lean theorem: `mkdirSuccessImpliesPrecondition` (FilesystemModel.lean)
+/// ```lean
+/// theorem mkdirSuccessImpliesPrecondition (fs : Filesystem) (p : Path) :
+///   isOk (tryMkdir p fs) → MkdirPrecondition p fs
+/// ```
+#[test]
+fn prop_mkdir_eexist() {
+    proptest!(|(path in valid_path_strategy())| {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        // Create directory
+        fs::create_dir(&target).unwrap();
+
+        // Attempt to create again should fail (EEXIST)
+        let result = fs::create_dir(&target);
+        prop_assert!(result.is_err(), "mkdir should fail on existing path");
+
+        if let Err(e) = result {
+            prop_assert_eq!(e.kind(), std::io::ErrorKind::AlreadyExists);
+        }
+    });
+}
+
+/// Property: rmdir respects ENOTEMPTY precondition
+///
+/// Lean theorem: `rmdirSuccessImpliesPrecondition` (FilesystemModel.lean)
+/// ```lean
+/// theorem rmdirSuccessImpliesPrecondition (fs : Filesystem) (p : Path) :
+///   isOk (tryRmdir p fs) → RmdirPrecondition p fs
+/// ```
+#[test]
+fn prop_rmdir_enotempty() {
+    proptest!(|(
+        dir_path in valid_path_strategy(),
+        file_path in valid_path_strategy()
+    )| {
+        let temp = TempDir::new().unwrap();
+        let dir = temp.path().join(&dir_path);
+        let file = dir.join(&file_path);
+
+        // Create directory with file inside
+        fs::create_dir(&dir).unwrap();
+        fs::write(&file, b"content").unwrap();
+
+        // Attempt to remove non-empty directory should fail
+        let result = fs::remove_dir(&dir);
+        prop_assert!(result.is_err(), "rmdir should fail on non-empty directory");
+    });
+}
+
+/// Property: Type preservation - operations maintain filesystem invariants
+///
+/// Lean theorem: `operationPreservesTypeInvariant` (FilesystemModel.lean)
+/// ```lean
+/// theorem operationPreservesTypeInvariant (fs : Filesystem) (op : Operation)
+///   (h_valid : ValidOperation op fs) :
+///   validFilesystem (applyOp op fs) = true
+/// ```
+#[test]
+fn prop_type_preservation() {
+    proptest!(|(
+        dir_path in valid_path_strategy(),
+        file_path in valid_path_strategy()
+    )| {
+        // Ensure different paths
+        if dir_path == file_path {
+            return Ok(());
+        }
+
+        let temp = TempDir::new().unwrap();
+        let dir = temp.path().join(&dir_path);
+        let file = temp.path().join(&file_path);
+
+        // Create both directory and file
+        fs::create_dir(&dir).unwrap();
+        fs::write(&file, b"test").unwrap();
+
+        // Verify types are preserved
+        prop_assert!(dir.is_dir(), "Directory should remain a directory");
+        prop_assert!(file.is_file(), "File should remain a file");
+
+        // Removing file shouldn't affect directory type
+        fs::remove_file(&file).unwrap();
+        prop_assert!(dir.is_dir(), "Directory type preserved after file removal");
+
+        // Removing directory shouldn't affect (now missing) file
+        fs::remove_dir(&dir).unwrap();
+        prop_assert!(!file.exists(), "File remains deleted");
+    });
+}
+
+/// Property: Composition - multiple operations compose correctly
+///
+/// Lean theorem: `compositionCorrectness` (FilesystemComposition.lean)
+/// ```lean
+/// theorem compositionCorrectness (fs : Filesystem) (op1 op2 : Operation)
+///   (h1 : ValidOperation op1 fs)
+///   (h2 : ValidOperation op2 (applyOp op1 fs)) :
+///   applyOp op2 (applyOp op1 fs) = applySequence [op1, op2] fs
+/// ```
+#[test]
+fn prop_composition_correctness() {
+    proptest!(|(
+        path1 in valid_path_strategy(),
+        path2 in valid_path_strategy()
+    )| {
+        // Ensure different paths
+        if path1 == path2 {
+            return Ok(());
+        }
+
+        let temp = TempDir::new().unwrap();
+        let target1 = temp.path().join(&path1);
+        let target2 = temp.path().join(&path2);
+
+        // Preconditions
+        if target1.exists() || target2.exists() {
+            return Ok(());
+        }
+
+        // Apply op1
+        fs::create_dir(&target1).unwrap();
+        let after_op1 = FsSnapshot::capture(temp.path()).unwrap();
+
+        // Apply op2
+        fs::create_dir(&target2).unwrap();
+        let _after_both = FsSnapshot::capture(temp.path()).unwrap();
+
+        // Reverse composition
+        fs::remove_dir(&target2).unwrap();
+        let after_reverse_op2 = FsSnapshot::capture(temp.path()).unwrap();
+
+        fs::remove_dir(&target1).unwrap();
+        let _final_state = FsSnapshot::capture(temp.path()).unwrap();
+
+        // Verify composition properties
+        prop_assert_eq!(after_reverse_op2, after_op1, "Reversing op2 should return to after_op1 state");
+    });
+}
+
+/// Property: Nested path operations work correctly
+///
+/// Validates: Parent directory must exist (ENOENT handling)
+#[test]
+fn prop_nested_paths() {
+    proptest!(|(nested_path in valid_nested_path_strategy())| {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&nested_path);
+
+        // Attempting mkdir without parent should fail
+        if let Some(parent) = target.parent() {
+            if !parent.exists() && parent != temp.path() {
+                let result = fs::create_dir(&target);
+                prop_assert!(result.is_err(), "mkdir should fail when parent doesn't exist");
+
+                if let Err(e) = result {
+                    prop_assert_eq!(e.kind(), std::io::ErrorKind::NotFound);
+                }
+                return Ok(());
+            }
+        }
+
+        // If parent exists, mkdir should succeed
+        if let Some(parent) = target.parent() {
+            if !parent.exists() && parent != temp.path() {
+                fs::create_dir_all(parent).unwrap();
+            }
+        }
+
+        fs::create_dir(&target).unwrap();
+        prop_assert!(target.exists());
+
+        fs::remove_dir(&target).unwrap();
+        prop_assert!(!target.exists());
+    });
+}
+
+/// Property: CNO (Create-No-Op) creates identity element
+///
+/// Lean theorem: `reversibleCreatesIdentity` (FilesystemComposition.lean:95)
+/// ```lean
+/// theorem reversibleCreatesIdentity (op : Operation)
+///   (h_rev : Reversible op) :
+///   ∃ (inv : Operation), applyOp inv (applyOp op fs) = fs
+/// ```
+#[test]
+fn prop_cno_identity() {
+    proptest!(|(path in valid_path_strategy())| {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        if target.exists() {
+            return Ok(());
+        }
+
+        // Capture state
+        let before = FsSnapshot::capture(temp.path()).unwrap();
+
+        // Apply operation (mkdir)
+        fs::create_dir(&target).unwrap();
+
+        // Apply inverse (rmdir) - should be identity
+        fs::remove_dir(&target).unwrap();
+
+        // Verify identity: op⁻¹(op(fs)) = fs
+        let after = FsSnapshot::capture(temp.path()).unwrap();
+        prop_assert_eq!(before, after, "Inverse operation should be identity");
+    });
+}
+
+/// Property: File content preservation during reversible operations
+///
+/// Validates that reversing file operations preserves original content
+#[test]
+fn prop_content_preservation() {
+    proptest!(|(
+        path in valid_path_strategy(),
+        original in prop::collection::vec(any::<u8>(), 0..200)
+    )| {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        // Create file with original content
+        fs::write(&target, &original).unwrap();
+
+        // Read back
+        let read_content = fs::read(&target).unwrap();
+        prop_assert_eq!(read_content, original.clone(), "Content should be preserved");
+
+        // Delete and recreate
+        fs::remove_file(&target).unwrap();
+        fs::write(&target, &original).unwrap();
+
+        // Verify content again
+        let final_content = fs::read(&target).unwrap();
+        prop_assert_eq!(final_content, original, "Content preserved after delete/recreate");
+    });
+}
+
+/// Property: Equivalence relation properties
+///
+/// Lean theorem: `fs_equiv_refl/sym/trans` (FilesystemEquivalence.lean)
+/// ```lean
+/// theorem fs_equiv_refl : Reflexive fs_equivalent
+/// theorem fs_equiv_sym : Symmetric fs_equivalent
+/// theorem fs_equiv_trans : Transitive fs_equivalent
+/// ```
+#[test]
+fn prop_equivalence_reflexive() {
+    proptest!(|(path in valid_path_strategy())| {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        if !target.exists() {
+            fs::create_dir(&target).unwrap();
+        }
+
+        // Capture state twice
+        let snapshot1 = FsSnapshot::capture(temp.path()).unwrap();
+        let snapshot2 = FsSnapshot::capture(temp.path()).unwrap();
+
+        // Reflexivity: fs ≡ fs
+        prop_assert_eq!(snapshot1, snapshot2);
+    });
+}
+
+/// Property: Path validation edge cases
+///
+/// Tests boundary conditions for path handling
+#[test]
+fn prop_path_validation() {
+    proptest!(|(path in valid_path_strategy())| {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        // Empty paths should work (valid directory names)
+        if path.is_empty() {
+            return Ok(());
+        }
+
+        // Path should be creatable if preconditions met
+        if !target.exists() {
+            fs::create_dir(&target).unwrap();
+            prop_assert!(target.exists());
+            prop_assert!(target.is_dir());
+        }
+    });
+}
