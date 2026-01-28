@@ -223,6 +223,71 @@ vsh> ls newfile.txt
 
 ---
 
+## Pipelines
+
+### Basic Pipelines
+
+Chain commands together using the `|` operator:
+
+```bash
+vsh> ls | grep test
+# Lists files, filters for "test"
+
+vsh> cat file.txt | wc -l
+# Count lines in file
+
+vsh> echo hello | cat | cat
+# Multi-stage pipeline
+```
+
+### Pipelines with Redirections
+
+Final redirections apply to the last stage:
+
+```bash
+vsh> ls -la | grep ".rs" > rust_files.txt
+# List Rust files to file
+
+vsh> cat file1.txt file2.txt | grep error | sort >> errors.txt
+# Find and sort errors, append to file
+
+vsh> ps aux | grep process | wc -l > count.txt
+# Count matching processes
+```
+
+### Pipeline Exit Codes
+
+Exit code comes from the last command (POSIX behavior):
+
+```bash
+vsh> true | false
+# Returns 1 (from false)
+
+vsh> false | true
+# Returns 0 (from true)
+```
+
+### Pipeline Undo
+
+Final output redirections are reversible:
+
+```bash
+vsh> echo test | cat > output.txt
+[op:123abc] echo test
+# Creates output.txt
+
+vsh> undo
+[op:456def] undo [op:123abc] DeleteFile output.txt
+# File deleted - pipeline output undone
+
+vsh> ls output.txt
+# File not found
+```
+
+Intermediate pipeline stages don't modify filesystem, so only final redirections are undoable.
+
+---
+
 ## Transactions
 
 ### Group Operations
