@@ -35,6 +35,9 @@ enum Token {
 
     /// Both output redirection (bash extension): &>
     BothRedirect,
+
+    /// Pipeline operator: |
+    Pipe,
 }
 
 /// Parsed command with arguments and redirections.
@@ -219,6 +222,16 @@ fn tokenize(input: &str) -> Vec<Token> {
                 }
             }
 
+            '|' => {
+                // End current word
+                if !current_word.is_empty() {
+                    tokens.push(Token::Word(current_word.clone()));
+                    current_word.clear();
+                }
+
+                tokens.push(Token::Pipe);
+            }
+
             // Regular character
             _ => {
                 current_word.push(ch);
@@ -318,6 +331,10 @@ pub fn parse_command(input: &str) -> Result<Command> {
                 let file = expect_word(&tokens, i + 1, "both redirection")?;
                 redirects.push(Redirection::BothOutput { file });
                 i += 2;
+            }
+
+            Token::Pipe => {
+                return Err(anyhow!("Pipelines not yet implemented (Phase 6 M3)"));
             }
         }
     }
@@ -707,6 +724,39 @@ mod tests {
         let tokens = tokenize("make 2>&1");
         assert_eq!(tokens.len(), 2);
         assert_eq!(tokens[1], Token::ErrorToOutput);
+    }
+
+    #[test]
+    fn test_tokenize_pipe() {
+        let tokens = tokenize("ls | grep test");
+        assert_eq!(tokens.len(), 4);
+        assert_eq!(tokens[0], Token::Word("ls".to_string()));
+        assert_eq!(tokens[1], Token::Pipe);
+        assert_eq!(tokens[2], Token::Word("grep".to_string()));
+        assert_eq!(tokens[3], Token::Word("test".to_string()));
+    }
+
+    #[test]
+    fn test_tokenize_multi_pipe() {
+        let tokens = tokenize("cat file.txt | grep foo | wc -l");
+        assert_eq!(tokens.len(), 8);
+        assert_eq!(tokens[0], Token::Word("cat".to_string()));
+        assert_eq!(tokens[1], Token::Word("file.txt".to_string()));
+        assert_eq!(tokens[2], Token::Pipe);
+        assert_eq!(tokens[3], Token::Word("grep".to_string()));
+        assert_eq!(tokens[4], Token::Word("foo".to_string()));
+        assert_eq!(tokens[5], Token::Pipe);
+        assert_eq!(tokens[6], Token::Word("wc".to_string()));
+        assert_eq!(tokens[7], Token::Word("-l".to_string()));
+    }
+
+    #[test]
+    fn test_tokenize_pipe_with_redirect() {
+        let tokens = tokenize("ls | grep test > output.txt");
+        assert_eq!(tokens.len(), 6);
+        assert_eq!(tokens[1], Token::Pipe);
+        assert_eq!(tokens[4], Token::OutputRedirect);
+        assert_eq!(tokens[5], Token::Word("output.txt".to_string()));
     }
 
     #[test]
