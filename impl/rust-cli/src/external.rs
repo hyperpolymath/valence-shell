@@ -87,13 +87,36 @@ pub fn execute_external_with_redirects(
     }
 }
 
-/// Execute an external command (no redirections - legacy)
+/// Execute an external command without redirections (legacy interface).
 ///
-/// Handles signal termination (SIGINT, SIGTERM) and returns appropriate exit codes.
-/// Exit code 130 indicates SIGINT (Ctrl+C), 143 indicates SIGTERM.
+/// Spawns a child process via execve(), polls for completion, and handles
+/// Ctrl+C interruption gracefully. The child process runs in its own process
+/// group for proper job control on Unix.
 ///
-/// This function supports interruption via Ctrl+C - the global INTERRUPT_REQUESTED
-/// flag is checked periodically and the child process is killed if set.
+/// # Arguments
+/// * `program` - Program name (resolved via PATH lookup)
+/// * `args` - Command arguments
+///
+/// # Returns
+/// Exit code from the child process:
+/// - 0: Success
+/// - 1-127: Program-specific exit codes
+/// - 128+N: Terminated by signal N (130 = SIGINT, 143 = SIGTERM)
+///
+/// # Errors
+/// Returns error if:
+/// - Program not found in PATH
+/// - Failed to spawn child process
+/// - Failed to wait for child termination
+///
+/// # Examples
+/// ```no_run
+/// use vsh::external;
+///
+/// let exit_code = external::execute_external("ls", &["-la".to_string()])?;
+/// assert_eq!(exit_code, 0);
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn execute_external(program: &str, args: &[String]) -> Result<i32> {
     // PATH lookup
     let executable = find_in_path(program)?;

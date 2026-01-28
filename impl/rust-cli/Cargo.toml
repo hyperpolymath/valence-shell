@@ -68,3 +68,7 @@ strip = true
 [[bin]]
 name = "vsh"
 path = "src/main.rs"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

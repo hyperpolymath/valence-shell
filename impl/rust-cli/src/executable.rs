@@ -12,12 +12,24 @@ use crate::redirection;
 use crate::state::ShellState;
 use crate::{commands, external};
 
-/// Trait for executable commands
+/// Trait for executable commands with proof references.
 ///
-/// Separates concerns:
-/// - Parser creates Command enum
-/// - Command trait handles execution
-/// - REPL just calls execute()
+/// Separates concerns between parsing and execution:
+/// - Parser creates [`Command`] enum from user input
+/// - This trait handles command execution logic
+/// - REPL just calls [`execute`](ExecutableCommand::execute)
+///
+/// # Examples
+/// ```no_run
+/// use vsh::executable::ExecutableCommand;
+/// use vsh::parser::Command;
+/// use vsh::state::ShellState;
+///
+/// let mut state = ShellState::new("/tmp/test")?;
+/// let cmd = Command::Mkdir { path: "test".to_string(), redirects: vec![] };
+/// cmd.execute(&mut state)?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub trait ExecutableCommand {
     /// Execute the command, potentially modifying shell state
     fn execute(&self, state: &mut ShellState) -> Result<ExecutionResult>;
@@ -35,7 +47,10 @@ pub trait ExecutableCommand {
     fn description(&self) -> String;
 }
 
-/// Result of command execution
+/// Result of command execution indicating next REPL action.
+///
+/// Determines whether the REPL should continue, exit, or handle
+/// external command exit codes.
 #[derive(Debug)]
 pub enum ExecutionResult {
     /// Command completed successfully

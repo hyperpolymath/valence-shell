@@ -91,7 +91,18 @@ where
     Ok(())
 }
 
-/// Redirection operator for a command
+/// I/O redirection operator for commands.
+///
+/// Supports POSIX-standard redirections and bash extensions. All file
+/// modifications are tracked for undo support.
+///
+/// # Examples
+/// ```
+/// use vsh::redirection::Redirection;
+///
+/// let redirect = Redirection::Output { file: "output.txt".to_string() };
+/// // Used with commands: ls > output.txt
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum Redirection {
     /// Redirect stdout to file (truncate): `> file`
@@ -116,7 +127,20 @@ pub enum Redirection {
     BothOutput { file: String },
 }
 
-/// Type of file modification for undo
+/// Type of file modification for undo tracking.
+///
+/// Records how a file was changed by a redirection so the change can be
+/// reversed. Each variant stores the data needed for reversal.
+///
+/// # Examples
+/// ```no_run
+/// use vsh::redirection::FileModification;
+/// use std::path::PathBuf;
+///
+/// let mod_op = FileModification::Created { path: PathBuf::from("new.txt") };
+/// mod_op.reverse()?;  // Deletes the created file
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 #[derive(Debug, Clone)]
 pub enum FileModification {
     /// File was created (didn't exist before)
@@ -180,7 +204,21 @@ impl FileModification {
     }
 }
 
-/// Redirection setup and cleanup handler
+/// Redirection setup and cleanup handler.
+///
+/// Manages file handles opened for redirections and tracks modifications
+/// for undo support. Ensures files are properly closed via Drop.
+///
+/// # Examples
+/// ```no_run
+/// use vsh::redirection::{Redirection, RedirectSetup};
+/// use vsh::state::ShellState;
+///
+/// let mut state = ShellState::new("/tmp/test")?;
+/// let redirects = vec![Redirection::Output { file: "out.txt".to_string() }];
+/// let setup = RedirectSetup::setup(&redirects, &mut state)?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub struct RedirectSetup {
     /// Files opened for redirection (need cleanup)
     pub opened_files: Vec<File>,

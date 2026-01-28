@@ -37,6 +37,23 @@ enum Token {
     BothRedirect,
 }
 
+/// Parsed command with arguments and redirections.
+///
+/// Represents all built-in and external commands that can be executed.
+/// Built-in commands are variants of this enum; external commands use
+/// [`Command::External`].
+///
+/// # Examples
+/// ```
+/// use vsh::parser::{parse_command, Command};
+///
+/// let cmd = parse_command("mkdir test")?;
+/// match cmd {
+///     Command::Mkdir { path, .. } => assert_eq!(path, "test"),
+///     _ => panic!("Wrong command"),
+/// }
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 #[derive(Debug, PartialEq)]
 pub enum Command {
     // Built-ins (existing)
@@ -217,7 +234,31 @@ fn tokenize(input: &str) -> Vec<Token> {
     tokens
 }
 
-/// Parse a command line into a Command with redirections
+/// Parse a command line into a structured [`Command`] with redirections.
+///
+/// Tokenizes the input, identifies built-in commands vs external programs,
+/// and extracts I/O redirections.
+///
+/// # Arguments
+/// * `input` - Raw command line string (e.g., "ls -la > output.txt")
+///
+/// # Returns
+/// Parsed [`Command`] ready for execution
+///
+/// # Errors
+/// Returns error if:
+/// - Invalid redirection syntax
+/// - Missing redirection target
+/// - Malformed command
+///
+/// # Examples
+/// ```
+/// use vsh::parser::parse_command;
+///
+/// let cmd = parse_command("mkdir project > log.txt")?;
+/// // Creates Mkdir command with Output redirection
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn parse_command(input: &str) -> Result<Command> {
     // Tokenize input
     let tokens = tokenize(input);
