@@ -7,7 +7,17 @@
 use crate::state::OperationType;
 use colored::Colorize;
 
-/// A reference to a formal proof
+/// A reference to formal proofs across multiple verification systems.
+///
+/// Maps each operation to its corresponding theorems in Coq, Lean 4, Agda, and Isabelle.
+/// Used to display proof references in verbose mode and verification status.
+///
+/// # Examples
+/// ```
+/// use vsh::proof_refs::MKDIR_RMDIR_REVERSIBLE;
+///
+/// println!("{}", MKDIR_RMDIR_REVERSIBLE.format_short());
+/// ```
 #[derive(Debug, Clone)]
 pub struct ProofReference {
     /// Primary theorem name
@@ -30,7 +40,15 @@ pub struct ProofReference {
 }
 
 impl ProofReference {
-    /// Get proof reference for an operation type
+    /// Get the proof reference for a given operation type.
+    ///
+    /// Maps operation types to their corresponding proof references.
+    ///
+    /// # Arguments
+    /// * `op` - The operation type to look up
+    ///
+    /// # Returns
+    /// The corresponding [`ProofReference`] with theorem locations
     pub fn for_operation(op: OperationType) -> Self {
         match op {
             OperationType::Mkdir | OperationType::Rmdir => MKDIR_RMDIR_REVERSIBLE,
@@ -41,7 +59,9 @@ impl ProofReference {
         }
     }
 
-    /// Format for display
+    /// Format as a short one-line reference for terminal display.
+    ///
+    /// Returns: `theorem_name (coq_location)` with ANSI colors
     pub fn format_short(&self) -> String {
         format!(
             "{} ({})",
@@ -50,7 +70,10 @@ impl ProofReference {
         )
     }
 
-    /// Format with all locations
+    /// Format with all proof system locations for detailed display.
+    ///
+    /// Returns multi-line string with theorem name, description, and locations
+    /// in Coq, Lean 4, Agda, and Isabelle.
     pub fn format_full(&self) -> String {
         format!(
             "{}\n  {}\n  Coq:      {}\n  Lean 4:   {}\n  Agda:     {}\n  Isabelle: {}",
@@ -64,7 +87,10 @@ impl ProofReference {
     }
 }
 
-/// mkdir/rmdir reversibility theorem
+/// Proof reference for mkdir/rmdir reversibility.
+///
+/// Theorem: `rmdir(mkdir(path, fs)) = fs` when preconditions hold
+/// (parent exists, path doesn't exist).
 pub const MKDIR_RMDIR_REVERSIBLE: ProofReference = ProofReference {
     theorem: "mkdir_rmdir_reversible",
     coq_location: "proofs/coq/filesystem_model.v:L45-L62",
@@ -74,7 +100,10 @@ pub const MKDIR_RMDIR_REVERSIBLE: ProofReference = ProofReference {
     description: "rmdir(mkdir(path, fs)) = fs when preconditions hold",
 };
 
-/// create_file/delete_file reversibility theorem
+/// Proof reference for create_file/delete_file reversibility.
+///
+/// Theorem: `delete_file(create_file(path, fs)) = fs` when preconditions hold
+/// (parent exists, path doesn't exist).
 pub const CREATE_DELETE_REVERSIBLE: ProofReference = ProofReference {
     theorem: "create_delete_file_reversible",
     coq_location: "proofs/coq/file_operations.v:L32-L48",
@@ -84,7 +113,10 @@ pub const CREATE_DELETE_REVERSIBLE: ProofReference = ProofReference {
     description: "delete_file(create_file(path, fs)) = fs when preconditions hold",
 };
 
-/// write_file reversibility theorem
+/// Proof reference for write_file reversibility.
+///
+/// Theorem: `write_file(path, old_content, write_file(path, new_content, fs)) = fs`
+/// when file exists and preconditions hold.
 pub const WRITE_FILE_REVERSIBLE: ProofReference = ProofReference {
     theorem: "write_file_reversible",
     coq_location: "proofs/coq/file_content_operations.v:L67-L85",
@@ -94,7 +126,10 @@ pub const WRITE_FILE_REVERSIBLE: ProofReference = ProofReference {
     description: "write_file(path, old, write_file(path, new, fs)) = fs",
 };
 
-/// Operation composition theorem
+/// Proof reference for operation composition/sequencing reversibility.
+///
+/// Theorem: `apply_sequence(reverse(ops), apply_sequence(ops, fs)) = fs`
+/// when all individual operations are reversible.
 pub const COMPOSITION_REVERSIBLE: ProofReference = ProofReference {
     theorem: "operation_sequence_reversible",
     coq_location: "proofs/coq/filesystem_composition.v:L28-L52",
@@ -104,7 +139,12 @@ pub const COMPOSITION_REVERSIBLE: ProofReference = ProofReference {
     description: "apply_sequence(reverse(ops), apply_sequence(ops, fs)) = fs",
 };
 
-/// Get all proof references
+/// Get all available proof references as a vector.
+///
+/// Returns all proof constants for iteration or verification checking.
+///
+/// # Returns
+/// Vector of all [`ProofReference`] constants defined in this module
 pub fn all_proofs() -> Vec<ProofReference> {
     vec![
         MKDIR_RMDIR_REVERSIBLE,
@@ -114,7 +154,10 @@ pub fn all_proofs() -> Vec<ProofReference> {
     ]
 }
 
-/// Print summary of verification status
+/// Print a formatted summary of formal verification status.
+///
+/// Displays proof count, verification systems, and coverage information
+/// with colored terminal output.
 pub fn print_verification_summary() {
     println!("{}", "═══ Formal Verification Status ═══".bright_blue().bold());
     println!();

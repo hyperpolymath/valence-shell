@@ -15,7 +15,32 @@ use crate::executable::{ExecutableCommand, ExecutionResult};
 use crate::parser;
 use crate::state::ShellState;
 
-/// Run the interactive REPL
+/// Run the interactive REPL (Read-Eval-Print Loop).
+///
+/// Starts an interactive shell session with:
+/// - Command history
+/// - Colored prompts showing transaction state
+/// - Ctrl+C handling for interrupting commands
+/// - EOF (Ctrl+D) to exit
+///
+/// # Arguments
+/// * `state` - Mutable shell state for command execution
+///
+/// # Errors
+/// Returns error if:
+/// - SIGINT handler installation fails
+/// - Terminal I/O fails
+/// - Command execution fails fatally
+///
+/// # Examples
+/// ```no_run
+/// use vsh::repl;
+/// use vsh::state::ShellState;
+///
+/// let mut state = ShellState::new("/tmp/workspace")?;
+/// repl::run(&mut state)?;  // Starts interactive shell
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn run(state: &mut ShellState) -> Result<()> {
     // Install SIGINT handler for graceful Ctrl+C handling
     ctrlc::set_handler(move || {

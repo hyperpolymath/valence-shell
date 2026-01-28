@@ -11,7 +11,31 @@ use std::fs;
 use crate::proof_refs;
 use crate::state::{Operation, OperationType, ShellState};
 
-/// Create a directory
+/// Create a directory at the specified path.
+///
+/// This operation is reversible via [`undo`] and corresponds to the Lean 4 theorem
+/// `mkdir_rmdir_reversible` in FilesystemModel.lean.
+///
+/// # Arguments
+/// * `state` - Mutable shell state for recording the operation
+/// * `path` - Path relative to shell root or absolute path
+/// * `verbose` - Whether to show proof references
+///
+/// # Errors
+/// Returns error if:
+/// - Path already exists (EEXIST)
+/// - Parent directory doesn't exist (ENOENT)
+/// - Insufficient permissions
+///
+/// # Examples
+/// ```no_run
+/// use vsh::commands;
+/// use vsh::state::ShellState;
+///
+/// let mut state = ShellState::new("/tmp/test")?;
+/// commands::mkdir(&mut state, "project", false)?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
@@ -54,7 +78,32 @@ pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     Ok(())
 }
 
-/// Remove a directory
+/// Remove an empty directory at the specified path.
+///
+/// This operation is reversible via [`undo`] and corresponds to the Lean 4 theorem
+/// `rmdir_mkdir_reversible` in FilesystemModel.lean.
+///
+/// # Arguments
+/// * `state` - Mutable shell state for recording the operation
+/// * `path` - Path relative to shell root or absolute path
+/// * `verbose` - Whether to show proof references
+///
+/// # Errors
+/// Returns error if:
+/// - Path does not exist (ENOENT)
+/// - Path is not a directory (ENOTDIR)
+/// - Directory is not empty (ENOTEMPTY)
+/// - Insufficient permissions
+///
+/// # Examples
+/// ```no_run
+/// # use vsh::commands;
+/// # use vsh::state::ShellState;
+/// let mut state = ShellState::new("/tmp/test")?;
+/// commands::mkdir(&mut state, "old_dir", false)?;
+/// commands::rmdir(&mut state, "old_dir", false)?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn rmdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
@@ -92,7 +141,30 @@ pub fn rmdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     Ok(())
 }
 
-/// Create a file
+/// Create an empty file at the specified path.
+///
+/// This operation is reversible via [`undo`] and corresponds to the Lean 4 theorem
+/// `createFile_deleteFile_reversible` in FileOperations.lean.
+///
+/// # Arguments
+/// * `state` - Mutable shell state for recording the operation
+/// * `path` - Path relative to shell root or absolute path
+/// * `verbose` - Whether to show proof references
+///
+/// # Errors
+/// Returns error if:
+/// - Path already exists (EEXIST)
+/// - Parent directory doesn't exist (ENOENT)
+/// - Insufficient permissions
+///
+/// # Examples
+/// ```no_run
+/// # use vsh::commands;
+/// # use vsh::state::ShellState;
+/// let mut state = ShellState::new("/tmp/test")?;
+/// commands::touch(&mut state, "README.md", false)?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
@@ -127,7 +199,32 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     Ok(())
 }
 
-/// Remove a file
+/// Remove a file at the specified path.
+///
+/// The file's content is preserved for undo. This operation is reversible via [`undo`]
+/// and corresponds to the Lean 4 theorem `deleteFile_createFile_reversible`.
+///
+/// # Arguments
+/// * `state` - Mutable shell state for recording the operation
+/// * `path` - Path relative to shell root or absolute path
+/// * `verbose` - Whether to show proof references
+///
+/// # Errors
+/// Returns error if:
+/// - Path does not exist (ENOENT)
+/// - Path is a directory (EISDIR) - use [`rmdir`] instead
+/// - Insufficient permissions
+///
+/// # Examples
+/// ```no_run
+/// # use vsh::commands;
+/// # use vsh::state::ShellState;
+/// let mut state = ShellState::new("/tmp/test")?;
+/// commands::touch(&mut state, "temp.txt", false)?;
+/// commands::rm(&mut state, "temp.txt", false)?;
+/// commands::undo(&mut state, 1, false)?;  // File restored
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
@@ -163,7 +260,31 @@ pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     Ok(())
 }
 
-/// Undo operations
+/// Undo the last N operations.
+///
+/// Reverses operations in reverse order, executing their inverse operations.
+/// Each undo is itself a new operation and can be undone with [`redo`].
+///
+/// # Arguments
+/// * `state` - Mutable shell state for accessing history
+/// * `count` - Number of operations to undo (default: 1)
+/// * `verbose` - Whether to show proof references
+///
+/// # Errors
+/// Returns error if:
+/// - No operations to undo
+/// - Inverse operation fails (filesystem inconsistency)
+/// - Missing undo data for file operations
+///
+/// # Examples
+/// ```no_run
+/// # use vsh::commands;
+/// # use vsh::state::ShellState;
+/// let mut state = ShellState::new("/tmp/test")?;
+/// commands::mkdir(&mut state, "test", false)?;
+/// commands::undo(&mut state, 1, false)?;  // Removes test/
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
     // Clone operations to avoid borrowing state
     let ops_to_undo: Vec<Operation> = state.last_n_undoable(count).into_iter().cloned().collect();
@@ -244,7 +365,31 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
     Ok(())
 }
 
-/// Redo operations
+/// Redo the last N undone operations.
+///
+/// Re-applies operations that were reversed with [`undo`]. Redo moves forward
+/// in the operation history, restoring the previous state.
+///
+/// # Arguments
+/// * `state` - Mutable shell state for accessing redo stack
+/// * `count` - Number of operations to redo (default: 1)
+/// * `verbose` - Whether to show proof references
+///
+/// # Errors
+/// Returns error if:
+/// - No operations to redo
+/// - Re-executing operation fails (filesystem changed externally)
+///
+/// # Examples
+/// ```no_run
+/// # use vsh::commands;
+/// # use vsh::state::ShellState;
+/// let mut state = ShellState::new("/tmp/test")?;
+/// commands::mkdir(&mut state, "test", false)?;
+/// commands::undo(&mut state, 1, false)?;   // Removes test/
+/// commands::redo(&mut state, 1, false)?;   // Recreates test/
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
     for _ in 0..count {
         let op = match state.pop_redo() {
@@ -305,7 +450,25 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
     Ok(())
 }
 
-/// Show history
+/// Show operation history with optional proof references.
+///
+/// Displays the last N operations in reverse chronological order, showing operation
+/// IDs, timestamps, types, and paths. With `show_proofs`, includes theorem references.
+///
+/// # Arguments
+/// * `state` - Shell state for accessing history
+/// * `count` - Number of operations to show (default: 10)
+/// * `show_proofs` - Whether to show Lean 4 theorem references
+///
+/// # Examples
+/// ```no_run
+/// # use vsh::commands;
+/// # use vsh::state::ShellState;
+/// let state = ShellState::new("/tmp/test")?;
+/// commands::history(&state, 10, false)?;  // Show last 10 operations
+/// commands::history(&state, 5, true)?;    // Show last 5 with proofs
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn history(state: &ShellState, count: usize, show_proofs: bool) -> Result<()> {
     let history = state.get_history(count);
 
@@ -350,7 +513,31 @@ pub fn history(state: &ShellState, count: usize, show_proofs: bool) -> Result<()
     Ok(())
 }
 
-/// Begin a transaction
+/// Begin a new transaction group.
+///
+/// All subsequent operations are grouped under this transaction until
+/// [`commit_transaction`] or [`rollback_transaction`] is called.
+///
+/// # Arguments
+/// * `state` - Mutable shell state for transaction management
+/// * `name` - Transaction name for identification
+///
+/// # Errors
+/// Returns error if:
+/// - A transaction is already active
+/// - State persistence fails
+///
+/// # Examples
+/// ```no_run
+/// # use vsh::commands;
+/// # use vsh::state::ShellState;
+/// let mut state = ShellState::new("/tmp/test")?;
+/// commands::begin_transaction(&mut state, "setup")?;
+/// commands::mkdir(&mut state, "src", false)?;
+/// commands::touch(&mut state, "src/main.rs", false)?;
+/// commands::commit_transaction(&mut state)?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn begin_transaction(state: &mut ShellState, name: &str) -> Result<()> {
     let id = state.begin_transaction(name)?;
     println!(
@@ -362,7 +549,29 @@ pub fn begin_transaction(state: &mut ShellState, name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Commit current transaction
+/// Commit the current transaction, making all operations permanent.
+///
+/// Finalizes the active transaction started with [`begin_transaction`].
+/// All operations in the transaction become part of the permanent history.
+///
+/// # Arguments
+/// * `state` - Mutable shell state for transaction management
+///
+/// # Errors
+/// Returns error if:
+/// - No active transaction
+/// - State persistence fails
+///
+/// # Examples
+/// ```no_run
+/// # use vsh::commands;
+/// # use vsh::state::ShellState;
+/// let mut state = ShellState::new("/tmp/test")?;
+/// commands::begin_transaction(&mut state, "feature")?;
+/// commands::mkdir(&mut state, "new_feature", false)?;
+/// commands::commit_transaction(&mut state)?;  // Makes changes permanent
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn commit_transaction(state: &mut ShellState) -> Result<()> {
     let ops = state.current_transaction_ops();
     let op_count = ops.len();
@@ -377,7 +586,30 @@ pub fn commit_transaction(state: &mut ShellState) -> Result<()> {
     Ok(())
 }
 
-/// Rollback current transaction
+/// Rollback the current transaction, reversing all operations atomically.
+///
+/// Undoes all operations in the active transaction started with [`begin_transaction`].
+/// Operations are reversed in LIFO order. Reports partial failures if any rollback fails.
+///
+/// # Arguments
+/// * `state` - Mutable shell state for transaction management
+///
+/// # Errors
+/// Returns error if:
+/// - No active transaction
+/// - Rollback operations fail (reports which operations failed)
+///
+/// # Examples
+/// ```no_run
+/// # use vsh::commands;
+/// # use vsh::state::ShellState;
+/// let mut state = ShellState::new("/tmp/test")?;
+/// commands::begin_transaction(&mut state, "experiment")?;
+/// commands::mkdir(&mut state, "temp", false)?;
+/// commands::touch(&mut state, "temp/file.txt", false)?;
+/// commands::rollback_transaction(&mut state)?;  // Removes temp/ and file
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
     let ops: Vec<_> = state.current_transaction_ops().iter().map(|o| (*o).clone()).collect();
 
@@ -475,7 +707,22 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
     }
 }
 
-/// Show operation graph
+/// Display the operation dependency graph (DAG).
+///
+/// Shows the current state in the operation history as a directed acyclic graph.
+/// Illustrates how operations build upon each other and the undo path.
+///
+/// # Arguments
+/// * `state` - Shell state for accessing operation history
+///
+/// # Examples
+/// ```no_run
+/// # use vsh::commands;
+/// # use vsh::state::ShellState;
+/// let state = ShellState::new("/tmp/test")?;
+/// commands::show_graph(&state)?;  // Displays ASCII DAG
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn show_graph(state: &ShellState) -> Result<()> {
     let history = state.get_history(20);
 
@@ -548,7 +795,17 @@ pub fn show_graph(state: &ShellState) -> Result<()> {
     Ok(())
 }
 
-/// Show proof information
+/// Display formal verification status and proof system coverage.
+///
+/// Shows all proof references with their locations in Coq, Lean 4, Agda,
+/// Isabelle, and other verification systems. Provides verification statistics.
+///
+/// # Examples
+/// ```no_run
+/// use vsh::commands;
+/// commands::show_proofs()?;  // Displays proof verification summary
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn show_proofs() -> Result<()> {
     proof_refs::print_verification_summary();
     Ok(())

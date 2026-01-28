@@ -15,7 +15,22 @@ use uuid::Uuid;
 
 use crate::proof_refs::ProofReference;
 
-/// Operation type enum matching Coq definitions
+/// Operation type enum matching formal proof definitions.
+///
+/// Each variant corresponds to a filesystem operation with a proven inverse.
+/// The mapping to Lean 4 theorems is:
+/// - `Mkdir`/`Rmdir`: mkdir_rmdir_reversible
+/// - `CreateFile`/`DeleteFile`: createFile_deleteFile_reversible
+/// - `WriteFile`: write_restore_reversible (self-inverse)
+/// - `FileTruncated`/`FileAppended`: truncate_restore_reversible, append_truncate_reversible
+///
+/// # Examples
+/// ```
+/// use vsh::state::OperationType;
+///
+/// let op = OperationType::Mkdir;
+/// assert_eq!(op.inverse(), Some(OperationType::Rmdir));
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OperationType {
     Mkdir,
@@ -65,7 +80,19 @@ impl std::fmt::Display for OperationType {
     }
 }
 
-/// A single filesystem operation with undo information
+/// A single filesystem operation with complete undo/redo information.
+///
+/// Each operation is assigned a unique UUID and records all data needed for reversal.
+/// File deletion operations store the original file content in `undo_data` for restoration.
+///
+/// # Examples
+/// ```
+/// use vsh::state::{Operation, OperationType};
+///
+/// let op = Operation::new(OperationType::Mkdir, "project".to_string(), None);
+/// assert_eq!(op.op_type, OperationType::Mkdir);
+/// assert!(!op.undone);
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Operation {
     /// Unique operation ID
@@ -113,7 +140,23 @@ impl Operation {
     }
 }
 
-/// Transaction group for atomic multi-operation rollback
+/// Transaction group for atomic multi-operation rollback.
+///
+/// Groups multiple operations together so they can be committed or rolled back
+/// atomically. If rollback fails partway through, reports which operations succeeded
+/// and which failed.
+///
+/// # Examples
+/// ```no_run
+/// # use vsh::commands;
+/// # use vsh::state::ShellState;
+/// let mut state = ShellState::new("/tmp/test")?;
+/// commands::begin_transaction(&mut state, "feature")?;
+/// commands::mkdir(&mut state, "src", false)?;
+/// commands::mkdir(&mut state, "tests", false)?;
+/// commands::commit_transaction(&mut state)?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     pub id: Uuid,
@@ -123,7 +166,25 @@ pub struct Transaction {
     pub committed: bool,
 }
 
-/// Main shell state
+/// Main shell state managing operation history, undo/redo stacks, and transactions.
+///
+/// The state is persisted to `~/.cache/vsh/state.json` and restored on shell startup.
+/// All filesystem operations are relative to the `root` path.
+///
+/// # Invariants
+/// - All operations in `history` are recorded in execution order
+/// - `redo_stack` contains only operations that were undone
+/// - At most one `active_transaction` can be active
+/// - State persists across shell sessions
+///
+/// # Examples
+/// ```no_run
+/// use vsh::state::ShellState;
+///
+/// let mut state = ShellState::new("/tmp/workspace")?;
+/// // Perform operations...
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub struct ShellState {
     /// Sandbox root path
     pub root: PathBuf,
