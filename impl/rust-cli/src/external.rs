@@ -87,6 +87,164 @@ pub fn execute_external_with_redirects(
     }
 }
 
+/// Execute a pipeline of external commands with stdio chaining.
+///
+/// Spawns each command in sequence, piping stdout of stage N to stdin of stage N+1.
+/// Final stage's output goes to redirections or inherits from shell.
+///
+/// # Arguments
+/// * `stages` - Vector of (program, args) pairs for each pipeline stage
+/// * `redirects` - Final redirections (>, >>, etc.) applied to last stage
+/// * `state` - Shell state for undo tracking
+///
+/// # Returns
+/// Exit code of the rightmost (last) command in the pipeline (POSIX behavior)
+///
+/// # Errors
+/// Returns error if:
+/// - Pipeline is empty or has only one stage
+/// - Program not found in PATH
+/// - Failed to spawn child process
+/// - Failed to setup redirections
+///
+/// # Examples
+/// ```no_run
+/// use vsh::external;
+/// use vsh::state::ShellState;
+///
+/// let stages = vec![
+///     ("ls".to_string(), vec!["-la".to_string()]),
+///     ("grep".to_string(), vec!["test".to_string()]),
+/// ];
+/// let mut state = ShellState::new("/tmp")?;
+/// let exit_code = external::execute_pipeline(&stages, &[], &mut state)?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+pub fn execute_pipeline(
+    stages: &[(String, Vec<String>)],
+    redirects: &[Redirection],
+    state: &mut ShellState,
+) -> Result<i32> {
+    if stages.is_empty() {
+        anyhow::bail!("Pipeline must have at least one stage");
+    }
+
+    if stages.len() == 1 {
+        // Single stage - just run normally with redirects
+        return execute_external_with_redirects(&stages[0].0, &stages[0].1, redirects, state);
+    }
+
+    // Setup final redirection output files
+    let redirect_setup = if !redirects.is_empty() {
+        Some(RedirectSetup::setup(redirects, state)?)
+    } else {
+        None
+    };
+
+    // Configure stdio for stages and spawn children
+    let mut children: Vec<std::process::Child> = Vec::new();
+    let mut prev_stdout: Option<std::process::ChildStdout> = None;
+
+    for (idx, (program, args)) in stages.iter().enumerate() {
+        let executable = find_in_path(program)?;
+
+        let is_first = idx == 0;
+        let is_last = idx == stages.len() - 1;
+
+        // Configure stdin
+        let stdin_cfg = if is_first {
+            // First stage: inherit from shell
+            Stdio::inherit()
+        } else {
+            // Middle/last stages: read from previous stdout
+            Stdio::from(prev_stdout.take().unwrap())
+        };
+
+        // Configure stdout
+        let stdout_cfg = if is_last {
+            // Last stage: redirect to file or inherit
+            if !redirects.is_empty() {
+                stdio_config_from_redirects(redirects, redirect_setup.as_ref().unwrap(), state)?.1
+            } else {
+                Stdio::inherit()
+            }
+        } else {
+            // First/middle stages: pipe to next
+            Stdio::piped()
+        };
+
+        // Configure stderr (inherit unless redirected in last stage)
+        let stderr_cfg = if is_last && !redirects.is_empty() {
+            stdio_config_from_redirects(redirects, redirect_setup.as_ref().unwrap(), state)?.2
+        } else {
+            Stdio::inherit()
+        };
+
+        // Spawn child
+        let mut command = Command::new(&executable);
+        command
+            .args(args)
+            .stdin(stdin_cfg)
+            .stdout(stdout_cfg)
+            .stderr(stderr_cfg);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
+
+        let mut child = command
+            .spawn()
+            .context(format!("Failed to spawn: {}", program))?;
+
+        // Save stdout for next stage
+        if !is_last {
+            prev_stdout = child.stdout.take();
+        }
+
+        children.push(child);
+    }
+
+    // Wait for all children in order, checking for SIGINT
+    let mut final_exit_code = 0;
+
+    for (idx, mut child) in children.into_iter().enumerate() {
+        loop {
+            match child.try_wait().context("Failed to wait for child")? {
+                Some(status) => {
+                    let exit_code = handle_exit_status(status)?;
+                    if idx == stages.len() - 1 {
+                        // Last stage's exit code is pipeline's exit code
+                        final_exit_code = exit_code;
+                    }
+                    break;
+                }
+                None => {
+                    // Child still running - check for interrupt
+                    if crate::INTERRUPT_REQUESTED.load(Ordering::Relaxed) {
+                        // Kill all remaining children
+                        child.kill().context("Failed to kill child process")?;
+                        crate::INTERRUPT_REQUESTED.store(false, Ordering::Relaxed);
+                        child.wait().context("Failed to wait for killed child")?;
+
+                        // Don't record modifications - operation interrupted
+                        return Ok(130); // 128 + SIGINT
+                    }
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+            }
+        }
+    }
+
+    // Record undo for final redirection (if any)
+    if let Some(setup) = redirect_setup {
+        setup.record_for_undo(state)?;
+    }
+
+    Ok(final_exit_code)
+}
+
 /// Execute an external command without redirections (legacy interface).
 ///
 /// Spawns a child process via execve(), polls for completion, and handles

@@ -310,9 +310,14 @@ impl ExecutableCommand for Command {
 
             // Pipeline commands (not reversible by default, but redirections are)
             Command::Pipeline { stages, redirects } => {
-                // TODO: Implement execute_pipeline (task #20)
-                let _ = (stages, redirects);
-                Err(anyhow::anyhow!("Pipeline execution not yet implemented"))
+                let exit_code = external::execute_pipeline(stages, redirects, state).unwrap_or_else(
+                    |e| {
+                        eprintln!("Pipeline error: {}", e);
+                        127
+                    },
+                );
+
+                Ok(ExecutionResult::ExternalCommand { exit_code })
             }
         }
     }
