@@ -18,6 +18,7 @@ mod external;
 mod history;
 mod parser;
 mod proof_refs;
+mod redirection;
 mod repl;
 mod state;
 
