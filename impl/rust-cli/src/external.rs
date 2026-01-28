@@ -8,6 +8,8 @@ use anyhow::{Context, Result};
 use std::fs::{File, OpenOptions};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::time::Duration;
+use std::sync::atomic::Ordering;
 
 use crate::redirection::{Redirection, RedirectSetup};
 use crate::state::ShellState;
@@ -36,40 +38,100 @@ pub fn execute_external_with_redirects(
     // PATH lookup
     let executable = find_in_path(program)?;
 
-    // Execute with redirected stdio
-    let status = Command::new(&executable)
+    // Build command with redirected stdio
+    let mut command = Command::new(&executable);
+    command
         .args(args)
         .stdin(stdin_cfg)
         .stdout(stdout_cfg)
-        .stderr(stderr_cfg)
-        .status()
-        .context(format!("Failed to execute: {}", program))?;
+        .stderr(stderr_cfg);
 
-    // Record file modifications for undo
-    redirect_setup.record_for_undo(state)?;
+    // Set process group on Unix for proper job control
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
 
-    // Handle exit status (including signals)
-    handle_exit_status(status)
+    // Spawn child process (non-blocking)
+    let mut child = command
+        .spawn()
+        .context(format!("Failed to spawn: {}", program))?;
+
+    // Poll for exit while checking for interrupt
+    loop {
+        match child.try_wait().context("Failed to wait for child")? {
+            Some(status) => {
+                // Child exited - record modifications and return
+                redirect_setup.record_for_undo(state)?;
+                return handle_exit_status(status);
+            }
+            None => {
+                // Child still running - check for interrupt
+                if crate::INTERRUPT_REQUESTED.load(Ordering::Relaxed) {
+                    // User pressed Ctrl+C - kill child and reset flag
+                    child.kill().context("Failed to kill child process")?;
+                    crate::INTERRUPT_REQUESTED.store(false, Ordering::Relaxed);
+
+                    // Wait for child to actually terminate
+                    child.wait().context("Failed to wait for killed child")?;
+
+                    // Don't record modifications - operation interrupted
+                    return Ok(130); // 128 + SIGINT(2)
+                }
+
+                // Sleep briefly before next check
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+    }
 }
 
 /// Execute an external command (no redirections - legacy)
 ///
 /// Handles signal termination (SIGINT, SIGTERM) and returns appropriate exit codes.
 /// Exit code 130 indicates SIGINT (Ctrl+C), 143 indicates SIGTERM.
+///
+/// This function supports interruption via Ctrl+C - the global INTERRUPT_REQUESTED
+/// flag is checked periodically and the child process is killed if set.
 pub fn execute_external(program: &str, args: &[String]) -> Result<i32> {
     // PATH lookup
     let executable = find_in_path(program)?;
 
-    // Execute via std::process::Command
-    let status = Command::new(&executable)
+    // Spawn child process (non-blocking)
+    let mut child = Command::new(&executable)
         .args(args)
-        .stdin(Stdio::inherit()) // Pass through stdin
-        .stdout(Stdio::inherit()) // Pass through stdout
-        .stderr(Stdio::inherit()) // Pass through stderr
-        .status()
-        .context(format!("Failed to execute: {}", program))?;
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .context(format!("Failed to spawn: {}", program))?;
 
-    handle_exit_status(status)
+    // Poll for exit while checking for interrupt
+    loop {
+        match child.try_wait().context("Failed to wait for child")? {
+            Some(status) => {
+                // Child exited normally
+                return handle_exit_status(status);
+            }
+            None => {
+                // Child still running - check for interrupt
+                if crate::INTERRUPT_REQUESTED.load(Ordering::Relaxed) {
+                    // User pressed Ctrl+C - kill child and reset flag
+                    child.kill().context("Failed to kill child process")?;
+                    crate::INTERRUPT_REQUESTED.store(false, Ordering::Relaxed);
+
+                    // Wait for child to actually terminate
+                    child.wait().context("Failed to wait for killed child")?;
+
+                    return Ok(130); // 128 + SIGINT(2)
+                }
+
+                // Sleep briefly before next check
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+    }
 }
 
 /// Convert redirections to stdio configuration
