@@ -499,4 +499,100 @@ mod tests {
         let exit_code = execute_external("echo", &["hello".to_string()]).unwrap();
         assert_eq!(exit_code, 0, "echo should return 0");
     }
+
+    #[test]
+    fn test_pipeline_simple() {
+        // Test simple 2-stage pipeline: true | true
+        use tempfile::TempDir;
+        let temp = TempDir::new().unwrap();
+        let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
+
+        let stages = vec![
+            ("true".to_string(), vec![]),
+            ("true".to_string(), vec![]),
+        ];
+        let exit_code = execute_pipeline(&stages, &[], &mut state).unwrap();
+        assert_eq!(exit_code, 0, "true | true should return 0");
+    }
+
+    #[test]
+    fn test_pipeline_exit_code() {
+        // Test that pipeline returns exit code from last stage
+        use tempfile::TempDir;
+        let temp = TempDir::new().unwrap();
+        let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
+
+        let stages = vec![
+            ("true".to_string(), vec![]),
+            ("false".to_string(), vec![]),
+        ];
+        let exit_code = execute_pipeline(&stages, &[], &mut state).unwrap();
+        assert_eq!(exit_code, 1, "true | false should return 1 (from false)");
+    }
+
+    #[test]
+    fn test_pipeline_three_stages() {
+        // Test 3-stage pipeline
+        use tempfile::TempDir;
+        let temp = TempDir::new().unwrap();
+        let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
+
+        let stages = vec![
+            ("echo".to_string(), vec!["hello".to_string()]),
+            ("cat".to_string(), vec![]),
+            ("cat".to_string(), vec![]),
+        ];
+        let exit_code = execute_pipeline(&stages, &[], &mut state).unwrap();
+        assert_eq!(exit_code, 0, "echo hello | cat | cat should return 0");
+    }
+
+    #[test]
+    fn test_pipeline_with_redirect() {
+        // Test pipeline with output redirection
+        use tempfile::TempDir;
+        use std::fs;
+        let temp = TempDir::new().unwrap();
+        let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
+
+        let stages = vec![
+            ("echo".to_string(), vec!["test".to_string()]),
+            ("cat".to_string(), vec![]),
+        ];
+        let redirects = vec![crate::redirection::Redirection::Output {
+            file: "output.txt".to_string(),
+        }];
+        let exit_code = execute_pipeline(&stages, &redirects, &mut state).unwrap();
+        assert_eq!(exit_code, 0, "Pipeline with redirect should return 0");
+
+        // Verify file was created
+        let output_file = temp.path().join("output.txt");
+        assert!(output_file.exists(), "Output file should be created");
+
+        let content = fs::read_to_string(output_file).unwrap();
+        assert_eq!(content.trim(), "test", "Output should be 'test'");
+    }
+
+    #[test]
+    fn test_pipeline_error_empty_stages() {
+        // Test that empty stages array returns error
+        use tempfile::TempDir;
+        let temp = TempDir::new().unwrap();
+        let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
+
+        let stages: Vec<(String, Vec<String>)> = vec![];
+        let result = execute_pipeline(&stages, &[], &mut state);
+        assert!(result.is_err(), "Empty pipeline should return error");
+    }
+
+    #[test]
+    fn test_pipeline_single_stage_delegates() {
+        // Test that single-stage pipeline delegates to execute_external_with_redirects
+        use tempfile::TempDir;
+        let temp = TempDir::new().unwrap();
+        let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
+
+        let stages = vec![("true".to_string(), vec![])];
+        let exit_code = execute_pipeline(&stages, &[], &mut state).unwrap();
+        assert_eq!(exit_code, 0, "Single-stage pipeline should work");
+    }
 }
