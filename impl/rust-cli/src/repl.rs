@@ -10,7 +10,8 @@ use anyhow::Result;
 use colored::Colorize;
 use std::io::{self, BufRead, Write};
 
-use crate::commands;
+use crate::{commands, external, parser};
+use crate::parser::Command;
 use crate::state::ShellState;
 
 /// Run the interactive REPL
@@ -80,108 +81,111 @@ fn build_prompt(state: &ShellState) -> String {
 }
 
 fn execute_line(state: &mut ShellState, input: &str) -> Result<bool> {
-    let parts: Vec<&str> = input.split_whitespace().collect();
-    if parts.is_empty() {
-        return Ok(false);
+    // Handle special commands first (not parsed)
+    let trimmed = input.trim();
+
+    match trimmed {
+        "help" | "?" => {
+            print_help();
+            return Ok(false);
+        }
+        "clear" => {
+            print!("\x1B[2J\x1B[1;1H");
+            return Ok(false);
+        }
+        "status" => {
+            print_status(state);
+            return Ok(false);
+        }
+        _ => {}
     }
 
-    let cmd = parts[0];
-    let args = &parts[1..];
+    // Handle aliases before parsing
+    let input_normalized = match trimmed {
+        s if s.starts_with("u ") || s == "u" => {
+            trimmed.replacen("u", "undo", 1)
+        }
+        s if s.starts_with("r ") || s == "r" => {
+            trimmed.replacen("r", "redo", 1)
+        }
+        s if s.starts_with("h ") || s == "h" => {
+            trimmed.replacen("h", "history", 1)
+        }
+        s if s.starts_with("g ") || s == "g" => {
+            trimmed.replacen("g", "graph", 1)
+        }
+        "q" => "quit".to_string(),
+        _ => trimmed.to_string(),
+    };
 
+    // Parse command using the new parser
+    let cmd = parser::parse_command(&input_normalized)?;
+
+    // Execute command
     match cmd {
-        // Exit commands
-        "exit" | "quit" | "q" => {
+        Command::Exit | Command::Quit => {
             return Ok(true);
         }
 
-        // Help
-        "help" | "?" => {
-            print_help();
+        Command::Mkdir { path } => {
+            commands::mkdir(state, &path, false)?;
         }
 
-        // Directory operations
-        "mkdir" => {
-            if args.is_empty() {
-                anyhow::bail!("Usage: mkdir <path>");
-            }
-            commands::mkdir(state, args[0], false)?;
+        Command::Rmdir { path } => {
+            commands::rmdir(state, &path, false)?;
         }
 
-        "rmdir" => {
-            if args.is_empty() {
-                anyhow::bail!("Usage: rmdir <path>");
-            }
-            commands::rmdir(state, args[0], false)?;
+        Command::Touch { path } => {
+            commands::touch(state, &path, false)?;
         }
 
-        // File operations
-        "touch" => {
-            if args.is_empty() {
-                anyhow::bail!("Usage: touch <path>");
-            }
-            commands::touch(state, args[0], false)?;
+        Command::Rm { path } => {
+            commands::rm(state, &path, false)?;
         }
 
-        "rm" => {
-            if args.is_empty() {
-                anyhow::bail!("Usage: rm <path>");
-            }
-            commands::rm(state, args[0], false)?;
-        }
-
-        // Undo/Redo
-        "undo" | "u" => {
-            let count = args.first().and_then(|s| s.parse().ok()).unwrap_or(1);
+        Command::Undo { count } => {
             commands::undo(state, count, false)?;
         }
 
-        "redo" | "r" => {
-            let count = args.first().and_then(|s| s.parse().ok()).unwrap_or(1);
+        Command::Redo { count } => {
             commands::redo(state, count, false)?;
         }
 
-        // History
-        "history" | "h" => {
-            let show_proofs = args.contains(&"--proofs") || args.contains(&"-p");
-            let count = args
-                .iter()
-                .filter(|s| !s.starts_with('-'))
-                .find_map(|s| s.parse().ok())
-                .unwrap_or(10);
+        Command::History { count, show_proofs } => {
             commands::history(state, count, show_proofs)?;
         }
 
         // Transactions
-        "begin" => {
-            if args.is_empty() {
-                anyhow::bail!("Usage: begin <name>");
-            }
-            commands::begin_transaction(state, args[0])?;
+        Command::Begin { name } => {
+            commands::begin_transaction(state, &name)?;
         }
 
-        "commit" => {
+        Command::Commit => {
             commands::commit_transaction(state)?;
         }
 
-        "rollback" => {
+        Command::Rollback => {
             commands::rollback_transaction(state)?;
         }
 
-        // Graph
-        "graph" | "g" => {
+        // Display commands
+        Command::Graph => {
             commands::show_graph(state)?;
         }
 
-        // Proofs
-        "proofs" | "proof" => {
+        Command::Proofs => {
             commands::show_proofs()?;
         }
 
-        // List (convenience)
-        "ls" => {
-            let path = args.first().map(|s| state.resolve_path(s)).unwrap_or(state.root.clone());
-            if path.is_dir() {
-                for entry in std::fs::read_dir(&path)? {
+        Command::Ls { path } => {
+            let target = if let Some(p) = path {
+                state.resolve_path(&p)
+            } else {
+                state.root.clone()
+            };
+
+            if target.is_dir() {
+                for entry in std::fs::read_dir(&target)? {
                     let entry = entry?;
                     let name = entry.file_name();
                     let file_type = entry.file_type()?;
@@ -196,29 +200,21 @@ fn execute_line(state: &mut ShellState, input: &str) -> Result<bool> {
             }
         }
 
-        // pwd
-        "pwd" => {
+        Command::Pwd => {
             println!("{}", state.root.display());
         }
 
-        // Clear screen
-        "clear" => {
-            print!("\x1B[2J\x1B[1;1H");
-        }
-
-        // Status
-        "status" => {
-            print_status(state);
-        }
-
-        // Unknown command
-        _ => {
-            eprintln!(
-                "{} Unknown command: {}",
-                "?".bright_yellow(),
-                cmd.bright_red()
-            );
-            eprintln!("Type 'help' for available commands");
+        Command::External { program, args } => {
+            match external::execute_external(&program, &args) {
+                Ok(exit_code) => {
+                    // Store exit code for future $? support
+                    state.last_exit_code = exit_code;
+                }
+                Err(e) => {
+                    eprintln!("{}: {}", program, e);
+                    state.last_exit_code = 127; // Command not found
+                }
+            }
         }
     }
 
@@ -261,6 +257,11 @@ fn print_help() {
     println!("{}", "Other:".bright_yellow());
     println!("  {}          Clear screen", "clear".bright_black());
     println!("  {}           Exit shell", "exit".bright_black());
+    println!();
+
+    println!("{}", "External Commands:".bright_yellow());
+    println!("  Any other command will be executed as an external program");
+    println!("  Example: {} or {}", "ls -la".bright_green(), "cat file.txt".bright_green());
     println!();
 
     println!(

@@ -13,7 +13,9 @@
 //! - Zig FFI provides the verified POSIX interface
 
 mod commands;
+mod external;
 mod history;
+mod parser;
 mod proof_refs;
 mod repl;
 mod state;

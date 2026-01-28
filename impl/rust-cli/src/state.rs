@@ -131,6 +131,9 @@ pub struct ShellState {
 
     /// State file path for persistence
     state_file: PathBuf,
+
+    /// Last exit code from external command (for future $? support)
+    pub last_exit_code: i32,
 }
 
 impl ShellState {
@@ -152,6 +155,7 @@ impl ShellState {
             active_transaction: None,
             transactions: Vec::new(),
             state_file,
+            last_exit_code: 0,
         };
 
         // Try to load existing state
