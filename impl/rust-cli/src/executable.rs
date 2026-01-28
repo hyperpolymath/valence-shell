@@ -8,6 +8,7 @@ use anyhow::Result;
 
 use crate::parser::Command;
 use crate::proof_refs::ProofReference;
+use crate::redirection;
 use crate::state::ShellState;
 use crate::{commands, external};
 
@@ -51,24 +52,51 @@ impl ExecutableCommand for Command {
     fn execute(&self, state: &mut ShellState) -> Result<ExecutionResult> {
         match self {
             // Filesystem operations (reversible)
-            Command::Mkdir { path, redirects: _ } => {
-                // TODO: Handle redirections in Phase 6 M2
-                commands::mkdir(state, path, false)?;
+            Command::Mkdir { path, redirects } => {
+                if redirects.is_empty() {
+                    commands::mkdir(state, path, false)?;
+                } else {
+                    let path = path.clone();
+                    redirection::capture_and_redirect(redirects, state, |s| {
+                        commands::mkdir(s, &path, false)
+                    })?;
+                }
                 Ok(ExecutionResult::Success)
             }
 
-            Command::Rmdir { path, redirects: _ } => {
-                commands::rmdir(state, path, false)?;
+            Command::Rmdir { path, redirects } => {
+                if redirects.is_empty() {
+                    commands::rmdir(state, path, false)?;
+                } else {
+                    let path = path.clone();
+                    redirection::capture_and_redirect(redirects, state, |s| {
+                        commands::rmdir(s, &path, false)
+                    })?;
+                }
                 Ok(ExecutionResult::Success)
             }
 
-            Command::Touch { path, redirects: _ } => {
-                commands::touch(state, path, false)?;
+            Command::Touch { path, redirects } => {
+                if redirects.is_empty() {
+                    commands::touch(state, path, false)?;
+                } else {
+                    let path = path.clone();
+                    redirection::capture_and_redirect(redirects, state, |s| {
+                        commands::touch(s, &path, false)
+                    })?;
+                }
                 Ok(ExecutionResult::Success)
             }
 
-            Command::Rm { path, redirects: _ } => {
-                commands::rm(state, path, false)?;
+            Command::Rm { path, redirects } => {
+                if redirects.is_empty() {
+                    commands::rm(state, path, false)?;
+                } else {
+                    let path = path.clone();
+                    redirection::capture_and_redirect(redirects, state, |s| {
+                        commands::rm(s, &path, false)
+                    })?;
+                }
                 Ok(ExecutionResult::Success)
             }
 
@@ -119,37 +147,74 @@ impl ExecutableCommand for Command {
             Command::Exit | Command::Quit => Ok(ExecutionResult::Exit),
 
             // Navigation (built-ins but not reversible)
-            Command::Ls { path, redirects: _ } => {
-                // TODO: Handle redirections in Phase 6 M2
-                use std::fs;
+            Command::Ls { path, redirects } => {
+                if redirects.is_empty() {
+                    // Direct output to terminal
+                    use std::fs;
 
-                let target = if let Some(p) = path {
-                    state.resolve_path(p)
-                } else {
-                    state.root.clone()
-                };
-
-                if !target.is_dir() {
-                    anyhow::bail!("Not a directory");
-                }
-
-                for entry in fs::read_dir(&target)? {
-                    let entry = entry?;
-                    let name = entry.file_name();
-                    let file_type = entry.file_type()?;
-                    if file_type.is_dir() {
-                        use colored::Colorize;
-                        println!("{}/", name.to_string_lossy().bright_blue());
+                    let target = if let Some(p) = path {
+                        state.resolve_path(p)
                     } else {
-                        println!("{}", name.to_string_lossy());
+                        state.root.clone()
+                    };
+
+                    if !target.is_dir() {
+                        anyhow::bail!("Not a directory");
                     }
+
+                    for entry in fs::read_dir(&target)? {
+                        let entry = entry?;
+                        let name = entry.file_name();
+                        let file_type = entry.file_type()?;
+                        if file_type.is_dir() {
+                            use colored::Colorize;
+                            println!("{}/", name.to_string_lossy().bright_blue());
+                        } else {
+                            println!("{}", name.to_string_lossy());
+                        }
+                    }
+                } else {
+                    // Capture and redirect output
+                    let path_opt = path.clone();
+                    redirection::capture_and_redirect(redirects, state, |s| {
+                        use std::fs;
+
+                        let target = if let Some(ref p) = path_opt {
+                            s.resolve_path(p)
+                        } else {
+                            s.root.clone()
+                        };
+
+                        if !target.is_dir() {
+                            anyhow::bail!("Not a directory");
+                        }
+
+                        for entry in fs::read_dir(&target)? {
+                            let entry = entry?;
+                            let name = entry.file_name();
+                            let file_type = entry.file_type()?;
+                            if file_type.is_dir() {
+                                // No colors when redirecting
+                                println!("{}/", name.to_string_lossy());
+                            } else {
+                                println!("{}", name.to_string_lossy());
+                            }
+                        }
+                        Ok(())
+                    })?;
                 }
                 Ok(ExecutionResult::Success)
             }
 
-            Command::Pwd { redirects: _ } => {
-                // TODO: Handle redirections in Phase 6 M2
-                println!("{}", state.root.display());
+            Command::Pwd { redirects } => {
+                if redirects.is_empty() {
+                    println!("{}", state.root.display());
+                } else {
+                    redirection::capture_and_redirect(redirects, state, |s| {
+                        println!("{}", s.root.display());
+                        Ok(())
+                    })?;
+                }
                 Ok(ExecutionResult::Success)
             }
 
@@ -207,20 +272,25 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::Success)
             }
 
-            // External commands (not reversible)
+            // External commands (not reversible by default, but redirections are)
             Command::External {
                 program,
                 args,
-                redirects: _,
+                redirects,
             } => {
-                // TODO: Handle redirections in Phase 6 M2
-                match external::execute_external(program, args) {
-                    Ok(exit_code) => Ok(ExecutionResult::ExternalCommand { exit_code }),
-                    Err(e) => {
-                        eprintln!("{}: {}", program, e);
-                        Ok(ExecutionResult::ExternalCommand { exit_code: 127 })
-                    }
+                let exit_code = if redirects.is_empty() {
+                    // No redirections - use simple path
+                    external::execute_external(program, args)
+                } else {
+                    // Has redirections - use redirection-aware execution
+                    external::execute_external_with_redirects(program, args, redirects, state)
                 }
+                .unwrap_or_else(|e| {
+                    eprintln!("{}: {}", program, e);
+                    127
+                });
+
+                Ok(ExecutionResult::ExternalCommand { exit_code })
             }
         }
     }

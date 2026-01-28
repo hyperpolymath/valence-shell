@@ -7,10 +7,89 @@
 use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use crate::state::ShellState;
+
+/// Captures stdout and applies redirections
+///
+/// Used for built-in commands that print to stdout.
+/// Executes the provided closure, captures its stdout output,
+/// and writes to redirection targets if specified.
+///
+/// The closure receives mutable access to ShellState for command execution.
+pub fn capture_and_redirect<F>(
+    redirects: &[Redirection],
+    state: &mut ShellState,
+    mut f: F,
+) -> Result<()>
+where
+    F: FnMut(&mut ShellState) -> Result<()>,
+{
+    if redirects.is_empty() {
+        // No redirections - execute normally
+        return f(state);
+    }
+
+    // Resolve redirect file paths before capturing stdout
+    // (state.resolve_path needs immutable access)
+    let resolved_redirects: Vec<(Redirection, PathBuf)> = redirects
+        .iter()
+        .filter_map(|r| match r {
+            Redirection::Output { file } => {
+                Some((r.clone(), state.resolve_path(file)))
+            }
+            Redirection::Append { file } => {
+                Some((r.clone(), state.resolve_path(file)))
+            }
+            Redirection::BothOutput { file } => {
+                Some((r.clone(), state.resolve_path(file)))
+            }
+            _ => None,
+        })
+        .collect();
+
+    // Setup redirections (validates, opens files, records original state)
+    let redirect_setup = RedirectSetup::setup(redirects, state)?;
+
+    // Capture stdout
+    let mut buffer = gag::BufferRedirect::stdout()?;
+
+    // Execute command with mutable state
+    f(state)?;
+
+    // Get captured output
+    let mut output = String::new();
+    buffer.read_to_string(&mut output)?;
+    drop(buffer); // Release stdout
+
+    // Write to redirect targets
+    for (redirect, path) in resolved_redirects {
+        match redirect {
+            Redirection::Output { .. } | Redirection::BothOutput { .. } => {
+                fs::write(&path, &output)
+                    .with_context(|| format!("Failed to write to: {}", path.display()))?;
+            }
+
+            Redirection::Append { .. } => {
+                let mut f = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&path)
+                    .with_context(|| format!("Failed to open for append: {}", path.display()))?;
+                f.write_all(output.as_bytes())?;
+            }
+
+            _ => {} // Filtered out above
+        }
+    }
+
+    // Record modifications for undo
+    redirect_setup.record_for_undo(state)?;
+
+    Ok(())
+}
 
 /// Redirection operator for a command
 #[derive(Debug, Clone, PartialEq)]
