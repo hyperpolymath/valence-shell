@@ -256,6 +256,153 @@ fn tokenize(input: &str) -> Vec<Token> {
     tokens
 }
 
+/// Parse a pipeline command (tokens containing `|` operators).
+///
+/// Splits the token stream on Pipe operators, parses each stage as (program, args),
+/// and extracts final redirections from the last stage.
+///
+/// # Arguments
+/// * `tokens` - Token stream containing at least one `Token::Pipe`
+///
+/// # Returns
+/// [`Command::Pipeline`] with stages and final redirections
+///
+/// # Errors
+/// Returns error if:
+/// - Pipeline has empty stages
+/// - Pipeline has less than 2 stages
+/// - Stage has no command name
+/// - Invalid redirections in last stage
+fn parse_pipeline(tokens: &[Token]) -> Result<Command> {
+    // Split token stream on Pipe tokens
+    let mut stages: Vec<Vec<Token>> = Vec::new();
+    let mut current_stage: Vec<Token> = Vec::new();
+
+    for token in tokens {
+        match token {
+            Token::Pipe => {
+                if current_stage.is_empty() {
+                    return Err(anyhow!("Empty pipeline stage"));
+                }
+                stages.push(current_stage.clone());
+                current_stage.clear();
+            }
+            _ => current_stage.push(token.clone()),
+        }
+    }
+
+    // Add final stage
+    if current_stage.is_empty() {
+        return Err(anyhow!("Pipeline ends with |"));
+    }
+    stages.push(current_stage);
+
+    if stages.len() < 2 {
+        return Err(anyhow!("Pipeline must have at least 2 stages"));
+    }
+
+    // Extract final redirections from last stage
+    let last_stage_idx = stages.len() - 1;
+    let (last_command_tokens, final_redirects) =
+        extract_redirections_from_tokens(&stages[last_stage_idx])?;
+    stages[last_stage_idx] = last_command_tokens;
+
+    // Parse each stage as (program, args)
+    let mut parsed_stages: Vec<(String, Vec<String>)> = Vec::new();
+
+    for stage_tokens in stages {
+        if stage_tokens.is_empty() {
+            return Err(anyhow!("Empty pipeline stage"));
+        }
+
+        let words: Vec<String> = stage_tokens
+            .iter()
+            .filter_map(|t| match t {
+                Token::Word(w) => Some(w.clone()),
+                _ => None,
+            })
+            .collect();
+
+        if words.is_empty() {
+            return Err(anyhow!("Pipeline stage has no command"));
+        }
+
+        let program = words[0].clone();
+        let args = words[1..].to_vec();
+        parsed_stages.push((program, args));
+    }
+
+    Ok(Command::Pipeline {
+        stages: parsed_stages,
+        redirects: final_redirects,
+    })
+}
+
+/// Extract redirections from a token slice, returning (command_tokens, redirections).
+///
+/// Separates command words from redirection operators and their targets.
+fn extract_redirections_from_tokens(tokens: &[Token]) -> Result<(Vec<Token>, Vec<Redirection>)> {
+    let mut command_tokens = Vec::new();
+    let mut redirects = Vec::new();
+
+    let mut i = 0;
+    while i < tokens.len() {
+        match &tokens[i] {
+            Token::Word(_) => {
+                command_tokens.push(tokens[i].clone());
+                i += 1;
+            }
+
+            Token::OutputRedirect => {
+                let file = expect_word(tokens, i + 1, "output redirection")?;
+                redirects.push(Redirection::Output { file });
+                i += 2;
+            }
+
+            Token::AppendRedirect => {
+                let file = expect_word(tokens, i + 1, "append redirection")?;
+                redirects.push(Redirection::Append { file });
+                i += 2;
+            }
+
+            Token::InputRedirect => {
+                let file = expect_word(tokens, i + 1, "input redirection")?;
+                redirects.push(Redirection::Input { file });
+                i += 2;
+            }
+
+            Token::ErrorRedirect => {
+                let file = expect_word(tokens, i + 1, "error redirection")?;
+                redirects.push(Redirection::ErrorOutput { file });
+                i += 2;
+            }
+
+            Token::ErrorAppendRedirect => {
+                let file = expect_word(tokens, i + 1, "error append redirection")?;
+                redirects.push(Redirection::ErrorAppend { file });
+                i += 2;
+            }
+
+            Token::ErrorToOutput => {
+                redirects.push(Redirection::ErrorToOutput);
+                i += 1;
+            }
+
+            Token::BothRedirect => {
+                let file = expect_word(tokens, i + 1, "both redirection")?;
+                redirects.push(Redirection::BothOutput { file });
+                i += 2;
+            }
+
+            Token::Pipe => {
+                return Err(anyhow!("Unexpected pipe in stage"));
+            }
+        }
+    }
+
+    Ok((command_tokens, redirects))
+}
+
 /// Parse a command line into a structured [`Command`] with redirections.
 ///
 /// Tokenizes the input, identifies built-in commands vs external programs,
@@ -287,6 +434,11 @@ pub fn parse_command(input: &str) -> Result<Command> {
 
     if tokens.is_empty() {
         return Err(anyhow!("Empty command"));
+    }
+
+    // Check if input contains pipes - if so, parse as pipeline
+    if tokens.iter().any(|t| matches!(t, Token::Pipe)) {
+        return parse_pipeline(&tokens);
     }
 
     // Separate command tokens from redirections
@@ -343,7 +495,8 @@ pub fn parse_command(input: &str) -> Result<Command> {
             }
 
             Token::Pipe => {
-                return Err(anyhow!("Pipelines not yet implemented (Phase 6 M3)"));
+                // Should never reach here - pipes are caught at parse_command() entry
+                return Err(anyhow!("Unexpected pipe token in single command"));
             }
         }
     }
@@ -772,5 +925,77 @@ mod tests {
     fn test_parse_empty() {
         assert!(parse_command("").is_err());
         assert!(parse_command("   ").is_err());
+    }
+
+    #[test]
+    fn test_parse_simple_pipeline() {
+        let cmd = parse_command("ls | grep test").unwrap();
+        match cmd {
+            Command::Pipeline { stages, redirects } => {
+                assert_eq!(stages.len(), 2);
+                assert_eq!(stages[0].0, "ls");
+                assert_eq!(stages[0].1.len(), 0);
+                assert_eq!(stages[1].0, "grep");
+                assert_eq!(stages[1].1, vec!["test"]);
+                assert!(redirects.is_empty());
+            }
+            _ => panic!("Expected Pipeline"),
+        }
+    }
+
+    #[test]
+    fn test_parse_multi_stage_pipeline() {
+        let cmd = parse_command("cat file.txt | grep foo | wc -l").unwrap();
+        match cmd {
+            Command::Pipeline { stages, .. } => {
+                assert_eq!(stages.len(), 3);
+                assert_eq!(stages[0].0, "cat");
+                assert_eq!(stages[0].1, vec!["file.txt"]);
+                assert_eq!(stages[1].0, "grep");
+                assert_eq!(stages[1].1, vec!["foo"]);
+                assert_eq!(stages[2].0, "wc");
+                assert_eq!(stages[2].1, vec!["-l"]);
+            }
+            _ => panic!("Expected Pipeline"),
+        }
+    }
+
+    #[test]
+    fn test_parse_pipeline_with_redirect() {
+        let cmd = parse_command("ls | grep test > output.txt").unwrap();
+        match cmd {
+            Command::Pipeline { stages, redirects } => {
+                assert_eq!(stages.len(), 2);
+                assert_eq!(redirects.len(), 1);
+                match &redirects[0] {
+                    Redirection::Output { file } => assert_eq!(file, "output.txt"),
+                    _ => panic!("Expected Output redirection"),
+                }
+            }
+            _ => panic!("Expected Pipeline"),
+        }
+    }
+
+    #[test]
+    fn test_parse_pipeline_empty_stage_error() {
+        assert!(parse_command("ls |").is_err());
+        assert!(parse_command("| grep test").is_err());
+    }
+
+    #[test]
+    fn test_parse_pipeline_single_stage_not_pipeline() {
+        // Single command with no pipe should not create pipeline
+        let cmd = parse_command("ls").unwrap();
+        match cmd {
+            Command::Ls { .. } => {}, // Built-in command
+            _ => panic!("Single command should not create pipeline"),
+        }
+
+        // External command without pipe should also not create pipeline
+        let cmd2 = parse_command("echo hello").unwrap();
+        match cmd2 {
+            Command::External { .. } => {},
+            _ => panic!("Single external command should not create pipeline"),
+        }
     }
 }

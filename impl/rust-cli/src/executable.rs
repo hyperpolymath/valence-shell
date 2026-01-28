@@ -307,6 +307,13 @@ impl ExecutableCommand for Command {
 
                 Ok(ExecutionResult::ExternalCommand { exit_code })
             }
+
+            // Pipeline commands (not reversible by default, but redirections are)
+            Command::Pipeline { stages, redirects } => {
+                // TODO: Implement execute_pipeline (task #20)
+                let _ = (stages, redirects);
+                Err(anyhow::anyhow!("Pipeline execution not yet implemented"))
+            }
         }
     }
 
@@ -377,6 +384,19 @@ impl ExecutableCommand for Command {
                 } else {
                     format!("{} {}", program, args.join(" "))
                 }
+            }
+            Command::Pipeline { stages, .. } => {
+                let stage_desc: Vec<_> = stages
+                    .iter()
+                    .map(|(prog, args)| {
+                        if args.is_empty() {
+                            prog.clone()
+                        } else {
+                            format!("{} {}", prog, args.join(" "))
+                        }
+                    })
+                    .collect();
+                stage_desc.join(" | ")
             }
         }
     }
