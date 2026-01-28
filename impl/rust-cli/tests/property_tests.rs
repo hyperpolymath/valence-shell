@@ -572,3 +572,238 @@ fn prop_path_validation() {
         }
     });
 }
+
+// ============================================================
+// File Content Modification Properties (Phase 6 M2)
+// ============================================================
+
+/// Property: File truncation is reversible with saved content
+///
+/// Pending Lean theorem: `truncate_restore_reversible` (FileContentOperations.lean)
+/// ```lean
+/// theorem truncate_restore_reversible (p : Path) (fs : Filesystem) :
+///   let original := readFile p fs
+///   let truncated := writeFile p "" fs
+///   let restored := writeFile p original truncated
+///   restored = fs
+/// ```
+///
+/// Validates: Output redirection (>) undo restores original content
+#[test]
+fn prop_truncate_restore_reversible() {
+    proptest!(|(
+        path in valid_path_strategy(),
+        original_content in prop::collection::vec(any::<u8>(), 1..500)
+    )| {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        // Create file with original content
+        fs::write(&target, &original_content).unwrap();
+
+        // Save original for undo
+        let saved_content = fs::read(&target).unwrap();
+        prop_assert_eq!(saved_content.clone(), original_content.clone());
+
+        // Truncate (simulate > redirection)
+        fs::write(&target, b"").unwrap();
+        let truncated = fs::read(&target).unwrap();
+        prop_assert_eq!(truncated.len(), 0, "File should be truncated to zero");
+
+        // Restore original (undo)
+        fs::write(&target, &saved_content).unwrap();
+
+        // Verify restoration
+        let restored = fs::read(&target).unwrap();
+        prop_assert_eq!(
+            restored,
+            original_content,
+            "Restore should return to original state"
+        );
+    });
+}
+
+/// Property: File append is reversible with truncation to original size
+///
+/// Pending Lean theorem: `append_truncate_reversible` (FileContentOperations.lean)
+/// ```lean
+/// theorem append_truncate_reversible (p : Path) (data : String) (fs : Filesystem) :
+///   let original_size := fileSize p fs
+///   let appended := appendFile p data fs
+///   let restored := truncateFile p original_size appended
+///   restored = fs
+/// ```
+///
+/// Validates: Append redirection (>>) undo truncates to original size
+#[test]
+fn prop_append_truncate_reversible() {
+    proptest!(|(
+        path in valid_path_strategy(),
+        original_content in prop::collection::vec(any::<u8>(), 1..500),
+        appended_content in prop::collection::vec(any::<u8>(), 1..500)
+    )| {
+        use std::fs::OpenOptions;
+        use std::io::Write;
+
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        // Create file with original content
+        fs::write(&target, &original_content).unwrap();
+
+        // Record original size
+        let original_size = fs::metadata(&target).unwrap().len();
+        prop_assert_eq!(original_size, original_content.len() as u64);
+
+        // Append (simulate >> redirection)
+        let mut file = OpenOptions::new()
+            .append(true)
+            .open(&target)
+            .unwrap();
+        file.write_all(&appended_content).unwrap();
+        drop(file);
+
+        // Verify append happened
+        let appended = fs::read(&target).unwrap();
+        let expected_size = original_content.len() + appended_content.len();
+        prop_assert_eq!(appended.len(), expected_size, "Content should be appended");
+
+        // Truncate to original size (undo)
+        let file = OpenOptions::new()
+            .write(true)
+            .open(&target)
+            .unwrap();
+        file.set_len(original_size).unwrap();
+        drop(file);
+
+        // Verify restoration
+        let restored = fs::read(&target).unwrap();
+        prop_assert_eq!(
+            restored,
+            original_content,
+            "Truncate to original size should restore original content"
+        );
+    });
+}
+
+/// Property: Multiple truncations are reversible in sequence
+///
+/// Validates: Multiple > redirections can be undone in reverse order
+#[test]
+fn prop_multiple_truncates_reversible() {
+    proptest!(|(
+        path in valid_path_strategy(),
+        content1 in prop::collection::vec(any::<u8>(), 1..200),
+        content2 in prop::collection::vec(any::<u8>(), 1..200),
+        content3 in prop::collection::vec(any::<u8>(), 1..200)
+    )| {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        // Initial state
+        fs::write(&target, &content1).unwrap();
+        let state1 = fs::read(&target).unwrap();
+
+        // Truncate to content2
+        let saved1 = fs::read(&target).unwrap();
+        fs::write(&target, &content2).unwrap();
+        let state2 = fs::read(&target).unwrap();
+
+        // Truncate to content3
+        let saved2 = fs::read(&target).unwrap();
+        fs::write(&target, &content3).unwrap();
+        let _state3 = fs::read(&target).unwrap();
+
+        // Undo sequence (reverse order)
+        fs::write(&target, &saved2).unwrap();
+        let after_undo1 = fs::read(&target).unwrap();
+        prop_assert_eq!(after_undo1, state2, "First undo should restore state2");
+
+        fs::write(&target, &saved1).unwrap();
+        let after_undo2 = fs::read(&target).unwrap();
+        prop_assert_eq!(after_undo2.clone(), state1, "Second undo should restore state1");
+        prop_assert_eq!(after_undo2, content1, "Should return to initial content");
+    });
+}
+
+/// Property: Append-truncate-append composition
+///
+/// Validates: Complex modification sequences are reversible
+#[test]
+fn prop_append_truncate_append() {
+    proptest!(|(
+        path in valid_path_strategy(),
+        base in prop::collection::vec(any::<u8>(), 10..100),
+        data1 in prop::collection::vec(any::<u8>(), 5..50),
+        data2 in prop::collection::vec(any::<u8>(), 5..50)
+    )| {
+        use std::fs::OpenOptions;
+        use std::io::Write;
+
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        // Base state
+        fs::write(&target, &base).unwrap();
+        let base_size = fs::metadata(&target).unwrap().len();
+
+        // Append data1
+        let mut f = OpenOptions::new().append(true).open(&target).unwrap();
+        f.write_all(&data1).unwrap();
+        drop(f);
+
+        // Truncate to base
+        let f = OpenOptions::new().write(true).open(&target).unwrap();
+        f.set_len(base_size).unwrap();
+        drop(f);
+        let after_truncate1 = fs::read(&target).unwrap();
+        prop_assert_eq!(after_truncate1, base.clone(), "Truncate should restore base");
+
+        // Append data2
+        let mut f = OpenOptions::new().append(true).open(&target).unwrap();
+        f.write_all(&data2).unwrap();
+        drop(f);
+
+        // Truncate to base again
+        let f = OpenOptions::new().write(true).open(&target).unwrap();
+        f.set_len(base_size).unwrap();
+        drop(f);
+
+        let final_state = fs::read(&target).unwrap();
+        prop_assert_eq!(final_state, base, "Should return to base after second cycle");
+    });
+}
+
+/// Property: Zero-byte file operations
+///
+/// Validates: Edge case handling for empty files
+#[test]
+fn prop_empty_file_operations() {
+    proptest!(|(path in valid_path_strategy())| {
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        // Create empty file
+        fs::write(&target, b"").unwrap();
+        prop_assert!(target.exists());
+        prop_assert_eq!(fs::metadata(&target).unwrap().len(), 0);
+
+        // Append to empty file
+        use std::fs::OpenOptions;
+        use std::io::Write;
+        let mut f = OpenOptions::new().append(true).open(&target).unwrap();
+        f.write_all(b"data").unwrap();
+        drop(f);
+
+        let content = fs::read(&target).unwrap();
+        prop_assert_eq!(content, b"data");
+
+        // Truncate back to zero
+        let f = OpenOptions::new().write(true).open(&target).unwrap();
+        f.set_len(0).unwrap();
+        drop(f);
+
+        let final_content = fs::read(&target).unwrap();
+        prop_assert_eq!(final_content.len(), 0, "Should be empty again");
+    });
+}
