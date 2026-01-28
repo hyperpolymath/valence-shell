@@ -266,6 +266,55 @@ theorem captureRestoreIdentity (p : Path) (fs : FilesystemWithContent)
     simp only [↓reduceIte]
     exact writeFileSameContent p fs content hpre h
 
+-- File Size Operations
+
+/-- Get file size in bytes -/
+def fileSize (p : Path) (fs : FilesystemWithContent) : Nat :=
+  match readFile p fs with
+  | none => 0  -- File doesn't exist
+  | some content => content.length
+
+/-- Append content to file -/
+def appendFile (p : Path) (data : FileContent) (fs : FilesystemWithContent)
+    : FilesystemWithContent :=
+  match readFile p fs with
+  | none => fs  -- Can't append to non-existent file
+  | some oldContent =>
+      writeFile p (String.append oldContent data) fs
+
+/-- Truncate file to specific size -/
+def truncateFile (p : Path) (size : Nat) (fs : FilesystemWithContent)
+    : FilesystemWithContent :=
+  match readFile p fs with
+  | none => fs  -- Can't truncate non-existent file
+  | some content =>
+      let truncated := content.take size
+      writeFile p truncated fs
+
+-- Append/Truncate Reversibility
+
+/-- Truncating to original size after append restores filesystem -/
+theorem append_truncate_reversible (p : Path) (data : FileContent)
+    (fs : FilesystemWithContent)
+    (content : FileContent)
+    (hpre : WriteFilePrecondition p fs)
+    (hold : readFile p fs = some content) :
+    truncateFile p content.length (appendFile p data fs) = fs := by
+  sorry
+
+/-- Truncating with empty content is equivalent to writing empty -/
+theorem truncate_to_zero_is_write_empty (p : Path) (fs : FilesystemWithContent) :
+    truncateFile p 0 fs = writeFile p emptyContent fs := by
+  sorry
+
+/-- Truncate-restore reversibility (via writeFileReversible) -/
+theorem truncate_restore_reversible (p : Path) (fs : FilesystemWithContent)
+    (oldContent : FileContent)
+    (hpre : WriteFilePrecondition p fs)
+    (hold : readFile p fs = some oldContent) :
+    writeFile p oldContent (writeFile p emptyContent fs) = fs := by
+  exact writeFileReversible p fs oldContent emptyContent hpre hold
+
 -- Integration with MAA Framework
 
 /-- File modification record for audit trail -/
