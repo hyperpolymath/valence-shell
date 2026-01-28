@@ -386,22 +386,31 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
         return Ok(());
     }
 
+    // Collect rollback failures
+    let mut failed_rollbacks: Vec<(String, String)> = Vec::new();
+
     // Undo all operations in reverse order
     for op in ops.iter().rev() {
         if let Some(inverse_type) = op.op_type.inverse() {
             let path = state.resolve_path(&op.path);
 
-            match inverse_type {
-                OperationType::Rmdir => { fs::remove_dir(&path).ok(); }
-                OperationType::Mkdir => { fs::create_dir(&path).ok(); }
-                OperationType::DeleteFile => { fs::remove_file(&path).ok(); }
+            let result = match inverse_type {
+                OperationType::Rmdir => {
+                    fs::remove_dir(&path).context("Failed to remove directory")
+                }
+                OperationType::Mkdir => {
+                    fs::create_dir(&path).context("Failed to create directory")
+                }
+                OperationType::DeleteFile => {
+                    fs::remove_file(&path).context("Failed to remove file")
+                }
                 OperationType::CreateFile => {
                     let content = op.undo_data.as_ref().cloned().unwrap_or_default();
-                    fs::write(&path, content).ok();
+                    fs::write(&path, content).context("Failed to restore file")
                 }
                 OperationType::WriteFile => {
                     let content = op.undo_data.as_ref().cloned().unwrap_or_default();
-                    fs::write(&path, content).ok();
+                    fs::write(&path, content).context("Failed to restore file content")
                 }
                 OperationType::FileAppended => {
                     // Rollback append: truncate file to original size
@@ -409,16 +418,27 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                         if let Ok(size_array) = size_bytes[..8].try_into() {
                             let original_size = u64::from_le_bytes(size_array);
                             use std::fs::OpenOptions;
-                            if let Ok(file) = OpenOptions::new().write(true).open(&path) {
-                                file.set_len(original_size).ok();
-                            }
+                            OpenOptions::new()
+                                .write(true)
+                                .open(&path)
+                                .and_then(|file| file.set_len(original_size))
+                                .context("Failed to truncate file")
+                        } else {
+                            Err(anyhow::anyhow!("Invalid size data in undo_data"))
                         }
+                    } else {
+                        Err(anyhow::anyhow!("Missing size data for append rollback"))
                     }
                 }
                 OperationType::FileTruncated => {
                     // Handled by WriteFile inverse (restore original content)
                     unreachable!("FileTruncated inverse is WriteFile, handled above");
                 }
+            };
+
+            // Collect failures
+            if let Err(e) = result {
+                failed_rollbacks.push((op.path.clone(), e.to_string()));
             }
         }
     }
@@ -426,13 +446,33 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
     // Clear the transaction
     state.active_transaction = None;
 
-    println!(
-        "{} {} operations rolled back",
-        "Transaction rolled back:".bright_red(),
-        ops.len()
-    );
+    // Report results
+    if failed_rollbacks.is_empty() {
+        println!(
+            "{} {} operations",
+            "Transaction rolled back:".bright_green(),
+            ops.len()
+        );
+        Ok(())
+    } else {
+        let succeeded = ops.len() - failed_rollbacks.len();
+        eprintln!(
+            "{} {} succeeded, {} failed",
+            "Partial rollback:".bright_yellow(),
+            succeeded,
+            failed_rollbacks.len()
+        );
 
-    Ok(())
+        for (path, err) in &failed_rollbacks {
+            eprintln!("  {} {}: {}", "Failed:".bright_red(), path, err);
+        }
+
+        anyhow::bail!(
+            "Transaction rollback incomplete: {}/{} operations failed",
+            failed_rollbacks.len(),
+            ops.len()
+        )
+    }
 }
 
 /// Show operation graph
