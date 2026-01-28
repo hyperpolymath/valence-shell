@@ -334,14 +334,49 @@ impl RedirectSetup {
     }
 
     /// Record all modifications as undoable operations
-    pub fn record_for_undo(self, _state: &mut ShellState) -> Result<()> {
-        // TODO: Integrate with state.record_operation()
-        // For now, store modifications separately
-        // Will be integrated when OperationType enum is extended
+    pub fn record_for_undo(self, state: &mut ShellState) -> Result<()> {
+        use crate::state::{Operation, OperationType};
 
-        for _modification in &self.modifications {
-            // Future: Record as Operation in history
-            // state.record_operation(op);
+        // Clone modifications to avoid moving out of Drop type
+        for modification in self.modifications.clone() {
+            let (op_type, path, undo_data) = match modification {
+                FileModification::Created { path } => {
+                    // File was created by redirection
+                    let path_str = path.to_string_lossy().to_string();
+                    (OperationType::CreateFile, path_str, None)
+                }
+
+                FileModification::Truncated {
+                    path,
+                    original_content,
+                } => {
+                    // File was truncated by > redirection
+                    let path_str = path.to_string_lossy().to_string();
+                    (
+                        OperationType::FileTruncated,
+                        path_str,
+                        Some(original_content),
+                    )
+                }
+
+                FileModification::Appended {
+                    path,
+                    original_size,
+                } => {
+                    // File was appended to by >> redirection
+                    let path_str = path.to_string_lossy().to_string();
+                    // Encode size as bytes
+                    let size_bytes = original_size.to_le_bytes().to_vec();
+                    (OperationType::FileAppended, path_str, Some(size_bytes))
+                }
+            };
+
+            let mut op = Operation::new(op_type, path, state.active_transaction.as_ref().map(|t| t.id));
+            if let Some(data) = undo_data {
+                op = op.with_undo_data(data);
+            }
+
+            state.record_operation(op);
         }
 
         Ok(())

@@ -22,6 +22,12 @@ pub enum OperationType {
     CreateFile,
     DeleteFile,
     WriteFile,
+    /// File was truncated by output redirection (> or 2>)
+    /// undo_data contains original file content
+    FileTruncated,
+    /// File was appended to by append redirection (>> or 2>>)
+    /// undo_data contains original file size (u64 encoded as bytes)
+    FileAppended,
 }
 
 impl OperationType {
@@ -33,6 +39,8 @@ impl OperationType {
             OperationType::CreateFile => Some(OperationType::DeleteFile),
             OperationType::DeleteFile => Some(OperationType::CreateFile),
             OperationType::WriteFile => Some(OperationType::WriteFile), // Self-inverse with old content
+            OperationType::FileTruncated => Some(OperationType::WriteFile), // Restore original content
+            OperationType::FileAppended => Some(OperationType::FileAppended), // Self-inverse (truncate to original size)
         }
     }
 
@@ -50,6 +58,8 @@ impl std::fmt::Display for OperationType {
             OperationType::CreateFile => write!(f, "touch"),
             OperationType::DeleteFile => write!(f, "rm"),
             OperationType::WriteFile => write!(f, "write"),
+            OperationType::FileTruncated => write!(f, "truncate"),
+            OperationType::FileAppended => write!(f, "append"),
         }
     }
 }

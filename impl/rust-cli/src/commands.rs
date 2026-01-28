@@ -196,6 +196,27 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 let content = op.undo_data.as_ref().cloned().unwrap_or_default();
                 fs::write(&path, content).context("Undo write failed")?;
             }
+            OperationType::FileAppended => {
+                // Undo append: truncate file to original size
+                let size_bytes = op.undo_data.as_ref().context("Missing original size for undo")?;
+                let original_size = u64::from_le_bytes(
+                    size_bytes[..8]
+                        .try_into()
+                        .context("Invalid size data")?,
+                );
+
+                use std::fs::OpenOptions;
+                let file = OpenOptions::new()
+                    .write(true)
+                    .open(&path)
+                    .context("Failed to open file for truncation")?;
+                file.set_len(original_size)
+                    .context("Undo append (truncate) failed")?;
+            }
+            OperationType::FileTruncated => {
+                // Handled by WriteFile inverse (restore original content)
+                unreachable!("FileTruncated inverse is WriteFile, handled above");
+            }
         }
 
         // Record the undo operation
@@ -253,6 +274,14 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             OperationType::WriteFile => {
                 // Would need new content
                 anyhow::bail!("WriteFile redo not yet implemented");
+            }
+            OperationType::FileTruncated => {
+                // Redo truncate: truncate file (original undo_data was the old content)
+                fs::write(&path, "").context("Redo truncate failed")?;
+            }
+            OperationType::FileAppended => {
+                // Cannot redo append without knowing what was appended
+                anyhow::bail!("FileAppended redo not yet implemented (would need appended content)");
             }
         }
 
@@ -373,6 +402,22 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                 OperationType::WriteFile => {
                     let content = op.undo_data.as_ref().cloned().unwrap_or_default();
                     fs::write(&path, content).ok();
+                }
+                OperationType::FileAppended => {
+                    // Rollback append: truncate file to original size
+                    if let Some(size_bytes) = op.undo_data.as_ref() {
+                        if let Ok(size_array) = size_bytes[..8].try_into() {
+                            let original_size = u64::from_le_bytes(size_array);
+                            use std::fs::OpenOptions;
+                            if let Ok(file) = OpenOptions::new().write(true).open(&path) {
+                                file.set_len(original_size).ok();
+                            }
+                        }
+                    }
+                }
+                OperationType::FileTruncated => {
+                    // Handled by WriteFile inverse (restore original content)
+                    unreachable!("FileTruncated inverse is WriteFile, handled above");
                 }
             }
         }
