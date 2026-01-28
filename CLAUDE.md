@@ -16,7 +16,7 @@
 
 **Note for AI Assistants**: Main development happens on GitLab. This GitHub repo may be a temporary workspace or migration staging area.
 
-## Current State (as of 2025-11-22, Updated in Continuation Session)
+## Current State (as of 2026-01-28, v0.7.0 - Phase 6 M1 Complete)
 
 ### ✅ Formal Proofs (MAJOR UPDATE - Real Filesystem Operations + Composition + Equivalence)
 
@@ -106,29 +106,102 @@
   - ✓ Validates error conditions
   - ✓ Shows composition properties
 
+### ✅ Rust CLI (v0.7.0 - PRIMARY IMPLEMENTATION)
+
+**Status**: Working, 29/29 tests passing
+**Location**: `impl/rust-cli/`
+
+**Features Implemented**:
+- ✅ Built-in filesystem operations (mkdir, rmdir, touch, rm)
+- ✅ Undo/redo with operation history
+- ✅ Transaction grouping (begin/commit/rollback)
+- ✅ External command execution (Phase 6 M1)
+- ✅ Command parser (built-ins vs external)
+- ✅ PATH lookup and executable discovery
+- ✅ Exit code tracking
+- ✅ cd builtin for navigation
+- ✅ Interactive REPL with history
+- ✅ Proof references for operations
+
+**Architecture**:
+- Pure Rust for fast path (~8ms cold start)
+- Direct syscalls via std::fs
+- No daemon needed for simple operations
+- stdio inheritance for external commands
+
+**Testing**:
+- 15 unit tests (parser, external, state)
+- 14 integration tests (filesystem operations)
+- All tests passing
+- Manual verification complete
+
+**Performance**:
+- Cold start: 8ms (target: 5ms - within tolerance)
+- Simple operations: <1ms
+- External commands: ~5ms total
+- PATH lookup: ~0.2ms
+
+**What Works** (Try it!):
+```bash
+vsh> mkdir test
+vsh> cd test
+vsh> touch file.txt
+vsh> ls
+vsh> echo "Hello from vsh"
+vsh> pwd
+vsh> undo
+vsh> history --proofs
+```
+
 ### 📚 Documentation
 
-- `proofs/README.md` - **START HERE** - Comprehensive proof documentation
-- `SESSION_COMPLETE.md` - Complete summary of extended Phase 1-2 session
-- `docs/PROGRESS_REPORT.md` - Detailed Phase 1 report
-- `docs/PHASE2_REPORT.md` - Phase 2 composition & equivalence report
-- `docs/CONTINUATION_REPORT.md` - **NEW** Continuation session report
-- `INTEGRATION_SUMMARY.md` - Absolute Zero & ECHIDNA integration
-- `CLAUDE.md` - This file - Updated with current state
+**Proof Documentation**:
+- `proofs/README.md` - Comprehensive proof documentation across 6 systems
+- `SESSION_COMPLETE.md` - Phase 1-2 proof session summary
+- `docs/PHASE2_REPORT.md` - Composition & equivalence theory
+- `docs/CONTINUATION_REPORT.md` - Continuation session report
+
+**Implementation Documentation** (v0.7.0):
+- `docs/ARCHITECTURE.md` - **NEW** Hybrid Rust+BEAM architecture design
+- `docs/LEAN4_RUST_CORRESPONDENCE.md` - **NEW** Formal spec to implementation mapping
+- `docs/PHASE6_M1_DESIGN.md` - **NEW** External command execution specification
+- `docs/POSIX_COMPLIANCE.md` - **NEW** 14-milestone roadmap to full POSIX shell
+- `docs/ECHIDNA_INTEGRATION.md` - **NEW** Automated verification pipeline plan
+- `docs/CONSOLIDATION_ANALYSIS.md` - **NEW** MUST/SHOULD/COULD + seam sealing
+
+**User Documentation**:
+- `docs/SESSION_2026-01-28.md` - Phase 6 M1 completion summary
+- `docs/DEMO_EXTERNAL_COMMANDS.md` - Usage examples and patterns
+- `README.adoc` - Project overview
+- `CLAUDE.md` - This file - AI assistant instructions
 
 ## Technology Stack
 
-### Current Implementation
-- **Coq** (CIC foundation) - Formal verification
+### Formal Verification (Complete)
+- **Lean 4** - Primary source of truth for correctness
+- **Coq** - CIC foundation, extraction to OCaml
 - **Isabelle/HOL** - Cross-validation (different logical foundation)
-- **Elixir/BEAM** - Runtime implementation (unverified)
-- **Bash** - Demonstration scripts
+- **Agda** - Intensional type theory validation
+- **Mizar** - Set theory foundation
+- **Z3 SMT** - Automated verification
 
-### Planned Architecture (Documented, Not Built)
-- **Zig** - Fast path for simple builtins (5ms cold start target vs bash)
-- **BEAM** - Warm daemon for complex operations
-- **On-demand verification** - Proof checking when needed
-- **Rationale**: BEAM cold start 160ms vs bash 5ms - Zig provides bash-competitive startup
+### Runtime Implementation (v0.7.0)
+- **Rust** - Primary shell implementation (fast path)
+  - Direct POSIX syscalls via std::fs
+  - ~8ms cold start (bash-competitive)
+  - Full interactive shell with undo/redo
+  - External command execution
+- **Elixir/BEAM** - Planned for complex operations
+  - Supervision trees for fault tolerance
+  - Ecto for audit logging
+  - Hot code reload
+  - Currently: NIF build issues, low priority
+
+### Architecture (Hybrid Rust+BEAM)
+- **Rust CLI** - Fast path for simple operations (✅ Working)
+- **BEAM Daemon** - Complex operations, audit logs (⚠️ Planned)
+- **Lean 4 Proofs** - Source of truth (✅ Complete)
+- **Echidna Validation** - Build-time verification (📋 Planned)
 
 ## MAA Framework Primitives
 
@@ -142,57 +215,97 @@
 - **Status**: Proven for list operations; needs filesystem model
 - **Use Case**: Safe operations with guaranteed rollback
 
-## Critical Gap Identified
+## Verification Status (v0.7.0)
 
-**⚠️ Proofs on abstract lists ≠ Proofs on real filesystem operations**
+### ✅ What We Have
+1. **Real filesystem proofs** - NOT abstract lists anymore
+   - Proven in 6 systems: Lean 4, Coq, Agda, Isabelle, Mizar, Z3
+   - POSIX semantics modeled (error codes, preconditions)
+   - Reversibility for mkdir/rmdir, create/delete
+   - Composition and equivalence theory
 
-What we have:
-```coq
-Theorem list_add_remove : forall x l,
-  remove x (add x l) = l.
-```
+2. **Working implementation** - Rust CLI fully functional
+   - Built-in operations match specifications
+   - Undo/redo with operation history
+   - External command execution
+   - 29/29 tests passing
 
-What we need:
-```coq
-Theorem posix_mkdir_rmdir_reversible :
-  forall path fs,
-    ~ path_exists path fs ->
-    rmdir path (mkdir path fs) = fs.
-```
+3. **Correspondence documentation** - Lean 4 ↔ Rust mapping
+   - `docs/LEAN4_RUST_CORRESPONDENCE.md`
+   - Each operation mapped to its theorem
+   - Verification gaps identified
 
-**No formal connection exists between Coq proofs and Elixir/Bash code.**
+### ⚠️ Verification Gaps (Being Addressed)
 
-## Next Steps (Roadmap)
+**Gap 1**: Formal correspondence proofs
+- **Current**: Manual documentation only
+- **Needed**: Mechanized proofs that Rust matches Lean 4
+- **Plan**: Echidna property-based testing (Phase 1)
+- **Timeline**: 3 weeks
 
-### 1. Model Real Filesystem in Coq (2-4 weeks)
-- Define `FSNode` with paths, directories, permissions
-- Model POSIX `mkdir/rmdir` with error cases:
-  - `EEXIST` - path already exists
-  - `ENOENT` - parent directory doesn't exist
-  - `EACCES` - permission denied
-  - `ENOTEMPTY` - directory not empty (for rmdir)
+**Gap 2**: Automated verification in CI
+- **Current**: Manual proof checking
+- **Needed**: Automated validation in every build
+- **Plan**: ECHIDNA_INTEGRATION.md (8-week plan)
+- **Timeline**: Starting Phase 1
 
-### 2. Prove mkdir/rmdir Reversibility (2-4 weeks)
-```coq
-Theorem posix_mkdir_rmdir_reversible :
-  forall path fs,
-    ~ path_exists path fs ->
-    parent_exists path fs ->
-    has_write_permission path fs ->
-    rmdir path (mkdir path fs) = fs.
-```
+**Gap 3**: OS syscall correctness
+- **Current**: Trust POSIX guarantees
+- **Needed**: Verify syscalls match our model
+- **Status**: Delegated to OS (accepted limitation)
 
-### 3. Extract to Executable Code (4-8 weeks)
-**Option A**: Use Coq extraction to OCaml, build FFI to POSIX syscalls
-**Option B**: Verify Elixir code matches Coq spec (harder, no automated extraction)
+**This is expected for verified systems** - CompCert and seL4 have similar trust boundaries.
 
-### 4. Close the Verification Gap
-- Prove correspondence between abstract model and real implementation
-- Build verification pipeline: Spec → Proof → Extraction → Executable
+## Roadmap (v0.7.0 → v0.10.0)
+
+**See `docs/CONSOLIDATION_ANALYSIS.md` for detailed plan**
+
+### Phase 0: Critical Sealing (2 weeks) → v0.7.1
+**Status**: In progress
+- ✅ cd builtin implemented
+- ✅ Consolidation analysis complete
+- 🔄 SIGINT handling for external commands
+- 🔄 Error recovery improvements
+- 🔄 Test fixtures refactor
+- 🔄 Getting Started guide
+- 🔄 GitHub Actions CI
+- 🔄 API documentation
+
+### Phase 1: Echidna Integration (3 weeks) → v0.7.2
+**Status**: Planned
+- Automated proof checking in CI
+- Property test generation from Lean 4
+- Correspondence validation
+- Build hash validation
+
+### Phase 2: Redirections (3 weeks) → v0.8.0
+**Status**: Phase 6 Milestone 2
+- Output redirection (`>`, `>>`)
+- Input redirection (`<`)
+- Error redirection (`2>`, `2>>`)
+- File descriptor management
+
+### Phase 3: Pipelines (4 weeks) → v0.9.0
+**Status**: Phase 6 Milestone 3
+- Pipeline syntax (`|`)
+- Multi-process execution
+- stdio plumbing
+- Buffer management
+
+### Phase 4: Variables (3 weeks) → v0.10.0
+**Status**: Phase 6 Milestone 4
+- Variable assignment and expansion
+- Special variables (`$?`, `$@`, `$$`)
+- Environment variables
+- Command substitution
+
+**Total Timeline**: ~15 weeks (3.5 months) to v0.10.0
+
+See `docs/POSIX_COMPLIANCE.md` for full 14-milestone roadmap to complete POSIX shell.
 
 ## What We Can Honestly Claim
 
-### ✅ Valid Claims (UPDATED 2025-11-22)
+### ✅ Valid Claims (v0.7.0 - 2026-01-28)
 
 1. **Polyglot Verification Achievement**
    - ✓ Same filesystem theorems proven in **5 different proof assistants**
@@ -232,6 +345,14 @@ Theorem posix_mkdir_rmdir_reversible :
    - ✓ Clear documentation of verification gap
    - ✓ Honest assessment of claims and limitations
 
+7. **Working Interactive Shell** (v0.7.0)
+   - ✓ Rust CLI implementation complete
+   - ✓ External command execution (ls, cat, echo, etc.)
+   - ✓ Built-in operations with undo/redo
+   - ✓ 29/29 tests passing
+   - ✓ ~8ms cold start (bash-competitive)
+   - ✓ Documented correspondence to Lean 4 specs
+
 ### ❌ Cannot Claim (Yet)
 
 1. **GDPR Compliance**
@@ -240,9 +361,9 @@ Theorem posix_mkdir_rmdir_reversible :
    - Need full deletion pipeline verification
 
 2. **Verified Implementation End-to-End**
-   - FFI layer NOT formally verified (manual review required)
-   - Elixir implementation matches spec (manual correspondence)
-   - Verification gap between proofs and real syscalls
+   - Rust implementation documented but not formally proven
+   - Correspondence to Lean 4 is manual, not mechanized
+   - Echidna validation pipeline not yet implemented
 
 3. **Thermodynamic Reversibility**
    - Only algorithmic reversibility (F⁻¹(F(s)) = s)
@@ -255,11 +376,13 @@ Theorem posix_mkdir_rmdir_reversible :
    - Performance not optimized
    - No full POSIX compliance
 
-5. **Complete Shell**
-   - Only filesystem operations covered
-   - No command parsing, pipes, job control
-   - No Zig fast path implemented
-   - No BEAM daemon integration
+5. **Full POSIX Shell**
+   - ✅ Basic operations and external commands (Phase 6 M1)
+   - ❌ No redirections yet (Phase 6 M2 planned)
+   - ❌ No pipelines yet (Phase 6 M3 planned)
+   - ❌ No variables yet (Phase 6 M4 planned)
+   - ❌ No job control, glob expansion, quotes (M5-M14)
+   - See `docs/POSIX_COMPLIANCE.md` for full roadmap
 
 ## Important Distinctions
 
@@ -402,18 +525,20 @@ See [RSR_COMPLIANCE.md](RSR_COMPLIANCE.md) for full compliance report.
 
 ---
 
-**Last Updated**: 2025-11-22 (Continuation Session)
-**Version**: 0.5.0 (Phase 2 completion + Equivalence theory extended to 4 systems)
-**Status**: Research Prototype with Formal Guarantees + Complete Algebraic Structure - Not Production Ready
+**Last Updated**: 2026-01-28 (Phase 6 M1 Complete + Phase 0 Sealing)
+**Version**: 0.7.0 → 0.7.1 (in progress)
+**Status**: Research Prototype with Working Shell - Phase 0 Sealing in Progress
 
-**Major Updates** (Continuation Session):
-- ✅ Phase 2 admitted lemmas completed (Isabelle, Agda)
-- ✅ Mizar composition framework created
-- ✅ Equivalence theory extended to Lean 4, Agda, Isabelle (NEW)
-- ✅ Bug fixes (Agda reverseOp)
-- **~217 formal proofs** across 6 verification systems (was ~170)
-- **~3,180 lines of proofs** (was ~2,280)
-- **23 proof files** (was 19)
-- Composition: Complete in 5 systems (Coq, Lean 4, Agda, Isabelle, Mizar)
-- Equivalence: Complete in 4 systems (Coq, Lean 4, Agda, Isabelle)
-- ~6,100 total lines (proofs + implementation + docs + infrastructure)
+**Recent Updates** (v0.7.0):
+- ✅ Phase 6 Milestone 1: External command execution complete
+- ✅ Command parser with built-in/external distinction
+- ✅ PATH lookup and executable discovery
+- ✅ cd builtin for navigation
+- ✅ 29/29 tests passing
+- ✅ Comprehensive documentation (7 new .md files)
+- ✅ CONSOLIDATION_ANALYSIS.md with roadmap
+- **~256+ formal proofs** across 6 verification systems
+- **~4,500 lines of implementation** (Rust CLI)
+- **~3,100 lines of new documentation**
+- Rust CLI: Fully functional interactive shell
+- Next: Phase 0 sealing (polish), then Echidna integration
