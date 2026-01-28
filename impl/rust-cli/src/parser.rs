@@ -116,6 +116,15 @@ pub enum Command {
         args: Vec<String>,
         redirects: Vec<Redirection>,
     },
+
+    /// Pipeline of external commands (cmd1 | cmd2 | cmd3)
+    ///
+    /// Each stage is a (program, args) pair. Intermediate stages use piped stdio.
+    /// Final redirections apply to the last stage only.
+    Pipeline {
+        stages: Vec<(String, Vec<String>)>,
+        redirects: Vec<Redirection>,
+    },
 }
 
 /// Tokenize input string into words and redirection operators
