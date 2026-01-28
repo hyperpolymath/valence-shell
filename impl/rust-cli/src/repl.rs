@@ -9,10 +9,9 @@
 use anyhow::Result;
 use colored::Colorize;
 use std::io::{self, BufRead, Write};
-use std::path::PathBuf;
 
-use crate::{commands, external, parser};
-use crate::parser::Command;
+use crate::executable::{ExecutableCommand, ExecutionResult};
+use crate::parser;
 use crate::state::ShellState;
 
 /// Run the interactive REPL
@@ -56,11 +55,10 @@ pub fn run(state: &mut ShellState) -> Result<()> {
 }
 
 fn build_prompt(state: &ShellState) -> String {
-    let txn_indicator = if state.active_transaction.is_some() {
+    let txn_indicator = if let Some(ref txn) = state.active_transaction {
         format!(
             "{}/",
-            format!("txn:{}", state.active_transaction.as_ref().unwrap().name)
-                .bright_cyan()
+            format!("txn:{}", txn.name).bright_cyan()
         )
     } else {
         String::new()
@@ -119,145 +117,21 @@ fn execute_line(state: &mut ShellState, input: &str) -> Result<bool> {
         _ => trimmed.to_string(),
     };
 
-    // Parse command using the new parser
+    // Parse command using the parser
     let cmd = parser::parse_command(&input_normalized)?;
 
-    // Execute command
-    match cmd {
-        Command::Exit | Command::Quit => {
-            return Ok(true);
+    // Execute command using trait (Seam 1↔2)
+    let result = cmd.execute(state)?;
+
+    // Handle execution result
+    match result {
+        ExecutionResult::Exit => Ok(true),
+        ExecutionResult::ExternalCommand { exit_code } => {
+            state.last_exit_code = exit_code;
+            Ok(false)
         }
-
-        Command::Mkdir { path } => {
-            commands::mkdir(state, &path, false)?;
-        }
-
-        Command::Rmdir { path } => {
-            commands::rmdir(state, &path, false)?;
-        }
-
-        Command::Touch { path } => {
-            commands::touch(state, &path, false)?;
-        }
-
-        Command::Rm { path } => {
-            commands::rm(state, &path, false)?;
-        }
-
-        Command::Undo { count } => {
-            commands::undo(state, count, false)?;
-        }
-
-        Command::Redo { count } => {
-            commands::redo(state, count, false)?;
-        }
-
-        Command::History { count, show_proofs } => {
-            commands::history(state, count, show_proofs)?;
-        }
-
-        // Transactions
-        Command::Begin { name } => {
-            commands::begin_transaction(state, &name)?;
-        }
-
-        Command::Commit => {
-            commands::commit_transaction(state)?;
-        }
-
-        Command::Rollback => {
-            commands::rollback_transaction(state)?;
-        }
-
-        // Display commands
-        Command::Graph => {
-            commands::show_graph(state)?;
-        }
-
-        Command::Proofs => {
-            commands::show_proofs()?;
-        }
-
-        Command::Ls { path } => {
-            let target = if let Some(p) = path {
-                state.resolve_path(&p)
-            } else {
-                state.root.clone()
-            };
-
-            if target.is_dir() {
-                for entry in std::fs::read_dir(&target)? {
-                    let entry = entry?;
-                    let name = entry.file_name();
-                    let file_type = entry.file_type()?;
-                    if file_type.is_dir() {
-                        println!("{}/", name.to_string_lossy().bright_blue());
-                    } else {
-                        println!("{}", name.to_string_lossy());
-                    }
-                }
-            } else {
-                anyhow::bail!("Not a directory");
-            }
-        }
-
-        Command::Pwd => {
-            println!("{}", state.root.display());
-        }
-
-        Command::Cd { path } => {
-            let target = if let Some(p) = path {
-                if p == "-" {
-                    // cd - not implemented yet
-                    anyhow::bail!("cd -: not implemented yet");
-                }
-                // Handle absolute vs relative paths
-                if p.starts_with('/') {
-                    // Absolute path - use as-is
-                    PathBuf::from(p)
-                } else if p.starts_with("~/") {
-                    // Home-relative path
-                    let home = dirs::home_dir()
-                        .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
-                    home.join(&p[2..])
-                } else {
-                    // Relative to current directory
-                    state.root.join(&p)
-                }
-            } else {
-                // cd with no args goes to home
-                dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?
-            };
-
-            if !target.exists() {
-                anyhow::bail!("cd: {}: No such file or directory", target.display());
-            }
-
-            if !target.is_dir() {
-                anyhow::bail!("cd: {}: Not a directory", target.display());
-            }
-
-            // Change the shell's working directory
-            std::env::set_current_dir(&target)?;
-            // Update state root to track current directory
-            state.root = std::fs::canonicalize(target)?;
-        }
-
-        Command::External { program, args } => {
-            match external::execute_external(&program, &args) {
-                Ok(exit_code) => {
-                    // Store exit code for future $? support
-                    state.last_exit_code = exit_code;
-                }
-                Err(e) => {
-                    eprintln!("{}: {}", program, e);
-                    state.last_exit_code = 127; // Command not found
-                }
-            }
-        }
+        ExecutionResult::Success => Ok(false),
     }
-
-    Ok(false)
 }
 
 fn print_help() {
@@ -271,6 +145,7 @@ fn print_help() {
     println!("  {}         Remove a file", "rm <path>".bright_green());
     println!("  {}         List directory contents", "ls [path]".bright_green());
     println!("  {}         Change directory", "cd [path]".bright_green());
+    println!("  {}          Return to previous directory", "cd -".bright_green());
     println!("  {}            Show current directory", "pwd".bright_green());
     println!();
 

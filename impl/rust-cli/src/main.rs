@@ -13,6 +13,7 @@
 //! - Zig FFI provides the verified POSIX interface
 
 mod commands;
+mod executable;
 mod external;
 mod history;
 mod parser;
@@ -20,7 +21,7 @@ mod proof_refs;
 mod repl;
 mod state;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 
@@ -121,9 +122,14 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Initialize shell state
-    let root = cli
-        .root
-        .unwrap_or_else(|| std::env::current_dir().unwrap().to_string_lossy().to_string());
+    let root = match cli.root {
+        Some(r) => r,
+        None => {
+            let current = std::env::current_dir()
+                .context("Failed to get current directory")?;
+            current.to_string_lossy().to_string()
+        }
+    };
 
     let mut state = state::ShellState::new(&root)?;
 

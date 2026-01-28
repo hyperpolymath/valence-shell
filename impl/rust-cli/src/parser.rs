@@ -214,6 +214,17 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_cd_dash() {
+        let cmd = parse_command("cd -").unwrap();
+        match cmd {
+            Command::Cd { path } => {
+                assert_eq!(path, Some("-".to_string()));
+            }
+            _ => panic!("Expected Cd command"),
+        }
+    }
+
+    #[test]
     fn test_parse_empty() {
         assert!(parse_command("").is_err());
         assert!(parse_command("   ").is_err());

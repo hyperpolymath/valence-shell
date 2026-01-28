@@ -134,6 +134,9 @@ pub struct ShellState {
 
     /// Last exit code from external command (for future $? support)
     pub last_exit_code: i32,
+
+    /// Previous directory for cd - support
+    pub previous_dir: Option<PathBuf>,
 }
 
 impl ShellState {
@@ -156,6 +159,7 @@ impl ShellState {
             transactions: Vec::new(),
             state_file,
             last_exit_code: 0,
+            previous_dir: None,
         };
 
         // Try to load existing state
@@ -181,14 +185,6 @@ impl ShellState {
         self.save().ok();
     }
 
-    /// Get the last undoable operation
-    pub fn last_undoable(&self) -> Option<&Operation> {
-        self.history
-            .iter()
-            .rev()
-            .find(|op| !op.undone)
-    }
-
     /// Get the last N undoable operations
     pub fn last_n_undoable(&self, n: usize) -> Vec<&Operation> {
         self.history
@@ -209,11 +205,6 @@ impl ShellState {
             self.redo_stack.push_front(op.clone());
         }
         self.save().ok();
-    }
-
-    /// Get operation by ID
-    pub fn get_operation(&self, id: Uuid) -> Option<&Operation> {
-        self.history.iter().find(|o| o.id == id)
     }
 
     /// Begin a new transaction
@@ -294,6 +285,7 @@ impl ShellState {
             history: self.history.clone(),
             transactions: self.transactions.clone(),
             active_transaction: self.active_transaction.clone(),
+            previous_dir: self.previous_dir.clone(),
         };
 
         let json = serde_json::to_string_pretty(&state)?;
@@ -314,6 +306,7 @@ impl ShellState {
         self.history = state.history;
         self.transactions = state.transactions;
         self.active_transaction = state.active_transaction;
+        self.previous_dir = state.previous_dir;
 
         Ok(())
     }
@@ -324,6 +317,8 @@ struct SerializableState {
     history: Vec<Operation>,
     transactions: Vec<Transaction>,
     active_transaction: Option<Transaction>,
+    #[serde(default)]
+    previous_dir: Option<PathBuf>,
 }
 
 #[cfg(test)]

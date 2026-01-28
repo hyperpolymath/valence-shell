@@ -11,10 +11,15 @@
 //! 4. Undo/redo correctness
 //! 5. Transaction atomicity
 
+mod fixtures;
+
 use std::fs;
 use std::path::PathBuf;
 
 /// Test sandbox that cleans up after itself
+///
+/// Note: New tests should use fixtures::test_sandbox() instead.
+/// This struct is kept for backward compatibility with existing tests.
 struct TestSandbox {
     root: PathBuf,
 }
