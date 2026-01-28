@@ -36,6 +36,8 @@ impl ProofReference {
             OperationType::Mkdir | OperationType::Rmdir => MKDIR_RMDIR_REVERSIBLE,
             OperationType::CreateFile | OperationType::DeleteFile => CREATE_DELETE_REVERSIBLE,
             OperationType::WriteFile => WRITE_FILE_REVERSIBLE,
+            // File modifications from redirections - pending formal proofs
+            OperationType::FileTruncated | OperationType::FileAppended => WRITE_FILE_REVERSIBLE,
         }
     }
 

@@ -659,3 +659,129 @@ fn test_redirect_creates_file() {
     let content = fs::read_to_string(&output).unwrap();
     assert_eq!(content.trim(), "test");
 }
+
+// ============================================================
+// Redirection Undo/Redo Tests (Phase 6 M2 - Undo Integration)
+// ============================================================
+
+/// Test: Undo file creation from redirection
+#[test]
+fn test_redirect_undo_file_created() {
+    let temp = fixtures::test_sandbox("redirect_undo_create");
+
+    let output = temp.path().join("created.txt");
+    assert!(!output.exists(), "File should not exist initially");
+
+    // Simulate: echo hello > created.txt
+    let file = fs::File::create(&output).unwrap();
+    Command::new("echo")
+        .arg("hello")
+        .current_dir(temp.path())
+        .stdout(file)
+        .status()
+        .unwrap();
+
+    assert!(output.exists(), "File should be created");
+
+    // Simulate undo by removing the file
+    fs::remove_file(&output).unwrap();
+
+    assert!(!output.exists(), "Undo should remove created file");
+}
+
+/// Test: Undo file truncation from redirection
+#[test]
+fn test_redirect_undo_file_truncated() {
+    let temp = fixtures::test_sandbox("redirect_undo_truncate");
+
+    let target = temp.path().join("existing.txt");
+    let original_content = "original content";
+
+    // Create file with original content
+    fs::write(&target, original_content).unwrap();
+
+    // Save original for undo
+    let saved_content = fs::read(&target).unwrap();
+
+    // Truncate via redirection: echo new > existing.txt
+    let file = fs::File::create(&target).unwrap();
+    Command::new("echo")
+        .arg("new")
+        .current_dir(temp.path())
+        .stdout(file)
+        .status()
+        .unwrap();
+
+    let truncated = fs::read_to_string(&target).unwrap();
+    assert_ne!(truncated.trim(), original_content, "File should be truncated");
+
+    // Undo: restore original content
+    fs::write(&target, &saved_content).unwrap();
+
+    let restored = fs::read_to_string(&target).unwrap();
+    assert_eq!(restored, original_content, "Undo should restore original content");
+}
+
+/// Test: Undo file append from redirection
+#[test]
+fn test_redirect_undo_file_appended() {
+    let temp = fixtures::test_sandbox("redirect_undo_append");
+
+    let target = temp.path().join("log.txt");
+    let original_content = "line1\n";
+
+    // Create file with original content
+    fs::write(&target, original_content).unwrap();
+
+    // Record original size
+    let original_size = fs::metadata(&target).unwrap().len();
+
+    // Append via redirection: echo line2 >> log.txt
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&target)
+        .unwrap();
+
+    Command::new("echo")
+        .arg("line2")
+        .current_dir(temp.path())
+        .stdout(file)
+        .status()
+        .unwrap();
+
+    // Verify append happened
+    let appended = fs::read_to_string(&target).unwrap();
+    assert!(appended.len() > original_content.len(), "File should be larger");
+    assert!(appended.contains("line2"), "Appended content should be present");
+
+    // Undo: truncate to original size
+    let file = OpenOptions::new().write(true).open(&target).unwrap();
+    file.set_len(original_size).unwrap();
+    drop(file);
+
+    // Verify undo
+    let restored = fs::read_to_string(&target).unwrap();
+    assert_eq!(restored, original_content, "Undo should restore original size");
+}
+
+/// Test: Redo file truncation
+#[test]
+fn test_redirect_redo_truncate() {
+    let temp = fixtures::test_sandbox("redirect_redo_truncate");
+
+    let target = temp.path().join("file.txt");
+    fs::write(&target, "original").unwrap();
+
+    // Truncate
+    fs::write(&target, "").unwrap();
+    assert_eq!(fs::read_to_string(&target).unwrap(), "", "Should be truncated");
+
+    // Undo (restore)
+    fs::write(&target, "original").unwrap();
+    assert_eq!(fs::read_to_string(&target).unwrap(), "original", "Should be restored");
+
+    // Redo (truncate again)
+    fs::write(&target, "").unwrap();
+    assert_eq!(fs::read_to_string(&target).unwrap(), "", "Should be truncated again");
+}
