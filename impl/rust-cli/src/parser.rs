@@ -29,6 +29,7 @@ pub enum Command {
     Proofs,
     Ls { path: Option<String> },
     Pwd,
+    Cd { path: Option<String> },
 
     // NEW: External command
     External {
@@ -120,6 +121,9 @@ pub fn parse_command(input: &str) -> Result<Command> {
             path: args.get(0).map(|s| s.to_string()),
         }),
         "pwd" => Ok(Command::Pwd),
+        "cd" => Ok(Command::Cd {
+            path: args.get(0).map(|s| s.to_string()),
+        }),
 
         // Everything else: external command
         _ => Ok(Command::External {
@@ -184,6 +188,28 @@ mod tests {
                 assert_eq!(path, Some("/tmp".to_string()));
             }
             _ => panic!("Expected Ls command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cd() {
+        let cmd = parse_command("cd /home").unwrap();
+        match cmd {
+            Command::Cd { path } => {
+                assert_eq!(path, Some("/home".to_string()));
+            }
+            _ => panic!("Expected Cd command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cd_no_args() {
+        let cmd = parse_command("cd").unwrap();
+        match cmd {
+            Command::Cd { path } => {
+                assert_eq!(path, None);
+            }
+            _ => panic!("Expected Cd command"),
         }
     }
 
