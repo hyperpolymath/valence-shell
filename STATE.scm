@@ -26,8 +26,8 @@
      (version . "0.7.0"))
 
     (current-position
-     (phase . "Phase 6 M2 Complete / Phase 0 Sealing Complete")
-     (overall-completion . 72)
+     (phase . "Phase 6 M3 Complete - Pipelines Operational")
+     (overall-completion . 75)
 
      (components
       (proofs
@@ -37,8 +37,8 @@
 
       (rust-cli
        (status . "production-ready")
-       (completion . 90)
-       (details . "Interactive shell with redirections, SIGINT handling, error recovery, comprehensive docs. All tests passing (90/90: 44 unit + 27 integration + 19 property)"))
+       (completion . 92)
+       (details . "Interactive shell with pipelines, redirections, SIGINT handling, error recovery, comprehensive docs. All tests passing (104/104: 58 unit + 27 integration + 19 property)"))
 
       (elixir-impl
        (status . "failing-build")
@@ -64,9 +64,13 @@
       "Rust CLI with mkdir/rmdir/touch/rm"
       "External command execution (ls, cat, echo, etc.)"
       "PATH lookup and executable discovery"
+      "Unix pipelines (cmd1 | cmd2 | cmd3)"
+      "Pipeline stdio chaining via Stdio::piped()"
+      "Pipeline exit codes from last stage (POSIX behavior)"
       "I/O Redirections (>, >>, <, 2>, 2>>, &>, 2>&1)"
       "Redirection undo support (file truncate/append reversible)"
-      "SIGINT handling (Ctrl+C interrupts commands, not shell)"
+      "Pipeline undo support (final redirections reversible)"
+      "SIGINT handling (Ctrl+C interrupts commands/pipelines, not shell)"
       "Process group management for job control"
       "Exit code tracking with signal detection"
       "Undo/redo with operation history"
@@ -75,7 +79,7 @@
       "Error recovery with visibility (no silent failures)"
       "Comprehensive API documentation (rustdoc)"
       "GitHub Actions CI pipeline"
-      "All tests passing (90/90: 44 unit + 27 integration + 19 property)"
+      "All tests passing (104/104: 58 unit + 27 integration + 19 property)"
       "Formal proofs verified in 6 systems"))
 
     (route-to-mvp
@@ -153,17 +157,22 @@
           "✓ GitHub Actions CI pipeline"
           "✓ Comprehensive API documentation (rustdoc)"))
         ((name . "Milestone 3: Pipelines")
-         (status . "planned")
+         (status . "complete")
+         (version . "0.7.3")
          (items
-          "□ Pipeline operator (|)"
-          "□ Multi-stage pipeline execution"
-          "□ Pipeline error handling"
-          "□ Pipeline undo support")))
+          "✓ Pipeline operator (|)"
+          "✓ Multi-stage pipeline execution"
+          "✓ Pipeline error handling"
+          "✓ Pipeline undo support"
+          "✓ Stdio chaining via Stdio::piped()"
+          "✓ Exit code from last stage (POSIX)"
+          "✓ SIGINT handling for entire pipeline"
+          "✓ 7 pipeline integration tests"))))
        (items
         "✓ Basic command parser implemented"
         "✓ External command execution"
         "✓ Redirections (>, <, >>, 2>, 2>>, &>, 2>&1)"
-        "□ Pipeline support (|)"
+        "✓ Pipeline support (|)"
         "□ Variables ($VAR)"
         "□ Glob expansion (*.txt)"
         "□ Quote processing"
@@ -252,7 +261,27 @@
        "Component 6: Comprehensive API documentation (rustdoc)"
        "All documentation builds without warnings"
        "Pushed to GitHub: 6 commits (Phase 0) + foundation work"
-       "Updated STATE.scm to v0.7.2")))))
+       "Updated STATE.scm to v0.7.2"))
+
+     ((timestamp . "2026-01-28")
+      (accomplishments
+       "Completed Phase 6 Milestone 3: Unix Pipelines"
+       "Component 1: Added Pipe token to tokenizer"
+       "Component 2: Implemented parse_pipeline() function"
+       "Component 3: Added Command::Pipeline enum variant"
+       "Component 4: Implemented execute_pipeline() with stdio chaining"
+       "Component 5: Integrated Pipeline into ExecutableCommand trait"
+       "Component 6: Added 7 pipeline integration tests"
+       "Component 7: Updated documentation with pipeline examples"
+       "Stdio chaining: first=inherit, middle=piped, last=redirect"
+       "Exit code from last stage (POSIX behavior)"
+       "SIGINT kills entire pipeline (exit code 130)"
+       "Final redirections tracked for undo"
+       "All tests passing (104/104: 58 unit + 27 integration + 19 property)"
+       "Pipeline examples: ls | grep test, cat | wc -l > count.txt"
+       "Manual testing successful: ls | head -3 works correctly"
+       "Updated GETTING_STARTED.md with Pipelines section"
+       "Updated STATE.scm to v0.7.3"))))
 
 (define (get-state)
   "Return the current project state"
