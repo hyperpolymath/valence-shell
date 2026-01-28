@@ -42,6 +42,9 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 # Time handling
 chrono = { version = "0.4", features = ["serde"] }
 
+# Stdout/stderr capture for redirections
+gag = "1.0"
+
 # Unix socket for BEAM IPC
 # (tokio already provides this)
 

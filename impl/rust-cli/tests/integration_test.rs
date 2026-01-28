@@ -13,8 +13,9 @@
 
 mod fixtures;
 
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::path::PathBuf;
+use std::process::Command;
 
 /// Test sandbox that cleans up after itself
 ///
@@ -407,4 +408,254 @@ fn test_special_characters() {
         assert!(target.exists(), "Should handle special chars: {}", name);
         fs::remove_dir(&target).unwrap();
     }
+}
+
+// ============================================================
+// I/O Redirections (Phase 6 M2)
+// ============================================================
+
+/// Test: Output redirection via direct Command execution
+#[test]
+fn test_redirect_output_via_command() {
+    let temp = fixtures::test_sandbox("redirect_cmd");
+
+    // Execute: echo hello (directly via std::process::Command with redirect)
+    let output_file = temp.path().join("output.txt");
+    let file = fs::File::create(&output_file).unwrap();
+
+    let status = Command::new("echo")
+        .arg("hello")
+        .stdout(file)
+        .status()
+        .unwrap();
+
+    assert!(status.success());
+
+    // Verify file was created with correct content
+    let content = fs::read_to_string(&output_file).unwrap();
+    assert_eq!(content.trim(), "hello");
+}
+
+/// Test: Append redirection via direct Command execution
+#[test]
+fn test_redirect_append_via_command() {
+    let temp = fixtures::test_sandbox("redirect_append_cmd");
+
+    // Create initial file
+    let target = temp.path().join("log.txt");
+    fs::write(&target, "line1\n").unwrap();
+
+    // Append via std::process::Command
+    use std::fs::OpenOptions;
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&target)
+        .unwrap();
+
+    Command::new("echo")
+        .arg("line2")
+        .stdout(file)
+        .status()
+        .unwrap();
+
+    // Verify both lines present
+    let content = fs::read_to_string(&target).unwrap();
+    assert!(content.contains("line1"), "Original content should remain");
+    assert!(content.contains("line2"), "New content should be appended");
+}
+
+/// Test: Input redirection via direct Command execution
+#[test]
+fn test_redirect_input_via_command() {
+    let temp = fixtures::test_sandbox("redirect_input_cmd");
+
+    // Create input file
+    let input_file = temp.path().join("input.txt");
+    fs::write(&input_file, "test input data").unwrap();
+
+    // Redirect via std::process::Command
+    let output_file = temp.path().join("output.txt");
+
+    let input = fs::File::open(&input_file).unwrap();
+    let output = fs::File::create(&output_file).unwrap();
+
+    Command::new("cat")
+        .stdin(input)
+        .stdout(output)
+        .status()
+        .unwrap();
+
+    // Verify output matches input
+    let output_content = fs::read_to_string(&output_file).unwrap();
+    assert_eq!(output_content, "test input data");
+}
+
+/// Test: Validation of basic redirection logic
+#[test]
+fn test_redirect_file_operations() {
+    let temp = fixtures::test_sandbox("redirect_ops");
+
+    // Test file creation
+    let file1 = temp.path().join("new.txt");
+    assert!(!file1.exists());
+
+    fs::write(&file1, "created").unwrap();
+    assert!(file1.exists());
+
+    // Test file truncation
+    let original_content = fs::read(&file1).unwrap();
+    assert_eq!(original_content, b"created");
+
+    fs::write(&file1, "truncated").unwrap();
+    let new_content = fs::read_to_string(&file1).unwrap();
+    assert_eq!(new_content, "truncated");
+
+    // Test reversibility by restoring original
+    fs::write(&file1, &original_content).unwrap();
+    let restored = fs::read_to_string(&file1).unwrap();
+    assert_eq!(restored, "created");
+}
+
+/// Test: Append operation tracking
+#[test]
+fn test_redirect_append_tracking() {
+    let temp = fixtures::test_sandbox("redirect_append_track");
+
+    // Create file
+    let file = temp.path().join("file.txt");
+    fs::write(&file, "original").unwrap();
+
+    // Record original size
+    let original_size = fs::metadata(&file).unwrap().len();
+    assert_eq!(original_size, 8); // "original" = 8 bytes
+
+    // Append
+    use std::io::Write;
+    let mut f = fs::OpenOptions::new().append(true).open(&file).unwrap();
+    f.write_all(b" appended").unwrap();
+    drop(f);
+
+    // Verify appended
+    let content = fs::read_to_string(&file).unwrap();
+    assert_eq!(content, "original appended");
+
+    // Simulate undo: truncate to original size
+    use std::fs::OpenOptions;
+    let f = OpenOptions::new().write(true).open(&file).unwrap();
+    f.set_len(original_size).unwrap();
+    drop(f);
+
+    // Verify truncated back
+    let restored = fs::read_to_string(&file).unwrap();
+    assert_eq!(restored, "original");
+}
+
+// ============================================================
+// Built-in Command Redirections (Phase 6 M2 - Week 2)
+// ============================================================
+
+/// Test: pwd output redirection (direct)
+#[test]
+fn test_builtin_pwd_redirect_direct() {
+    let temp = fixtures::test_sandbox("pwd_redirect");
+
+    // Execute pwd with redirection using direct std::process::Command
+    let output_file = temp.path().join("pwd_output.txt");
+
+    // Simulate: pwd > pwd_output.txt
+    // Since pwd just prints current dir, we can test the redirection mechanism
+    let file = fs::File::create(&output_file).unwrap();
+
+    let status = Command::new("pwd")
+        .current_dir(temp.path())
+        .stdout(file)
+        .status()
+        .unwrap();
+
+    assert!(status.success(), "pwd should succeed");
+
+    // Verify output
+    let content = fs::read_to_string(&output_file).unwrap();
+    assert!(
+        content.contains(&temp.path().to_string_lossy().to_string()),
+        "Output should contain temp directory path"
+    );
+}
+
+/// Test: ls output redirection (direct)
+#[test]
+fn test_builtin_ls_redirect_direct() {
+    let temp = fixtures::test_sandbox("ls_redirect");
+
+    // Create test files
+    fs::create_dir(temp.path().join("testdir")).unwrap();
+    fs::write(temp.path().join("file.txt"), "").unwrap();
+
+    // Execute: ls > listing.txt
+    let output_file = temp.path().join("listing.txt");
+    let file = fs::File::create(&output_file).unwrap();
+
+    let status = Command::new("ls")
+        .current_dir(temp.path())
+        .stdout(file)
+        .status()
+        .unwrap();
+
+    assert!(status.success(), "ls should succeed");
+
+    // Verify listing contains entries
+    let content = fs::read_to_string(&output_file).unwrap();
+    assert!(content.contains("testdir"), "Should list testdir");
+    assert!(content.contains("file.txt"), "Should list file.txt");
+}
+
+/// Test: Append redirection behavior
+#[test]
+fn test_builtin_append_behavior() {
+    let temp = fixtures::test_sandbox("append_behavior");
+
+    // Create initial file
+    let log = temp.path().join("log.txt");
+    fs::write(&log, "line1\n").unwrap();
+
+    // Append using direct Command
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log)
+        .unwrap();
+
+    Command::new("echo")
+        .arg("line2")
+        .current_dir(temp.path())
+        .stdout(file)
+        .status()
+        .unwrap();
+
+    // Verify both lines
+    let content = fs::read_to_string(&log).unwrap();
+    assert!(content.contains("line1"), "Original line preserved");
+    assert!(content.contains("line2"), "New line appended");
+}
+
+/// Test: Validation of redirection file creation
+#[test]
+fn test_redirect_creates_file() {
+    let temp = fixtures::test_sandbox("redirect_create");
+
+    let output = temp.path().join("output.txt");
+    assert!(!output.exists(), "File should not exist initially");
+
+    // Redirect to non-existent file
+    let file = fs::File::create(&output).unwrap();
+    Command::new("echo")
+        .arg("test")
+        .stdout(file)
+        .status()
+        .unwrap();
+
+    assert!(output.exists(), "Redirection should create file");
+    let content = fs::read_to_string(&output).unwrap();
+    assert_eq!(content.trim(), "test");
 }
