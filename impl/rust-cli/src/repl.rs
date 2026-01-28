@@ -9,6 +9,7 @@
 use anyhow::Result;
 use colored::Colorize;
 use std::io::{self, BufRead, Write};
+use std::path::PathBuf;
 
 use crate::{commands, external, parser};
 use crate::parser::Command;
@@ -204,6 +205,44 @@ fn execute_line(state: &mut ShellState, input: &str) -> Result<bool> {
             println!("{}", state.root.display());
         }
 
+        Command::Cd { path } => {
+            let target = if let Some(p) = path {
+                if p == "-" {
+                    // cd - not implemented yet
+                    anyhow::bail!("cd -: not implemented yet");
+                }
+                // Handle absolute vs relative paths
+                if p.starts_with('/') {
+                    // Absolute path - use as-is
+                    PathBuf::from(p)
+                } else if p.starts_with("~/") {
+                    // Home-relative path
+                    let home = dirs::home_dir()
+                        .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
+                    home.join(&p[2..])
+                } else {
+                    // Relative to current directory
+                    state.root.join(&p)
+                }
+            } else {
+                // cd with no args goes to home
+                dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?
+            };
+
+            if !target.exists() {
+                anyhow::bail!("cd: {}: No such file or directory", target.display());
+            }
+
+            if !target.is_dir() {
+                anyhow::bail!("cd: {}: Not a directory", target.display());
+            }
+
+            // Change the shell's working directory
+            std::env::set_current_dir(&target)?;
+            // Update state root to track current directory
+            state.root = std::fs::canonicalize(target)?;
+        }
+
         Command::External { program, args } => {
             match external::execute_external(&program, &args) {
                 Ok(exit_code) => {
@@ -231,6 +270,7 @@ fn print_help() {
     println!("  {}      Create an empty file", "touch <path>".bright_green());
     println!("  {}         Remove a file", "rm <path>".bright_green());
     println!("  {}         List directory contents", "ls [path]".bright_green());
+    println!("  {}         Change directory", "cd [path]".bright_green());
     println!("  {}            Show current directory", "pwd".bright_green());
     println!();
 
