@@ -51,22 +51,23 @@ impl ExecutableCommand for Command {
     fn execute(&self, state: &mut ShellState) -> Result<ExecutionResult> {
         match self {
             // Filesystem operations (reversible)
-            Command::Mkdir { path } => {
+            Command::Mkdir { path, redirects: _ } => {
+                // TODO: Handle redirections in Phase 6 M2
                 commands::mkdir(state, path, false)?;
                 Ok(ExecutionResult::Success)
             }
 
-            Command::Rmdir { path } => {
+            Command::Rmdir { path, redirects: _ } => {
                 commands::rmdir(state, path, false)?;
                 Ok(ExecutionResult::Success)
             }
 
-            Command::Touch { path } => {
+            Command::Touch { path, redirects: _ } => {
                 commands::touch(state, path, false)?;
                 Ok(ExecutionResult::Success)
             }
 
-            Command::Rm { path } => {
+            Command::Rm { path, redirects: _ } => {
                 commands::rm(state, path, false)?;
                 Ok(ExecutionResult::Success)
             }
@@ -118,7 +119,8 @@ impl ExecutableCommand for Command {
             Command::Exit | Command::Quit => Ok(ExecutionResult::Exit),
 
             // Navigation (built-ins but not reversible)
-            Command::Ls { path } => {
+            Command::Ls { path, redirects: _ } => {
+                // TODO: Handle redirections in Phase 6 M2
                 use std::fs;
 
                 let target = if let Some(p) = path {
@@ -145,7 +147,8 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::Success)
             }
 
-            Command::Pwd => {
+            Command::Pwd { redirects: _ } => {
+                // TODO: Handle redirections in Phase 6 M2
                 println!("{}", state.root.display());
                 Ok(ExecutionResult::Success)
             }
@@ -205,7 +208,12 @@ impl ExecutableCommand for Command {
             }
 
             // External commands (not reversible)
-            Command::External { program, args } => {
+            Command::External {
+                program,
+                args,
+                redirects: _,
+            } => {
+                // TODO: Handle redirections in Phase 6 M2
                 match external::execute_external(program, args) {
                     Ok(exit_code) => Ok(ExecutionResult::ExternalCommand { exit_code }),
                     Err(e) => {
@@ -243,10 +251,10 @@ impl ExecutableCommand for Command {
 
     fn description(&self) -> String {
         match self {
-            Command::Mkdir { path } => format!("mkdir {}", path),
-            Command::Rmdir { path } => format!("rmdir {}", path),
-            Command::Touch { path } => format!("touch {}", path),
-            Command::Rm { path } => format!("rm {}", path),
+            Command::Mkdir { path, .. } => format!("mkdir {}", path),
+            Command::Rmdir { path, .. } => format!("rmdir {}", path),
+            Command::Touch { path, .. } => format!("touch {}", path),
+            Command::Rm { path, .. } => format!("rm {}", path),
             Command::Undo { count } => format!("undo {}", count),
             Command::Redo { count } => format!("redo {}", count),
             Command::History { count, show_proofs } => {
@@ -263,14 +271,14 @@ impl ExecutableCommand for Command {
             Command::Rollback => "rollback".to_string(),
             Command::Graph => "graph".to_string(),
             Command::Proofs => "proofs".to_string(),
-            Command::Ls { path } => {
+            Command::Ls { path, .. } => {
                 if let Some(p) = path {
                     format!("ls {}", p)
                 } else {
                     "ls".to_string()
                 }
             }
-            Command::Pwd => "pwd".to_string(),
+            Command::Pwd { .. } => "pwd".to_string(),
             Command::Cd { path } => {
                 if let Some(p) = path {
                     format!("cd {}", p)
@@ -278,7 +286,7 @@ impl ExecutableCommand for Command {
                     "cd".to_string()
                 }
             }
-            Command::External { program, args } => {
+            Command::External { program, args, .. } => {
                 if args.is_empty() {
                     program.clone()
                 } else {

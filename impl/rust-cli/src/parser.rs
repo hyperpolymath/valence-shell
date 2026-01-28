@@ -3,51 +3,308 @@
 //!
 //! Parses shell input into structured commands.
 //! Distinguishes between built-in commands and external programs.
+//! Supports I/O redirections (>, <, >>, 2>, etc.)
 
 use anyhow::{anyhow, Result};
+
+use crate::redirection::Redirection;
+
+/// Token from lexical analysis
+#[derive(Debug, Clone, PartialEq)]
+enum Token {
+    /// Regular word (command, argument, filename)
+    Word(String),
+
+    /// Output redirection operator: >
+    OutputRedirect,
+
+    /// Append redirection operator: >>
+    AppendRedirect,
+
+    /// Input redirection operator: <
+    InputRedirect,
+
+    /// Error output redirection operator: 2>
+    ErrorRedirect,
+
+    /// Error append redirection operator: 2>>
+    ErrorAppendRedirect,
+
+    /// Error to output redirection: 2>&1
+    ErrorToOutput,
+
+    /// Both output redirection (bash extension): &>
+    BothRedirect,
+}
 
 #[derive(Debug, PartialEq)]
 pub enum Command {
     // Built-ins (existing)
-    Mkdir { path: String },
-    Rmdir { path: String },
-    Touch { path: String },
-    Rm { path: String },
-    Undo { count: usize },
-    Redo { count: usize },
-    History { count: usize, show_proofs: bool },
+    Mkdir {
+        path: String,
+        redirects: Vec<Redirection>,
+    },
+    Rmdir {
+        path: String,
+        redirects: Vec<Redirection>,
+    },
+    Touch {
+        path: String,
+        redirects: Vec<Redirection>,
+    },
+    Rm {
+        path: String,
+        redirects: Vec<Redirection>,
+    },
+    Undo {
+        count: usize,
+    },
+    Redo {
+        count: usize,
+    },
+    History {
+        count: usize,
+        show_proofs: bool,
+    },
     Exit,
     Quit,
 
     // Transactions
-    Begin { name: String },
+    Begin {
+        name: String,
+    },
     Commit,
     Rollback,
 
     // Display commands
     Graph,
     Proofs,
-    Ls { path: Option<String> },
-    Pwd,
-    Cd { path: Option<String> },
+    Ls {
+        path: Option<String>,
+        redirects: Vec<Redirection>,
+    },
+    Pwd {
+        redirects: Vec<Redirection>,
+    },
+    Cd {
+        path: Option<String>,
+    },
 
-    // NEW: External command
+    // External command
     External {
         program: String,
         args: Vec<String>,
+        redirects: Vec<Redirection>,
     },
 }
 
-/// Parse a command line into a Command
+/// Tokenize input string into words and redirection operators
+///
+/// Handles:
+/// - >> before > (longest match first)
+/// - 2>> before 2>
+/// - 2>&1 as single token
+/// - &> as single token
+fn tokenize(input: &str) -> Vec<Token> {
+    let mut tokens = Vec::new();
+    let mut chars = input.chars().peekable();
+    let mut current_word = String::new();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            // Whitespace: end current word
+            ' ' | '\t' => {
+                if !current_word.is_empty() {
+                    tokens.push(Token::Word(current_word.clone()));
+                    current_word.clear();
+                }
+            }
+
+            // Redirection operators
+            '>' => {
+                // End current word
+                if !current_word.is_empty() {
+                    tokens.push(Token::Word(current_word.clone()));
+                    current_word.clear();
+                }
+
+                // Check for >>
+                if chars.peek() == Some(&'>') {
+                    chars.next(); // consume second >
+                    tokens.push(Token::AppendRedirect);
+                } else {
+                    tokens.push(Token::OutputRedirect);
+                }
+            }
+
+            '<' => {
+                // End current word
+                if !current_word.is_empty() {
+                    tokens.push(Token::Word(current_word.clone()));
+                    current_word.clear();
+                }
+
+                tokens.push(Token::InputRedirect);
+            }
+
+            '2' => {
+                // Check if this is start of 2> or 2>&1
+                if chars.peek() == Some(&'>') {
+                    // End current word if not empty
+                    if !current_word.is_empty() {
+                        tokens.push(Token::Word(current_word.clone()));
+                        current_word.clear();
+                    }
+
+                    chars.next(); // consume >
+
+                    // Check for 2>> or 2>&1
+                    match chars.peek() {
+                        Some(&'>') => {
+                            chars.next();
+                            tokens.push(Token::ErrorAppendRedirect);
+                        }
+                        Some(&'&') => {
+                            chars.next();
+                            if chars.peek() == Some(&'1') {
+                                chars.next();
+                                tokens.push(Token::ErrorToOutput);
+                            } else {
+                                // Invalid: 2>&[not 1]
+                                // Put back as word
+                                current_word.push_str("2>&");
+                            }
+                        }
+                        _ => {
+                            tokens.push(Token::ErrorRedirect);
+                        }
+                    }
+                } else {
+                    // Regular '2' character, part of word
+                    current_word.push(ch);
+                }
+            }
+
+            '&' => {
+                // Check for &>
+                if chars.peek() == Some(&'>') {
+                    // End current word
+                    if !current_word.is_empty() {
+                        tokens.push(Token::Word(current_word.clone()));
+                        current_word.clear();
+                    }
+
+                    chars.next(); // consume >
+                    tokens.push(Token::BothRedirect);
+                } else {
+                    // Regular & (background job - not implemented yet)
+                    current_word.push(ch);
+                }
+            }
+
+            // Regular character
+            _ => {
+                current_word.push(ch);
+            }
+        }
+    }
+
+    // Add final word if any
+    if !current_word.is_empty() {
+        tokens.push(Token::Word(current_word));
+    }
+
+    tokens
+}
+
+/// Parse a command line into a Command with redirections
 pub fn parse_command(input: &str) -> Result<Command> {
-    let parts: Vec<&str> = input.split_whitespace().collect();
-    if parts.is_empty() {
+    // Tokenize input
+    let tokens = tokenize(input);
+
+    if tokens.is_empty() {
         return Err(anyhow!("Empty command"));
     }
 
-    let cmd = parts[0];
-    let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+    // Separate command tokens from redirections
+    let mut command_tokens = Vec::new();
+    let mut redirects = Vec::new();
 
+    let mut i = 0;
+    while i < tokens.len() {
+        match &tokens[i] {
+            Token::Word(w) => {
+                command_tokens.push(w.clone());
+                i += 1;
+            }
+
+            Token::OutputRedirect => {
+                let file = expect_word(&tokens, i + 1, "output redirection")?;
+                redirects.push(Redirection::Output { file });
+                i += 2;
+            }
+
+            Token::AppendRedirect => {
+                let file = expect_word(&tokens, i + 1, "append redirection")?;
+                redirects.push(Redirection::Append { file });
+                i += 2;
+            }
+
+            Token::InputRedirect => {
+                let file = expect_word(&tokens, i + 1, "input redirection")?;
+                redirects.push(Redirection::Input { file });
+                i += 2;
+            }
+
+            Token::ErrorRedirect => {
+                let file = expect_word(&tokens, i + 1, "error redirection")?;
+                redirects.push(Redirection::ErrorOutput { file });
+                i += 2;
+            }
+
+            Token::ErrorAppendRedirect => {
+                let file = expect_word(&tokens, i + 1, "error append redirection")?;
+                redirects.push(Redirection::ErrorAppend { file });
+                i += 2;
+            }
+
+            Token::ErrorToOutput => {
+                redirects.push(Redirection::ErrorToOutput);
+                i += 1;
+            }
+
+            Token::BothRedirect => {
+                let file = expect_word(&tokens, i + 1, "both redirection")?;
+                redirects.push(Redirection::BothOutput { file });
+                i += 2;
+            }
+        }
+    }
+
+    // Must have at least command name
+    if command_tokens.is_empty() {
+        return Err(anyhow!("Missing command (only redirections found)"));
+    }
+
+    // Parse command from tokens
+    let cmd = command_tokens[0].as_str();
+    let args: Vec<String> = command_tokens[1..].to_vec();
+
+    // Parse base command with redirections
+    parse_base_command(cmd, args, redirects)
+}
+
+/// Extract word token at index or return error
+fn expect_word(tokens: &[Token], index: usize, context: &str) -> Result<String> {
+    match tokens.get(index) {
+        Some(Token::Word(w)) => Ok(w.clone()),
+        Some(_) => Err(anyhow!("{}: expected filename, got redirection operator", context)),
+        None => Err(anyhow!("{}: missing filename", context)),
+    }
+}
+
+/// Parse base command with arguments and redirections
+fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>) -> Result<Command> {
     match cmd {
         "mkdir" => {
             if args.is_empty() {
@@ -55,6 +312,7 @@ pub fn parse_command(input: &str) -> Result<Command> {
             }
             Ok(Command::Mkdir {
                 path: args[0].clone(),
+                redirects,
             })
         }
         "rmdir" => {
@@ -63,6 +321,7 @@ pub fn parse_command(input: &str) -> Result<Command> {
             }
             Ok(Command::Rmdir {
                 path: args[0].clone(),
+                redirects,
             })
         }
         "touch" => {
@@ -71,6 +330,7 @@ pub fn parse_command(input: &str) -> Result<Command> {
             }
             Ok(Command::Touch {
                 path: args[0].clone(),
+                redirects,
             })
         }
         "rm" => {
@@ -79,6 +339,7 @@ pub fn parse_command(input: &str) -> Result<Command> {
             }
             Ok(Command::Rm {
                 path: args[0].clone(),
+                redirects,
             })
         }
         "undo" => {
@@ -119,16 +380,24 @@ pub fn parse_command(input: &str) -> Result<Command> {
         "proofs" | "proof" => Ok(Command::Proofs),
         "ls" => Ok(Command::Ls {
             path: args.get(0).map(|s| s.to_string()),
+            redirects,
         }),
-        "pwd" => Ok(Command::Pwd),
-        "cd" => Ok(Command::Cd {
-            path: args.get(0).map(|s| s.to_string()),
-        }),
+        "pwd" => Ok(Command::Pwd { redirects }),
+        "cd" => {
+            // cd doesn't support redirections (it's a state change, not output)
+            if !redirects.is_empty() {
+                return Err(anyhow!("cd: redirections not supported for this command"));
+            }
+            Ok(Command::Cd {
+                path: args.get(0).map(|s| s.to_string()),
+            })
+        }
 
         // Everything else: external command
         _ => Ok(Command::External {
             program: cmd.to_string(),
             args,
+            redirects,
         }),
     }
 }
@@ -140,18 +409,27 @@ mod tests {
     #[test]
     fn test_parse_mkdir() {
         let cmd = parse_command("mkdir foo").unwrap();
-        assert_eq!(cmd, Command::Mkdir {
-            path: "foo".to_string()
-        });
+        assert_eq!(
+            cmd,
+            Command::Mkdir {
+                path: "foo".to_string(),
+                redirects: vec![],
+            }
+        );
     }
 
     #[test]
     fn test_parse_external() {
         let cmd = parse_command("echo hello world").unwrap();
         match cmd {
-            Command::External { program, args } => {
+            Command::External {
+                program,
+                args,
+                redirects,
+            } => {
                 assert_eq!(program, "echo");
                 assert_eq!(args, vec!["hello", "world"]);
+                assert_eq!(redirects, vec![]);
             }
             _ => panic!("Expected External command"),
         }
@@ -184,8 +462,9 @@ mod tests {
     fn test_parse_ls() {
         let cmd = parse_command("ls /tmp").unwrap();
         match cmd {
-            Command::Ls { path } => {
+            Command::Ls { path, redirects } => {
                 assert_eq!(path, Some("/tmp".to_string()));
+                assert_eq!(redirects, vec![]);
             }
             _ => panic!("Expected Ls command"),
         }
@@ -222,6 +501,171 @@ mod tests {
             }
             _ => panic!("Expected Cd command"),
         }
+    }
+
+    // Redirection parsing tests
+    #[test]
+    fn test_parse_output_redirect() {
+        let cmd = parse_command("ls > output.txt").unwrap();
+        match cmd {
+            Command::Ls { redirects, .. } => {
+                assert_eq!(redirects.len(), 1);
+                assert_eq!(
+                    redirects[0],
+                    Redirection::Output {
+                        file: "output.txt".to_string()
+                    }
+                );
+            }
+            _ => panic!("Expected Ls command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_append_redirect() {
+        let cmd = parse_command("echo test >> log.txt").unwrap();
+        match cmd {
+            Command::External { redirects, .. } => {
+                assert_eq!(redirects.len(), 1);
+                assert_eq!(
+                    redirects[0],
+                    Redirection::Append {
+                        file: "log.txt".to_string()
+                    }
+                );
+            }
+            _ => panic!("Expected External command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_input_redirect() {
+        let cmd = parse_command("cat < input.txt").unwrap();
+        match cmd {
+            Command::External { redirects, .. } => {
+                assert_eq!(redirects.len(), 1);
+                assert_eq!(
+                    redirects[0],
+                    Redirection::Input {
+                        file: "input.txt".to_string()
+                    }
+                );
+            }
+            _ => panic!("Expected External command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_error_redirect() {
+        let cmd = parse_command("make 2> errors.log").unwrap();
+        match cmd {
+            Command::External { redirects, .. } => {
+                assert_eq!(redirects.len(), 1);
+                assert_eq!(
+                    redirects[0],
+                    Redirection::ErrorOutput {
+                        file: "errors.log".to_string()
+                    }
+                );
+            }
+            _ => panic!("Expected External command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_error_to_output() {
+        let cmd = parse_command("make 2>&1").unwrap();
+        match cmd {
+            Command::External { redirects, .. } => {
+                assert_eq!(redirects.len(), 1);
+                assert_eq!(redirects[0], Redirection::ErrorToOutput);
+            }
+            _ => panic!("Expected External command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_multiple_redirects() {
+        let cmd = parse_command("cat < in.txt > out.txt 2> err.log").unwrap();
+        match cmd {
+            Command::External { redirects, .. } => {
+                assert_eq!(redirects.len(), 3);
+                assert_eq!(
+                    redirects[0],
+                    Redirection::Input {
+                        file: "in.txt".to_string()
+                    }
+                );
+                assert_eq!(
+                    redirects[1],
+                    Redirection::Output {
+                        file: "out.txt".to_string()
+                    }
+                );
+                assert_eq!(
+                    redirects[2],
+                    Redirection::ErrorOutput {
+                        file: "err.log".to_string()
+                    }
+                );
+            }
+            _ => panic!("Expected External command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_both_redirect() {
+        let cmd = parse_command("make &> output.log").unwrap();
+        match cmd {
+            Command::External { redirects, .. } => {
+                assert_eq!(redirects.len(), 1);
+                assert_eq!(
+                    redirects[0],
+                    Redirection::BothOutput {
+                        file: "output.log".to_string()
+                    }
+                );
+            }
+            _ => panic!("Expected External command"),
+        }
+    }
+
+    #[test]
+    fn test_tokenize_basic() {
+        let tokens = tokenize("echo hello");
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0], Token::Word("echo".to_string()));
+        assert_eq!(tokens[1], Token::Word("hello".to_string()));
+    }
+
+    #[test]
+    fn test_tokenize_output_redirect() {
+        let tokens = tokenize("ls > file.txt");
+        assert_eq!(tokens.len(), 3);
+        assert_eq!(tokens[0], Token::Word("ls".to_string()));
+        assert_eq!(tokens[1], Token::OutputRedirect);
+        assert_eq!(tokens[2], Token::Word("file.txt".to_string()));
+    }
+
+    #[test]
+    fn test_tokenize_append_redirect() {
+        let tokens = tokenize("echo test >> file.txt");
+        assert_eq!(tokens.len(), 4);
+        assert_eq!(tokens[1], Token::Word("test".to_string()));
+        assert_eq!(tokens[2], Token::AppendRedirect);
+    }
+
+    #[test]
+    fn test_tokenize_error_redirect() {
+        let tokens = tokenize("make 2> err.log");
+        assert_eq!(tokens[1], Token::ErrorRedirect);
+    }
+
+    #[test]
+    fn test_tokenize_error_to_output() {
+        let tokens = tokenize("make 2>&1");
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[1], Token::ErrorToOutput);
     }
 
     #[test]
