@@ -6,6 +6,7 @@
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fs;
@@ -191,8 +192,15 @@ impl ShellState {
         // Clear redo stack when new operation is performed
         self.redo_stack.clear();
 
-        // Persist state
-        self.save().ok();
+        // Persist state - warn on failure but don't abort
+        if let Err(e) = self.save() {
+            eprintln!(
+                "{} Failed to save state: {}",
+                "Warning:".bright_yellow(),
+                e
+            );
+            eprintln!("Operation succeeded but may not persist across restarts");
+        }
     }
 
     /// Get the last N undoable operations
@@ -214,7 +222,15 @@ impl ShellState {
             // Push to redo stack
             self.redo_stack.push_front(op.clone());
         }
-        self.save().ok();
+
+        // Persist state - warn on failure
+        if let Err(e) = self.save() {
+            eprintln!(
+                "{} Failed to save undo state: {}",
+                "Warning:".bright_yellow(),
+                e
+            );
+        }
     }
 
     /// Begin a new transaction
@@ -233,7 +249,15 @@ impl ShellState {
 
         let id = txn.id;
         self.active_transaction = Some(txn);
-        self.save().ok();
+
+        // Persist state - warn on failure
+        if let Err(e) = self.save() {
+            eprintln!(
+                "{} Failed to save transaction start: {}",
+                "Warning:".bright_yellow(),
+                e
+            );
+        }
 
         Ok(id)
     }
@@ -248,7 +272,15 @@ impl ShellState {
         let mut committed = txn;
         committed.committed = true;
         self.transactions.push(committed);
-        self.save().ok();
+
+        // Persist state - warn on failure
+        if let Err(e) = self.save() {
+            eprintln!(
+                "{} Failed to save transaction commit: {}",
+                "Warning:".bright_yellow(),
+                e
+            );
+        }
 
         Ok(())
     }
