@@ -9,6 +9,9 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 /// Execute an external command
+///
+/// Handles signal termination (SIGINT, SIGTERM) and returns appropriate exit codes.
+/// Exit code 130 indicates SIGINT (Ctrl+C), 143 indicates SIGTERM.
 pub fn execute_external(program: &str, args: &[String]) -> Result<i32> {
     // PATH lookup
     let executable = find_in_path(program)?;
@@ -22,7 +25,21 @@ pub fn execute_external(program: &str, args: &[String]) -> Result<i32> {
         .status()
         .context(format!("Failed to execute: {}", program))?;
 
-    // Return exit code
+    // Handle exit status
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+
+        // Check if terminated by signal
+        if let Some(signal) = status.signal() {
+            // Convert Unix signal to shell exit code
+            // Convention: 128 + signal number
+            let exit_code = 128 + signal;
+            return Ok(exit_code);
+        }
+    }
+
+    // Normal exit code
     Ok(status.code().unwrap_or(1))
 }
 
@@ -101,5 +118,26 @@ mod tests {
         if let Ok(ls_path) = find_in_path("ls") {
             assert!(is_executable(&ls_path), "ls should be executable");
         }
+    }
+
+    #[test]
+    fn test_external_command_success() {
+        // Test successful command execution
+        let exit_code = execute_external("true", &[]).unwrap();
+        assert_eq!(exit_code, 0, "true command should return 0");
+    }
+
+    #[test]
+    fn test_external_command_failure() {
+        // Test failed command execution
+        let exit_code = execute_external("false", &[]).unwrap();
+        assert_eq!(exit_code, 1, "false command should return 1");
+    }
+
+    #[test]
+    fn test_external_command_with_args() {
+        // Test command with arguments
+        let exit_code = execute_external("echo", &["hello".to_string()]).unwrap();
+        assert_eq!(exit_code, 0, "echo should return 0");
     }
 }
