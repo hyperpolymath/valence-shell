@@ -17,39 +17,6 @@ use std::fs::{self, OpenOptions};
 use std::path::PathBuf;
 use std::process::Command;
 
-/// Test sandbox that cleans up after itself
-///
-/// Note: New tests should use fixtures::test_sandbox() instead.
-/// This struct is kept for backward compatibility with existing tests.
-struct TestSandbox {
-    root: PathBuf,
-}
-
-impl TestSandbox {
-    fn new(name: &str) -> Self {
-        let root = PathBuf::from(format!(
-            "/tmp/vsh_rust_test_{}_{}",
-            name,
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&root).unwrap();
-        Self { root }
-    }
-
-    fn path(&self, rel: &str) -> PathBuf {
-        self.root.join(rel)
-    }
-}
-
-impl Drop for TestSandbox {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.root);
-    }
-}
-
 // ============================================================
 // Reversibility Tests
 // ============================================================
@@ -58,9 +25,9 @@ impl Drop for TestSandbox {
 /// Lean theorem: mkdir_rmdir_reversible (FilesystemModel.lean:158)
 #[test]
 fn test_mkdir_rmdir_reversible() {
-    let sandbox = TestSandbox::new("mkdir_rmdir");
+    let temp = fixtures::test_sandbox("mkdir_rmdir");
 
-    let target = sandbox.path("testdir");
+    let target = temp.path().join("testdir");
 
     // Initial state: directory does not exist
     assert!(!target.exists(), "Precondition: path should not exist");
@@ -81,9 +48,9 @@ fn test_mkdir_rmdir_reversible() {
 /// Lean theorem: createFile_deleteFile_reversible (FileOperations.lean)
 #[test]
 fn test_create_delete_file_reversible() {
-    let sandbox = TestSandbox::new("create_delete");
+    let temp = fixtures::test_sandbox("create_delete");
 
-    let target = sandbox.path("testfile.txt");
+    let target = temp.path().join("testfile.txt");
 
     // Initial state
     assert!(!target.exists());
@@ -104,13 +71,13 @@ fn test_create_delete_file_reversible() {
 /// Lean theorem: operationSequenceReversible (FilesystemComposition.lean:129)
 #[test]
 fn test_operation_sequence_reversible() {
-    let sandbox = TestSandbox::new("sequence");
+    let temp = fixtures::test_sandbox("sequence");
 
     // Create a nested structure
-    let dir1 = sandbox.path("level1");
-    let dir2 = sandbox.path("level1/level2");
-    let file1 = sandbox.path("level1/file.txt");
-    let file2 = sandbox.path("level1/level2/nested.txt");
+    let dir1 = temp.path().join("level1");
+    let dir2 = temp.path().join("level1/level2");
+    let file1 = temp.path().join("level1/file.txt");
+    let file2 = temp.path().join("level1/level2/nested.txt");
 
     // Apply sequence: mkdir a → mkdir a/b → touch a/f → touch a/b/n
     fs::create_dir(&dir1).unwrap();
@@ -142,9 +109,9 @@ fn test_operation_sequence_reversible() {
 /// Coq: MkdirPrecondition requires ~path_exists
 #[test]
 fn test_mkdir_eexist() {
-    let sandbox = TestSandbox::new("eexist");
+    let temp = fixtures::test_sandbox("eexist");
 
-    let target = sandbox.path("existing");
+    let target = temp.path().join("existing");
     fs::create_dir(&target).unwrap();
 
     // Attempt to create again should fail
@@ -163,9 +130,9 @@ fn test_mkdir_eexist() {
 /// Coq: MkdirPrecondition requires parent_exists
 #[test]
 fn test_mkdir_enoent() {
-    let sandbox = TestSandbox::new("enoent");
+    let temp = fixtures::test_sandbox("enoent");
 
-    let target = sandbox.path("nonexistent/child");
+    let target = temp.path().join("nonexistent/child");
 
     let result = fs::create_dir(&target);
     assert!(result.is_err(), "mkdir should fail when parent doesn't exist");
@@ -182,9 +149,9 @@ fn test_mkdir_enoent() {
 /// Coq: RmdirPrecondition requires is_empty
 #[test]
 fn test_rmdir_enotempty() {
-    let sandbox = TestSandbox::new("enotempty");
+    let temp = fixtures::test_sandbox("enotempty");
 
-    let target = sandbox.path("nonempty");
+    let target = temp.path().join("nonempty");
     fs::create_dir(&target).unwrap();
     fs::write(target.join("file.txt"), "content").unwrap();
 
@@ -208,9 +175,9 @@ fn test_rmdir_enotempty() {
 /// Coq: RmdirPrecondition requires is_directory
 #[test]
 fn test_rmdir_enotdir() {
-    let sandbox = TestSandbox::new("enotdir");
+    let temp = fixtures::test_sandbox("enotdir");
 
-    let target = sandbox.path("afile.txt");
+    let target = temp.path().join("afile.txt");
     fs::write(&target, "content").unwrap();
 
     let result = fs::remove_dir(&target);
@@ -221,9 +188,9 @@ fn test_rmdir_enotdir() {
 /// Coq: DeleteFilePrecondition requires ~is_directory
 #[test]
 fn test_rm_eisdir() {
-    let sandbox = TestSandbox::new("eisdir");
+    let temp = fixtures::test_sandbox("eisdir");
 
-    let target = sandbox.path("adir");
+    let target = temp.path().join("adir");
     fs::create_dir(&target).unwrap();
 
     let result = fs::remove_file(&target);
@@ -238,9 +205,9 @@ fn test_rm_eisdir() {
 /// Lean theorem: writeFileReversible (FileContentOperations.lean)
 #[test]
 fn test_write_file_reversible() {
-    let sandbox = TestSandbox::new("write");
+    let temp = fixtures::test_sandbox("write");
 
-    let target = sandbox.path("data.txt");
+    let target = temp.path().join("data.txt");
     let original_content = b"original content";
     let new_content = b"modified content";
 
@@ -273,11 +240,11 @@ fn test_write_file_reversible() {
 /// Lean theorem: mkdirPreservesOtherPaths (FilesystemModel.lean)
 #[test]
 fn test_operation_independence() {
-    let sandbox = TestSandbox::new("independence");
+    let temp = fixtures::test_sandbox("independence");
 
     // Create two independent directories
-    let dir_a = sandbox.path("alpha");
-    let dir_b = sandbox.path("beta");
+    let dir_a = temp.path().join("alpha");
+    let dir_b = temp.path().join("beta");
 
     fs::create_dir(&dir_a).unwrap();
 
@@ -301,15 +268,15 @@ fn test_operation_independence() {
 /// Simulates transaction behavior at filesystem level
 #[test]
 fn test_transaction_rollback_simulation() {
-    let sandbox = TestSandbox::new("transaction");
+    let temp = fixtures::test_sandbox("transaction");
 
     // Record operations for potential rollback
     let mut operations: Vec<(&str, PathBuf)> = Vec::new();
 
     // Begin "transaction"
-    let target1 = sandbox.path("txn_dir1");
-    let target2 = sandbox.path("txn_dir2");
-    let target3 = sandbox.path("txn_file.txt");
+    let target1 = temp.path().join("txn_dir1");
+    let target2 = temp.path().join("txn_dir2");
+    let target3 = temp.path().join("txn_file.txt");
 
     // Execute operations
     fs::create_dir(&target1).unwrap();
@@ -348,9 +315,9 @@ fn test_transaction_rollback_simulation() {
 /// Test: Empty file creation and deletion
 #[test]
 fn test_empty_file() {
-    let sandbox = TestSandbox::new("empty");
+    let temp = fixtures::test_sandbox("empty");
 
-    let target = sandbox.path("empty.txt");
+    let target = temp.path().join("empty.txt");
     fs::write(&target, "").unwrap();
 
     assert!(target.exists());
@@ -364,10 +331,10 @@ fn test_empty_file() {
 /// Test: Deeply nested path operations
 #[test]
 fn test_deep_nesting() {
-    let sandbox = TestSandbox::new("deep");
+    let temp = fixtures::test_sandbox("deep");
 
     // Create deep path
-    let deep = sandbox.path("a/b/c/d/e/f/g");
+    let deep = temp.path().join("a/b/c/d/e/f/g");
     fs::create_dir_all(&deep).unwrap();
     assert!(deep.exists());
 
@@ -380,20 +347,20 @@ fn test_deep_nesting() {
 
     // Remove directories from deepest to shallowest
     let mut current = deep.clone();
-    while current != sandbox.root {
+    while current != temp.path() {
         if current.exists() && fs::read_dir(&current).unwrap().next().is_none() {
             fs::remove_dir(&current).unwrap();
         }
         current = current.parent().unwrap().to_path_buf();
     }
 
-    assert!(!sandbox.path("a").exists(), "Deep cleanup should remove all");
+    assert!(!temp.path().join("a").exists(), "Deep cleanup should remove all");
 }
 
 /// Test: Special characters in paths
 #[test]
 fn test_special_characters() {
-    let sandbox = TestSandbox::new("special");
+    let temp = fixtures::test_sandbox("special");
 
     let targets = vec![
         "spaces in name",
@@ -403,7 +370,7 @@ fn test_special_characters() {
     ];
 
     for name in &targets {
-        let target = sandbox.path(name);
+        let target = temp.path().join(name);
         fs::create_dir(&target).unwrap();
         assert!(target.exists(), "Should handle special chars: {}", name);
         fs::remove_dir(&target).unwrap();
