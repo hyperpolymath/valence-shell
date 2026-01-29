@@ -9,9 +9,10 @@ use std::fs::{File, OpenOptions};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
-use std::sync::atomic::Ordering;
 
+use crate::glob;
 use crate::redirection::{Redirection, RedirectSetup};
+use crate::signals;
 use crate::state::ShellState;
 
 /// Execute an external command with I/O redirections
@@ -35,13 +36,16 @@ pub fn execute_external_with_redirects(
     let (stdin_cfg, stdout_cfg, stderr_cfg) =
         stdio_config_from_redirects(redirects, &redirect_setup, state)?;
 
+    // Expand glob patterns in arguments (Phase 6 M12)
+    let expanded_args = expand_glob_args(args, state)?;
+
     // PATH lookup
     let executable = find_in_path(program)?;
 
     // Build command with redirected stdio
     let mut command = Command::new(&executable);
     command
-        .args(args)
+        .args(&expanded_args)
         .stdin(stdin_cfg)
         .stdout(stdout_cfg)
         .stderr(stderr_cfg);
@@ -68,10 +72,10 @@ pub fn execute_external_with_redirects(
             }
             None => {
                 // Child still running - check for interrupt
-                if crate::INTERRUPT_REQUESTED.load(Ordering::Relaxed) {
+                if signals::is_interrupt_requested() {
                     // User pressed Ctrl+C - kill child and reset flag
                     child.kill().context("Failed to kill child process")?;
-                    crate::INTERRUPT_REQUESTED.store(false, Ordering::Relaxed);
+                    signals::clear_interrupt();
 
                     // Wait for child to actually terminate
                     child.wait().context("Failed to wait for killed child")?;
@@ -222,10 +226,10 @@ pub fn execute_pipeline(
                 }
                 None => {
                     // Child still running - check for interrupt
-                    if crate::INTERRUPT_REQUESTED.load(Ordering::Relaxed) {
+                    if signals::is_interrupt_requested() {
                         // Kill all remaining children
                         child.kill().context("Failed to kill child process")?;
-                        crate::INTERRUPT_REQUESTED.store(false, Ordering::Relaxed);
+                        signals::clear_interrupt();
                         child.wait().context("Failed to wait for killed child")?;
 
                         // Don't record modifications - operation interrupted
@@ -297,10 +301,10 @@ pub fn execute_external(program: &str, args: &[String]) -> Result<i32> {
             }
             None => {
                 // Child still running - check for interrupt
-                if crate::INTERRUPT_REQUESTED.load(Ordering::Relaxed) {
+                if signals::is_interrupt_requested() {
                     // User pressed Ctrl+C - kill child and reset flag
                     child.kill().context("Failed to kill child process")?;
-                    crate::INTERRUPT_REQUESTED.store(false, Ordering::Relaxed);
+                    signals::clear_interrupt();
 
                     // Wait for child to actually terminate
                     child.wait().context("Failed to wait for killed child")?;
@@ -429,6 +433,67 @@ fn stdio_config_from_redirects(
     Ok((stdin_cfg, stdout_cfg, stderr_cfg))
 }
 
+/// Expand glob patterns in command arguments (Phase 6 M12)
+///
+/// For each argument:
+/// - If it contains glob metacharacters (*, ?, [, {), expand it
+/// - If expansion succeeds, use matching paths
+/// - If expansion fails or returns empty, use literal pattern (POSIX behavior)
+/// - If no metacharacters, use argument as-is
+///
+/// # POSIX Behavior
+/// - Brace expansion happens first: {a,b} -> [a, b]
+/// - Then glob expansion: *.txt -> [file1.txt, file2.txt]
+/// - Empty matches return literal: "*.xyz" if no .xyz files
+///
+/// # Examples
+/// ```no_run
+/// expand_glob_args(&["echo", "*.txt"], state)  // -> ["echo", "file1.txt", "file2.txt"]
+/// expand_glob_args(&["ls", "file?.rs"], state) // -> ["ls", "file1.rs", "file2.rs"]
+/// expand_glob_args(&["rm", "*.xyz"], state)    // -> ["rm", "*.xyz"] (no .xyz files)
+/// ```
+fn expand_glob_args(args: &[String], _state: &ShellState) -> Result<Vec<String>> {
+    let mut expanded: Vec<String> = Vec::new();
+
+    // Get current working directory for glob expansion
+    let cwd = std::env::current_dir()
+        .context("Failed to get current working directory")?;
+
+    for arg in args {
+        // Check if argument contains glob metacharacters
+        if glob::contains_glob_pattern(arg) {
+            // First, expand braces: file{1,2}.txt -> [file1.txt, file2.txt]
+            let brace_expanded = glob::expand_braces(arg);
+
+            // Then expand each brace result for glob patterns
+            let mut glob_matches: Vec<String> = Vec::new();
+            for pattern in &brace_expanded {
+                // Expand glob pattern relative to current directory
+                match glob::expand_glob(pattern, &cwd) {
+                    Ok(matches) if !matches.is_empty() => {
+                        // Found matches - add them as strings
+                        for path in matches {
+                            glob_matches.push(path.to_string_lossy().to_string());
+                        }
+                    }
+                    _ => {
+                        // No matches or error - use literal pattern (POSIX behavior)
+                        glob_matches.push(pattern.clone());
+                    }
+                }
+            }
+
+            // Add all matches (or literal if no matches)
+            expanded.extend(glob_matches);
+        } else {
+            // No glob pattern - use argument as-is
+            expanded.push(arg.clone());
+        }
+    }
+
+    Ok(expanded)
+}
+
 /// Handle command exit status, converting signals to exit codes
 fn handle_exit_status(status: std::process::ExitStatus) -> Result<i32> {
     #[cfg(unix)]
@@ -490,6 +555,77 @@ fn is_executable(path: &PathBuf) -> bool {
         true
     }
     false
+}
+
+/// Execute an external command in the background
+///
+/// Creates a new process group for the job and adds it to the job table.
+/// Does not wait for the command to complete.
+///
+/// # Arguments
+/// * `program` - Program name or path
+/// * `args` - Command arguments
+/// * `redirects` - I/O redirections
+/// * `state` - Shell state for job tracking
+///
+/// # Returns
+/// Job ID for the background job
+pub fn execute_external_background(
+    program: &str,
+    args: &[String],
+    redirects: &[Redirection],
+    state: &mut ShellState,
+) -> Result<usize> {
+    // Setup redirections if any
+    let redirect_setup = RedirectSetup::setup(redirects, state)?;
+
+    // Configure stdio from redirections
+    let (stdin_cfg, stdout_cfg, stderr_cfg) =
+        stdio_config_from_redirects(redirects, &redirect_setup, state)?;
+
+    // PATH lookup
+    let executable = find_in_path(program)?;
+
+    // Build command string for display
+    let command_str = if args.is_empty() {
+        format!("{} &", program)
+    } else {
+        format!("{} {} &", program, args.join(" "))
+    };
+
+    // Build command with redirected stdio
+    let mut command = Command::new(&executable);
+    command
+        .args(args)
+        .stdin(stdin_cfg)
+        .stdout(stdout_cfg)
+        .stderr(stderr_cfg);
+
+    // Create new process group for job (Unix only)
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+
+    // Spawn child process (non-blocking)
+    let child = command
+        .spawn()
+        .context(format!("Failed to spawn: {}", program))?;
+
+    let pid = child.id() as i32;
+    let pgid = pid; // Process becomes its own group leader
+
+    // Add job to job table
+    let job_id = state.jobs.add_job(pgid, command_str, vec![pid]);
+
+    // Print job info (bash-style)
+    println!("[{}] {}", job_id, pid);
+
+    // Don't wait for background job - it will run independently
+    // Job state will be updated by SIGCHLD handler (TODO)
+
+    Ok(job_id)
 }
 
 #[cfg(test)]
