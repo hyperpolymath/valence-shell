@@ -125,6 +125,20 @@ pub enum Redirection {
 
     /// Redirect both stdout and stderr to file (bash extension): `&> file`
     BothOutput { file: String },
+
+    /// Here document: `<< DELIMITER`
+    HereDoc {
+        delimiter: String,
+        content: String,
+        expand: bool,
+        strip_tabs: bool,
+    },
+
+    /// Here string: `<<< string`
+    HereString {
+        content: String,
+        expand: bool,
+    },
 }
 
 /// Type of file modification for undo tracking.
@@ -274,6 +288,10 @@ impl RedirectSetup {
 
                 Redirection::ErrorToOutput => {
                     // Handled at execution time (fd duplication)
+                }
+
+                Redirection::HereDoc { .. } | Redirection::HereString { .. } => {
+                    // Handled by external command execution (creates temp file)
                 }
             }
         }
@@ -496,6 +514,10 @@ fn validate_redirections(redirects: &[Redirection], state: &ShellState) -> Resul
 
             Redirection::ErrorToOutput => {
                 // No file validation needed
+            }
+
+            Redirection::HereDoc { .. } | Redirection::HereString { .. } => {
+                // No file validation needed (uses temp files)
             }
         }
     }
