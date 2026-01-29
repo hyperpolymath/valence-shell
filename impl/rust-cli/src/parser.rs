@@ -835,8 +835,47 @@ fn extract_redirections_from_tokens(tokens: &[Token]) -> Result<(Vec<Token>, Vec
                 i += 2;
             }
 
-            Token::HereDoc | Token::HereDocDash | Token::HereString => {
-                return Err(anyhow!("Here documents and here strings not yet implemented (M9)"));
+            Token::HereDoc | Token::HereDocDash => {
+                // Here document: << DELIMITER or <<- DELIMITER
+                let strip_tabs = matches!(&tokens[i], Token::HereDocDash);
+                let delimiter = expect_word(&tokens, i + 1, "here document delimiter")?;
+
+                // Check if delimiter is quoted (disables expansion)
+                let (delimiter_clean, expand) = if delimiter.starts_with('\'') || delimiter.starts_with('"') {
+                    (delimiter.trim_matches(|c| c == '\'' || c == '"').to_string(), false)
+                } else {
+                    (delimiter.clone(), true)
+                };
+
+                // Content will be provided by REPL after reading subsequent lines
+                // For now, create placeholder - will be filled by execute_with_heredoc
+                redirects.push(Redirection::HereDoc {
+                    delimiter: delimiter_clean,
+                    content: String::new(), // Filled later
+                    expand,
+                    strip_tabs,
+                });
+                i += 2;
+            }
+
+            Token::HereString => {
+                // Here string: <<< word
+                let content_word = expect_word(&tokens, i + 1, "here string content")?;
+
+                // Check if quoted (disables expansion)
+                let (content, expand) = if content_word.starts_with('\'') {
+                    (content_word.trim_matches('\'').to_string(), false)
+                } else if content_word.starts_with('"') {
+                    (content_word.trim_matches('"').to_string(), true)
+                } else {
+                    (content_word.clone(), true)
+                };
+
+                redirects.push(Redirection::HereString {
+                    content,
+                    expand,
+                });
+                i += 2;
             }
 
             Token::Pipe => {
@@ -966,8 +1005,47 @@ pub fn parse_command(input: &str) -> Result<Command> {
                 i += 2;
             }
 
-            Token::HereDoc | Token::HereDocDash | Token::HereString => {
-                return Err(anyhow!("Here documents and here strings not yet implemented (M9)"));
+            Token::HereDoc | Token::HereDocDash => {
+                // Here document: << DELIMITER or <<- DELIMITER
+                let strip_tabs = matches!(&tokens[i], Token::HereDocDash);
+                let delimiter = expect_word(&tokens, i + 1, "here document delimiter")?;
+
+                // Check if delimiter is quoted (disables expansion)
+                let (delimiter_clean, expand) = if delimiter.starts_with('\'') || delimiter.starts_with('"') {
+                    (delimiter.trim_matches(|c| c == '\'' || c == '"').to_string(), false)
+                } else {
+                    (delimiter.clone(), true)
+                };
+
+                // Content will be provided by REPL after reading subsequent lines
+                // For now, create placeholder - will be filled by execute_with_heredoc
+                redirects.push(Redirection::HereDoc {
+                    delimiter: delimiter_clean,
+                    content: String::new(), // Filled later
+                    expand,
+                    strip_tabs,
+                });
+                i += 2;
+            }
+
+            Token::HereString => {
+                // Here string: <<< word
+                let content_word = expect_word(&tokens, i + 1, "here string content")?;
+
+                // Check if quoted (disables expansion)
+                let (content, expand) = if content_word.starts_with('\'') {
+                    (content_word.trim_matches('\'').to_string(), false)
+                } else if content_word.starts_with('"') {
+                    (content_word.trim_matches('"').to_string(), true)
+                } else {
+                    (content_word.clone(), true)
+                };
+
+                redirects.push(Redirection::HereString {
+                    content,
+                    expand,
+                });
+                i += 2;
             }
 
             Token::Pipe => {
@@ -2594,5 +2672,160 @@ mod tests {
         if let Token::Word(w) = &tokens2[1] {
             assert!(matches!(w.parts[0], WordPart::ProcessSub(_, _)));
         }
+    }
+}
+
+/// Process here document content: strip tabs if needed, expand if needed
+pub fn process_heredoc_content(
+    content: &str,
+    strip_tabs: bool,
+    expand: bool,
+    state: &mut crate::state::ShellState,
+) -> Result<String> {
+    let mut processed = String::new();
+
+    for line in content.lines() {
+        let line_to_add = if strip_tabs {
+            line.trim_start_matches('\t')
+        } else {
+            line
+        };
+
+        if expand {
+            // Perform variable expansion, command substitution, arithmetic
+            let expanded = expand_with_command_sub(line_to_add, state)?;
+            processed.push_str(&expanded);
+        } else {
+            processed.push_str(line_to_add);
+        }
+        processed.push('\n');
+    }
+
+    // Remove trailing newline if content didn't end with one
+    if !content.ends_with('\n') && processed.ends_with('\n') {
+        processed.pop();
+    }
+
+    Ok(processed)
+}
+
+/// Fill in here document content after reading from input
+pub fn fill_heredoc_content(
+    cmd: &mut Command,
+    heredoc_contents: &[(String, String)], // (delimiter, content) pairs
+) -> Result<()> {
+    // Find redirections that need content filled
+    let redirects = match cmd {
+        Command::External { redirects, .. } => redirects,
+        Command::Mkdir { redirects, .. }
+        | Command::Rmdir { redirects, .. }
+        | Command::Touch { redirects, .. }
+        | Command::Rm { redirects, .. }
+        | Command::Ls { redirects, .. }
+        | Command::Pwd { redirects, .. }
+        | Command::Pipeline { redirects, .. } => redirects,
+        _ => return Ok(()), // No redirects (Cd, Undo, History, etc.)
+    };
+
+    let mut heredoc_index = 0;
+    for redirect in redirects.iter_mut() {
+        if let Redirection::HereDoc { ref mut content, .. } = redirect {
+            if heredoc_index < heredoc_contents.len() {
+                *content = heredoc_contents[heredoc_index].1.clone();
+                heredoc_index += 1;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Check if command contains here documents and extract delimiters
+pub fn extract_heredoc_delimiters(input: &str) -> Result<Vec<String>> {
+    let mut delimiters = Vec::new();
+    let tokens = tokenize(input)?;
+
+    for i in 0..tokens.len() {
+        if matches!(tokens[i], Token::HereDoc | Token::HereDocDash) {
+            if i + 1 < tokens.len() {
+                if let Token::Word(ref word) = tokens[i + 1] {
+                    let delimiter = quoted_word_to_string(word);
+                    // Remove quotes if present
+                    let clean = delimiter.trim_matches(|c| c == '\'' || c == '"');
+                    delimiters.push(clean.to_string());
+                }
+            }
+        }
+    }
+
+    Ok(delimiters)
+}
+
+#[cfg(test)]
+mod heredoc_tests {
+    use super::*;
+
+    #[test]
+    fn test_process_heredoc_literal() {
+        let mut state = crate::state::ShellState::new("/tmp").unwrap();
+        let content = "Line 1\nLine 2\nLine 3";
+
+        let processed = process_heredoc_content(content, false, false, &mut state).unwrap();
+        // Content without trailing newline adds newlines for each line
+        assert_eq!(processed, "Line 1\nLine 2\nLine 3");
+    }
+
+    #[test]
+    fn test_process_heredoc_with_expansion() {
+        let mut state = crate::state::ShellState::new("/tmp").unwrap();
+        state.set_variable("name", "World");
+
+        let content = "Hello $name\nResult: $((5 + 3))";
+
+        let processed = process_heredoc_content(content, false, true, &mut state).unwrap();
+        assert_eq!(processed, "Hello World\nResult: 8");
+    }
+
+    #[test]
+    fn test_process_heredoc_strip_tabs() {
+        let mut state = crate::state::ShellState::new("/tmp").unwrap();
+        let content = "\tLine 1\n\t\tLine 2\n\t\t\tLine 3";
+
+        let processed = process_heredoc_content(content, true, false, &mut state).unwrap();
+        // <<- strips ALL leading tabs from each line
+        assert_eq!(processed, "Line 1\nLine 2\nLine 3");
+    }
+
+    #[test]
+    fn test_tokenize_herestring() {
+        let tokens = tokenize("cat <<<word").unwrap();
+        assert_eq!(tokens.len(), 3);
+        assert!(matches!(tokens[1], Token::HereString));
+    }
+
+    #[test]
+    fn test_tokenize_heredoc() {
+        let tokens = tokenize("cat <<EOF").unwrap();
+        assert_eq!(tokens.len(), 3);
+        assert!(matches!(tokens[1], Token::HereDoc));
+    }
+
+    #[test]
+    fn test_tokenize_heredoc_dash() {
+        let tokens = tokenize("cat <<-EOF").unwrap();
+        assert_eq!(tokens.len(), 3);
+        assert!(matches!(tokens[1], Token::HereDocDash));
+    }
+
+    #[test]
+    fn test_extract_heredoc_delimiters() {
+        let delimiters = extract_heredoc_delimiters("cat <<EOF").unwrap();
+        assert_eq!(delimiters, vec!["EOF"]);
+
+        let delimiters2 = extract_heredoc_delimiters("cat <<'EOF'").unwrap();
+        assert_eq!(delimiters2, vec!["EOF"]);
+
+        let delimiters3 = extract_heredoc_delimiters("cmd <<END1 arg <<END2").unwrap();
+        assert_eq!(delimiters3, vec!["END1", "END2"]);
     }
 }
