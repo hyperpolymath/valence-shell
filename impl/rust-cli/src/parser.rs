@@ -1025,13 +1025,53 @@ pub fn expand_with_command_sub(input: &str, state: &mut crate::state::ShellState
                 cmd
             ));
         } else if ch == '$' {
-            // Check for $(cmd), ${VAR} or $VAR
+            // Check for $((expr)), $(cmd), ${VAR} or $VAR
             if chars.peek() == Some(&'(') {
-                // Command substitution: $(cmd)
-                chars.next(); // consume '('
-                let cmd = parse_command_sub_dollar(&mut chars)?;
-                let output = expand_command_substitution(&cmd, state)?;
-                result.push_str(&output);
+                chars.next(); // consume first '('
+
+                // Check for arithmetic expansion: $((
+                if chars.peek() == Some(&'(') {
+                    chars.next(); // consume second '('
+
+                    // Read until ))
+                    let mut expr_str = String::new();
+                    let mut paren_depth = 0;
+
+                    loop {
+                        match chars.peek() {
+                            None => return Err(anyhow!("Unclosed arithmetic expansion")),
+                            Some(&')') => {
+                                chars.next();
+                                if chars.peek() == Some(&')') && paren_depth == 0 {
+                                    chars.next(); // consume second ')'
+                                    break;
+                                } else if paren_depth > 0 {
+                                    paren_depth -= 1;
+                                    expr_str.push(')');
+                                } else {
+                                    expr_str.push(')');
+                                }
+                            }
+                            Some(&'(') => {
+                                paren_depth += 1;
+                                expr_str.push(chars.next().unwrap());
+                            }
+                            Some(_) => {
+                                expr_str.push(chars.next().unwrap());
+                            }
+                        }
+                    }
+
+                    // Parse and evaluate arithmetic expression
+                    let expr = crate::arith::parse_arithmetic(&expr_str)?;
+                    let value = crate::arith::eval_arith(&expr, state)?;
+                    result.push_str(&value.to_string());
+                } else {
+                    // Command substitution: $(cmd)
+                    let cmd = parse_command_sub_dollar(&mut chars)?;
+                    let output = expand_command_substitution(&cmd, state)?;
+                    result.push_str(&output);
+                }
             } else if chars.peek() == Some(&'{') {
                 // Braced form: ${VAR}
                 chars.next(); // consume '{'
