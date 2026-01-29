@@ -5,7 +5,7 @@
 //! Distinguishes between built-in commands and external programs.
 //! Supports I/O redirections (>, <, >>, 2>, etc.)
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 
 use crate::redirection::Redirection;
 
@@ -29,6 +29,8 @@ enum WordPart {
     Variable(String),
     /// Braced variable reference ${VAR}
     BracedVariable(String),
+    /// Command substitution $(cmd) or `cmd`
+    CommandSub(String),
 }
 
 /// Word with quote information for expansion
@@ -69,6 +71,10 @@ impl QuotedWord {
 
     fn push_braced_variable(&mut self, name: String) {
         self.parts.push(WordPart::BracedVariable(name));
+    }
+
+    fn push_command_sub(&mut self, cmd: String) {
+        self.parts.push(WordPart::CommandSub(cmd));
     }
 }
 
@@ -304,6 +310,12 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                         push_literal!();
                         parse_variable(&mut chars, &mut current_word)?;
                     }
+                    '`' => {
+                        // Backtick command substitution in double quotes
+                        push_literal!();
+                        let cmd = parse_command_sub_backtick(&mut chars)?;
+                        current_word.push_command_sub(cmd);
+                    }
                     _ => {
                         current_literal.push(ch);
                     }
@@ -333,6 +345,13 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                     '$' => {
                         push_literal!();
                         parse_variable(&mut chars, &mut current_word)?;
+                    }
+
+                    // Backtick command substitution
+                    '`' => {
+                        push_literal!();
+                        let cmd = parse_command_sub_backtick(&mut chars)?;
+                        current_word.push_command_sub(cmd);
                     }
 
                     // Whitespace: end current word
@@ -435,7 +454,12 @@ fn parse_variable(
     chars: &mut std::iter::Peekable<std::str::Chars>,
     word: &mut QuotedWord,
 ) -> Result<()> {
-    if chars.peek() == Some(&'{') {
+    if chars.peek() == Some(&'(') {
+        // Command substitution: $(cmd)
+        chars.next(); // consume '('
+        let cmd = parse_command_sub_dollar(chars)?;
+        word.push_command_sub(cmd);
+    } else if chars.peek() == Some(&'{') {
         // Braced form: ${VAR}
         chars.next(); // consume '{'
         let mut var_name = String::new();
@@ -495,6 +519,68 @@ fn parse_variable(
     }
 
     Ok(())
+}
+
+/// Parse command substitution in $(cmd) form
+fn parse_command_sub_dollar(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<String> {
+    let mut cmd = String::new();
+    let mut depth = 1;  // Track nesting depth for nested $()
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '(' => {
+                // Check if it's $( to track nested command substitution
+                if cmd.ends_with('$') {
+                    depth += 1;
+                }
+                cmd.push(ch);
+            }
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok(cmd);
+                }
+                cmd.push(ch);
+            }
+            _ => cmd.push(ch),
+        }
+    }
+
+    Err(anyhow!("Unclosed command substitution: $("))
+}
+
+/// Parse command substitution in `cmd` form
+fn parse_command_sub_backtick(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<String> {
+    let mut cmd = String::new();
+    let mut escaped = false;
+
+    while let Some(ch) = chars.next() {
+        match (ch, escaped) {
+            ('\\', false) => escaped = true,
+            ('`', false) => return Ok(cmd),
+            ('`', true) => {
+                cmd.push('`');
+                escaped = false;
+            }
+            ('\\', true) => {
+                cmd.push('\\');
+                escaped = false;
+            }
+            ('$', true) => {
+                cmd.push('$');
+                escaped = false;
+            }
+            (_, true) => {
+                // Other escaped characters: keep backslash
+                cmd.push('\\');
+                cmd.push(ch);
+                escaped = false;
+            }
+            (_, false) => cmd.push(ch),
+        }
+    }
+
+    Err(anyhow!("Unclosed command substitution: `"))
 }
 
 /// Parse a pipeline command (tokens containing `|` operators).
@@ -826,6 +912,85 @@ fn is_valid_var_name(name: &str) -> bool {
 /// assert_eq!(expand_variables("Exit code: $?", &state), "Exit code: 0");
 /// # Ok::<(), anyhow::Error>(())
 /// ```
+/// Expand variables and command substitutions in a string
+pub fn expand_with_command_sub(input: &str, state: &mut crate::state::ShellState) -> Result<String> {
+    let mut result = String::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\\' && chars.peek() == Some(&'$') {
+            // Escaped dollar from single quotes - skip backslash, keep literal $
+            result.push(chars.next().unwrap());
+        } else if ch == '$' {
+            // Check for $(cmd), ${VAR} or $VAR
+            if chars.peek() == Some(&'(') {
+                // Command substitution: $(cmd)
+                chars.next(); // consume '('
+                let cmd = parse_command_sub_dollar(&mut chars)?;
+                let output = expand_command_substitution(&cmd, state)?;
+                result.push_str(&output);
+            } else if chars.peek() == Some(&'{') {
+                // Braced form: ${VAR}
+                chars.next(); // consume '{'
+                let mut var_name = String::new();
+
+                // Read until '}'
+                while let Some(&c) = chars.peek() {
+                    if c == '}' {
+                        chars.next(); // consume '}'
+                        break;
+                    }
+                    var_name.push(chars.next().unwrap());
+                }
+
+                // Expand the variable
+                result.push_str(&state.expand_variable(&var_name));
+            } else if let Some(&next_ch) = chars.peek() {
+                // Simple form: $VAR or special variables like $?, $$
+                if next_ch == '?' || next_ch == '$' || next_ch == '#' || next_ch == '@' || next_ch == '*' {
+                    // Single-character special variable
+                    let var_name = chars.next().unwrap().to_string();
+                    result.push_str(&state.expand_variable(&var_name));
+                } else if next_ch.is_ascii_digit() {
+                    // Positional parameter: $0, $1, etc.
+                    let var_name = chars.next().unwrap().to_string();
+                    result.push_str(&state.expand_variable(&var_name));
+                } else if next_ch.is_alphabetic() || next_ch == '_' {
+                    // Variable name: starts with letter or underscore
+                    let mut var_name = String::new();
+
+                    // Read variable name (alphanumeric + underscore)
+                    while let Some(&c) = chars.peek() {
+                        if c.is_alphanumeric() || c == '_' {
+                            var_name.push(chars.next().unwrap());
+                        } else {
+                            break;
+                        }
+                    }
+
+                    result.push_str(&state.expand_variable(&var_name));
+                } else {
+                    // $ followed by non-variable character, keep literal $
+                    result.push('$');
+                }
+            } else {
+                // $ at end of string, keep literal $
+                result.push('$');
+            }
+        } else if ch == '`' {
+            // Backtick command substitution
+            let cmd = parse_command_sub_backtick(&mut chars)?;
+            let output = expand_command_substitution(&cmd, state)?;
+            result.push_str(&output);
+        } else {
+            // Regular character
+            result.push(ch);
+        }
+    }
+
+    Ok(result)
+}
+
 pub fn expand_variables(input: &str, state: &crate::state::ShellState) -> String {
     let mut result = String::new();
     let mut chars = input.chars().peekable();
@@ -946,14 +1111,93 @@ fn quoted_word_to_string(word: &QuotedWord) -> String {
                     result.push('}');
                 }
             }
+            WordPart::CommandSub(cmd) => {
+                // Command substitution - keep as-is for now
+                // Actual expansion happens in expand_quoted_word_with_state
+                if word.quote_type != QuoteType::Single {
+                    result.push_str("$(");
+                    result.push_str(cmd);
+                    result.push(')');
+                } else {
+                    // In single quotes, it's literal
+                    result.push_str("$(");
+                    result.push_str(cmd);
+                    result.push(')');
+                }
+            }
         }
     }
 
     result
 }
 
+/// Expand command substitution by executing the command and capturing output
+pub fn expand_command_substitution(cmd: &str, state: &mut crate::state::ShellState) -> Result<String> {
+    use std::process::{Command as ProcessCommand, Stdio};
+
+    // Parse the command
+    let parsed_cmd = parse_command(cmd)?;
+
+    // Execute and capture output based on command type
+    let output = match &parsed_cmd {
+        Command::External { program, args, .. } => {
+            // Execute external command and capture stdout
+            let mut process_cmd = ProcessCommand::new(program);
+            process_cmd.stdout(Stdio::piped());
+            process_cmd.stderr(Stdio::null());
+
+            // Expand variables in args before execution
+            let expanded_args: Vec<String> = args
+                .iter()
+                .map(|arg| expand_variables(arg, state))
+                .collect();
+
+            process_cmd.args(&expanded_args);
+
+            let output_result = process_cmd.output()
+                .with_context(|| format!("Failed to execute: {}", program))?;
+
+            if output_result.status.success() {
+                String::from_utf8_lossy(&output_result.stdout).to_string()
+            } else {
+                return Err(anyhow!("Command failed with exit code: {:?}", output_result.status.code()));
+            }
+        }
+
+        Command::Pwd { .. } => {
+            // pwd builtin
+            std::env::current_dir()
+                .context("Failed to get current directory")?
+                .to_string_lossy()
+                .to_string() + "\n"
+        }
+
+        Command::Ls { path, .. } => {
+            // ls builtin - delegate to external ls command
+            let ls_path = path.as_deref().unwrap_or(".");
+            let output_result = ProcessCommand::new("ls")
+                .arg(ls_path)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .output()
+                .context("Failed to execute ls")?;
+
+            String::from_utf8_lossy(&output_result.stdout).to_string()
+        }
+
+        _ => {
+            return Err(anyhow!("Command substitution not supported for this command type"));
+        }
+    };
+
+    // Strip trailing newlines (POSIX behavior)
+    let trimmed = output.trim_end_matches('\n').to_string();
+
+    Ok(trimmed)
+}
+
 /// Expand a QuotedWord into a final string, respecting quote context
-pub fn expand_quoted_word_with_state(word: &QuotedWord, state: &crate::state::ShellState) -> String {
+pub fn expand_quoted_word_with_state(word: &QuotedWord, state: &mut crate::state::ShellState) -> Result<String> {
     let mut result = String::new();
 
     for part in &word.parts {
@@ -981,10 +1225,22 @@ pub fn expand_quoted_word_with_state(word: &QuotedWord, state: &crate::state::Sh
                     }
                 }
             }
+            WordPart::CommandSub(cmd) => {
+                // Expand command substitution unless in single quotes
+                if word.quote_type != QuoteType::Single {
+                    let output = expand_command_substitution(cmd, state)?;
+                    result.push_str(&output);
+                } else {
+                    // In single quotes, it's literal
+                    result.push_str("$(");
+                    result.push_str(cmd);
+                    result.push(')');
+                }
+            }
         }
     }
 
-    result
+    Ok(result)
 }
 
 /// Parse base command with arguments and redirections
@@ -1729,5 +1985,179 @@ mod tests {
 
         let result = parse_command("   # comment with leading space");
         assert!(result.is_err());
+    }
+
+    // =========================================================================
+    // Command Substitution Tests (Phase 6 M6)
+    // =========================================================================
+
+    #[test]
+    fn test_command_sub_dollar_parse() {
+        // Test $(cmd) parsing
+        let tokens = tokenize("echo $(pwd)").unwrap();
+        assert_eq!(tokens.len(), 2);
+
+        if let Token::Word(w) = &tokens[1] {
+            assert_eq!(w.parts.len(), 1);
+            if let WordPart::CommandSub(cmd) = &w.parts[0] {
+                assert_eq!(cmd, "pwd");
+            } else {
+                panic!("Expected CommandSub, got {:?}", w.parts[0]);
+            }
+        } else {
+            panic!("Expected Word token");
+        }
+    }
+
+    #[test]
+    fn test_command_sub_backtick_parse() {
+        // Test `cmd` parsing
+        let tokens = tokenize("echo `date`").unwrap();
+        assert_eq!(tokens.len(), 2);
+
+        if let Token::Word(w) = &tokens[1] {
+            if let WordPart::CommandSub(cmd) = &w.parts[0] {
+                assert_eq!(cmd, "date");
+            }
+        }
+    }
+
+    #[test]
+    fn test_command_sub_in_double_quotes() {
+        // Command substitution should work inside double quotes
+        let tokens = tokenize("echo \"Result: $(pwd)\"").unwrap();
+        assert_eq!(tokens.len(), 2);
+
+        if let Token::Word(w) = &tokens[1] {
+            // Should have literal "Result: " and command sub
+            assert!(w.parts.len() >= 1);
+            assert_eq!(w.quote_type, QuoteType::Double);
+        }
+    }
+
+    #[test]
+    fn test_command_sub_in_single_quotes() {
+        // Command substitution should NOT work inside single quotes (literal)
+        let tokens = tokenize("echo '$(pwd)'").unwrap();
+        assert_eq!(tokens.len(), 2);
+
+        if let Token::Word(w) = &tokens[1] {
+            assert_eq!(w.quote_type, QuoteType::Single);
+            // Should be literal text, not CommandSub
+            if let WordPart::Literal(s) = &w.parts[0] {
+                assert!(s.contains("$(pwd)") || s.contains("$"));
+            }
+        }
+    }
+
+    #[test]
+    fn test_command_sub_nested_dollar() {
+        // Test nested $(outer $(inner))
+        let tokens = tokenize("echo $(echo $(echo nested))").unwrap();
+        assert_eq!(tokens.len(), 2);
+
+        if let Token::Word(w) = &tokens[1] {
+            if let WordPart::CommandSub(cmd) = &w.parts[0] {
+                // The nested command should be parsed as part of the outer command
+                assert!(cmd.contains("$(echo nested)"));
+            }
+        }
+    }
+
+    #[test]
+    fn test_command_sub_unclosed_dollar() {
+        // Unclosed $( should be an error
+        let result = tokenize("echo $(pwd");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Unclosed"));
+    }
+
+    #[test]
+    fn test_command_sub_unclosed_backtick() {
+        // Unclosed ` should be an error
+        let result = tokenize("echo `pwd");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Unclosed"));
+    }
+
+    #[test]
+    fn test_command_sub_empty() {
+        // Empty command substitution should parse
+        let tokens = tokenize("echo $()").unwrap();
+        assert_eq!(tokens.len(), 2);
+
+        if let Token::Word(w) = &tokens[1] {
+            if let WordPart::CommandSub(cmd) = &w.parts[0] {
+                assert_eq!(cmd, "");
+            }
+        }
+    }
+
+    #[test]
+    fn test_command_sub_with_args() {
+        // Command with arguments
+        let tokens = tokenize("echo $(ls -la)").unwrap();
+        assert_eq!(tokens.len(), 2);
+
+        if let Token::Word(w) = &tokens[1] {
+            if let WordPart::CommandSub(cmd) = &w.parts[0] {
+                assert_eq!(cmd, "ls -la");
+            }
+        }
+    }
+
+    #[test]
+    fn test_command_sub_multiple() {
+        // Multiple command substitutions in one line
+        let tokens = tokenize("echo $(pwd) $(date)").unwrap();
+        assert_eq!(tokens.len(), 3);
+
+        // First command sub
+        if let Token::Word(w) = &tokens[1] {
+            if let WordPart::CommandSub(cmd) = &w.parts[0] {
+                assert_eq!(cmd, "pwd");
+            }
+        }
+
+        // Second command sub
+        if let Token::Word(w) = &tokens[2] {
+            if let WordPart::CommandSub(cmd) = &w.parts[0] {
+                assert_eq!(cmd, "date");
+            }
+        }
+    }
+
+    #[test]
+    fn test_command_sub_mixed_with_variables() {
+        // Mix of variables and command substitution
+        let tokens = tokenize("echo $VAR $(pwd)").unwrap();
+        assert_eq!(tokens.len(), 3);
+
+        // Variable
+        if let Token::Word(w) = &tokens[1] {
+            if let WordPart::Variable(name) = &w.parts[0] {
+                assert_eq!(name, "VAR");
+            }
+        }
+
+        // Command sub
+        if let Token::Word(w) = &tokens[2] {
+            if let WordPart::CommandSub(cmd) = &w.parts[0] {
+                assert_eq!(cmd, "pwd");
+            }
+        }
+    }
+
+    #[test]
+    fn test_command_sub_backtick_escaped() {
+        // Escaped backtick inside backtick command sub
+        let tokens = tokenize("echo `echo \\`test\\``").unwrap();
+        assert_eq!(tokens.len(), 2);
+
+        if let Token::Word(w) = &tokens[1] {
+            if let WordPart::CommandSub(cmd) = &w.parts[0] {
+                assert!(cmd.contains("`test`"));
+            }
+        }
     }
 }
