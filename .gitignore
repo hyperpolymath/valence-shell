@@ -11,11 +11,11 @@ Thumbs.db
 .vscode/
 
 # Build
-/target/
-/_build/
-/build/
-/dist/
-/out/
+target/
+_build/
+build/
+dist/
+out/
 
 # Dependencies
 /node_modules/
