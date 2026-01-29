@@ -349,8 +349,8 @@ impl ExecutableCommand for Command {
 
             // Variable assignment
             Command::Assignment { name, value } => {
-                // Expand variables in the value
-                let expanded_value = crate::parser::expand_variables(value, state);
+                // Expand variables and command substitutions in the value
+                let expanded_value = crate::parser::expand_with_command_sub(value, state)?;
                 state.set_variable(name, expanded_value);
                 Ok(ExecutionResult::Success)
             }
@@ -359,8 +359,8 @@ impl ExecutableCommand for Command {
             Command::Export { name, value } => {
                 if let Some(val) = value {
                     // export VAR=value
-                    // Expand variables in the value
-                    let expanded_value = crate::parser::expand_variables(val, state);
+                    // Expand variables and command substitutions in the value
+                    let expanded_value = crate::parser::expand_with_command_sub(val, state)?;
                     state.set_variable(name, expanded_value);
                     state.export_variable(name);
                 } else {
