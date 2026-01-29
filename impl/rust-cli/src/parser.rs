@@ -1146,11 +1146,12 @@ pub fn expand_command_substitution(cmd: &str, state: &mut crate::state::ShellSta
             process_cmd.stdout(Stdio::piped());
             process_cmd.stderr(Stdio::null());
 
-            // Expand variables in args before execution
-            let expanded_args: Vec<String> = args
+            // Expand variables and command substitutions in args before execution
+            let expanded_args: Result<Vec<String>> = args
                 .iter()
-                .map(|arg| expand_variables(arg, state))
+                .map(|arg| expand_with_command_sub(arg, state))
                 .collect();
+            let expanded_args = expanded_args?;
 
             process_cmd.args(&expanded_args);
 
