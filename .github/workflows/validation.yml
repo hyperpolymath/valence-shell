@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+name: Correspondence Validation
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  validate-correspondence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            impl/rust-cli/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run correspondence validation
+        run: bash scripts/validate-correspondence.sh
+        working-directory: ${{ github.workspace }}
+
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-report
+          path: validation-report.md
+
+  verify-proofs:
+    runs-on: ubuntu-latest
+    if: false  # Disabled until proof systems installed in CI
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - name: Install proof assistants
+        run: |
+          # TODO: Install Coq, Lean 4, Agda, Isabelle, Z3
+          echo "Proof verification disabled - install proof systems"
+
+      - name: Verify Lean 4 proofs
+        run: |
+          cd proofs/lean4
+          lake build
+
+      - name: Verify Coq proofs
+        run: |
+          cd proofs/coq
+          make clean && make all
+
+  property-testing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run property-based tests
+        run: |
+          cd impl/rust-cli
+          cargo test --lib -- --test-threads=1 prop_
+        env:
+          PROPTEST_CASES: 1000  # More cases in CI
+
+      - name: Run correspondence tests
+        run: |
+          cd impl/rust-cli
+          cargo test --test correspondence_tests -- --nocapture
