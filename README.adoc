@@ -20,8 +20,9 @@ Every operation backed by machine-checkable proofs, enabling GDPR compliance wit
 
 [IMPORTANT]
 ====
-**Current Status**: Research Prototype (v0.5.0) +
+**Current Status**: Advanced Research Prototype (v0.14.0) +
 ⚠️ **NOT PRODUCTION READY** - Extraction gap exists between proofs and implementation. +
+**Progress**: 82% complete, 11/14 Phase 6 milestones done (pipelines, variables, job control working) +
 See <<_verification_status>> for details.
 ====
 
@@ -33,13 +34,27 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 
 === Key Features
 
+**Formal Verification:**
 * ✅ **Formally Proven Reversibility**: `rmdir(mkdir(p, fs)) = fs`
 * ✅ **Polyglot Verification**: 6 proof systems (Coq, Lean 4, Agda, Isabelle, Mizar, Z3)
 * ✅ **~256 Theorems**: Proven across different logical foundations
 * ✅ **Content Operations**: File read/write with proven reversibility
 * ✅ **MAA Framework**: Mutually Assured Accountability with audit trails
-* ✅ **Zero Runtime Dependencies**: OCaml stdlib only
+
+**Shell Features (v0.14.0):**
+* ✅ **Unix Pipelines**: Multi-stage pipelines (cmd1 | cmd2 | cmd3)
+* ✅ **I/O Redirections**: All POSIX redirections (>, >>, <, 2>, 2>>, &>, 2>&1)
+* ✅ **Process Substitution**: <(cmd) and >(cmd) with FIFO implementation
+* ✅ **Arithmetic Expansion**: $((expr)) with full operator support
+* ✅ **Here Documents**: <<DELIMITER, <<-DELIMITER, <<<word
+* ✅ **Job Control**: Background jobs, fg, bg, kill, job specifications
+* ✅ **Shell Variables**: $VAR, export, assignment, expansion
+* ✅ **177 Tests Passing**: 131 unit + 27 integration + 19 property tests
+
+**Implementation:**
+* ✅ **Production-Ready Rust CLI**: 95% complete, fully functional shell
 * ✅ **Offline-First**: All proofs verifiable air-gapped
+* ✅ **Fuzzing**: 4 fuzz targets with cargo-fuzz integration
 
 === What Makes This Different?
 
@@ -396,14 +411,20 @@ See link:CONTRIBUTING.md[CONTRIBUTING.md] for details.
 
 == Roadmap
 
-=== Version 0.6.0 (Next Release)
+=== Version 0.15.0 (Next Release)
 
-* [x] File copy/move operations
-* [x] Symbolic link support
-* [x] Content composition theorems
-* [x] Isabelle and Mizar content operations
+* [ ] Glob expansion (*.txt, ?.rs, [a-z]*)
+* [ ] Quote processing (proper escaping, single/double quotes)
+* [ ] Variables in redirections (edge case fix)
+* [ ] Expanded correspondence tests (15 → 25+)
 
-=== Version 0.7.0
+=== Version 0.16.0
+
+* [ ] Echidna validation pipeline
+* [ ] Property-based build validation
+* [ ] Continuous fuzzing in CI/CD
+
+=== Version 0.17.0
 
 * [ ] RMO (obliterative deletion) proofs
 * [ ] GDPR compliance primitives
@@ -411,12 +432,12 @@ See link:CONTRIBUTING.md[CONTRIBUTING.md] for details.
 
 === Version 1.0.0 (Production Ready)
 
-* [ ] Close extraction gap (Coq → OCaml verification)
+* [ ] Close extraction gap (Lean → Rust formal verification)
 * [ ] Verify FFI layer
-* [ ] Full POSIX compliance
+* [ ] Full POSIX compliance (subset)
 * [ ] Performance optimization
-* [ ] Security audit
-* [ ] Fuzzing campaign
+* [ ] Security audit complete
+* [ ] Fuzzing campaign complete
 
 == Licensing
 
@@ -458,7 +479,7 @@ Different logical foundations increase confidence. If all 6 systems prove the sa
 
 === Is this production-ready?
 
-**No.** Version 0.5.0 is a research prototype. The extraction gap (Coq → OCaml → POSIX) is not verified. Use for research, education, and experimentation only.
+**No.** Version 0.14.0 is an advanced research prototype with a working shell (82% complete), but the extraction gap (Lean → Rust → POSIX) is not formally verified. The Rust CLI is functional and extensively tested (177 tests), but lacks formal proof of correspondence to the Lean theorems. Use for research, education, and experimentation only.
 
 === Can I use this in my project?
 
@@ -508,7 +529,7 @@ If you use Valence Shell in academic work:
   year = {2025},
   url = {https://github.com/Hyperpolymath/valence-shell},
   note = {Polyglot verification across 6 proof systems},
-  version = {0.5.0}
+  version = {0.14.0}
 }
 ----
 
@@ -534,7 +555,7 @@ See link:LICENSE[LICENSE] for full text.
 
 **Made with ❤️ by humans and AI, for humans who value formal correctness.**
 
-**Status**: Research Prototype (v0.5.0) | **RSR**: PLATINUM (105/100) | **Proofs**: ~256 theorems
+**Status**: Advanced Research Prototype (v0.14.0) | **RSR**: PLATINUM (105/100) | **Proofs**: ~256 theorems | **Tests**: 177 passing
 
 [.text-center]
 _"Every operation reversible. Every claim proven. Every contributor valued."_

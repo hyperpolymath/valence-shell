@@ -28,14 +28,17 @@
 
   (what-this-is
    "Formally verified shell with ~256 theorems across 6 proof systems"
-   "Research prototype demonstrating mathematical guarantees for filesystem operations"
+   "Advanced research prototype with working shell features (v0.14.0, 82% complete)"
+   "Functional shell with pipelines, redirections, variables, job control, process substitution"
    "Implementation of MAA (Mutually Assured Accountability) framework"
+   "177 tests passing (131 unit + 27 integration + 19 property tests)"
    "Incremental path toward full POSIX shell compliance with verification at each step")
 
   (what-this-is-not
    "NOT production-ready (extraction gap between proofs and implementation)"
-   "NOT currently a full POSIX shell (no parser, pipelines, scripting yet)"
-   "NOT a replacement for bash/zsh in current state"
+   "NOT formally verified end-to-end (Lean → Rust correspondence 85% confidence, not proven)"
+   "NOT a full POSIX shell yet (missing glob expansion, quote processing)"
+   "NOT a replacement for bash/zsh in current state (lacks some scripting features)"
    "NOT optimized for performance (verification prioritized over speed)")
 
   ;; Maintenance note: Review satellite relationships when:

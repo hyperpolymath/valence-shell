@@ -34,17 +34,21 @@ where
 
     // Resolve redirect file paths before capturing stdout
     // (state.resolve_path needs immutable access)
+    // IMPORTANT: Expand variables in file paths first (fixes M11 edge case)
     let resolved_redirects: Vec<(Redirection, PathBuf)> = redirects
         .iter()
         .filter_map(|r| match r {
             Redirection::Output { file } => {
-                Some((r.clone(), state.resolve_path(file)))
+                let expanded = crate::parser::expand_variables(file, state);
+                Some((r.clone(), state.resolve_path(&expanded)))
             }
             Redirection::Append { file } => {
-                Some((r.clone(), state.resolve_path(file)))
+                let expanded = crate::parser::expand_variables(file, state);
+                Some((r.clone(), state.resolve_path(&expanded)))
             }
             Redirection::BothOutput { file } => {
-                Some((r.clone(), state.resolve_path(file)))
+                let expanded = crate::parser::expand_variables(file, state);
+                Some((r.clone(), state.resolve_path(&expanded)))
             }
             _ => None,
         })
@@ -306,7 +310,9 @@ impl RedirectSetup {
         state: &ShellState,
         append: bool,
     ) -> Result<()> {
-        let path = state.resolve_path(file);
+        // Expand variables in file path first (M11 edge case fix)
+        let expanded = crate::parser::expand_variables(file, state);
+        let path = state.resolve_path(&expanded);
 
         // Record original state for undo
         if path.exists() {
@@ -364,7 +370,9 @@ impl RedirectSetup {
 
     /// Setup input redirection (<)
     fn setup_input_redirect(&mut self, file: &str, state: &ShellState) -> Result<()> {
-        let path = state.resolve_path(file);
+        // Expand variables in file path first (M11 edge case fix)
+        let expanded = crate::parser::expand_variables(file, state);
+        let path = state.resolve_path(&expanded);
 
         // Validate file exists and is readable
         if !path.exists() {
@@ -533,7 +541,10 @@ fn validate_no_input_output_conflict(
     let input_files: HashSet<PathBuf> = redirects
         .iter()
         .filter_map(|r| match r {
-            Redirection::Input { file } => Some(state.resolve_path(file)),
+            Redirection::Input { file } => {
+                let expanded = crate::parser::expand_variables(file, state);
+                Some(state.resolve_path(&expanded))
+            }
             _ => None,
         })
         .collect();
@@ -545,7 +556,10 @@ fn validate_no_input_output_conflict(
             | Redirection::Append { file }
             | Redirection::ErrorOutput { file }
             | Redirection::ErrorAppend { file }
-            | Redirection::BothOutput { file } => Some(state.resolve_path(file)),
+            | Redirection::BothOutput { file } => {
+                let expanded = crate::parser::expand_variables(file, state);
+                Some(state.resolve_path(&expanded))
+            }
             _ => None,
         })
         .collect();
@@ -565,7 +579,9 @@ fn validate_no_input_output_conflict(
 
 /// Validate input redirection target
 fn validate_input_file(file: &str, state: &ShellState) -> Result<()> {
-    let path = state.resolve_path(file);
+    // Expand variables in file path first (M11 edge case fix)
+    let expanded = crate::parser::expand_variables(file, state);
+    let path = state.resolve_path(&expanded);
 
     if !path.exists() {
         anyhow::bail!("Input file does not exist: {}", path.display());
@@ -593,7 +609,9 @@ fn validate_input_file(file: &str, state: &ShellState) -> Result<()> {
 
 /// Validate output redirection target
 fn validate_output_file(file: &str, state: &ShellState) -> Result<()> {
-    let path = state.resolve_path(file);
+    // Expand variables in file path first (M11 edge case fix)
+    let expanded = crate::parser::expand_variables(file, state);
+    let path = state.resolve_path(&expanded);
 
     // Check parent directory exists
     if let Some(parent) = path.parent() {
