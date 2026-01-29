@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -204,11 +204,20 @@ pub struct ShellState {
     /// State file path for persistence
     state_file: PathBuf,
 
-    /// Last exit code from external command (for future $? support)
+    /// Last exit code from external command (for $? support)
     pub last_exit_code: i32,
 
     /// Previous directory for cd - support
     pub previous_dir: Option<PathBuf>,
+
+    /// Shell variables (VAR=value)
+    pub variables: HashMap<String, String>,
+
+    /// Variables that are exported to child processes
+    pub exported_vars: HashSet<String>,
+
+    /// Positional parameters ($1, $2, ...) for script arguments
+    pub positional_params: Vec<String>,
 }
 
 impl ShellState {
@@ -232,6 +241,9 @@ impl ShellState {
             state_file,
             last_exit_code: 0,
             previous_dir: None,
+            variables: HashMap::new(),
+            exported_vars: HashSet::new(),
+            positional_params: Vec::new(),
         };
 
         // Try to load existing state
@@ -412,6 +424,111 @@ impl ShellState {
         self.previous_dir = state.previous_dir;
 
         Ok(())
+    }
+
+    // =========================================================================
+    // Variable Management
+    // =========================================================================
+
+    /// Set a shell variable
+    pub fn set_variable(&mut self, name: impl Into<String>, value: impl Into<String>) {
+        self.variables.insert(name.into(), value.into());
+    }
+
+    /// Get a shell variable value
+    pub fn get_variable(&self, name: &str) -> Option<&str> {
+        self.variables.get(name).map(|s| s.as_str())
+    }
+
+    /// Export a variable (make it available to child processes)
+    pub fn export_variable(&mut self, name: impl Into<String>) {
+        self.exported_vars.insert(name.into());
+    }
+
+    /// Check if a variable is exported
+    pub fn is_exported(&self, name: &str) -> bool {
+        self.exported_vars.contains(name)
+    }
+
+    /// Get all exported variables as environment key-value pairs
+    pub fn get_exported_env(&self) -> Vec<(String, String)> {
+        self.exported_vars
+            .iter()
+            .filter_map(|name| {
+                self.variables
+                    .get(name)
+                    .map(|value| (name.clone(), value.clone()))
+            })
+            .collect()
+    }
+
+    /// Set positional parameters ($1, $2, ...)
+    pub fn set_positional_params(&mut self, params: Vec<String>) {
+        self.positional_params = params;
+    }
+
+    /// Get a positional parameter by index (1-based: $1, $2, ...)
+    pub fn get_positional_param(&self, index: usize) -> Option<&str> {
+        if index == 0 {
+            Some("vsh") // $0 is the shell name
+        } else if index > 0 && index <= self.positional_params.len() {
+            Some(&self.positional_params[index - 1])
+        } else {
+            None
+        }
+    }
+
+    /// Get all positional parameters as separate words ($@)
+    pub fn get_all_params_separate(&self) -> String {
+        self.positional_params.join(" ")
+    }
+
+    /// Get all positional parameters as single word ($*)
+    pub fn get_all_params_joined(&self) -> String {
+        self.positional_params.join(" ")
+    }
+
+    /// Get count of positional parameters ($#)
+    pub fn get_param_count(&self) -> usize {
+        self.positional_params.len()
+    }
+
+    /// Get special variable value ($$, $?, $HOME, etc.)
+    pub fn get_special_variable(&self, name: &str) -> Option<String> {
+        match name {
+            "?" => Some(self.last_exit_code.to_string()),
+            "$" => Some(std::process::id().to_string()),
+            "#" => Some(self.positional_params.len().to_string()),
+            "@" => Some(self.get_all_params_separate()),
+            "*" => Some(self.get_all_params_joined()),
+            "0" => Some("vsh".to_string()),
+            "HOME" => std::env::var("HOME").ok(),
+            "PWD" => std::env::current_dir()
+                .ok()
+                .and_then(|p| p.to_str().map(String::from)),
+            "USER" => std::env::var("USER").ok(),
+            "PATH" => std::env::var("PATH").ok(),
+            "SHELL" => Some("vsh".to_string()),
+            _ => {
+                // Check for positional parameter ($1, $2, ...)
+                if let Ok(index) = name.parse::<usize>() {
+                    self.get_positional_param(index).map(String::from)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    /// Expand a variable reference ($VAR or ${VAR})
+    pub fn expand_variable(&self, name: &str) -> String {
+        // Try special variables first
+        if let Some(value) = self.get_special_variable(name) {
+            return value;
+        }
+
+        // Then user-defined variables
+        self.get_variable(name).unwrap_or("").to_string()
     }
 }
 
