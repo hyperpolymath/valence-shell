@@ -68,48 +68,48 @@ impl ExecutableCommand for Command {
         match self {
             // Filesystem operations (reversible)
             Command::Mkdir { path, redirects } => {
+                let expanded_path = crate::parser::expand_variables(path, state);
                 if redirects.is_empty() {
-                    commands::mkdir(state, path, false)?;
+                    commands::mkdir(state, &expanded_path, false)?;
                 } else {
-                    let path = path.clone();
                     redirection::capture_and_redirect(redirects, state, |s| {
-                        commands::mkdir(s, &path, false)
+                        commands::mkdir(s, &expanded_path, false)
                     })?;
                 }
                 Ok(ExecutionResult::Success)
             }
 
             Command::Rmdir { path, redirects } => {
+                let expanded_path = crate::parser::expand_variables(path, state);
                 if redirects.is_empty() {
-                    commands::rmdir(state, path, false)?;
+                    commands::rmdir(state, &expanded_path, false)?;
                 } else {
-                    let path = path.clone();
                     redirection::capture_and_redirect(redirects, state, |s| {
-                        commands::rmdir(s, &path, false)
+                        commands::rmdir(s, &expanded_path, false)
                     })?;
                 }
                 Ok(ExecutionResult::Success)
             }
 
             Command::Touch { path, redirects } => {
+                let expanded_path = crate::parser::expand_variables(path, state);
                 if redirects.is_empty() {
-                    commands::touch(state, path, false)?;
+                    commands::touch(state, &expanded_path, false)?;
                 } else {
-                    let path = path.clone();
                     redirection::capture_and_redirect(redirects, state, |s| {
-                        commands::touch(s, &path, false)
+                        commands::touch(s, &expanded_path, false)
                     })?;
                 }
                 Ok(ExecutionResult::Success)
             }
 
             Command::Rm { path, redirects } => {
+                let expanded_path = crate::parser::expand_variables(path, state);
                 if redirects.is_empty() {
-                    commands::rm(state, path, false)?;
+                    commands::rm(state, &expanded_path, false)?;
                 } else {
-                    let path = path.clone();
                     redirection::capture_and_redirect(redirects, state, |s| {
-                        commands::rm(s, &path, false)
+                        commands::rm(s, &expanded_path, false)
                     })?;
                 }
                 Ok(ExecutionResult::Success)
@@ -133,7 +133,8 @@ impl ExecutableCommand for Command {
 
             // Transactions
             Command::Begin { name } => {
-                commands::begin_transaction(state, name)?;
+                let expanded_name = crate::parser::expand_variables(name, state);
+                commands::begin_transaction(state, &expanded_name)?;
                 Ok(ExecutionResult::Success)
             }
 
@@ -163,11 +164,14 @@ impl ExecutableCommand for Command {
 
             // Navigation (built-ins but not reversible)
             Command::Ls { path, redirects } => {
+                // Expand variables in path
+                let expanded_path = path.as_ref().map(|p| crate::parser::expand_variables(p, state));
+
                 if redirects.is_empty() {
                     // Direct output to terminal
                     use std::fs;
 
-                    let target = if let Some(p) = path {
+                    let target = if let Some(ref p) = expanded_path {
                         state.resolve_path(p)
                     } else {
                         state.root.clone()
@@ -190,11 +194,10 @@ impl ExecutableCommand for Command {
                     }
                 } else {
                     // Capture and redirect output
-                    let path_opt = path.clone();
                     redirection::capture_and_redirect(redirects, state, |s| {
                         use std::fs;
 
-                        let target = if let Some(ref p) = path_opt {
+                        let target = if let Some(ref p) = expanded_path {
                             s.resolve_path(p)
                         } else {
                             s.root.clone()
@@ -236,7 +239,10 @@ impl ExecutableCommand for Command {
             Command::Cd { path } => {
                 use std::path::PathBuf;
 
-                let target = if let Some(p) = path {
+                // Expand variables in path first
+                let expanded_path = path.as_ref().map(|p| crate::parser::expand_variables(p, state));
+
+                let target = if let Some(ref p) = expanded_path {
                     if p == "-" {
                         // cd - : swap to previous directory
                         match &state.previous_dir {
@@ -293,15 +299,22 @@ impl ExecutableCommand for Command {
                 args,
                 redirects,
             } => {
+                // Expand variables in program name and arguments
+                let expanded_program = crate::parser::expand_variables(program, state);
+                let expanded_args: Vec<String> = args
+                    .iter()
+                    .map(|arg| crate::parser::expand_variables(arg, state))
+                    .collect();
+
                 let exit_code = if redirects.is_empty() {
                     // No redirections - use simple path
-                    external::execute_external(program, args)
+                    external::execute_external(&expanded_program, &expanded_args)
                 } else {
                     // Has redirections - use redirection-aware execution
-                    external::execute_external_with_redirects(program, args, redirects, state)
+                    external::execute_external_with_redirects(&expanded_program, &expanded_args, redirects, state)
                 }
                 .unwrap_or_else(|e| {
-                    eprintln!("{}: {}", program, e);
+                    eprintln!("{}: {}", expanded_program, e);
                     127
                 });
 
@@ -310,14 +323,53 @@ impl ExecutableCommand for Command {
 
             // Pipeline commands (not reversible by default, but redirections are)
             Command::Pipeline { stages, redirects } => {
-                let exit_code = external::execute_pipeline(stages, redirects, state).unwrap_or_else(
-                    |e| {
+                // Expand variables in all pipeline stages
+                let expanded_stages: Vec<(String, Vec<String>)> = stages
+                    .iter()
+                    .map(|(program, args)| {
+                        let expanded_program = crate::parser::expand_variables(program, state);
+                        let expanded_args: Vec<String> = args
+                            .iter()
+                            .map(|arg| crate::parser::expand_variables(arg, state))
+                            .collect();
+                        (expanded_program, expanded_args)
+                    })
+                    .collect();
+
+                let exit_code = external::execute_pipeline(&expanded_stages, redirects, state)
+                    .unwrap_or_else(|e| {
                         eprintln!("Pipeline error: {}", e);
                         127
-                    },
-                );
+                    });
 
                 Ok(ExecutionResult::ExternalCommand { exit_code })
+            }
+
+            // Variable assignment
+            Command::Assignment { name, value } => {
+                // Expand variables in the value
+                let expanded_value = crate::parser::expand_variables(value, state);
+                state.set_variable(name, expanded_value);
+                Ok(ExecutionResult::Success)
+            }
+
+            // Export command
+            Command::Export { name, value } => {
+                if let Some(val) = value {
+                    // export VAR=value
+                    // Expand variables in the value
+                    let expanded_value = crate::parser::expand_variables(val, state);
+                    state.set_variable(name, expanded_value);
+                    state.export_variable(name);
+                } else {
+                    // export VAR (export existing variable)
+                    if state.get_variable(name).is_some() {
+                        state.export_variable(name);
+                    } else {
+                        anyhow::bail!("export: {}: variable not set", name);
+                    }
+                }
+                Ok(ExecutionResult::Success)
             }
         }
     }
@@ -402,6 +454,18 @@ impl ExecutableCommand for Command {
                     })
                     .collect();
                 stage_desc.join(" | ")
+            }
+
+            Command::Assignment { name, value } => {
+                format!("{}={}", name, value)
+            }
+
+            Command::Export { name, value } => {
+                if let Some(val) = value {
+                    format!("export {}={}", name, val)
+                } else {
+                    format!("export {}", name)
+                }
             }
         }
     }
