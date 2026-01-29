@@ -2,7 +2,7 @@
 
 [package]
 name = "vsh"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2021"
 authors = ["Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>"]
 description = "Valence Shell - A formally verified reversible shell"
@@ -47,6 +47,9 @@ gag = "1.0"
 
 # Signal handling (Ctrl+C for external commands)
 ctrlc = "3.4"
+
+# Unix syscalls (mkfifo for process substitution)
+libc = "0.2"
 
 # Unix socket for BEAM IPC
 # (tokio already provides this)
