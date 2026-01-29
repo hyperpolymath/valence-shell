@@ -122,6 +122,15 @@ enum Token {
 
     /// Pipeline operator: |
     Pipe,
+
+    /// Here document: <<
+    HereDoc,
+
+    /// Here document with tab stripping: <<-
+    HereDocDash,
+
+    /// Here string: <<<
+    HereString,
 }
 
 /// Parsed command with arguments and redirections.
@@ -394,7 +403,25 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                     }
 
                     '<' => {
-                        if chars.peek() == Some(&'(') {
+                        if chars.peek() == Some(&'<') {
+                            // Could be << or <<<
+                            chars.next(); // consume second <
+                            if chars.peek() == Some(&'<') {
+                                // Here string: <<<
+                                chars.next(); // consume third <
+                                push_word!();
+                                tokens.push(Token::HereString);
+                            } else if chars.peek() == Some(&'-') {
+                                // Here document with tab stripping: <<-
+                                chars.next(); // consume -
+                                push_word!();
+                                tokens.push(Token::HereDocDash);
+                            } else {
+                                // Here document: <<
+                                push_word!();
+                                tokens.push(Token::HereDoc);
+                            }
+                        } else if chars.peek() == Some(&'(') {
                             // Process substitution: <(cmd)
                             push_literal!();
                             let cmd = parse_process_sub_input(&mut chars)?;
@@ -808,6 +835,10 @@ fn extract_redirections_from_tokens(tokens: &[Token]) -> Result<(Vec<Token>, Vec
                 i += 2;
             }
 
+            Token::HereDoc | Token::HereDocDash | Token::HereString => {
+                return Err(anyhow!("Here documents and here strings not yet implemented (M9)"));
+            }
+
             Token::Pipe => {
                 return Err(anyhow!("Unexpected pipe in stage"));
             }
@@ -933,6 +964,10 @@ pub fn parse_command(input: &str) -> Result<Command> {
                 let file = expect_word(&tokens, i + 1, "both redirection")?;
                 redirects.push(Redirection::BothOutput { file });
                 i += 2;
+            }
+
+            Token::HereDoc | Token::HereDocDash | Token::HereString => {
+                return Err(anyhow!("Here documents and here strings not yet implemented (M9)"));
             }
 
             Token::Pipe => {

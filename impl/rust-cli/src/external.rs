@@ -377,6 +377,21 @@ fn stdio_config_from_redirects(
                 // TODO: Implement proper fd duplication
                 stderr_cfg = Stdio::inherit(); // Fallback
             }
+
+            Redirection::HereDoc { content, .. } | Redirection::HereString { content, .. } => {
+                // Create temporary file with here doc content
+                let temp_path = format!("/tmp/vsh-heredoc-{}-{}",
+                    std::process::id(),
+                    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+                );
+                std::fs::write(&temp_path, content)?;
+
+                let file_handle = File::open(&temp_path)
+                    .with_context(|| format!("Failed to open here document temp file: {}", temp_path))?;
+                stdin_cfg = Stdio::from(file_handle);
+
+                // TODO: Track temp file for cleanup
+            }
         }
     }
 
