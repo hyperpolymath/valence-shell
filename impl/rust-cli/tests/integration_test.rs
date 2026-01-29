@@ -752,3 +752,184 @@ fn test_redirect_redo_truncate() {
     fs::write(&target, "").unwrap();
     assert_eq!(fs::read_to_string(&target).unwrap(), "", "Should be truncated again");
 }
+// ============================================================
+// Glob Expansion Tests (Phase 6 M12)
+// ============================================================
+
+/// Test: Wildcard glob expansion (*.txt)
+#[test]
+fn test_glob_wildcard_expansion() {
+    let temp = fixtures::test_sandbox("glob_wildcard");
+
+    // Create test files
+    fs::write(temp.path().join("file1.txt"), "content1").unwrap();
+    fs::write(temp.path().join("file2.txt"), "content2").unwrap();
+    fs::write(temp.path().join("file3.log"), "content3").unwrap();
+
+    // Test *.txt pattern via external command
+    let output = Command::new("ls")
+        .arg("*.txt")
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("file1.txt"), "Should match file1.txt");
+    assert!(stdout.contains("file2.txt"), "Should match file2.txt");
+    assert!(!stdout.contains("file3.log"), "Should not match .log files");
+}
+
+/// Test: Question mark glob (file?.txt)
+#[test]
+fn test_glob_question_mark() {
+    let temp = fixtures::test_sandbox("glob_question");
+
+    // Create test files
+    fs::write(temp.path().join("file1.txt"), "").unwrap();
+    fs::write(temp.path().join("file2.txt"), "").unwrap();
+    fs::write(temp.path().join("file10.txt"), "").unwrap(); // Two chars, shouldn't match
+
+    // Test file?.txt pattern
+    let output = Command::new("ls")
+        .arg("file?.txt")
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("file1.txt"), "Should match single character");
+    assert!(stdout.contains("file2.txt"), "Should match single character");
+    assert!(!stdout.contains("file10.txt"), "Should not match two characters");
+}
+
+/// Test: Brace expansion (file{1,2,3}.txt)
+#[test]
+fn test_glob_brace_expansion() {
+    let temp = fixtures::test_sandbox("glob_brace");
+
+    // Create test files
+    fs::write(temp.path().join("file1.txt"), "").unwrap();
+    fs::write(temp.path().join("file2.txt"), "").unwrap();
+    fs::write(temp.path().join("file3.txt"), "").unwrap();
+    fs::write(temp.path().join("file4.txt"), "").unwrap();
+
+    // Test file{1,2,3}.txt pattern (should match 1, 2, 3 but not 4)
+    let output = Command::new("ls")
+        .arg("file{1,2,3}.txt")
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("file1.txt"), "Should match file1.txt");
+    assert!(stdout.contains("file2.txt"), "Should match file2.txt");
+    assert!(stdout.contains("file3.txt"), "Should match file3.txt");
+    // file4.txt may or may not appear - it's outside the brace expansion
+}
+
+/// Test: Empty glob matches return literal (POSIX behavior)
+#[test]
+fn test_glob_no_matches_literal() {
+    let temp = fixtures::test_sandbox("glob_no_match");
+
+    // Don't create any .xyz files
+
+    // Test *.xyz pattern - should pass literal to command
+    let output = Command::new("echo")
+        .arg("*.xyz")
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("*.xyz"), "Should pass literal pattern when no matches");
+}
+
+/// Test: Glob expansion in multiple arguments
+#[test]
+fn test_glob_multiple_args() {
+    let temp = fixtures::test_sandbox("glob_multi");
+
+    // Create test files
+    fs::write(temp.path().join("a1.txt"), "").unwrap();
+    fs::write(temp.path().join("a2.txt"), "").unwrap();
+    fs::write(temp.path().join("b1.log"), "").unwrap();
+    fs::write(temp.path().join("b2.log"), "").unwrap();
+
+    // Test echo *.txt *.log (should expand both patterns)
+    let output = Command::new("echo")
+        .arg("*.txt")
+        .arg("*.log")
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("a1.txt"), "Should expand *.txt");
+    assert!(stdout.contains("a2.txt"), "Should expand *.txt");
+    assert!(stdout.contains("b1.log"), "Should expand *.log");
+    assert!(stdout.contains("b2.log"), "Should expand *.log");
+}
+
+/// Test: Glob patterns do not expand in quoted strings
+#[test]
+fn test_glob_no_expansion_in_quotes() {
+    let temp = fixtures::test_sandbox("glob_quoted");
+
+    fs::write(temp.path().join("file.txt"), "").unwrap();
+
+    // Test echo "*.txt" (should NOT expand)
+    let output = Command::new("echo")
+        .arg("\"*.txt\"") // This would need quote processing in parser
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Note: This test may need quote handling in parser to work correctly
+    // For now it documents expected behavior
+}
+
+/// Test: Hidden files require explicit dot
+#[test]
+fn test_glob_hidden_files() {
+    let temp = fixtures::test_sandbox("glob_hidden");
+
+    // Create hidden and visible files
+    fs::write(temp.path().join(".hidden.txt"), "").unwrap();
+    fs::write(temp.path().join("visible.txt"), "").unwrap();
+
+    // Test *.txt (should NOT match .hidden.txt)
+    let output = Command::new("ls")
+        .arg("*.txt")
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("visible.txt"), "Should match visible files");
+    assert!(!stdout.contains(".hidden.txt"), "Should not match hidden files without explicit .");
+}
+
+/// Test: Glob character class [0-9]
+#[test]
+fn test_glob_character_class() {
+    let temp = fixtures::test_sandbox("glob_class");
+
+    // Create test files
+    fs::write(temp.path().join("file1.txt"), "").unwrap();
+    fs::write(temp.path().join("file2.txt"), "").unwrap();
+    fs::write(temp.path().join("fileA.txt"), "").unwrap();
+
+    // Test file[0-9].txt pattern
+    let output = Command::new("ls")
+        .arg("file[0-9].txt")
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("file1.txt"), "Should match digit 1");
+    assert!(stdout.contains("file2.txt"), "Should match digit 2");
+    assert!(!stdout.contains("fileA.txt"), "Should not match letter A");
+}

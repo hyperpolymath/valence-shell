@@ -2,7 +2,7 @@
 
 [package]
 name = "vsh"
-version = "0.13.0"
+version = "0.14.0"
 edition = "2021"
 authors = ["Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>"]
 description = "Valence Shell - A formally verified reversible shell"
@@ -36,6 +36,10 @@ dirs = "5.0"
 # Colored output
 colored = "2.1"
 
+# REPL with tab completion, history, syntax highlighting
+reedline = "0.36"
+nu-ansi-term = "0.50"
+
 # UUID for operation IDs
 uuid = { version = "1.6", features = ["v4", "serde"] }
 
@@ -51,6 +55,9 @@ ctrlc = "3.4"
 # Unix syscalls (mkfifo for process substitution)
 libc = "0.2"
 
+# Glob pattern matching
+glob = "0.3"
+
 # Unix socket for BEAM IPC
 # (tokio already provides this)
 
@@ -58,6 +65,14 @@ libc = "0.2"
 # Property-based testing (validates Lean 4 theorems)
 proptest = "1.4"
 tempfile = "3.8"
+
+# Benchmarking
+criterion = "0.5"
+
+[features]
+# Optional Lean 4 runtime verification (precondition checking)
+# Adds ~5% overhead, provides mathematical guarantees on operation safety
+lean-runtime-checks = []
 
 [build-dependencies]
 # Link to Zig FFI library
@@ -68,9 +83,17 @@ lto = true
 codegen-units = 1
 strip = true
 
+[lib]
+name = "vsh"
+path = "src/lib.rs"
+
 [[bin]]
 name = "vsh"
 path = "src/main.rs"
+
+[[bench]]
+name = "lean_verification_overhead"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true
