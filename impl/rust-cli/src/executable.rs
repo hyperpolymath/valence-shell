@@ -299,12 +299,13 @@ impl ExecutableCommand for Command {
                 args,
                 redirects,
             } => {
-                // Expand variables in program name and arguments
-                let expanded_program = crate::parser::expand_variables(program, state);
-                let expanded_args: Vec<String> = args
+                // Expand variables and command substitutions in program name and arguments
+                let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
+                let expanded_args: Result<Vec<String>> = args
                     .iter()
-                    .map(|arg| crate::parser::expand_variables(arg, state))
+                    .map(|arg| crate::parser::expand_with_command_sub(arg, state))
                     .collect();
+                let expanded_args = expanded_args?;
 
                 let exit_code = if redirects.is_empty() {
                     // No redirections - use simple path
@@ -323,18 +324,19 @@ impl ExecutableCommand for Command {
 
             // Pipeline commands (not reversible by default, but redirections are)
             Command::Pipeline { stages, redirects } => {
-                // Expand variables in all pipeline stages
-                let expanded_stages: Vec<(String, Vec<String>)> = stages
+                // Expand variables and command substitutions in all pipeline stages
+                let expanded_stages: Result<Vec<(String, Vec<String>)>> = stages
                     .iter()
                     .map(|(program, args)| {
-                        let expanded_program = crate::parser::expand_variables(program, state);
-                        let expanded_args: Vec<String> = args
+                        let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
+                        let expanded_args: Result<Vec<String>> = args
                             .iter()
-                            .map(|arg| crate::parser::expand_variables(arg, state))
+                            .map(|arg| crate::parser::expand_with_command_sub(arg, state))
                             .collect();
-                        (expanded_program, expanded_args)
+                        Ok((expanded_program, expanded_args?))
                     })
                     .collect();
+                let expanded_stages = expanded_stages?;
 
                 let exit_code = external::execute_pipeline(&expanded_stages, redirects, state)
                     .unwrap_or_else(|e| {
