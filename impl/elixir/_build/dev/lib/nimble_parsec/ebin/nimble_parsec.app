@@ -1,5 +1,5 @@
 {application,nimble_parsec,
-             [{config_mtime,1767139155},
+             [{config_mtime,1769642919},
               {optional_applications,[]},
               {applications,[kernel,stdlib,elixir]},
               {description,"A simple and fast library for text-based parser combinators"},

@@ -28,7 +28,7 @@ defmodule VSH.NIF do
   provides memory safety and direct POSIX access.
   """
 
-  use Zig, otp_app: :vsh, nifs: [mkdir: 1, rmdir: 1, create_file: 1, delete_file: 1, get_last_audit: 0]
+  use Zig, otp_app: :vsh
 
   ~Z"""
   // SPDX-License-Identifier: PLMP-1.0-or-later
@@ -185,71 +185,71 @@ defmodule VSH.NIF do
 
   fn errorToAtom(err: PosixError) beam.term {
       return switch (err) {
-          .success => beam.make_atom("ok"),
-          .eexist => beam.make_atom("eexist"),
-          .enoent => beam.make_atom("enoent"),
-          .eacces => beam.make_atom("eacces"),
-          .enotdir => beam.make_atom("enotdir"),
-          .eisdir => beam.make_atom("eisdir"),
-          .enotempty => beam.make_atom("enotempty"),
-          .einval => beam.make_atom("einval"),
+          .success => beam.make(.{.ok}, .{}),
+          .eexist => beam.make(.{.eexist}, .{}),
+          .enoent => beam.make(.{.enoent}, .{}),
+          .eacces => beam.make(.{.eacces}, .{}),
+          .enotdir => beam.make(.{.enotdir}, .{}),
+          .eisdir => beam.make(.{.eisdir}, .{}),
+          .enotempty => beam.make(.{.enotempty}, .{}),
+          .einval => beam.make(.{.einval}, .{}),
       };
   }
 
   // NIF: mkdir/1
   pub fn mkdir(path: []const u8) beam.term {
-      const fs = ensureFs() catch return beam.make_error_tuple("init_failed");
+      const fs = ensureFs() catch return beam.make(.{.@"error", .init_failed}, .{});
       const result = fs.mkdir(path);
       recordAudit("mkdir", path, result);
       if (result == .success) {
-          return beam.make_atom("ok");
+          return beam.make(.{.ok}, .{});
       }
-      return beam.make_error_tuple(errorToAtom(result));
+      return beam.make(.{.@"error", errorToAtom(result)}, .{});
   }
 
   // NIF: rmdir/1
   pub fn rmdir(path: []const u8) beam.term {
-      const fs = ensureFs() catch return beam.make_error_tuple("init_failed");
+      const fs = ensureFs() catch return beam.make(.{.@"error", .init_failed}, .{});
       const result = fs.rmdir(path);
       recordAudit("rmdir", path, result);
       if (result == .success) {
-          return beam.make_atom("ok");
+          return beam.make(.{.ok}, .{});
       }
-      return beam.make_error_tuple(errorToAtom(result));
+      return beam.make(.{.@"error", errorToAtom(result)}, .{});
   }
 
   // NIF: create_file/1
   pub fn create_file(path: []const u8) beam.term {
-      const fs = ensureFs() catch return beam.make_error_tuple("init_failed");
+      const fs = ensureFs() catch return beam.make(.{.@"error", .init_failed}, .{});
       const result = fs.createFile(path);
       recordAudit("create_file", path, result);
       if (result == .success) {
-          return beam.make_atom("ok");
+          return beam.make(.{.ok}, .{});
       }
-      return beam.make_error_tuple(errorToAtom(result));
+      return beam.make(.{.@"error", errorToAtom(result)}, .{});
   }
 
   // NIF: delete_file/1
   pub fn delete_file(path: []const u8) beam.term {
-      const fs = ensureFs() catch return beam.make_error_tuple("init_failed");
+      const fs = ensureFs() catch return beam.make(.{.@"error", .init_failed}, .{});
       const result = fs.deleteFile(path);
       recordAudit("delete_file", path, result);
       if (result == .success) {
-          return beam.make_atom("ok");
+          return beam.make(.{.ok}, .{});
       }
-      return beam.make_error_tuple(errorToAtom(result));
+      return beam.make(.{.@"error", errorToAtom(result)}, .{});
   }
 
   // NIF: get_last_audit/0
   pub fn get_last_audit() beam.term {
-      const entry = getLastAudit() orelse return beam.make_error_tuple("no_entries");
+      const entry = getLastAudit() orelse return beam.make(.{.@"error", .no_entries}, .{});
       // Return as {operation, path, result, timestamp}
-      return beam.make_tuple(.{
-          beam.make_binary(entry.operation),
-          beam.make_binary(entry.path),
+      return beam.make(.{
+          entry.operation,
+          entry.path,
           errorToAtom(entry.result),
-          beam.make_i64(entry.timestamp),
-      });
+          entry.timestamp,
+      }, .{});
   }
   """
 

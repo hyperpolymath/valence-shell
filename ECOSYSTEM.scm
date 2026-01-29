@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: PLMP-1.0-or-later
+;; SPDX-License-Identifier: PMPL-1.0-or-later
 ;; ECOSYSTEM.scm - Ecosystem Positioning
 ;; valence-shell
 ;;
@@ -8,18 +8,35 @@
 (ecosystem
   (version . "1.0.0")
   (name . "valence-shell")
-  (type . "component")
-  (purpose . "")
+  (type . "application")
+  (purpose . "Formally verified shell with proven reversibility guarantees and MAA framework")
 
   (position-in-ecosystem
-   (category . "")
-   (layer . ""))
+   (category . "system-software")
+   (layer . "user-interface"))
 
-  (related-projects . ())
+  (related-projects
+   ((name . "absolute-zero")
+    (relationship . "inspiration")
+    (reason . "CNO (Certified Null Operation) composition theory"))
+   ((name . "echidna")
+    (relationship . "potential-consumer")
+    (reason . "Could use verified filesystem operations"))
+   ((name . "januskey")
+    (relationship . "sibling-standard")
+    (reason . "Both implement MAA framework primitives")))
 
-  (what-this-is . ())
+  (what-this-is
+   "Formally verified shell with ~256 theorems across 6 proof systems"
+   "Research prototype demonstrating mathematical guarantees for filesystem operations"
+   "Implementation of MAA (Mutually Assured Accountability) framework"
+   "Incremental path toward full POSIX shell compliance with verification at each step")
 
-  (what-this-is-not . ())
+  (what-this-is-not
+   "NOT production-ready (extraction gap between proofs and implementation)"
+   "NOT currently a full POSIX shell (no parser, pipelines, scripting yet)"
+   "NOT a replacement for bash/zsh in current state"
+   "NOT optimized for performance (verification prioritized over speed)")
 
   ;; Maintenance note: Review satellite relationships when:
   ;; - Adding new repos with similar suffix patterns (-ssg, -mcp, -scm, -ffi)

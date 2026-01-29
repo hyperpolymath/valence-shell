@@ -7,3 +7,8 @@ deno 2.1.4
 
 # Build tools
 just 1.36.0
+zig 0.13.0
+
+# Language runtimes
+elixir 1.17.2
+erlang 27.2.1

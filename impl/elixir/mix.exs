@@ -26,7 +26,7 @@ defmodule VSH.MixProject do
   defp deps do
     [
       {:jason, "~> 1.4"},
-      {:zigler, "~> 0.13", runtime: false},
+      {:zigler, "~> 0.15", runtime: false},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false}
     ]
   end
