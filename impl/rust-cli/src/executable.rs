@@ -299,25 +299,44 @@ impl ExecutableCommand for Command {
                 args,
                 redirects,
             } => {
-                // Expand variables and command substitutions in program name and arguments
+                // Expand program name (no process substitutions in program name)
                 let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
-                let expanded_args: Result<Vec<String>> = args
-                    .iter()
-                    .map(|arg| crate::parser::expand_with_command_sub(arg, state))
-                    .collect();
-                let expanded_args = expanded_args?;
 
+                // Expand arguments with process substitutions
+                let mut all_process_subs = Vec::new();
+                let mut expanded_args = Vec::new();
+
+                for arg in args {
+                    let (expanded_arg, proc_subs) =
+                        crate::parser::expand_with_process_sub(arg, state)?;
+                    expanded_args.push(expanded_arg);
+                    all_process_subs.extend(proc_subs);
+                }
+
+                // Execute main command
                 let exit_code = if redirects.is_empty() {
                     // No redirections - use simple path
                     external::execute_external(&expanded_program, &expanded_args)
                 } else {
                     // Has redirections - use redirection-aware execution
-                    external::execute_external_with_redirects(&expanded_program, &expanded_args, redirects, state)
+                    external::execute_external_with_redirects(
+                        &expanded_program,
+                        &expanded_args,
+                        redirects,
+                        state,
+                    )
                 }
                 .unwrap_or_else(|e| {
                     eprintln!("{}: {}", expanded_program, e);
                     127
                 });
+
+                // Cleanup all process substitutions
+                for proc_sub in all_process_subs {
+                    if let Err(e) = proc_sub.cleanup() {
+                        eprintln!("Warning: Failed to cleanup process substitution: {}", e);
+                    }
+                }
 
                 Ok(ExecutionResult::ExternalCommand { exit_code })
             }

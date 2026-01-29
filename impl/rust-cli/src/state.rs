@@ -218,6 +218,9 @@ pub struct ShellState {
 
     /// Positional parameters ($1, $2, ...) for script arguments
     pub positional_params: Vec<String>,
+
+    /// Counter for generating unique FIFO IDs
+    fifo_counter: std::sync::atomic::AtomicUsize,
 }
 
 impl ShellState {
@@ -244,6 +247,7 @@ impl ShellState {
             variables: HashMap::new(),
             exported_vars: HashSet::new(),
             positional_params: Vec::new(),
+            fifo_counter: std::sync::atomic::AtomicUsize::new(0),
         };
 
         // Try to load existing state
@@ -491,6 +495,11 @@ impl ShellState {
     /// Get count of positional parameters ($#)
     pub fn get_param_count(&self) -> usize {
         self.positional_params.len()
+    }
+
+    /// Get next unique FIFO ID for process substitution
+    pub fn next_fifo_id(&self) -> usize {
+        self.fifo_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Get special variable value ($$, $?, $HOME, etc.)

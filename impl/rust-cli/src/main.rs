@@ -17,6 +17,7 @@ mod executable;
 mod external;
 mod history;
 mod parser;
+mod process_sub;
 mod proof_refs;
 mod redirection;
 mod repl;

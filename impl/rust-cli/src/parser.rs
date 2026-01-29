@@ -20,6 +20,15 @@ enum QuoteType {
     Double,
 }
 
+/// Type of process substitution
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessSubType {
+    /// Input: <(cmd) - command output as readable file
+    Input,
+    /// Output: >(cmd) - command input as writable file
+    Output,
+}
+
 /// Part of a word that may contain literals and variable references
 #[derive(Debug, Clone, PartialEq)]
 enum WordPart {
@@ -31,6 +40,8 @@ enum WordPart {
     BracedVariable(String),
     /// Command substitution $(cmd) or `cmd`
     CommandSub(String),
+    /// Process substitution <(cmd) or >(cmd)
+    ProcessSub(ProcessSubType, String),
 }
 
 /// Word with quote information for expansion
@@ -75,6 +86,10 @@ impl QuotedWord {
 
     fn push_command_sub(&mut self, cmd: String) {
         self.parts.push(WordPart::CommandSub(cmd));
+    }
+
+    fn push_process_sub(&mut self, sub_type: ProcessSubType, cmd: String) {
+        self.parts.push(WordPart::ProcessSub(sub_type, cmd));
     }
 }
 
@@ -359,20 +374,36 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                         push_word!();
                     }
 
-                    // Redirection operators
+                    // Redirection operators and process substitution
                     '>' => {
-                        push_word!();
-                        if chars.peek() == Some(&'>') {
-                            chars.next();
-                            tokens.push(Token::AppendRedirect);
+                        if chars.peek() == Some(&'(') {
+                            // Process substitution: >(cmd)
+                            push_literal!();
+                            let cmd = parse_process_sub_output(&mut chars)?;
+                            current_word.push_process_sub(ProcessSubType::Output, cmd);
                         } else {
-                            tokens.push(Token::OutputRedirect);
+                            // Regular redirection: > or >>
+                            push_word!();
+                            if chars.peek() == Some(&'>') {
+                                chars.next();
+                                tokens.push(Token::AppendRedirect);
+                            } else {
+                                tokens.push(Token::OutputRedirect);
+                            }
                         }
                     }
 
                     '<' => {
-                        push_word!();
-                        tokens.push(Token::InputRedirect);
+                        if chars.peek() == Some(&'(') {
+                            // Process substitution: <(cmd)
+                            push_literal!();
+                            let cmd = parse_process_sub_input(&mut chars)?;
+                            current_word.push_process_sub(ProcessSubType::Input, cmd);
+                        } else {
+                            // Input redirection: <
+                            push_word!();
+                            tokens.push(Token::InputRedirect);
+                        }
                     }
 
                     '2' => {
@@ -581,6 +612,62 @@ fn parse_command_sub_backtick(chars: &mut std::iter::Peekable<std::str::Chars>) 
     }
 
     Err(anyhow!("Unclosed command substitution: `"))
+}
+
+/// Parse process substitution in <(cmd) form (input)
+fn parse_process_sub_input(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<String> {
+    // Expects that '<(' has been detected and < consumed
+    chars.next(); // consume '('
+
+    let mut cmd = String::new();
+    let mut depth = 1;  // Track nesting depth
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '(' => {
+                depth += 1;
+                cmd.push(ch);
+            }
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok(cmd);
+                }
+                cmd.push(ch);
+            }
+            _ => cmd.push(ch),
+        }
+    }
+
+    Err(anyhow!("Unclosed process substitution: <("))
+}
+
+/// Parse process substitution in >(cmd) form (output)
+fn parse_process_sub_output(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<String> {
+    // Expects that '>(' has been detected and > consumed
+    chars.next(); // consume '('
+
+    let mut cmd = String::new();
+    let mut depth = 1;  // Track nesting depth
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '(' => {
+                depth += 1;
+                cmd.push(ch);
+            }
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok(cmd);
+                }
+                cmd.push(ch);
+            }
+            _ => cmd.push(ch),
+        }
+    }
+
+    Err(anyhow!("Unclosed process substitution: >("))
 }
 
 /// Parse a pipeline command (tokens containing `|` operators).
@@ -921,6 +1008,22 @@ pub fn expand_with_command_sub(input: &str, state: &mut crate::state::ShellState
         if ch == '\\' && chars.peek() == Some(&'$') {
             // Escaped dollar from single quotes - skip backslash, keep literal $
             result.push(chars.next().unwrap());
+        } else if ch == '<' && chars.peek() == Some(&'(') {
+            // Input process substitution: <(cmd)
+            chars.next(); // consume '('
+            let cmd = parse_process_sub_input(&mut chars)?;
+            return Err(anyhow!(
+                "Process substitution not yet implemented: execution requires FIFO support (<({}))",
+                cmd
+            ));
+        } else if ch == '>' && chars.peek() == Some(&'(') {
+            // Output process substitution: >(cmd)
+            chars.next(); // consume '('
+            let cmd = parse_process_sub_output(&mut chars)?;
+            return Err(anyhow!(
+                "Process substitution not yet implemented: execution requires FIFO support (>({}))",
+                cmd
+            ));
         } else if ch == '$' {
             // Check for $(cmd), ${VAR} or $VAR
             if chars.peek() == Some(&'(') {
@@ -989,6 +1092,60 @@ pub fn expand_with_command_sub(input: &str, state: &mut crate::state::ShellState
     }
 
     Ok(result)
+}
+
+/// Expand string with process substitutions (returns expanded string + process sub objects)
+pub fn expand_with_process_sub(
+    input: &str,
+    state: &mut crate::state::ShellState,
+) -> Result<(String, Vec<crate::process_sub::ProcessSubstitution>)> {
+    let mut result = String::new();
+    let mut process_subs = Vec::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '<' && chars.peek() == Some(&'(') {
+            // Input process substitution: <(cmd)
+            // parse_process_sub_input will consume '(' itself
+            let cmd = parse_process_sub_input(&mut chars)?;
+
+            // Create and start process substitution
+            let mut proc_sub = crate::process_sub::ProcessSubstitution::create(
+                ProcessSubType::Input,
+                cmd,
+                state,
+            )?;
+            proc_sub.start(state)?;
+
+            // Add FIFO path to result
+            result.push_str(&proc_sub.fifo_path.to_string_lossy());
+            process_subs.push(proc_sub);
+        } else if ch == '>' && chars.peek() == Some(&'(') {
+            // Output process substitution: >(cmd)
+            // parse_process_sub_output will consume '(' itself
+            let cmd = parse_process_sub_output(&mut chars)?;
+
+            // Create and start process substitution
+            let mut proc_sub = crate::process_sub::ProcessSubstitution::create(
+                ProcessSubType::Output,
+                cmd,
+                state,
+            )?;
+            proc_sub.start(state)?;
+
+            // Add FIFO path to result
+            result.push_str(&proc_sub.fifo_path.to_string_lossy());
+            process_subs.push(proc_sub);
+        } else {
+            // Not a process substitution, pass through to expand_with_command_sub
+            result.push(ch);
+        }
+    }
+
+    // Now expand variables and command substitutions in the result
+    let expanded = expand_with_command_sub(&result, state)?;
+
+    Ok((expanded, process_subs))
 }
 
 pub fn expand_variables(input: &str, state: &crate::state::ShellState) -> String {
@@ -1125,6 +1282,22 @@ fn quoted_word_to_string(word: &QuotedWord) -> String {
                     result.push(')');
                 }
             }
+            WordPart::ProcessSub(sub_type, cmd) => {
+                // Process substitution - keep as-is for now
+                // Actual expansion happens in expand_quoted_word_with_state
+                match sub_type {
+                    ProcessSubType::Input => {
+                        result.push_str("<(");
+                        result.push_str(cmd);
+                        result.push(')');
+                    }
+                    ProcessSubType::Output => {
+                        result.push_str(">(");
+                        result.push_str(cmd);
+                        result.push(')');
+                    }
+                }
+            }
         }
     }
 
@@ -1236,6 +1409,33 @@ pub fn expand_quoted_word_with_state(word: &QuotedWord, state: &mut crate::state
                     result.push_str("$(");
                     result.push_str(cmd);
                     result.push(')');
+                }
+            }
+            WordPart::ProcessSub(sub_type, cmd) => {
+                // Process substitution parsing is implemented, but execution is deferred
+                // Execution requires FIFO (named pipe) support which will be added later
+                if word.quote_type != QuoteType::Single {
+                    return Err(anyhow!(
+                        "Process substitution not yet implemented: execution requires FIFO support ({})",
+                        match sub_type {
+                            ProcessSubType::Input => format!("<({})", cmd),
+                            ProcessSubType::Output => format!(">({})", cmd),
+                        }
+                    ));
+                } else {
+                    // In single quotes, it's literal
+                    match sub_type {
+                        ProcessSubType::Input => {
+                            result.push_str("<(");
+                            result.push_str(cmd);
+                            result.push(')');
+                        }
+                        ProcessSubType::Output => {
+                            result.push_str(">(");
+                            result.push_str(cmd);
+                            result.push(')');
+                        }
+                    }
                 }
             }
         }
@@ -2159,6 +2359,165 @@ mod tests {
             if let WordPart::CommandSub(cmd) = &w.parts[0] {
                 assert!(cmd.contains("`test`"));
             }
+        }
+    }
+
+    // ===== Process Substitution Tests =====
+
+    #[test]
+    fn test_process_sub_input_parse() {
+        // Input process substitution: <(cmd)
+        let tokens = tokenize("diff <(ls dir1) <(ls dir2)").unwrap();
+        assert_eq!(tokens.len(), 3);
+
+        // First arg: <(ls dir1)
+        if let Token::Word(w) = &tokens[1] {
+            assert_eq!(w.parts.len(), 1);
+            if let WordPart::ProcessSub(sub_type, cmd) = &w.parts[0] {
+                assert!(matches!(sub_type, ProcessSubType::Input));
+                assert_eq!(cmd, "ls dir1");
+            } else {
+                panic!("Expected ProcessSub, got {:?}", w.parts[0]);
+            }
+        } else {
+            panic!("Expected Word token");
+        }
+
+        // Second arg: <(ls dir2)
+        if let Token::Word(w) = &tokens[2] {
+            assert_eq!(w.parts.len(), 1);
+            if let WordPart::ProcessSub(sub_type, cmd) = &w.parts[0] {
+                assert!(matches!(sub_type, ProcessSubType::Input));
+                assert_eq!(cmd, "ls dir2");
+            } else {
+                panic!("Expected ProcessSub, got {:?}", w.parts[0]);
+            }
+        } else {
+            panic!("Expected Word token");
+        }
+    }
+
+    #[test]
+    fn test_process_sub_output_parse() {
+        // Output process substitution: >(cmd)
+        let tokens = tokenize("tee >(wc -l) >(grep pattern)").unwrap();
+        assert_eq!(tokens.len(), 3);
+
+        // First arg: >(wc -l)
+        if let Token::Word(w) = &tokens[1] {
+            assert_eq!(w.parts.len(), 1);
+            if let WordPart::ProcessSub(sub_type, cmd) = &w.parts[0] {
+                assert!(matches!(sub_type, ProcessSubType::Output));
+                assert_eq!(cmd, "wc -l");
+            } else {
+                panic!("Expected ProcessSub, got {:?}", w.parts[0]);
+            }
+        } else {
+            panic!("Expected Word token");
+        }
+    }
+
+    #[test]
+    fn test_process_sub_in_double_quotes() {
+        // Process substitution in double quotes (should still parse)
+        let tokens = tokenize("echo \"<(ls)\"").unwrap();
+        assert_eq!(tokens.len(), 2);
+
+        if let Token::Word(w) = &tokens[1] {
+            assert_eq!(w.quote_type, QuoteType::Double);
+            if let WordPart::ProcessSub(sub_type, cmd) = &w.parts[0] {
+                assert!(matches!(sub_type, ProcessSubType::Input));
+                assert_eq!(cmd, "ls");
+            }
+        }
+    }
+
+    #[test]
+    fn test_process_sub_in_single_quotes() {
+        // Process substitution in single quotes should be literal
+        let tokens = tokenize("echo '<(ls)'").unwrap();
+        assert_eq!(tokens.len(), 2);
+
+        if let Token::Word(w) = &tokens[1] {
+            assert_eq!(w.quote_type, QuoteType::Single);
+            // In single quotes, should be parsed as literal
+            if let WordPart::Literal(s) = &w.parts[0] {
+                assert_eq!(s, "<(ls)");
+            } else {
+                panic!("Expected Literal in single quotes, got {:?}", w.parts[0]);
+            }
+        }
+    }
+
+    #[test]
+    fn test_process_sub_unclosed_input() {
+        // Unclosed <( should error
+        let result = tokenize("diff <(ls dir1");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Unclosed process substitution"));
+    }
+
+    #[test]
+    fn test_process_sub_unclosed_output() {
+        // Unclosed >( should error
+        let result = tokenize("tee >(wc -l");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Unclosed process substitution"));
+    }
+
+    #[test]
+    fn test_process_sub_empty() {
+        // Empty process substitution should parse
+        let tokens = tokenize("cat <()").unwrap();
+        assert_eq!(tokens.len(), 2);
+
+        if let Token::Word(w) = &tokens[1] {
+            if let WordPart::ProcessSub(_sub_type, cmd) = &w.parts[0] {
+                assert_eq!(cmd, "");
+            }
+        }
+    }
+
+    #[test]
+    fn test_process_sub_with_redirects() {
+        // Process substitution with redirects inside
+        let tokens = tokenize("cat <(ls > /tmp/out)").unwrap();
+        assert_eq!(tokens.len(), 2);
+
+        if let Token::Word(w) = &tokens[1] {
+            if let WordPart::ProcessSub(_sub_type, cmd) = &w.parts[0] {
+                assert_eq!(cmd, "ls > /tmp/out");
+            }
+        }
+    }
+
+    #[test]
+    fn test_process_sub_nested_parens() {
+        // Nested parentheses should track depth
+        let tokens = tokenize("cat <(echo (test))").unwrap();
+        assert_eq!(tokens.len(), 2);
+
+        if let Token::Word(w) = &tokens[1] {
+            if let WordPart::ProcessSub(_sub_type, cmd) = &w.parts[0] {
+                assert_eq!(cmd, "echo (test)");
+            }
+        }
+    }
+
+    #[test]
+    fn test_process_sub_vs_redirect() {
+        // < followed by non-( should be redirect, not process sub
+        let tokens = tokenize("cat < input.txt").unwrap();
+        assert_eq!(tokens.len(), 3);
+        assert!(matches!(tokens[1], Token::InputRedirect));
+
+        // <( should be process sub
+        let tokens2 = tokenize("cat <(echo test)").unwrap();
+        assert_eq!(tokens2.len(), 2);
+        if let Token::Word(w) = &tokens2[1] {
+            assert!(matches!(w.parts[0], WordPart::ProcessSub(_, _)));
         }
     }
 }
