@@ -148,12 +148,16 @@ defmodule VSHTest do
 
     test "returns all proof references" do
       proofs = VSH.State.get_proofs()
-      assert length(proofs) == 3
+      assert length(proofs) == 7
 
       theorems = Enum.map(proofs, & &1.theorem)
       assert "mkdir_rmdir_reversible" in theorems
       assert "create_delete_file_reversible" in theorems
       assert "operation_sequence_reversible" in theorems
+      assert "write_file_reversible" in theorems
+      assert "copy_preserves_source" in theorems
+      assert "move_reversible" in theorems
+      assert "obliterate_irreversible" in theorems
     end
   end
 

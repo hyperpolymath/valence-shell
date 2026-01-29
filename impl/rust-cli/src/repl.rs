@@ -65,7 +65,8 @@ pub fn run(state: &mut ShellState) -> Result<()> {
         }
 
         let input = input.trim();
-        if input.is_empty() {
+        if input.is_empty() || input.starts_with('#') {
+            // Skip empty lines and comments
             continue;
         }
 

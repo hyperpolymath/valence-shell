@@ -1,5 +1,5 @@
 {application,earmark_parser,
-             [{config_mtime,1767139155},
+             [{config_mtime,1769642919},
               {optional_applications,[]},
               {applications,[kernel,stdlib,elixir]},
               {description,"AST parser and generator for Markdown"},

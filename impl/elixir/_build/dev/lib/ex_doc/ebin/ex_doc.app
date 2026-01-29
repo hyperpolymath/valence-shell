@@ -1,5 +1,5 @@
 {application,ex_doc,
-             [{config_mtime,1767139155},
+             [{config_mtime,1769642919},
               {optional_applications,[makeup_c,makeup_html]},
               {applications,[kernel,stdlib,elixir,eex,earmark_parser,
                              makeup_elixir,makeup_erlang,makeup_c,

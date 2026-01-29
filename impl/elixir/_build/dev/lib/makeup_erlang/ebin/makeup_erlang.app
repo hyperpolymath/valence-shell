@@ -1,5 +1,5 @@
 {application,makeup_erlang,
-             [{config_mtime,1767139155},
+             [{config_mtime,1769642919},
               {optional_applications,[]},
               {applications,[kernel,stdlib,elixir,logger,makeup]},
               {description,"Erlang lexer for the Makeup syntax highlighter.\n"},

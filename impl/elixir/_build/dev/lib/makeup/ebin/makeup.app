@@ -1,5 +1,5 @@
 {application,makeup,
-             [{config_mtime,1767139155},
+             [{config_mtime,1769642919},
               {optional_applications,[]},
               {applications,[kernel,stdlib,elixir,eex,nimble_parsec]},
               {description,"Syntax highlighter for source code in the style of Pygments.\n"},

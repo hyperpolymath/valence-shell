@@ -537,6 +537,92 @@ export fn valence_path_exists(handle: ?*ValenceFS, path: [*:0]const u8) bool {
     return false;
 }
 
+/// Check if path is directory (C ABI)
+export fn valence_is_directory(handle: ?*ValenceFS, path: [*:0]const u8) bool {
+    if (handle) |h| {
+        const fs_ptr: *const Filesystem = @ptrCast(@alignCast(h));
+        return fs_ptr.isDirectory(std.mem.span(path));
+    }
+    return false;
+}
+
+/// Check if path is file (C ABI)
+export fn valence_is_file(handle: ?*ValenceFS, path: [*:0]const u8) bool {
+    if (handle) |h| {
+        const fs_ptr: *const Filesystem = @ptrCast(@alignCast(h));
+        return fs_ptr.isFile(std.mem.span(path));
+    }
+    return false;
+}
+
+/// Create filesystem with audit logging (C ABI)
+export fn valence_fs_create_with_audit(root: [*:0]const u8, audit_path_cstr: [*:0]const u8) ?*ValenceFS {
+    const allocator = std.heap.c_allocator;
+    const root_span = std.mem.span(root);
+
+    // Create audit log if path provided
+    var audit_log: ?*AuditLog = null;
+    if (audit_path_cstr[0] != 0) {
+        const audit_path = std.mem.span(audit_path_cstr);
+        const log_ptr = allocator.create(AuditLog) catch return null;
+        log_ptr.* = AuditLog.init(allocator, audit_path) catch {
+            allocator.destroy(log_ptr);
+            return null;
+        };
+        audit_log = log_ptr;
+    }
+
+    const fs = Filesystem.init(allocator, root_span, audit_log);
+    const fs_ptr = allocator.create(Filesystem) catch {
+        if (audit_log) |log| allocator.destroy(log);
+        return null;
+    };
+    fs_ptr.* = fs;
+    return @ptrCast(fs_ptr);
+}
+
+/// Get error string (C ABI)
+export fn valence_strerror(error_code: ValenceError) [*:0]const u8 {
+    const err: PosixError = @enumFromInt(error_code);
+    return switch (err) {
+        .success => "Success",
+        .eexist => "File exists",
+        .enoent => "No such file or directory",
+        .eacces => "Permission denied",
+        .enotdir => "Not a directory",
+        .eisdir => "Is a directory",
+        .enotempty => "Directory not empty",
+        .einval => "Invalid argument",
+        .enomem => "Out of memory",
+        .eio => "I/O error",
+        .eloop => "Too many symbolic links",
+        .enametoolong => "File name too long",
+    };
+}
+
+/// Get proof reference (C ABI)
+export fn valence_proof_reference(operation: [*:0]const u8) ?[*:0]const u8 {
+    const op = std.mem.span(operation);
+
+    if (mem.eql(u8, op, "mkdir")) {
+        return "proofs/coq/filesystem_model.v:L45-L62";
+    } else if (mem.eql(u8, op, "rmdir")) {
+        return "proofs/coq/filesystem_model.v:L45-L62";
+    } else if (mem.eql(u8, op, "create_file")) {
+        return "proofs/coq/file_operations.v:L32-L48";
+    } else if (mem.eql(u8, op, "delete_file")) {
+        return "proofs/coq/file_operations.v:L32-L48";
+    } else if (mem.eql(u8, op, "copy")) {
+        return "proofs/z3/copy_move_operations.smt2:L140-L163";
+    } else if (mem.eql(u8, op, "move")) {
+        return "proofs/z3/copy_move_operations.smt2:L254-L269";
+    } else if (mem.eql(u8, op, "obliterate")) {
+        return "proofs/coq/rmo_operations.v:L85-L115";
+    }
+
+    return null;
+}
+
 // =========================================================
 // TESTS - Validate against Coq theorems
 // =========================================================

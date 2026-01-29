@@ -670,6 +670,12 @@ fn extract_redirections_from_tokens(tokens: &[Token]) -> Result<(Vec<Token>, Vec
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn parse_command(input: &str) -> Result<Command> {
+    // Skip comments (lines starting with #)
+    let trimmed = input.trim_start();
+    if trimmed.starts_with('#') || trimmed.is_empty() {
+        return Err(anyhow!("Empty command"));
+    }
+
     // Tokenize input
     let tokens = tokenize(input)?;
 
@@ -1713,5 +1719,15 @@ mod tests {
             }
             _ => {}
         }
+    }
+
+    #[test]
+    fn test_comment_lines_rejected() {
+        // Comments should be rejected as empty commands
+        let result = parse_command("# this is a comment");
+        assert!(result.is_err());
+
+        let result = parse_command("   # comment with leading space");
+        assert!(result.is_err());
     }
 }
