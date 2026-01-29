@@ -319,7 +319,7 @@ pub fn execute_external(program: &str, args: &[String]) -> Result<i32> {
 fn stdio_config_from_redirects(
     redirects: &[Redirection],
     _setup: &RedirectSetup,
-    state: &ShellState,
+    state: &mut ShellState,
 ) -> Result<(Stdio, Stdio, Stdio)> {
     let mut stdin_cfg = Stdio::inherit();
     let mut stdout_cfg = Stdio::inherit();
@@ -378,16 +378,47 @@ fn stdio_config_from_redirects(
                 stderr_cfg = Stdio::inherit(); // Fallback
             }
 
-            Redirection::HereDoc { content, .. } | Redirection::HereString { content, .. } => {
-                // Create temporary file with here doc content
+            Redirection::HereDoc { content, expand, strip_tabs, .. } => {
+                // Process here document content
+                let processed = crate::parser::process_heredoc_content(
+                    content,
+                    *strip_tabs,
+                    *expand,
+                    state,
+                )?;
+
+                // Create temporary file with processed content
                 let temp_path = format!("/tmp/vsh-heredoc-{}-{}",
                     std::process::id(),
                     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
                 );
-                std::fs::write(&temp_path, content)?;
+                std::fs::write(&temp_path, &processed)?;
 
                 let file_handle = File::open(&temp_path)
                     .with_context(|| format!("Failed to open here document temp file: {}", temp_path))?;
+                stdin_cfg = Stdio::from(file_handle);
+
+                // TODO: Track temp file for cleanup
+            }
+
+            Redirection::HereString { content, expand } => {
+                // Process here string content (always add trailing newline)
+                let processed = if *expand {
+                    let expanded = crate::parser::expand_with_command_sub(content, state)?;
+                    format!("{}\n", expanded)
+                } else {
+                    format!("{}\n", content)
+                };
+
+                // Create temporary file
+                let temp_path = format!("/tmp/vsh-herestring-{}-{}",
+                    std::process::id(),
+                    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+                );
+                std::fs::write(&temp_path, &processed)?;
+
+                let file_handle = File::open(&temp_path)
+                    .with_context(|| format!("Failed to open here string temp file: {}", temp_path))?;
                 stdin_cfg = Stdio::from(file_handle);
 
                 // TODO: Track temp file for cleanup
