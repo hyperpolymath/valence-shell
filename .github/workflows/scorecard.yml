@@ -15,7 +15,7 @@ jobs:
       security-events: write
       id-token: write
     steps:
-      - uses: actions/checkout@v6.0.1
+      - uses: actions/checkout@v6.0.2
         with:
           persist-credentials: false
       
@@ -26,6 +26,6 @@ jobs:
           results_format: sarif
       
       - name: Upload results
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@v4.32.0
         with:
           sarif_file: results.sarif
