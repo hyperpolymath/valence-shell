@@ -77,3 +77,7 @@ htmlcov/
 /tmp/
 *.tmp
 *.bak
+
+# Strategic analysis - local notes only
+STRATEGIC_ANALYSIS.md
+docs/strategic/

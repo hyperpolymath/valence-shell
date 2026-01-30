@@ -293,11 +293,55 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::Success)
             }
 
+            // Conditionals
+            Command::Test { args, redirects } => {
+                // Expand arguments
+                let expanded_args: Vec<String> = args
+                    .iter()
+                    .map(|arg| crate::parser::expand_variables(arg, state))
+                    .collect();
+
+                let exit_code = if redirects.is_empty() {
+                    crate::test_command::execute_test(&expanded_args, false)?
+                } else {
+                    let mut code = 0;
+                    redirection::capture_and_redirect(redirects, state, |_s| {
+                        code = crate::test_command::execute_test(&expanded_args, false)?;
+                        Ok(())
+                    })?;
+                    code
+                };
+
+                Ok(ExecutionResult::ExternalCommand { exit_code })
+            }
+
+            Command::Bracket { args, redirects } => {
+                // Expand arguments
+                let expanded_args: Vec<String> = args
+                    .iter()
+                    .map(|arg| crate::parser::expand_variables(arg, state))
+                    .collect();
+
+                let exit_code = if redirects.is_empty() {
+                    crate::test_command::execute_test(&expanded_args, true)?
+                } else {
+                    let mut code = 0;
+                    redirection::capture_and_redirect(redirects, state, |_s| {
+                        code = crate::test_command::execute_test(&expanded_args, true)?;
+                        Ok(())
+                    })?;
+                    code
+                };
+
+                Ok(ExecutionResult::ExternalCommand { exit_code })
+            }
+
             // External commands (not reversible by default, but redirections are)
             Command::External {
                 program,
                 args,
                 redirects,
+                background,
             } => {
                 // Expand program name (no process substitutions in program name)
                 let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
@@ -314,35 +358,59 @@ impl ExecutableCommand for Command {
                 }
 
                 // Execute main command
-                let exit_code = if redirects.is_empty() {
-                    // No redirections - use simple path
-                    external::execute_external(&expanded_program, &expanded_args)
-                } else {
-                    // Has redirections - use redirection-aware execution
-                    external::execute_external_with_redirects(
+                if *background {
+                    // Background execution
+                    let _job_id = external::execute_external_background(
                         &expanded_program,
                         &expanded_args,
                         redirects,
                         state,
                     )
-                }
-                .unwrap_or_else(|e| {
-                    eprintln!("{}: {}", expanded_program, e);
-                    127
-                });
+                    .unwrap_or_else(|e| {
+                        eprintln!("{}: {}", expanded_program, e);
+                        0 // No job created
+                    });
 
-                // Cleanup all process substitutions
-                for proc_sub in all_process_subs {
-                    if let Err(e) = proc_sub.cleanup() {
-                        eprintln!("Warning: Failed to cleanup process substitution: {}", e);
+                    // Cleanup all process substitutions
+                    for proc_sub in all_process_subs {
+                        if let Err(e) = proc_sub.cleanup() {
+                            eprintln!("Warning: Failed to cleanup process substitution: {}", e);
+                        }
                     }
-                }
 
-                Ok(ExecutionResult::ExternalCommand { exit_code })
+                    Ok(ExecutionResult::Success)
+                } else {
+                    // Foreground execution
+                    let exit_code = if redirects.is_empty() {
+                        // No redirections - use simple path
+                        external::execute_external(&expanded_program, &expanded_args)
+                    } else {
+                        // Has redirections - use redirection-aware execution
+                        external::execute_external_with_redirects(
+                            &expanded_program,
+                            &expanded_args,
+                            redirects,
+                            state,
+                        )
+                    }
+                    .unwrap_or_else(|e| {
+                        eprintln!("{}: {}", expanded_program, e);
+                        127
+                    });
+
+                    // Cleanup all process substitutions
+                    for proc_sub in all_process_subs {
+                        if let Err(e) = proc_sub.cleanup() {
+                            eprintln!("Warning: Failed to cleanup process substitution: {}", e);
+                        }
+                    }
+
+                    Ok(ExecutionResult::ExternalCommand { exit_code })
+                }
             }
 
             // Pipeline commands (not reversible by default, but redirections are)
-            Command::Pipeline { stages, redirects } => {
+            Command::Pipeline { stages, redirects, background: _ } => {
                 // Expand variables and command substitutions in all pipeline stages
                 let expanded_stages: Result<Vec<(String, Vec<String>)>> = stages
                     .iter()
@@ -391,6 +459,62 @@ impl ExecutableCommand for Command {
                     }
                 }
                 Ok(ExecutionResult::Success)
+            }
+
+            // Job control
+            Command::Jobs { long } => {
+                commands::jobs(state, *long)?;
+                Ok(ExecutionResult::Success)
+            }
+
+            Command::Fg { job_spec } => {
+                commands::fg(state, job_spec.as_deref())?;
+                Ok(ExecutionResult::Success)
+            }
+
+            Command::Bg { job_spec } => {
+                commands::bg(state, job_spec.as_deref())?;
+                Ok(ExecutionResult::Success)
+            }
+
+            Command::Kill { signal, job_spec } => {
+                commands::kill_job(state, signal.as_deref(), job_spec)?;
+                Ok(ExecutionResult::Success)
+            }
+
+            // Logical operators (short-circuit evaluation)
+            Command::LogicalOp { operator, left, right } => {
+                use crate::parser::LogicalOperator;
+
+                // Execute left command
+                let left_result = left.execute(state)?;
+
+                // Get exit code from left command
+                let left_exit_code = match left_result {
+                    ExecutionResult::Success => 0,
+                    ExecutionResult::Exit => return Ok(ExecutionResult::Exit),
+                    ExecutionResult::ExternalCommand { exit_code } => exit_code,
+                };
+
+                // Short-circuit evaluation based on operator
+                match operator {
+                    LogicalOperator::And => {
+                        // && : execute right only if left succeeded (exit code 0)
+                        if left_exit_code == 0 {
+                            right.execute(state)
+                        } else {
+                            Ok(ExecutionResult::ExternalCommand { exit_code: left_exit_code })
+                        }
+                    }
+                    LogicalOperator::Or => {
+                        // || : execute right only if left failed (exit code != 0)
+                        if left_exit_code != 0 {
+                            right.execute(state)
+                        } else {
+                            Ok(ExecutionResult::ExternalCommand { exit_code: left_exit_code })
+                        }
+                    }
+                }
             }
         }
     }
@@ -456,6 +580,20 @@ impl ExecutableCommand for Command {
                     "cd".to_string()
                 }
             }
+            Command::Test { args, .. } => {
+                if args.is_empty() {
+                    "test".to_string()
+                } else {
+                    format!("test {}", args.join(" "))
+                }
+            }
+            Command::Bracket { args, .. } => {
+                if args.is_empty() {
+                    "[ ]".to_string()
+                } else {
+                    format!("[ {} ]", args.join(" "))
+                }
+            }
             Command::External { program, args, .. } => {
                 if args.is_empty() {
                     program.clone()
@@ -487,6 +625,47 @@ impl ExecutableCommand for Command {
                 } else {
                     format!("export {}", name)
                 }
+            }
+
+            Command::Jobs { long } => {
+                if *long {
+                    "jobs -l".to_string()
+                } else {
+                    "jobs".to_string()
+                }
+            }
+
+            Command::Fg { job_spec } => {
+                if let Some(spec) = job_spec {
+                    format!("fg {}", spec)
+                } else {
+                    "fg".to_string()
+                }
+            }
+
+            Command::Bg { job_spec } => {
+                if let Some(spec) = job_spec {
+                    format!("bg {}", spec)
+                } else {
+                    "bg".to_string()
+                }
+            }
+
+            Command::Kill { signal, job_spec } => {
+                if let Some(sig) = signal {
+                    format!("kill {} {}", sig, job_spec)
+                } else {
+                    format!("kill {}", job_spec)
+                }
+            }
+
+            Command::LogicalOp { operator, left, right } => {
+                use crate::parser::LogicalOperator;
+                let op_str = match operator {
+                    LogicalOperator::And => "&&",
+                    LogicalOperator::Or => "||",
+                };
+                format!("{} {} {}", left.description(), op_str, right.description())
             }
         }
     }

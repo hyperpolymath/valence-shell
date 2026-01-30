@@ -149,6 +149,9 @@ defmodule VSH.Daemon do
       "obliterate" -> handle_obliterate(params)
       "obliterate_tree" -> handle_obliterate_tree(params)
 
+      # Hardware secure erase (SSD-specific)
+      "hardware_erase" -> handle_hardware_erase(params)
+
       # Reversibility
       "undo" -> handle_undo(params)
       "redo" -> handle_redo(params)
@@ -413,12 +416,14 @@ defmodule VSH.Daemon do
 
   defp handle_obliterate(%{"path" => path} = params) do
     path_list = String.split(path, "/", trim: true)
-    pattern = case Map.get(params, "pattern", "dod") do
-      "gutmann" -> :gutmann
-      "simple" -> :simple
-      _ -> :dod
+    # NIST SP 800-88 compliant methods
+    pattern = case Map.get(params, "method", "clear") do
+      "clear" -> :nist_clear      # 1 pass zeros (GDPR compliant)
+      "purge" -> :nist_purge      # 1 pass random + verify (high security)
+      "legacy-dod" -> :dod        # Deprecated: 3 pass DoD 5220.22-M
+      _ -> :nist_clear
     end
-    verify = Map.get(params, "verify", false)
+    verify = Map.get(params, "verify", pattern == :nist_purge)
 
     case VSH.Filesystem.obliterate_file(path_list, pattern: pattern, verify: verify, audit: true) do
       {:ok, :obliterated} ->
@@ -430,10 +435,11 @@ defmodule VSH.Daemon do
           operation: "obliterate",
           path: path,
           operationId: op.id,
-          pattern: to_string(pattern),
+          method: to_string(pattern),
+          standard: "NIST SP 800-88 Rev. 1",
           verified: verify,
           canUndo: false,
-          warning: "IRREVERSIBLE - data permanently destroyed",
+          warning: "IRREVERSIBLE - data permanently destroyed (GDPR compliant)",
           proof: %{
             theorem: proof.theorem,
             location: proof.coq
@@ -449,10 +455,12 @@ defmodule VSH.Daemon do
 
   defp handle_obliterate_tree(%{"path" => path} = params) do
     path_list = String.split(path, "/", trim: true)
-    pattern = case Map.get(params, "pattern", "dod") do
-      "gutmann" -> :gutmann
-      "simple" -> :simple
-      _ -> :dod
+    # NIST SP 800-88 compliant methods
+    pattern = case Map.get(params, "method", "clear") do
+      "clear" -> :nist_clear      # 1 pass zeros (GDPR compliant)
+      "purge" -> :nist_purge      # 1 pass random + verify (high security)
+      "legacy-dod" -> :dod        # Deprecated: 3 pass DoD 5220.22-M
+      _ -> :nist_clear
     end
 
     case VSH.Filesystem.obliterate_tree(path_list, pattern: pattern, audit: true) do
@@ -465,9 +473,10 @@ defmodule VSH.Daemon do
           operation: "obliterate_tree",
           path: path,
           operationId: op.id,
-          pattern: to_string(pattern),
+          method: to_string(pattern),
+          standard: "NIST SP 800-88 Rev. 1",
           canUndo: false,
-          warning: "IRREVERSIBLE - entire tree permanently destroyed",
+          warning: "IRREVERSIBLE - entire tree permanently destroyed (GDPR compliant)",
           proof: %{
             theorem: proof.theorem,
             location: proof.coq
@@ -480,6 +489,117 @@ defmodule VSH.Daemon do
   end
 
   defp handle_obliterate_tree(_), do: {:error, -32602, "Invalid params: path required"}
+
+  ## Hardware Secure Erase (SSD-Specific)
+
+  defp handle_hardware_erase(%{"device" => device} = params) do
+    # Detect drive type first
+    case VSH.SecureErase.detect_drive_type(device) do
+      {:ok, drive_type} ->
+        # Determine method based on drive type and user request
+        method = case {drive_type, Map.get(params, "method", "auto")} do
+          {:sata_ssd, "ata-secure-erase"} -> :ata_secure_erase
+          {:sata_ssd, "auto"} -> :ata_secure_erase
+          {:nvme_ssd, "nvme-format"} -> :nvme_format
+          {:nvme_ssd, "nvme-sanitize"} -> :nvme_sanitize
+          {:nvme_ssd, "auto"} -> :nvme_format  # Default to faster crypto erase
+          {:hdd, _} -> :unsupported
+          {:unknown, _} -> :unsupported
+          _ -> :unsupported
+        end
+
+        case method do
+          :unsupported ->
+            {:error, -32000, "Hardware secure erase not supported for drive type #{drive_type}"}
+
+          :ata_secure_erase ->
+            # Execute ATA Secure Erase (includes confirmation)
+            case VSH.SecureErase.ata_secure_erase(device, enhanced: true) do
+              {:ok, "erase_complete"} ->
+                {:ok, op} = VSH.State.record_operation(:hardware_erase, [device])
+                proof = VSH.State.proof_for(:hardware_erase)
+
+                {:ok, %{
+                  success: true,
+                  operation: "hardware_erase",
+                  device: device,
+                  driveType: drive_type,
+                  method: "ATA Secure Erase (Enhanced)",
+                  operationId: op.id,
+                  standard: "NIST SP 800-88 Purge",
+                  canUndo: false,
+                  warning: "DEVICE-LEVEL ERASE - Entire device permanently destroyed",
+                  proof: %{
+                    theorem: proof.theorem,
+                    location: proof.coq
+                  }
+                }}
+
+              {:error, reason} ->
+                {:error, -32000, "ATA Secure Erase failed: #{reason}"}
+            end
+
+          :nvme_format ->
+            # Execute NVMe Format (includes confirmation)
+            case VSH.SecureErase.nvme_format_crypto(device) do
+              {:ok, "erase_complete"} ->
+                {:ok, op} = VSH.State.record_operation(:hardware_erase, [device])
+                proof = VSH.State.proof_for(:hardware_erase)
+
+                {:ok, %{
+                  success: true,
+                  operation: "hardware_erase",
+                  device: device,
+                  driveType: drive_type,
+                  method: "NVMe Format (Crypto Erase)",
+                  operationId: op.id,
+                  standard: "NIST SP 800-88 Purge",
+                  canUndo: false,
+                  warning: "DEVICE-LEVEL ERASE - Entire device permanently destroyed",
+                  proof: %{
+                    theorem: proof.theorem,
+                    location: proof.coq
+                  }
+                }}
+
+              {:error, reason} ->
+                {:error, -32000, "NVMe Format failed: #{reason}"}
+            end
+
+          :nvme_sanitize ->
+            # Execute NVMe Sanitize (includes confirmation)
+            case VSH.SecureErase.nvme_sanitize(device, block_erase: true) do
+              {:ok, "erase_complete"} ->
+                {:ok, op} = VSH.State.record_operation(:hardware_erase, [device])
+                proof = VSH.State.proof_for(:hardware_erase)
+
+                {:ok, %{
+                  success: true,
+                  operation: "hardware_erase",
+                  device: device,
+                  driveType: drive_type,
+                  method: "NVMe Sanitize (Block Erase)",
+                  operationId: op.id,
+                  standard: "NIST SP 800-88 Purge",
+                  canUndo: false,
+                  warning: "DEVICE-LEVEL ERASE - Entire device permanently destroyed",
+                  proof: %{
+                    theorem: proof.theorem,
+                    location: proof.coq
+                  }
+                }}
+
+              {:error, reason} ->
+                {:error, -32000, "NVMe Sanitize failed: #{reason}"}
+            end
+        end
+
+      {:error, reason} ->
+        {:error, -32000, "Failed to detect drive type: #{reason}"}
+    end
+  end
+
+  defp handle_hardware_erase(_), do: {:error, -32602, "Invalid params: device required (e.g., /dev/sda)"}
 
   ## Reversibility Operations
 

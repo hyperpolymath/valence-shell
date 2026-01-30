@@ -134,6 +134,12 @@ enum Token {
 
     /// Background operator: &
     Background,
+
+    /// Logical AND operator: &&
+    And,
+
+    /// Logical OR operator: ||
+    Or,
 }
 
 /// Parsed command with arguments and redirections.
@@ -206,6 +212,16 @@ pub enum Command {
         path: Option<String>,
     },
 
+    // Conditionals
+    Test {
+        args: Vec<String>,
+        redirects: Vec<Redirection>,
+    },
+    Bracket {
+        args: Vec<String>,
+        redirects: Vec<Redirection>,
+    },
+
     // External command
     External {
         program: String,
@@ -260,6 +276,22 @@ pub enum Command {
         signal: Option<String>,
         job_spec: String,
     },
+
+    /// Logical operation (cmd1 && cmd2 or cmd1 || cmd2)
+    LogicalOp {
+        operator: LogicalOperator,
+        left: Box<Command>,
+        right: Box<Command>,
+    },
+}
+
+/// Logical operators for command chaining
+#[derive(Debug, Clone, PartialEq)]
+pub enum LogicalOperator {
+    /// AND (&&) - execute right only if left succeeds
+    And,
+    /// OR (||) - execute right only if left fails
+    Or,
 }
 
 /// Quote state during tokenization
@@ -492,8 +524,12 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                     }
 
                     '&' => {
-                        // Check for &>
-                        if chars.peek() == Some(&'>') {
+                        // Check for &&, &>, or &
+                        if chars.peek() == Some(&'&') {
+                            push_word!();
+                            chars.next();
+                            tokens.push(Token::And);
+                        } else if chars.peek() == Some(&'>') {
                             push_word!();
                             chars.next();
                             tokens.push(Token::BothRedirect);
@@ -505,8 +541,15 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                     }
 
                     '|' => {
-                        push_word!();
-                        tokens.push(Token::Pipe);
+                        // Check for || or |
+                        if chars.peek() == Some(&'|') {
+                            push_word!();
+                            chars.next();
+                            tokens.push(Token::Or);
+                        } else {
+                            push_word!();
+                            tokens.push(Token::Pipe);
+                        }
                     }
 
                     // Regular character
@@ -742,6 +785,72 @@ fn parse_process_sub_output(chars: &mut std::iter::Peekable<std::str::Chars>) ->
 /// - Pipeline has less than 2 stages
 /// - Stage has no command name
 /// - Invalid redirections in last stage
+/// Parse logical operators (&& and ||)
+fn parse_logical_op(tokens: &[Token], op_pos: usize) -> Result<Command> {
+    // Get the operator type
+    let operator = match &tokens[op_pos] {
+        Token::And => LogicalOperator::And,
+        Token::Or => LogicalOperator::Or,
+        _ => return Err(anyhow!("Expected && or ||")),
+    };
+
+    // Split into left and right parts
+    let left_tokens = &tokens[..op_pos];
+    let right_tokens = &tokens[op_pos + 1..];
+
+    if left_tokens.is_empty() {
+        return Err(anyhow!("Missing command before {:?}", operator));
+    }
+    if right_tokens.is_empty() {
+        return Err(anyhow!("Missing command after {:?}", operator));
+    }
+
+    // Recursively parse left and right commands
+    // Convert tokens back to string for parsing (simplified approach)
+    let left_str = tokens_to_string(left_tokens)?;
+    let right_str = tokens_to_string(right_tokens)?;
+
+    let left_cmd = parse_command(&left_str)?;
+    let right_cmd = parse_command(&right_str)?;
+
+    Ok(Command::LogicalOp {
+        operator,
+        left: Box::new(left_cmd),
+        right: Box::new(right_cmd),
+    })
+}
+
+/// Convert tokens back to a string for recursive parsing
+fn tokens_to_string(tokens: &[Token]) -> Result<String> {
+    let mut result = String::new();
+
+    for (i, token) in tokens.iter().enumerate() {
+        if i > 0 {
+            result.push(' ');
+        }
+
+        match token {
+            Token::Word(w) => result.push_str(&quoted_word_to_string(w)),
+            Token::OutputRedirect => result.push('>'),
+            Token::AppendRedirect => result.push_str(">>"),
+            Token::InputRedirect => result.push('<'),
+            Token::ErrorRedirect => result.push_str("2>"),
+            Token::ErrorAppendRedirect => result.push_str("2>>"),
+            Token::ErrorToOutput => result.push_str("2>&1"),
+            Token::BothRedirect => result.push_str("&>"),
+            Token::Pipe => result.push('|'),
+            Token::HereDoc => result.push_str("<<"),
+            Token::HereDocDash => result.push_str("<<-"),
+            Token::HereString => result.push_str("<<<"),
+            Token::Background => result.push('&'),
+            Token::And => return Err(anyhow!("Unexpected && in tokens_to_string")),
+            Token::Or => return Err(anyhow!("Unexpected || in tokens_to_string")),
+        }
+    }
+
+    Ok(result)
+}
+
 fn parse_pipeline(tokens: &[Token]) -> Result<Command> {
     // Split token stream on Pipe tokens
     let mut stages: Vec<Vec<Token>> = Vec::new();
@@ -915,6 +1024,10 @@ fn extract_redirections_from_tokens(tokens: &[Token]) -> Result<(Vec<Token>, Vec
             Token::Pipe => {
                 return Err(anyhow!("Unexpected pipe in stage"));
             }
+
+            Token::And | Token::Or => {
+                return Err(anyhow!("Unexpected logical operator in stage"));
+            }
         }
     }
 
@@ -979,6 +1092,11 @@ pub fn parse_command(input: &str) -> Result<Command> {
                 }
             }
         }
+    }
+
+    // Check for logical operators (&&, ||) - lowest precedence
+    if let Some(op_pos) = tokens.iter().position(|t| matches!(t, Token::And | Token::Or)) {
+        return parse_logical_op(&tokens, op_pos);
     }
 
     // Check if input contains pipes - if so, parse as pipeline
@@ -1096,6 +1214,11 @@ pub fn parse_command(input: &str) -> Result<Command> {
             Token::Pipe => {
                 // Should never reach here - pipes are caught at parse_command() entry
                 return Err(anyhow!("Unexpected pipe token in single command"));
+            }
+
+            Token::And | Token::Or => {
+                // Should never reach here - logical operators are caught at parse_command() entry
+                return Err(anyhow!("Unexpected logical operator in single command"));
             }
         }
     }
@@ -1803,6 +1926,30 @@ fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>,
             };
 
             Ok(Command::Kill { signal, job_spec })
+        }
+
+        // Conditionals
+        "test" => {
+            Ok(Command::Test {
+                args,
+                redirects,
+            })
+        }
+
+        "[" => {
+            // For bracket command, verify closing ]
+            if args.is_empty() || args.last() != Some(&"]".to_string()) {
+                return Err(anyhow!("[: missing closing bracket ]"));
+            }
+
+            // Remove the closing ] from args
+            let mut test_args = args;
+            test_args.pop();
+
+            Ok(Command::Bracket {
+                args: test_args,
+                redirects,
+            })
         }
 
         // Everything else: external command
@@ -3020,5 +3167,45 @@ mod job_control_tests {
             }
             _ => panic!("Expected Kill command"),
         }
+    }
+
+    #[test]
+    fn test_parse_logical_and() {
+        let cmd = parse_command("mkdir foo && touch bar").unwrap();
+        match cmd {
+            Command::LogicalOp { operator, left, right } => {
+                assert_eq!(operator, LogicalOperator::And);
+                assert!(matches!(*left, Command::Mkdir { .. }));
+                assert!(matches!(*right, Command::Touch { .. }));
+            }
+            _ => panic!("Expected LogicalOp command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_logical_or() {
+        let cmd = parse_command("test -f file.txt || touch file.txt").unwrap();
+        match cmd {
+            Command::LogicalOp { operator, left, right } => {
+                assert_eq!(operator, LogicalOperator::Or);
+                assert!(matches!(*left, Command::Test { .. }));
+                assert!(matches!(*right, Command::Touch { .. }));
+            }
+            _ => panic!("Expected LogicalOp command"),
+        }
+    }
+
+    #[test]
+    fn test_tokenize_and_operator() {
+        let tokens = tokenize("cmd1 && cmd2").unwrap();
+        assert_eq!(tokens.len(), 3);
+        assert!(matches!(tokens[1], Token::And));
+    }
+
+    #[test]
+    fn test_tokenize_or_operator() {
+        let tokens = tokenize("cmd1 || cmd2").unwrap();
+        assert_eq!(tokens.len(), 3);
+        assert!(matches!(tokens[1], Token::Or));
     }
 }

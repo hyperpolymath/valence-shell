@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: PLMP-1.0-or-later
+# ClusterFuzzLite project configuration for OSS-Fuzz integration
+
+homepage: "https://github.com/hyperpolymath/valence-shell"
+language: rust
+primary_contact: "jonathan.jewell@open.ac.uk"
+auto_ccs:
+  - "jonathan.jewell@open.ac.uk"
+
+sanitizers:
+  - address
+  - undefined
+  - memory
+
+fuzzing_engines:
+  - libfuzzer
+
+architectures:
+  - x86_64

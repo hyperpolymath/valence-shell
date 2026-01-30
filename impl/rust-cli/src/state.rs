@@ -44,6 +44,12 @@ pub enum OperationType {
     /// File was appended to by append redirection (>> or 2>>)
     /// undo_data contains original file size (u64 encoded as bytes)
     FileAppended,
+    /// Hardware-level secure erase (NIST SP 800-88 Purge)
+    /// NOT REVERSIBLE - destroys entire device
+    HardwareErase,
+    /// Obliterate: GDPR-compliant irreversible deletion
+    /// NOT REVERSIBLE - secure file deletion with no recovery
+    Obliterate,
 }
 
 impl OperationType {
@@ -57,6 +63,8 @@ impl OperationType {
             OperationType::WriteFile => Some(OperationType::WriteFile), // Self-inverse with old content
             OperationType::FileTruncated => Some(OperationType::WriteFile), // Restore original content
             OperationType::FileAppended => Some(OperationType::FileAppended), // Self-inverse (truncate to original size)
+            OperationType::HardwareErase => None, // NOT REVERSIBLE
+            OperationType::Obliterate => None, // NOT REVERSIBLE - GDPR deletion
         }
     }
 
@@ -76,6 +84,8 @@ impl std::fmt::Display for OperationType {
             OperationType::WriteFile => write!(f, "write"),
             OperationType::FileTruncated => write!(f, "truncate"),
             OperationType::FileAppended => write!(f, "append"),
+            OperationType::HardwareErase => write!(f, "hardware_erase"),
+            OperationType::Obliterate => write!(f, "obliterate"),
         }
     }
 }
@@ -216,11 +226,23 @@ pub struct ShellState {
     /// Variables that are exported to child processes
     pub exported_vars: HashSet<String>,
 
+    /// Maximum history size (None = unlimited, Some(n) = limit to n operations)
+    /// When limit is reached, oldest operations are removed
+    /// Default: 10,000 operations
+    pub max_history_size: Option<usize>,
+
+    /// Directory for archiving old history entries
+    /// If set, entries removed from history are saved here
+    pub history_archive_path: Option<PathBuf>,
+
     /// Positional parameters ($1, $2, ...) for script arguments
     pub positional_params: Vec<String>,
 
     /// Counter for generating unique FIFO IDs
     fifo_counter: std::sync::atomic::AtomicUsize,
+
+    /// Job table for background job management
+    pub jobs: crate::job::JobTable,
 }
 
 impl ShellState {
@@ -246,8 +268,11 @@ impl ShellState {
             previous_dir: None,
             variables: HashMap::new(),
             exported_vars: HashSet::new(),
+            max_history_size: Some(10_000), // Default: 10k operations
+            history_archive_path: None,     // No archival by default
             positional_params: Vec::new(),
             fifo_counter: std::sync::atomic::AtomicUsize::new(0),
+            jobs: crate::job::JobTable::new(),
         };
 
         // Try to load existing state
@@ -266,6 +291,9 @@ impl ShellState {
 
         self.history.push(op);
 
+        // Enforce history size limit
+        self.enforce_history_limit();
+
         // Clear redo stack when new operation is performed
         self.redo_stack.clear();
 
@@ -278,6 +306,60 @@ impl ShellState {
             );
             eprintln!("Operation succeeded but may not persist across restarts");
         }
+    }
+
+    /// Enforce history size limit by removing oldest operations
+    ///
+    /// When history exceeds max_history_size, removes the oldest operations.
+    /// If history_archive_path is set, saves removed operations to archive.
+    fn enforce_history_limit(&mut self) {
+        if let Some(limit) = self.max_history_size {
+            if self.history.len() > limit {
+                let excess = self.history.len() - limit;
+
+                // Archive old operations if path is set
+                if let Some(ref archive_path) = self.history_archive_path {
+                    if let Err(e) = self.archive_operations(&self.history[0..excess], archive_path) {
+                        eprintln!(
+                            "{} Failed to archive old history: {}",
+                            "Warning:".bright_yellow(),
+                            e
+                        );
+                    }
+                }
+
+                // Remove oldest operations
+                self.history.drain(0..excess);
+
+                // Note: This means undo can only go back `limit` operations
+                // Users should be aware via configuration
+            }
+        }
+    }
+
+    /// Archive operations to disk for later reference
+    ///
+    /// Saves operations as JSON lines to the archive file
+    fn archive_operations(&self, operations: &[Operation], archive_path: &PathBuf) -> Result<()> {
+        use std::io::Write;
+
+        // Create archive directory if it doesn't exist
+        if let Some(parent) = archive_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        // Append operations to archive file
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(archive_path)?;
+
+        for op in operations {
+            let json = serde_json::to_string(op)?;
+            writeln!(file, "{}", json)?;
+        }
+
+        Ok(())
     }
 
     /// Get the last N undoable operations
@@ -383,6 +465,11 @@ impl ShellState {
         }
     }
 
+    /// Get root path as string (for Lean FFI)
+    pub fn root(&self) -> &str {
+        self.root.to_str().unwrap_or("/")
+    }
+
     /// Get history for display
     pub fn get_history(&self, count: usize) -> Vec<&Operation> {
         self.history.iter().rev().take(count).collect()
@@ -442,6 +529,12 @@ impl ShellState {
     /// Get a shell variable value
     pub fn get_variable(&self, name: &str) -> Option<&str> {
         self.variables.get(name).map(|s| s.as_str())
+    }
+
+    /// Unset a shell variable
+    pub fn unset_variable(&mut self, name: &str) {
+        self.variables.remove(name);
+        self.exported_vars.remove(name);
     }
 
     /// Export a variable (make it available to child processes)

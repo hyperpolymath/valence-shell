@@ -36,13 +36,19 @@ structure StorageFS where
   storage : Storage
   mapping : BlockMapping
 
+/-- Secure deletion methods (NIST SP 800-88 compliant) -/
+inductive SecureDeletionMethod where
+  | clear : SecureDeletionMethod           -- NIST Clear: 1 pass (zeros/random)
+  | purge : SecureDeletionMethod           -- NIST Purge: verified overwrite
+  | cryptoErase : SecureDeletionMethod     -- Cryptographic erasure (key destruction)
+  | destroy : SecureDeletionMethod         -- Physical destruction required
+  deriving Repr, DecidableEq
+
 /-- Overwrite patterns for secure deletion -/
 inductive OverwritePattern where
-  | zeros : OverwritePattern      -- 0x00
-  | ones : OverwritePattern       -- 0xFF
-  | random : Nat → OverwritePattern  -- seed
-  | alternating55 : OverwritePattern -- 0x55
-  | alternatingAA : OverwritePattern -- 0xAA
+  | zeros : OverwritePattern         -- 0x00 (NIST recommended)
+  | ones : OverwritePattern          -- 0xFF
+  | random : Nat → OverwritePattern  -- Random data (NIST recommended)
   deriving Repr, DecidableEq
 
 /-- Generate byte from pattern -/
@@ -51,8 +57,6 @@ def patternByte (p : OverwritePattern) (pos : Nat) : UInt8 :=
   | .zeros => 0
   | .ones => 255
   | .random seed => UInt8.ofNat ((seed * 1103515245 + 12345 + pos) % 256)
-  | .alternating55 => 85
-  | .alternatingAA => 170
 
 /-- Overwrite a single block with pattern -/
 def overwriteBlock (blk : StorageBlock) (pattern : OverwritePattern) : StorageBlock :=
@@ -61,16 +65,17 @@ def overwriteBlock (blk : StorageBlock) (pattern : OverwritePattern) : StorageBl
     blockData := List.map (patternByte pattern) (List.range size)
     overwriteCount := blk.overwriteCount + 1 }
 
-/-- DoD 5220.22-M: 3-pass overwrite patterns -/
-def dodPatterns : List OverwritePattern :=
-  [.zeros, .ones, .random 42]
+/-- NIST SP 800-88 Clear: Single pass (sufficient for modern drives) -/
+def nistClear : List OverwritePattern :=
+  [.zeros]  -- or .random for additional paranoia
 
-/-- Gutmann-style patterns (simplified) -/
-def gutmannPatterns : List OverwritePattern :=
-  [.random 1, .random 2, .random 3, .random 4,
-   .alternating55, .alternatingAA,
-   .zeros, .ones,
-   .random 5, .random 6, .random 7, .random 8]
+/-- NIST SP 800-88 Purge: Verified overwrite -/
+def nistPurge : List OverwritePattern :=
+  [.random 42]  -- Single pass with verification
+
+/-- Legacy DoD 5220.22-M (deprecated - use NIST instead) -/
+def dodPatternsLegacy : List OverwritePattern :=
+  [.zeros, .ones, .random 42]
 
 /-- RMO precondition -/
 def obliteratePrecondition (p : Path) (sfs : StorageFS) : Prop :=

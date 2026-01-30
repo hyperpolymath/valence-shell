@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# ClusterFuzzLite PR Fuzzing - Layer 6
+#
+# Runs on every PR for 5 minutes to catch obvious bugs
+# Full fuzzing runs happen in cflite_batch.yml
+
+name: ClusterFuzzLite PR Fuzzing
+
+on:
+  pull_request:
+    paths:
+      - 'impl/rust-cli/src/**'
+      - 'impl/rust-cli/fuzz/**'
+      - '.clusterfuzzlite/**'
+
+permissions: read-all
+
+jobs:
+  pr_fuzzing:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, undefined]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - name: Build fuzzers (${{ matrix.sanitizer }})
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: rust
+          sanitizer: ${{ matrix.sanitizer }}
+
+      - name: Run fuzzers (${{ matrix.sanitizer }})
+        id: run
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 300  # 5 minutes per sanitizer
+          mode: 'code-change'
+          sanitizer: ${{ matrix.sanitizer }}
+          output-sarif: true
+
+      - name: Upload SARIF (if crashes found)
+        if: always() && steps.run.outputs.sarif-output != ''
+        uses: github/codeql-action/upload-sarif@a4784f2dad6682d68cce8299ef20b1ca931bbdfb # v4
+        with:
+          sarif_file: ${{ steps.run.outputs.sarif-output }}
+          category: clusterfuzzlite-${{ matrix.sanitizer }}

@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: PLMP-1.0-or-later
+[package]
+name = "vsh_nif"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>"]
+
+[lib]
+name = "vsh_nif"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.37"
+anyhow = "1.0"
+
+[dependencies.vsh]
+path = "../../../rust-cli"

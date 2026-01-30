@@ -23,3 +23,12 @@ lean_lib FilesystemEquivalence where
 
 lean_lib SymlinkOperations where
   srcDir := "."
+
+lean_lib Extraction where
+  srcDir := "."
+
+lean_lib RMOOperations where
+  srcDir := "."
+
+lean_lib CopyMoveOperations where
+  srcDir := "."

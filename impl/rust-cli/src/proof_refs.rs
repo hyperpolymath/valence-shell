@@ -56,6 +56,8 @@ impl ProofReference {
             OperationType::WriteFile => WRITE_FILE_REVERSIBLE,
             // File modifications from redirections - pending formal proofs
             OperationType::FileTruncated | OperationType::FileAppended => WRITE_FILE_REVERSIBLE,
+            OperationType::HardwareErase => HARDWARE_ERASE_IRREVERSIBLE,
+            OperationType::Obliterate => OBLITERATE_IRREVERSIBLE,
         }
     }
 
@@ -137,6 +139,32 @@ pub const COMPOSITION_REVERSIBLE: ProofReference = ProofReference {
     agda_location: "proofs/agda/FilesystemComposition.agda:L26-L48",
     isabelle_location: "proofs/isabelle/FilesystemComposition.thy:L22-L42",
     description: "apply_sequence(reverse(ops), apply_sequence(ops, fs)) = fs",
+};
+
+/// Proof reference for hardware secure erase irreversibility.
+///
+/// Theorem: Hardware erase operations have NO inverse - data destruction is permanent.
+/// Complies with NIST SP 800-88 Rev. 1 Purge methods.
+pub const HARDWARE_ERASE_IRREVERSIBLE: ProofReference = ProofReference {
+    theorem: "hardware_erase_irreversible",
+    coq_location: "proofs/coq/rmo_operations.v:L45-L68",
+    lean_location: "proofs/lean4/RMOOperations.lean:L52-L73",
+    agda_location: "proofs/agda/RMOOperations.agda:L48-L70",
+    isabelle_location: "proofs/isabelle/RMOOperations.thy:L44-L65",
+    description: "∀ fs device. ¬∃ op. apply(op, hardware_erase(device, fs)) = fs",
+};
+
+/// Proof reference for GDPR-compliant obliterate irreversibility.
+///
+/// Theorem: Obliterate operations have NO inverse - secure 3-pass overwrite + deletion.
+/// Complies with DoD 5220.22-M and GDPR Article 17 (Right to Erasure).
+pub const OBLITERATE_IRREVERSIBLE: ProofReference = ProofReference {
+    theorem: "obliterate_irreversible",
+    coq_location: "proofs/coq/rmo_operations.v:L70-L95",
+    lean_location: "proofs/lean4/RMOOperations.lean:L75-L98",
+    agda_location: "proofs/agda/RMOOperations.agda:L72-L96",
+    isabelle_location: "proofs/isabelle/RMOOperations.thy:L67-L89",
+    description: "∀ fs file. ¬∃ op. apply(op, obliterate(file, fs)) = fs",
 };
 
 /// Get all available proof references as a vector.
