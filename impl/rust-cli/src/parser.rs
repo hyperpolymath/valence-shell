@@ -131,6 +131,9 @@ enum Token {
 
     /// Here string: <<<
     HereString,
+
+    /// Background operator: &
+    Background,
 }
 
 /// Parsed command with arguments and redirections.
@@ -208,6 +211,7 @@ pub enum Command {
         program: String,
         args: Vec<String>,
         redirects: Vec<Redirection>,
+        background: bool,
     },
 
     /// Pipeline of external commands (cmd1 | cmd2 | cmd3)
@@ -217,6 +221,7 @@ pub enum Command {
     Pipeline {
         stages: Vec<(String, Vec<String>)>,
         redirects: Vec<Redirection>,
+        background: bool,
     },
 
     /// Variable assignment (VAR=value)
@@ -232,6 +237,28 @@ pub enum Command {
     Export {
         name: String,
         value: Option<String>,
+    },
+
+    // Job control
+    /// List jobs
+    Jobs {
+        long: bool,
+    },
+
+    /// Bring job to foreground
+    Fg {
+        job_spec: Option<String>,
+    },
+
+    /// Continue job in background
+    Bg {
+        job_spec: Option<String>,
+    },
+
+    /// Kill a job
+    Kill {
+        signal: Option<String>,
+        job_spec: String,
     },
 }
 
@@ -471,8 +498,9 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                             chars.next();
                             tokens.push(Token::BothRedirect);
                         } else {
-                            // Regular & (background job - not implemented yet)
-                            current_literal.push(ch);
+                            // Background job operator: &
+                            push_word!();
+                            tokens.push(Token::Background);
                         }
                     }
 
@@ -776,6 +804,7 @@ fn parse_pipeline(tokens: &[Token]) -> Result<Command> {
     Ok(Command::Pipeline {
         stages: parsed_stages,
         redirects: final_redirects,
+        background: false,  // TODO: detect & in pipeline
     })
 }
 
@@ -878,6 +907,11 @@ fn extract_redirections_from_tokens(tokens: &[Token]) -> Result<(Vec<Token>, Vec
                 i += 2;
             }
 
+            Token::Background => {
+                // Background operator - skip it here, handled at top level
+                i += 1;
+            }
+
             Token::Pipe => {
                 return Err(anyhow!("Unexpected pipe in stage"));
             }
@@ -955,6 +989,7 @@ pub fn parse_command(input: &str) -> Result<Command> {
     // Separate command tokens from redirections
     let mut command_tokens: Vec<String> = Vec::new();
     let mut redirects = Vec::new();
+    let mut background = false;
 
     let mut i = 0;
     while i < tokens.len() {
@@ -1048,6 +1083,16 @@ pub fn parse_command(input: &str) -> Result<Command> {
                 i += 2;
             }
 
+            Token::Background => {
+                // Background job: &
+                // Must be last token
+                if i != tokens.len() - 1 {
+                    return Err(anyhow!("Background operator & must be at end of command"));
+                }
+                background = true;
+                i += 1;
+            }
+
             Token::Pipe => {
                 // Should never reach here - pipes are caught at parse_command() entry
                 return Err(anyhow!("Unexpected pipe token in single command"));
@@ -1065,7 +1110,7 @@ pub fn parse_command(input: &str) -> Result<Command> {
     let args: Vec<String> = command_tokens[1..].to_vec();
 
     // Parse base command with redirections
-    parse_base_command(cmd, args, redirects)
+    parse_base_command(cmd, args, redirects, background)
 }
 
 /// Check if a string is a valid variable name
@@ -1382,11 +1427,15 @@ fn quoted_word_to_string(word: &QuotedWord) -> String {
     for part in &word.parts {
         match part {
             WordPart::Literal(s) => {
-                // In single quotes, escape $ so expand_variables() doesn't expand
-                if word.quote_type == QuoteType::Single && s.contains('$') {
-                    // Escape $ by prefixing with backslash
+                // In quotes (single or double), escape special characters
+                // to prevent unwanted expansion later
+                if word.quote_type != QuoteType::None {
+                    // Escape $ in single quotes so expand_variables() doesn't expand
+                    // Escape glob metacharacters (* ? [ {) in all quotes
                     for ch in s.chars() {
-                        if ch == '$' {
+                        if (word.quote_type == QuoteType::Single && ch == '$')
+                            || matches!(ch, '*' | '?' | '[' | '{')
+                        {
                             result.push('\\');
                         }
                         result.push(ch);
@@ -1598,7 +1647,7 @@ pub fn expand_quoted_word_with_state(word: &QuotedWord, state: &mut crate::state
 }
 
 /// Parse base command with arguments and redirections
-fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>) -> Result<Command> {
+fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>, background: bool) -> Result<Command> {
     match cmd {
         "mkdir" => {
             if args.is_empty() {
@@ -1721,11 +1770,47 @@ fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>)
             }
         }
 
+        // Job control
+        "jobs" => {
+            let long = args.contains(&"-l".to_string()) || args.contains(&"--long".to_string());
+            Ok(Command::Jobs { long })
+        }
+
+        "fg" => {
+            // fg with optional job spec
+            Ok(Command::Fg {
+                job_spec: args.get(0).map(|s| s.to_string()),
+            })
+        }
+
+        "bg" => {
+            // bg with optional job spec
+            Ok(Command::Bg {
+                job_spec: args.get(0).map(|s| s.to_string()),
+            })
+        }
+
+        "kill" => {
+            // kill [-SIGNAL] %job
+            let (signal, job_spec) = if args.len() >= 2 && args[0].starts_with('-') {
+                // kill -9 %1 or kill -SIGTERM %1
+                (Some(args[0].clone()), args[1].clone())
+            } else if args.len() >= 1 {
+                // kill %1 (default SIGTERM)
+                (None, args[0].clone())
+            } else {
+                return Err(anyhow!("kill: missing job specification"));
+            };
+
+            Ok(Command::Kill { signal, job_spec })
+        }
+
         // Everything else: external command
         _ => Ok(Command::External {
             program: cmd.to_string(),
             args,
             redirects,
+            background,
         }),
     }
 }
@@ -1761,10 +1846,12 @@ mod tests {
                 program,
                 args,
                 redirects,
+                background,
             } => {
                 assert_eq!(program, "echo");
                 assert_eq!(args, vec!["hello", "world"]);
                 assert_eq!(redirects, vec![]);
+                assert!(!background);
             }
             _ => panic!("Expected External command"),
         }
@@ -1997,13 +2084,14 @@ mod tests {
     fn test_parse_simple_pipeline() {
         let cmd = parse_command("ls | grep test").unwrap();
         match cmd {
-            Command::Pipeline { stages, redirects } => {
+            Command::Pipeline { stages, redirects, background } => {
                 assert_eq!(stages.len(), 2);
                 assert_eq!(stages[0].0, "ls");
                 assert_eq!(stages[0].1.len(), 0);
                 assert_eq!(stages[1].0, "grep");
                 assert_eq!(stages[1].1, vec!["test"]);
                 assert!(redirects.is_empty());
+                assert_eq!(background, false);
             }
             _ => panic!("Expected Pipeline"),
         }
@@ -2030,9 +2118,10 @@ mod tests {
     fn test_parse_pipeline_with_redirect() {
         let cmd = parse_command("ls | grep test > output.txt").unwrap();
         match cmd {
-            Command::Pipeline { stages, redirects } => {
+            Command::Pipeline { stages, redirects, background } => {
                 assert_eq!(stages.len(), 2);
                 assert_eq!(redirects.len(), 1);
+                assert_eq!(background, false);
                 match &redirects[0] {
                     Redirection::Output { file } => assert_eq!(file, "output.txt"),
                     _ => panic!("Expected Output redirection"),
@@ -2827,5 +2916,109 @@ mod heredoc_tests {
 
         let delimiters3 = extract_heredoc_delimiters("cmd <<END1 arg <<END2").unwrap();
         assert_eq!(delimiters3, vec!["END1", "END2"]);
+    }
+}
+
+#[cfg(test)]
+mod job_control_tests {
+    use super::*;
+
+    #[test]
+    fn test_tokenize_background() {
+        let tokens = tokenize("sleep 10 &").unwrap();
+        assert_eq!(tokens.len(), 3);
+        assert!(matches!(tokens[2], Token::Background));
+    }
+
+    #[test]
+    fn test_parse_background_job() {
+        let cmd = parse_command("sleep 10 &").unwrap();
+        match cmd {
+            Command::External { program, args, background, .. } => {
+                assert_eq!(program, "sleep");
+                assert_eq!(args, vec!["10"]);
+                assert!(background);
+            }
+            _ => panic!("Expected External command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_jobs_command() {
+        let cmd = parse_command("jobs").unwrap();
+        match cmd {
+            Command::Jobs { long } => {
+                assert!(!long);
+            }
+            _ => panic!("Expected Jobs command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_jobs_long() {
+        let cmd = parse_command("jobs -l").unwrap();
+        match cmd {
+            Command::Jobs { long } => {
+                assert!(long);
+            }
+            _ => panic!("Expected Jobs command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_fg_no_spec() {
+        let cmd = parse_command("fg").unwrap();
+        match cmd {
+            Command::Fg { job_spec } => {
+                assert!(job_spec.is_none());
+            }
+            _ => panic!("Expected Fg command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_fg_with_spec() {
+        let cmd = parse_command("fg %1").unwrap();
+        match cmd {
+            Command::Fg { job_spec } => {
+                assert_eq!(job_spec, Some("%1".to_string()));
+            }
+            _ => panic!("Expected Fg command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_bg_no_spec() {
+        let cmd = parse_command("bg").unwrap();
+        match cmd {
+            Command::Bg { job_spec } => {
+                assert!(job_spec.is_none());
+            }
+            _ => panic!("Expected Bg command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_kill_default_signal() {
+        let cmd = parse_command("kill %1").unwrap();
+        match cmd {
+            Command::Kill { signal, job_spec } => {
+                assert_eq!(job_spec, "%1");
+                assert!(signal.is_none());
+            }
+            _ => panic!("Expected Kill command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_kill_with_signal() {
+        let cmd = parse_command("kill -9 %1").unwrap();
+        match cmd {
+            Command::Kill { signal, job_spec } => {
+                assert_eq!(job_spec, "%1");
+                assert_eq!(signal, Some("-9".to_string()));
+            }
+            _ => panic!("Expected Kill command"),
+        }
     }
 }
