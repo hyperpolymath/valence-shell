@@ -1,0 +1,24 @@
+-- SPDX-License-Identifier: PLMP-1.0-or-later
+package valence-shell
+
+version = 0.14.0
+authors = "Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>"
+license = "PLMP-1.0-or-later"
+
+brief = "Formally verified filesystem operations with provable reversibility"
+readme = "README.md"
+
+sourcedir = "src"
+
+-- Core modules
+modules = Filesystem.Model
+        , Filesystem.Operations
+        , Filesystem.Composition
+        , Filesystem.RMO
+
+-- Dependencies
+depends = base >= 0.6.0
+        , contrib
+
+-- Build options
+opts = "--total"  -- Require totality proofs

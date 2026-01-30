@@ -15,7 +15,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use std::sync::atomic::Ordering;
 
 // Use library modules
 use vsh::{commands, state};
