@@ -209,8 +209,8 @@ mod tests {
 
         // Common typos
         assert_eq!(levenshtein_distance("sl", "ls"), 2); // Swap
-        assert_eq!(levenshtein_distance("gti", "git"), 1); // Transpose
-        assert_eq!(levenshtein_distance("mkdr", "mkdir"), 2); // Missing char + swap
+        assert_eq!(levenshtein_distance("gti", "git"), 2); // Transpose = delete + insert
+        assert_eq!(levenshtein_distance("mkdr", "mkdir"), 1); // One insertion
     }
 
     #[test]

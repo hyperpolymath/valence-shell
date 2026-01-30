@@ -80,6 +80,11 @@ criterion = "0.5"
 # Adds ~5% overhead, provides mathematical guarantees on operation safety
 lean-runtime-checks = []
 
+# Enhanced REPL with syntax highlighting and tab completion (default)
+# Disable with --no-default-features for minimal build
+default = ["enhanced-repl"]
+enhanced-repl = []
+
 [build-dependencies]
 # Link to Zig FFI library
 cc = "1.0"

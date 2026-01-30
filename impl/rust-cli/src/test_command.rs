@@ -454,10 +454,10 @@ mod tests {
         assert!(expr.evaluate().unwrap()); // true AND true = true
 
         let expr = TestExpr::And(
-            Box::new(TestExpr::StringEmpty("".to_string())),
-            Box::new(TestExpr::IntEqual("1".to_string(), "1".to_string())),
+            Box::new(TestExpr::StringNotEmpty("".to_string())), // false (empty string is not "not empty")
+            Box::new(TestExpr::IntEqual("1".to_string(), "1".to_string())), // true
         );
-        assert!(!expr.evaluate().unwrap()); // true AND false = false
+        assert!(!expr.evaluate().unwrap()); // false AND true = false
     }
 
     #[test]

@@ -316,7 +316,7 @@ mod tests {
     #[ignore] // Requires user confirmation
     fn test_obliterate() {
         let temp_dir = TempDir::new().unwrap();
-        let mut state = ShellState::new(temp_dir.path()).unwrap();
+        let mut state = ShellState::new(temp_dir.path().to_str().unwrap()).unwrap();
 
         let test_file = "sensitive.txt";
         fs::write(temp_dir.path().join(test_file), "secret data").unwrap();
