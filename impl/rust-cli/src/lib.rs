@@ -16,6 +16,7 @@ pub mod executable;
 pub mod external;
 pub mod glob;
 pub mod history;
+pub mod quotes;
 pub mod job;
 pub mod parser;
 pub mod process_sub;
