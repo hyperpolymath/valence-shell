@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: PLMP-1.0-or-later
+
+[package]
+name = "vsh-fuzz"
+version = "0.0.0"
+authors = ["Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>"]
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+tempfile = "3.8"
+walkdir = "2.4"
+
+[dependencies.vsh]
+path = ".."
+
+[[bin]]
+name = "fuzz_parser"
+path = "fuzz_targets/fuzz_parser.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_path_operations"
+path = "fuzz_targets/fuzz_path_operations.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_glob_expansion"
+path = "fuzz_targets/fuzz_glob_expansion.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_state_machine"
+path = "fuzz_targets/fuzz_state_machine.rs"
+test = false
+doc = false

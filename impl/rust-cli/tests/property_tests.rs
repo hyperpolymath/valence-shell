@@ -807,3 +807,277 @@ fn prop_empty_file_operations() {
         prop_assert_eq!(final_content.len(), 0, "Should be empty again");
     });
 }
+
+// ============================================================
+// Conditional & Logical Operator Properties (Phase 6 M14)
+// ============================================================
+
+/// Property: test -f always returns 0 for regular files, 1 otherwise
+///
+/// POSIX requirement: test -f should check if path is a regular file
+#[test]
+fn prop_test_f_file_detection() {
+    proptest!(|(path in valid_path_strategy())| {
+        use vsh::test_command::execute_test;
+
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        // Create a file
+        fs::write(&target, b"test").unwrap();
+
+        // test -f should return 0 (success)
+        let args = vec!["-f".to_string(), target.to_string_lossy().to_string()];
+        let exit_code = execute_test(&args, false).unwrap();
+        prop_assert_eq!(exit_code, 0, "test -f should return 0 for regular files");
+
+        // Remove and create dir instead
+        fs::remove_file(&target).unwrap();
+        fs::create_dir(&target).unwrap();
+
+        // test -f should return 1 (failure) for directory
+        let args = vec!["-f".to_string(), target.to_string_lossy().to_string()];
+        let exit_code = execute_test(&args, false).unwrap();
+        prop_assert_eq!(exit_code, 1, "test -f should return 1 for directories");
+    });
+}
+
+/// Property: test -d always returns 0 for directories, 1 otherwise
+///
+/// POSIX requirement: test -d should check if path is a directory
+#[test]
+fn prop_test_d_directory_detection() {
+    proptest!(|(path in valid_path_strategy())| {
+        use vsh::test_command::execute_test;
+
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        // Create a directory
+        fs::create_dir(&target).unwrap();
+
+        // test -d should return 0 (success)
+        let args = vec!["-d".to_string(), target.to_string_lossy().to_string()];
+        let exit_code = execute_test(&args, false).unwrap();
+        prop_assert_eq!(exit_code, 0, "test -d should return 0 for directories");
+
+        // Remove and create file instead
+        fs::remove_dir(&target).unwrap();
+        fs::write(&target, b"test").unwrap();
+
+        // test -d should return 1 (failure) for file
+        let args = vec!["-d".to_string(), target.to_string_lossy().to_string()];
+        let exit_code = execute_test(&args, false).unwrap();
+        prop_assert_eq!(exit_code, 1, "test -d should return 1 for files");
+    });
+}
+
+/// Property: test -e returns 0 for any existing path
+///
+/// POSIX requirement: test -e checks existence regardless of type
+#[test]
+fn prop_test_e_existence_check() {
+    proptest!(|(path in valid_path_strategy(), is_dir in any::<bool>())| {
+        use vsh::test_command::execute_test;
+
+        let temp = TempDir::new().unwrap();
+        let target = temp.path().join(&path);
+
+        // Create either file or directory
+        if is_dir {
+            fs::create_dir(&target).unwrap();
+        } else {
+            fs::write(&target, b"test").unwrap();
+        }
+
+        // test -e should return 0 (exists)
+        let args = vec!["-e".to_string(), target.to_string_lossy().to_string()];
+        let exit_code = execute_test(&args, false).unwrap();
+        prop_assert_eq!(exit_code, 0, "test -e should return 0 for existing paths");
+
+        // Remove
+        if is_dir {
+            fs::remove_dir(&target).unwrap();
+        } else {
+            fs::remove_file(&target).unwrap();
+        }
+
+        // test -e should return 1 (doesn't exist)
+        let args = vec!["-e".to_string(), target.to_string_lossy().to_string()];
+        let exit_code = execute_test(&args, false).unwrap();
+        prop_assert_eq!(exit_code, 1, "test -e should return 1 for non-existing paths");
+    });
+}
+
+/// Property: test string equality is reflexive and symmetric
+///
+/// POSIX requirement: string comparison should follow equality properties
+#[test]
+fn prop_test_string_equality() {
+    proptest!(|(s in "[a-z]{1,20}")| {
+        use vsh::test_command::execute_test;
+
+        // s = s should be true
+        let args = vec![s.clone(), "=".to_string(), s.clone()];
+        let exit_code = execute_test(&args, false).unwrap();
+        prop_assert_eq!(exit_code, 0, "String should equal itself");
+
+        // s != s should be false
+        let args = vec![s.clone(), "!=".to_string(), s.clone()];
+        let exit_code = execute_test(&args, false).unwrap();
+        prop_assert_eq!(exit_code, 1, "String should not be not-equal to itself");
+    });
+}
+
+/// Property: test integer comparisons are transitive
+///
+/// If a < b and b < c, then a < c
+#[test]
+fn prop_test_integer_transitivity() {
+    proptest!(|(a in 0i64..100, b in 100i64..200, c in 200i64..300)| {
+        use vsh::test_command::execute_test;
+
+        // a -lt b should be true
+        let args = vec![a.to_string(), "-lt".to_string(), b.to_string()];
+        let exit_code = execute_test(&args, false).unwrap();
+        prop_assert_eq!(exit_code, 0, "a < b should be true");
+
+        // b -lt c should be true
+        let args = vec![b.to_string(), "-lt".to_string(), c.to_string()];
+        let exit_code = execute_test(&args, false).unwrap();
+        prop_assert_eq!(exit_code, 0, "b < c should be true");
+
+        // Therefore a -lt c should be true (transitivity)
+        let args = vec![a.to_string(), "-lt".to_string(), c.to_string()];
+        let exit_code = execute_test(&args, false).unwrap();
+        prop_assert_eq!(exit_code, 0, "a < c should be true (transitivity)");
+    });
+}
+
+/// Property: Logical AND (&&) short-circuits on failure
+///
+/// cmd1 && cmd2: if cmd1 fails, cmd2 never executes
+#[test]
+fn prop_logical_and_short_circuit() {
+    proptest!(|(path in valid_path_strategy())| {
+        use vsh::parser::parse_command;
+        use vsh::executable::ExecutableCommand;
+        use vsh::state::ShellState;
+
+        let temp = TempDir::new().unwrap();
+
+        // Parse: test -f nonexistent && mkdir path
+        // The mkdir should NOT execute because test fails
+        let nonexistent = temp.path().join("does_not_exist.txt");
+        let target = temp.path().join(&path);
+
+        let cmd_str = format!(
+            "test -f {} && mkdir {}",
+            nonexistent.to_string_lossy(),
+            target.to_string_lossy()
+        );
+
+        let cmd = parse_command(&cmd_str).unwrap();
+
+        // Execute
+        let mut state = ShellState::new(temp.path()).unwrap();
+        let _ = cmd.execute(&mut state);
+
+        // The directory should NOT exist (mkdir didn't run due to short-circuit)
+        prop_assert!(!target.exists(), "Short-circuit should prevent mkdir execution");
+    });
+}
+
+/// Property: Logical OR (||) short-circuits on success
+///
+/// cmd1 || cmd2: if cmd1 succeeds, cmd2 never executes
+#[test]
+fn prop_logical_or_short_circuit() {
+    proptest!(|(path1 in valid_path_strategy(), path2 in valid_path_strategy())| {
+        use vsh::parser::parse_command;
+        use vsh::executable::ExecutableCommand;
+        use vsh::state::ShellState;
+
+        let temp = TempDir::new().unwrap();
+
+        // Create first dir
+        let target1 = temp.path().join(&path1);
+        fs::create_dir(&target1).unwrap();
+
+        let target2 = temp.path().join(&path2);
+
+        // Parse: test -d path1 || mkdir path2
+        // The mkdir should NOT execute because test succeeds
+        let cmd_str = format!(
+            "test -d {} || mkdir {}",
+            target1.to_string_lossy(),
+            target2.to_string_lossy()
+        );
+
+        let cmd = parse_command(&cmd_str).unwrap();
+
+        // Execute
+        let mut state = ShellState::new(temp.path()).unwrap();
+        let _ = cmd.execute(&mut state);
+
+        // The second directory should NOT exist (mkdir didn't run due to short-circuit)
+        prop_assert!(!target2.exists(), "Short-circuit should prevent mkdir execution");
+    });
+}
+
+/// Property: Quote processing prevents glob expansion
+///
+/// Quoted patterns should not be expanded even if they match files
+#[test]
+fn prop_quote_prevents_glob() {
+    proptest!(|()| {
+        use vsh::quotes::parse_quotes;
+        use vsh::quotes::QuoteState;
+
+        // Test various quoted glob patterns
+        let test_cases = vec![
+            ("'*.txt'", true),  // Single quotes - no expansion
+            ("\"*.txt\"", true),  // Double quotes - no expansion
+            ("*.txt", false),   // Unquoted - should expand
+            ("'[abc]'", true),  // Bracket glob in quotes
+            ("'{1,2,3}'", true), // Brace expansion in quotes
+        ];
+
+        for (input, should_be_quoted) in test_cases {
+            let segments = parse_quotes(input).unwrap();
+
+            if should_be_quoted {
+                // At least one segment should be quoted
+                let has_quoted = segments.iter().any(|seg| {
+                    !matches!(seg.state, QuoteState::Unquoted)
+                });
+                prop_assert!(has_quoted, "Pattern {} should have quoted segments", input);
+            }
+        }
+    });
+}
+
+/// Property: Glob expansion is deterministic
+///
+/// Expanding the same pattern twice should give the same results
+#[test]
+fn prop_glob_deterministic() {
+    proptest!(|(files in prop::collection::vec("[a-z]{3,8}\\.txt", 1..5))| {
+        let temp = TempDir::new().unwrap();
+
+        // Create files
+        for file in &files {
+            let path = temp.path().join(file);
+            fs::write(&path, b"test").unwrap();
+        }
+
+        // Expand glob twice
+        use vsh::glob::expand_glob;
+        let pattern = format!("{}/*.txt", temp.path().to_string_lossy());
+
+        let expansion1 = expand_glob(&pattern).unwrap();
+        let expansion2 = expand_glob(&pattern).unwrap();
+
+        prop_assert_eq!(expansion1, expansion2, "Glob expansion should be deterministic");
+    });
+}

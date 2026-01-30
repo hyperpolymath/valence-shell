@@ -9,10 +9,10 @@
 use anyhow::Result;
 use colored::Colorize;
 use std::io::{self, BufRead, Write};
-use std::sync::atomic::Ordering;
 
 use crate::executable::{ExecutableCommand, ExecutionResult};
 use crate::parser;
+use crate::signals;
 use crate::state::ShellState;
 
 /// Run the interactive REPL (Read-Eval-Print Loop).
@@ -44,7 +44,7 @@ use crate::state::ShellState;
 pub fn run(state: &mut ShellState) -> Result<()> {
     // Install SIGINT handler for graceful Ctrl+C handling
     ctrlc::set_handler(move || {
-        crate::INTERRUPT_REQUESTED.store(true, Ordering::Relaxed);
+        signals::request_interrupt();
     })
     .expect("Error setting Ctrl-C handler");
 
@@ -194,6 +194,15 @@ fn print_help() {
     println!("  {}  Start a transaction group", "begin <name>".bright_magenta());
     println!("  {}         Commit current transaction", "commit".bright_magenta());
     println!("  {}       Rollback current transaction", "rollback".bright_magenta());
+    println!();
+
+    println!("{}", "Job Control:".bright_yellow());
+    println!("  {}  Run command in background", "cmd &".bright_green());
+    println!("  {}            List all jobs", "jobs".bright_green());
+    println!("  {}       List jobs with PIDs", "jobs -l".bright_green());
+    println!("  {}        Bring job to foreground", "fg [%N]".bright_green());
+    println!("  {}        Continue job in background", "bg [%N]".bright_green());
+    println!("  {}      Send signal to job", "kill [-%N] %N".bright_green());
     println!();
 
     println!("{}", "Information:".bright_yellow());

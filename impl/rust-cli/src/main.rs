@@ -12,31 +12,25 @@
 //! - Complex operations delegate to BEAM daemon
 //! - Zig FFI provides the verified POSIX interface
 
-mod commands;
-mod executable;
-mod external;
-mod history;
-mod parser;
-mod process_sub;
-mod arith;
-mod proof_refs;
-mod redirection;
-mod repl;
-mod state;
-
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 
-/// Global flag set by SIGINT handler to interrupt running commands
-pub static INTERRUPT_REQUESTED: AtomicBool = AtomicBool::new(false);
+// Use library modules
+use vsh::{commands, state};
+
+// REPL modules (choose one based on feature flags)
+#[cfg(feature = "enhanced-repl")]
+use vsh::enhanced_repl as repl_impl;
+#[cfg(not(feature = "enhanced-repl"))]
+use vsh::repl as repl_impl;
 
 /// Valence Shell - Every operation is reversible
 #[derive(Parser)]
 #[command(name = "vsh")]
 #[command(author = "Hyperpolymath")]
-#[command(version = "0.6.0")]
+#[command(version = "1.0.0")]
 #[command(about = "A formally verified reversible shell", long_about = None)]
 struct Cli {
     /// Enable verbose output showing proof references
@@ -180,7 +174,8 @@ fn main() -> Result<()> {
             commands::show_graph(&state)?;
         }
         Some(Commands::Shell) | None => {
-            repl::run(&mut state)?;
+            // Use enhanced REPL with tab completion and syntax highlighting
+            repl_impl::run(&mut state)?;
         }
         Some(Commands::Proofs) => {
             commands::show_proofs()?;

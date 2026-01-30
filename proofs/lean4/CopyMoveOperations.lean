@@ -212,7 +212,7 @@ theorem copy_then_move (src dst dst2 : Path) (fs : Filesystem) :
     (move dst dst2 (copyFile src dst fs)) dst2 = fs src := by
   intro hCopy hMove
   calc (move dst dst2 (copyFile src dst fs)) dst2
-      = (copyFile src dst fs) dst := move_preserves_content dst dst2 (copyFile src dst fs) hMove
+      = (copyFile src dst fs) dst := (move_preserves_content dst dst2 (copyFile src dst fs) hMove).symm
     _ = fs src := (copyFile_same_content src dst fs hCopy).symm
 
 /-!

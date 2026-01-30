@@ -159,6 +159,8 @@ theorem operationSequenceReversible (ops : List Operation) (fs : Filesystem)
       -- Step 1: Apply rest operations then reverse rest
       have ih_result := ih (applyOp op fs) hrev_rest
       -- ih_result: applySequence (reverseSequence rest) (applySequence rest (applyOp op fs)) = applyOp op fs
+      -- Unfold reverseSequence in ih_result to match the simplified goal
+      simp only [reverseSequence] at ih_result
       -- Step 2: Apply reverseOp op to get back to fs
       have single := singleOpReversible op fs hrev_op
       -- single: applyOp (reverseOp op) (applyOp op fs) = fs

@@ -10,6 +10,10 @@ use std::fs;
 
 use crate::proof_refs;
 use crate::state::{Operation, OperationType, ShellState};
+use crate::verification;
+
+// Secure deletion (RMO - Remove-Match-Obliterate)
+pub mod secure_deletion;
 
 /// Create a directory at the specified path.
 ///
@@ -38,6 +42,10 @@ use crate::state::{Operation, OperationType, ShellState};
 /// ```
 pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
+
+    // Optional Lean 4 verification (compile-time feature flag)
+    // Provides mathematical guarantee that preconditions are satisfied
+    verification::verify_mkdir(state.root(), path)?;
 
     // Check preconditions (matching Coq)
     if full_path.exists() {
@@ -107,6 +115,9 @@ pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 pub fn rmdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
+    // Optional Lean 4 verification
+    verification::verify_rmdir(state.root(), path)?;
+
     // Check preconditions
     if !full_path.exists() {
         anyhow::bail!("Path does not exist (ENOENT)");
@@ -168,6 +179,9 @@ pub fn rmdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
+    // Optional Lean 4 verification
+    verification::verify_create_file(state.root(), path)?;
+
     if full_path.exists() {
         anyhow::bail!("Path already exists (EEXIST)");
     }
@@ -227,6 +241,9 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 /// ```
 pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
+
+    // Optional Lean 4 verification
+    verification::verify_delete_file(state.root(), path)?;
 
     if !full_path.exists() {
         anyhow::bail!("Path does not exist (ENOENT)");
@@ -295,7 +312,17 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
     }
 
     for op in &ops_to_undo {
-        let inverse_type = op.op_type.inverse().context("Operation has no inverse")?;
+        // Check if operation is reversible
+        let Some(inverse_type) = op.op_type.inverse() else {
+            println!(
+                "{} {} (irreversible: {})",
+                "Cannot undo".bright_red(),
+                op.path,
+                op.op_type
+            );
+            continue;
+        };
+
         let path = state.resolve_path(&op.path);
 
         // Execute inverse operation
@@ -337,6 +364,10 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             OperationType::FileTruncated => {
                 // Handled by WriteFile inverse (restore original content)
                 unreachable!("FileTruncated inverse is WriteFile, handled above");
+            }
+            OperationType::HardwareErase | OperationType::Obliterate => {
+                // These have no inverse (inverse() returns None), so we never get here
+                unreachable!("Irreversible operations filtered out above");
             }
         }
 
@@ -427,6 +458,10 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             OperationType::FileAppended => {
                 // Cannot redo append without knowing what was appended
                 anyhow::bail!("FileAppended redo not yet implemented (would need appended content)");
+            }
+            OperationType::HardwareErase | OperationType::Obliterate => {
+                // Cannot redo - irreversible operations
+                anyhow::bail!("{:?} cannot be redone - operation is irreversible", op.op_type);
             }
         }
 
@@ -666,6 +701,10 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                     // Handled by WriteFile inverse (restore original content)
                     unreachable!("FileTruncated inverse is WriteFile, handled above");
                 }
+                OperationType::HardwareErase | OperationType::Obliterate => {
+                    // This should never happen - these have no inverse (inverse() returns None)
+                    unreachable!("Irreversible operations should not reach here");
+                }
             };
 
             // Collect failures
@@ -808,5 +847,393 @@ pub fn show_graph(state: &ShellState) -> Result<()> {
 /// ```
 pub fn show_proofs() -> Result<()> {
     proof_refs::print_verification_summary();
+    Ok(())
+}
+
+/// List all jobs with their status.
+///
+/// Displays job ID, state (Running/Stopped/Done), and command string.
+/// The current job is marked with `+`, the previous job with `-`.
+///
+/// # Arguments
+/// * `state` - Shell state containing job table
+/// * `long` - If true, show process IDs (not yet implemented)
+///
+/// # Examples
+/// ```no_run
+/// use vsh::commands;
+/// use vsh::state::ShellState;
+///
+/// let state = ShellState::new("/tmp")?;
+/// commands::jobs(&state, false)?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+pub fn jobs(state: &ShellState, _long: bool) -> Result<()> {
+    let lines = state.jobs.list_jobs();
+
+    if lines.is_empty() {
+        // No jobs to display
+        return Ok(());
+    }
+
+    for line in lines {
+        println!("{}", line);
+    }
+
+    Ok(())
+}
+
+/// Bring a job to the foreground.
+///
+/// Moves the specified job (or current job if none specified) to foreground,
+/// giving it terminal control. If the job was stopped, sends SIGCONT to resume it.
+///
+/// # Arguments
+/// * `state` - Shell state containing job table
+/// * `job_spec` - Job specification (%1, %+, etc.) or None for current job
+///
+/// # Errors
+/// Returns error if job does not exist or terminal control fails.
+pub fn fg(state: &mut ShellState, job_spec: Option<&str>) -> Result<()> {
+    let spec = job_spec.unwrap_or("%+");
+
+    // Find the job
+    let job = state.jobs.get_job(spec)
+        .ok_or_else(|| anyhow::anyhow!("fg: no such job: {}", spec))?;
+
+    let pgid = job.pgid;
+    let job_id = job.id;
+    let job_state = job.state;
+
+    println!("{}", job.command.trim_end_matches(" &"));
+
+    #[cfg(unix)]
+    {
+        use crate::job::JobState;
+
+        // Give terminal control to job
+        unsafe {
+            libc::tcsetpgrp(libc::STDIN_FILENO, pgid);
+        }
+
+        // If job is stopped, send SIGCONT to resume
+        if job_state == JobState::Stopped {
+            unsafe {
+                libc::kill(-pgid, libc::SIGCONT);
+            }
+        }
+
+        // Update job state to running
+        state.jobs.update_job_state(pgid, JobState::Running);
+
+        // Wait for job to complete or stop
+        let mut status: i32 = 0;
+        unsafe {
+            libc::waitpid(-pgid, &mut status, libc::WUNTRACED);
+        }
+
+        // Return terminal control to shell
+        let shell_pgid = unsafe { libc::getpgrp() };
+        unsafe {
+            libc::tcsetpgrp(libc::STDIN_FILENO, shell_pgid);
+        }
+
+        // Update job state based on wait result
+        if unsafe { libc::WIFSTOPPED(status) } {
+            state.jobs.update_job_state(pgid, JobState::Stopped);
+            println!("\n[{}]+  Stopped              {}", job_id, state.jobs.get_job(spec).unwrap().command.trim_end_matches(" &"));
+        } else {
+            // Job completed - remove from table
+            state.jobs.remove_job(job_id);
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        anyhow::bail!("fg: job control not supported on this platform");
+    }
+
+    Ok(())
+}
+
+/// Continue a stopped job in the background.
+///
+/// Sends SIGCONT to the specified job (or current job if none specified)
+/// to resume execution in the background.
+///
+/// # Arguments
+/// * `state` - Shell state containing job table
+/// * `job_spec` - Job specification (%1, %+, etc.) or None for current job
+///
+/// # Errors
+/// Returns error if job does not exist or is not stopped.
+pub fn bg(state: &mut ShellState, job_spec: Option<&str>) -> Result<()> {
+    let spec = job_spec.unwrap_or("%+");
+
+    // Find the job
+    let job = state.jobs.get_job(spec)
+        .ok_or_else(|| anyhow::anyhow!("bg: no such job: {}", spec))?;
+
+    let pgid = job.pgid;
+    let job_id = job.id;
+    let job_state = job.state;
+
+    #[cfg(unix)]
+    {
+        use crate::job::JobState;
+
+        if job_state != JobState::Stopped {
+            anyhow::bail!("bg: job is already running");
+        }
+
+        // Send SIGCONT to resume job in background
+        unsafe {
+            libc::kill(-pgid, libc::SIGCONT);
+        }
+
+        // Update job state
+        state.jobs.update_job_state(pgid, JobState::Running);
+
+        // Print job info (bash-style)
+        let job = state.jobs.get_job(spec).unwrap();
+        println!("[{}]+ {}", job_id, job.command);
+    }
+
+    #[cfg(not(unix))]
+    {
+        anyhow::bail!("bg: job control not supported on this platform");
+    }
+
+    Ok(())
+}
+
+/// Send a signal to a job.
+///
+/// Sends the specified signal (or SIGTERM if none specified) to all processes
+/// in the job's process group.
+///
+/// # Arguments
+/// * `state` - Shell state containing job table
+/// * `signal` - Signal to send (-9, -SIGTERM, etc.) or None for SIGTERM
+/// * `job_spec` - Job specification (%1, %+, etc.)
+///
+/// # Errors
+/// Returns error if job does not exist or signal sending fails.
+pub fn kill_job(state: &mut ShellState, signal: Option<&str>, job_spec: &str) -> Result<()> {
+    // Find the job
+    let job = state.jobs.get_job(job_spec)
+        .ok_or_else(|| anyhow::anyhow!("kill: no such job: {}", job_spec))?;
+
+    let pgid = job.pgid;
+
+    #[cfg(unix)]
+    {
+        // Parse signal (default SIGTERM)
+        let sig = if let Some(sig_str) = signal {
+            parse_signal(sig_str)?
+        } else {
+            libc::SIGTERM
+        };
+
+        // Send signal to process group
+        let result = unsafe { libc::kill(-pgid, sig) };
+
+        if result == -1 {
+            anyhow::bail!("kill: failed to send signal to job {}", job_spec);
+        }
+
+        // Mark job as done if we sent SIGKILL or SIGTERM
+        if sig == libc::SIGKILL || sig == libc::SIGTERM {
+            use crate::job::JobState;
+            state.jobs.update_job_state(pgid, JobState::Done);
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        anyhow::bail!("kill: job control not supported on this platform");
+    }
+
+    Ok(())
+}
+
+/// Parse a signal specification (-9, -SIGTERM, etc.) into a signal number
+#[cfg(unix)]
+fn parse_signal(sig_str: &str) -> Result<i32> {
+    let sig_str = sig_str.trim_start_matches('-');
+
+    // Try to parse as number first
+    if let Ok(num) = sig_str.parse::<i32>() {
+        return Ok(num);
+    }
+
+    // Parse signal names
+    match sig_str {
+        "HUP" | "SIGHUP" => Ok(libc::SIGHUP),
+        "INT" | "SIGINT" => Ok(libc::SIGINT),
+        "QUIT" | "SIGQUIT" => Ok(libc::SIGQUIT),
+        "KILL" | "SIGKILL" => Ok(libc::SIGKILL),
+        "TERM" | "SIGTERM" => Ok(libc::SIGTERM),
+        "STOP" | "SIGSTOP" => Ok(libc::SIGSTOP),
+        "CONT" | "SIGCONT" => Ok(libc::SIGCONT),
+        "TSTP" | "SIGTSTP" => Ok(libc::SIGTSTP),
+        _ => anyhow::bail!("kill: unknown signal: {}", sig_str),
+    }
+}
+
+/// Perform hardware-level secure erase on an entire device (SSD/HDD).
+///
+/// **CRITICAL WARNING:** This operation erases the **ENTIRE DEVICE**, not individual files!
+/// All data on the device will be permanently destroyed.
+///
+/// This operation is **NOT REVERSIBLE** and includes comprehensive safety confirmations.
+///
+/// # Methods
+/// - `ata-secure-erase` - ATA Secure Erase for SATA SSDs (NIST Purge)
+/// - `nvme-format` - NVMe Format with crypto erase (NIST Purge, fast)
+/// - `nvme-sanitize` - NVMe Sanitize with block erase (NIST Purge, thorough)
+/// - `auto` - Auto-detect drive type and use appropriate method (default)
+///
+/// # Safety Features
+/// - System drive detection (ABORTS if system drive)
+/// - Mount point checking (offers to unmount)
+/// - Device info display (type, size, mounts)
+/// - Typed challenge (must type exact device name)
+/// - Final yes/no confirmation
+///
+/// # Arguments
+/// * `state` - Mutable shell state for recording the operation
+/// * `device` - Device path (e.g., `/dev/sda`, `/dev/nvme0n1`)
+/// * `method` - Secure erase method (default: auto)
+///
+/// # Examples
+/// ```no_run
+/// use vsh::commands;
+/// use vsh::state::ShellState;
+///
+/// let mut state = ShellState::new("/tmp/test")?;
+///
+/// // Auto-detect and erase
+/// commands::hardware_erase(&mut state, "/dev/sdb", None)?;
+///
+/// // Specific method
+/// commands::hardware_erase(&mut state, "/dev/nvme0n1", Some("nvme-format"))?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+pub fn hardware_erase(
+    state: &mut ShellState,
+    device: &str,
+    method: Option<&str>,
+) -> Result<()> {
+    use crate::confirmation::{confirm_destructive_operation, ConfirmationLevel};
+    use crate::secure_erase::{
+        ata_secure_erase, check_ata_secure_erase_support, check_nvme_sanitize_support,
+        detect_drive_type, nvme_format_crypto, nvme_sanitize, DriveType,
+    };
+
+    // Detect drive type
+    let drive_type = detect_drive_type(device)
+        .context("Failed to detect drive type")?;
+
+    // Determine method
+    let erase_method = match (drive_type, method) {
+        (DriveType::SataSSD, None) | (DriveType::SataSSD, Some("auto")) => "ata-secure-erase",
+        (DriveType::SataSSD, Some("ata-secure-erase")) => "ata-secure-erase",
+        (DriveType::NVMeSSD, None) | (DriveType::NVMeSSD, Some("auto")) => "nvme-format",
+        (DriveType::NVMeSSD, Some("nvme-format")) => "nvme-format",
+        (DriveType::NVMeSSD, Some("nvme-sanitize")) => "nvme-sanitize",
+        (DriveType::HDD, _) => {
+            anyhow::bail!(
+                "Hardware secure erase not supported for HDDs - use file-level obliterate instead"
+            );
+        }
+        (DriveType::Unknown, _) => {
+            anyhow::bail!("Unknown drive type - cannot determine secure erase method");
+        }
+        (_, Some(m)) => {
+            anyhow::bail!("Invalid method '{}' for drive type {:?}", m, drive_type);
+        }
+    };
+
+    // CRITICAL: Get user confirmation with device-level warnings
+    let confirmed = confirm_destructive_operation(
+        ConfirmationLevel::Device,
+        device,
+        erase_method,
+    )?;
+
+    if !confirmed {
+        println!();
+        println!("{}", "Operation cancelled by user".yellow());
+        return Ok(());
+    }
+
+    // Execute the appropriate secure erase method
+    match erase_method {
+        "ata-secure-erase" => {
+            // Check support first
+            if !check_ata_secure_erase_support(device)? {
+                anyhow::bail!("ATA Secure Erase not supported on this device");
+            }
+
+            println!();
+            println!("{}", "🔥 Executing ATA Secure Erase...".bright_cyan());
+            ata_secure_erase(device, true)?;
+            println!();
+            println!("{}", "✓ Device securely erased".bright_green().bold());
+        }
+
+        "nvme-format" => {
+            println!();
+            println!("{}", "🔥 Executing NVMe Format (Crypto Erase)...".bright_cyan());
+            nvme_format_crypto(device)?;
+            println!();
+            println!("{}", "✓ Device securely erased".bright_green().bold());
+        }
+
+        "nvme-sanitize" => {
+            // Check support first
+            if !check_nvme_sanitize_support(device)? {
+                anyhow::bail!("NVMe Sanitize not supported on this device");
+            }
+
+            println!();
+            println!("{}", "🔥 Executing NVMe Sanitize (this may take hours)...".bright_cyan());
+            nvme_sanitize(device, true)?;
+            println!();
+            println!("{}", "✓ Device securely erased".bright_green().bold());
+        }
+
+        _ => unreachable!(),
+    }
+
+    // Record operation (NOT reversible)
+    let op = Operation::new(
+        OperationType::HardwareErase,
+        device.to_string(),
+        None, // Not part of a transaction
+    );
+    let op_id = op.id;
+    state.record_operation(op);
+
+    println!(
+        "{} {} {} (method: {}, type: {:?})",
+        format!("[op:{}]", &op_id.to_string()[..8]).bright_black(),
+        "hardware_erase".bright_red().bold(),
+        device,
+        erase_method,
+        drive_type
+    );
+    println!(
+        "    {} {}",
+        "Standard:".bright_black(),
+        "NIST SP 800-88 Purge".bright_cyan()
+    );
+    println!(
+        "    {} {}",
+        "Warning:".bright_black(),
+        "IRREVERSIBLE - All data permanently destroyed".bright_red()
+    );
+
     Ok(())
 }

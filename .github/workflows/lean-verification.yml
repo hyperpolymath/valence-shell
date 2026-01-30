@@ -1,0 +1,178 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: Lean Verification Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'proofs/lean4/**'
+      - 'impl/ocaml/lean_wrapper.c'
+      - 'impl/rust-cli/src/lean_ffi.rs'
+      - 'impl/rust-cli/src/verification.rs'
+      - '.github/workflows/lean-verification.yml'
+  pull_request:
+    paths:
+      - 'proofs/lean4/**'
+      - 'impl/ocaml/**'
+      - 'impl/rust-cli/**'
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  build-lean-extraction:
+    name: Build and Test Lean Extraction Pipeline
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4
+
+      - name: Install Lean 4
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Verify Lean installation
+        run: |
+          source $HOME/.elan/env
+          lean --version
+          lean --print-prefix
+          ls -la $(lean --print-prefix)/lib/lean/libleanshared.so
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b
+        with:
+          toolchain: stable
+
+      - name: Cache Lean build
+        uses: actions/cache@v4
+        with:
+          path: proofs/lean4/.lake
+          key: ${{ runner.os }}-lean-${{ hashFiles('proofs/lean4/lakefile.lean', 'proofs/lean4/lean-toolchain') }}
+
+      - name: Build Lean extraction
+        run: |
+          source $HOME/.elan/env
+          cd proofs/lean4
+          lake build Extraction
+
+      - name: Verify Lean extraction output
+        run: |
+          ls -lh proofs/lean4/.lake/build/lib/Extraction.c
+          wc -l proofs/lean4/.lake/build/lib/Extraction.c
+
+      - name: Build C wrapper library
+        run: |
+          source $HOME/.elan/env
+          cd impl/ocaml
+          make build-c
+
+      - name: Verify shared library
+        run: |
+          ls -lh impl/ocaml/liblean_vsh.so
+          ldd impl/ocaml/liblean_vsh.so
+          nm -D impl/ocaml/liblean_vsh.so | grep vsh_safe || echo "Warning: vsh_safe functions not exported"
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db  # v2
+        with:
+          workspaces: impl/rust-cli
+
+      - name: Build Rust without Lean (baseline)
+        run: |
+          cd impl/rust-cli
+          cargo build --release
+          ls -lh target/release/vsh
+
+      - name: Test Rust without Lean
+        run: |
+          cd impl/rust-cli
+          cargo test
+          cargo test --test correspondence_tests
+          cargo test --test property_correspondence_tests
+
+      - name: Build Rust with Lean verification
+        run: |
+          source $HOME/.elan/env
+          cd impl/rust-cli
+          export LD_LIBRARY_PATH=../ocaml:$(lean --print-prefix)/lib/lean:$LD_LIBRARY_PATH
+          cargo build --release --features lean-runtime-checks
+
+      - name: Test Rust with Lean verification
+        run: |
+          source $HOME/.elan/env
+          cd impl/rust-cli
+          export LD_LIBRARY_PATH=../ocaml:$(lean --print-prefix)/lib/lean:$LD_LIBRARY_PATH
+          cargo test --features lean-runtime-checks
+          cargo test --test correspondence_tests --features lean-runtime-checks
+          cargo test --test property_correspondence_tests --features lean-runtime-checks
+
+      - name: Compare binary sizes
+        run: |
+          echo "Binary size comparison:"
+          echo "Without Lean: $(stat -c%s impl/rust-cli/target/release/vsh) bytes"
+          # Note: with-lean binary would be in different target dir, skip for now
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lean-extraction-artifacts
+          path: |
+            proofs/lean4/.lake/build/lib/Extraction.c
+            impl/ocaml/liblean_vsh.so
+            impl/rust-cli/target/release/vsh
+
+  benchmark-overhead:
+    name: Benchmark Lean Verification Overhead
+    runs-on: ubuntu-latest
+    needs: build-lean-extraction
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+
+      - name: Install Lean 4
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b
+        with:
+          toolchain: stable
+
+      - name: Build Lean extraction
+        run: |
+          source $HOME/.elan/env
+          cd proofs/lean4
+          lake build Extraction
+
+      - name: Build C wrapper
+        run: |
+          source $HOME/.elan/env
+          cd impl/ocaml
+          make build-c
+
+      - name: Benchmark baseline (no Lean)
+        run: |
+          cd impl/rust-cli
+          cargo bench --bench lean_verification_overhead -- --save-baseline baseline
+
+      - name: Benchmark with Lean
+        run: |
+          source $HOME/.elan/env
+          cd impl/rust-cli
+          export LD_LIBRARY_PATH=../ocaml:$(lean --print-prefix)/lib/lean:$LD_LIBRARY_PATH
+          cargo bench --bench lean_verification_overhead --features lean-runtime-checks -- --save-baseline with_lean
+
+      - name: Compare benchmarks
+        run: |
+          cd impl/rust-cli
+          cargo bench --bench lean_verification_overhead -- --baseline baseline
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: impl/rust-cli/target/criterion/
