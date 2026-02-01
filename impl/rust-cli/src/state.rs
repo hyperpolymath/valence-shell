@@ -8,12 +8,37 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::PathBuf;
 use uuid::Uuid;
 
 use crate::proof_refs::ProofReference;
+
+/// Value type for shell variables - can be scalar or array
+///
+/// # Examples
+/// ```
+/// use vsh::state::VariableValue;
+/// use std::collections::BTreeMap;
+///
+/// // Scalar variable
+/// let name = VariableValue::Scalar("Alice".to_string());
+///
+/// // Array variable
+/// let mut elements = BTreeMap::new();
+/// elements.insert(0, "first".to_string());
+/// elements.insert(1, "second".to_string());
+/// let arr = VariableValue::Array(elements);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VariableValue {
+    /// Scalar string value
+    Scalar(String),
+    /// Indexed array with sparse indices (bash-style)
+    /// Uses BTreeMap for ordered iteration of indices
+    Array(BTreeMap<usize, String>),
+}
 
 /// Operation type enum matching formal proof definitions.
 ///
@@ -220,8 +245,8 @@ pub struct ShellState {
     /// Previous directory for cd - support
     pub previous_dir: Option<PathBuf>,
 
-    /// Shell variables (VAR=value)
-    pub variables: HashMap<String, String>,
+    /// Shell variables (VAR=value for scalars, arr=(v1 v2 v3) for arrays)
+    pub variables: HashMap<String, VariableValue>,
 
     /// Variables that are exported to child processes
     pub exported_vars: HashSet<String>,
@@ -523,12 +548,16 @@ impl ShellState {
 
     /// Set a shell variable
     pub fn set_variable(&mut self, name: impl Into<String>, value: impl Into<String>) {
-        self.variables.insert(name.into(), value.into());
+        self.variables.insert(name.into(), VariableValue::Scalar(value.into()));
     }
 
-    /// Get a shell variable value
+    /// Get a shell variable value (scalar only)
+    /// Returns None if variable doesn't exist or is an array
     pub fn get_variable(&self, name: &str) -> Option<&str> {
-        self.variables.get(name).map(|s| s.as_str())
+        self.variables.get(name).and_then(|v| match v {
+            VariableValue::Scalar(s) => Some(s.as_str()),
+            VariableValue::Array(_) => None,
+        })
     }
 
     /// Unset a shell variable
@@ -542,19 +571,129 @@ impl ShellState {
         self.exported_vars.insert(name.into());
     }
 
+    // ========================================================================
+    // Array variable methods
+    // ========================================================================
+
+    /// Set an entire array variable
+    pub fn set_array(&mut self, name: impl Into<String>, elements: Vec<String>) {
+        let mut array = BTreeMap::new();
+        for (index, value) in elements.into_iter().enumerate() {
+            array.insert(index, value);
+        }
+        self.variables.insert(name.into(), VariableValue::Array(array));
+    }
+
+    /// Get a single array element by index
+    /// Returns None if variable doesn't exist, is not an array, or index doesn't exist
+    pub fn get_array_element(&self, name: &str, index: usize) -> Option<&str> {
+        self.variables.get(name).and_then(|v| match v {
+            VariableValue::Array(arr) => arr.get(&index).map(|s| s.as_str()),
+            VariableValue::Scalar(_) => None,
+        })
+    }
+
+    /// Get all array elements as a vector
+    /// Returns None if variable doesn't exist or is not an array
+    pub fn get_array_all(&self, name: &str) -> Option<Vec<&str>> {
+        self.variables.get(name).and_then(|v| match v {
+            VariableValue::Array(arr) => {
+                Some(arr.values().map(|s| s.as_str()).collect())
+            }
+            VariableValue::Scalar(_) => None,
+        })
+    }
+
+    /// Set a single array element by index
+    /// If the variable doesn't exist, creates a sparse array with just this element
+    /// If the variable is a scalar, converts it to an array
+    pub fn set_array_element(&mut self, name: impl Into<String>, index: usize, value: String) {
+        let name = name.into();
+        let mut array = match self.variables.get(&name) {
+            Some(VariableValue::Array(arr)) => arr.clone(),
+            Some(VariableValue::Scalar(_)) | None => BTreeMap::new(),
+        };
+        array.insert(index, value);
+        self.variables.insert(name, VariableValue::Array(array));
+    }
+
+    /// Get the length of an array (number of elements)
+    /// Returns 0 if variable doesn't exist or is a scalar
+    pub fn get_array_length(&self, name: &str) -> usize {
+        self.variables.get(name).map_or(0, |v| match v {
+            VariableValue::Array(arr) => arr.len(),
+            VariableValue::Scalar(_) => 0,
+        })
+    }
+
+    /// Get all array indices
+    /// Returns empty vector if variable doesn't exist or is a scalar
+    pub fn get_array_indices(&self, name: &str) -> Vec<usize> {
+        self.variables.get(name).map_or(Vec::new(), |v| match v {
+            VariableValue::Array(arr) => arr.keys().copied().collect(),
+            VariableValue::Scalar(_) => Vec::new(),
+        })
+    }
+
+    /// Append elements to an array
+    /// If variable doesn't exist, creates new array
+    /// If variable is scalar, converts to array with scalar as index 0
+    pub fn append_to_array(&mut self, name: impl Into<String>, elements: Vec<String>) {
+        let name = name.into();
+        let mut array = match self.variables.get(&name) {
+            Some(VariableValue::Array(arr)) => arr.clone(),
+            Some(VariableValue::Scalar(s)) => {
+                // Convert scalar to array with value at index 0
+                let mut map = BTreeMap::new();
+                map.insert(0, s.clone());
+                map
+            }
+            None => BTreeMap::new(),
+        };
+
+        // Find the next index (max index + 1, or 0 if empty)
+        let next_index = array.keys().max().map(|&i| i + 1).unwrap_or(0);
+
+        for (offset, value) in elements.into_iter().enumerate() {
+            array.insert(next_index + offset, value);
+        }
+
+        self.variables.insert(name, VariableValue::Array(array));
+    }
+
+    /// Check if a variable is an array
+    pub fn is_array(&self, name: &str) -> bool {
+        self.variables.get(name).map_or(false, |v| matches!(v, VariableValue::Array(_)))
+    }
+
+    // ========================================================================
+    // End of array variable methods
+    // ========================================================================
+
     /// Check if a variable is exported
     pub fn is_exported(&self, name: &str) -> bool {
         self.exported_vars.contains(name)
     }
 
     /// Get all exported variables as environment key-value pairs
+    /// Arrays are exported as space-separated values (bash behavior)
     pub fn get_exported_env(&self) -> Vec<(String, String)> {
         self.exported_vars
             .iter()
             .filter_map(|name| {
-                self.variables
-                    .get(name)
-                    .map(|value| (name.clone(), value.clone()))
+                self.variables.get(name).map(|value| {
+                    let string_value = match value {
+                        VariableValue::Scalar(s) => s.clone(),
+                        VariableValue::Array(arr) => {
+                            // Join array elements with spaces (bash behavior)
+                            arr.values()
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                        }
+                    };
+                    (name.clone(), string_value)
+                })
             })
             .collect()
     }
@@ -657,5 +796,240 @@ mod tests {
     fn test_state_new() {
         let state = ShellState::new("/tmp/vsh_test").unwrap();
         assert!(state.root.exists());
+    }
+
+    // ========================================================================
+    // Array variable tests
+    // ========================================================================
+
+    #[test]
+    fn test_set_array() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_1").unwrap();
+        let elements = vec!["one".to_string(), "two".to_string(), "three".to_string()];
+        state.set_array("arr", elements);
+
+        assert!(state.is_array("arr"));
+        assert_eq!(state.get_array_length("arr"), 3);
+    }
+
+    #[test]
+    fn test_get_array_element() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_2").unwrap();
+        state.set_array("arr", vec!["first".to_string(), "second".to_string()]);
+
+        assert_eq!(state.get_array_element("arr", 0), Some("first"));
+        assert_eq!(state.get_array_element("arr", 1), Some("second"));
+        assert_eq!(state.get_array_element("arr", 2), None);
+    }
+
+    #[test]
+    fn test_get_array_all() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_3").unwrap();
+        state.set_array("arr", vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+
+        let all = state.get_array_all("arr").unwrap();
+        assert_eq!(all, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn test_set_array_element_new() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_4").unwrap();
+        state.set_array_element("arr", 0, "first".to_string());
+        state.set_array_element("arr", 1, "second".to_string());
+
+        assert_eq!(state.get_array_element("arr", 0), Some("first"));
+        assert_eq!(state.get_array_element("arr", 1), Some("second"));
+        assert_eq!(state.get_array_length("arr"), 2);
+    }
+
+    #[test]
+    fn test_set_array_element_sparse() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_5").unwrap();
+        state.set_array_element("arr", 0, "zero".to_string());
+        state.set_array_element("arr", 100, "hundred".to_string());
+
+        assert_eq!(state.get_array_element("arr", 0), Some("zero"));
+        assert_eq!(state.get_array_element("arr", 100), Some("hundred"));
+        assert_eq!(state.get_array_element("arr", 50), None);
+        assert_eq!(state.get_array_length("arr"), 2); // Only 2 elements, not 101
+    }
+
+    #[test]
+    fn test_set_array_element_overwrite() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_6").unwrap();
+        state.set_array("arr", vec!["old".to_string()]);
+        state.set_array_element("arr", 0, "new".to_string());
+
+        assert_eq!(state.get_array_element("arr", 0), Some("new"));
+    }
+
+    #[test]
+    fn test_get_array_indices() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_7").unwrap();
+        state.set_array_element("arr", 0, "a".to_string());
+        state.set_array_element("arr", 2, "c".to_string());
+        state.set_array_element("arr", 5, "f".to_string());
+
+        let indices = state.get_array_indices("arr");
+        assert_eq!(indices, vec![0, 2, 5]);
+    }
+
+    #[test]
+    fn test_append_to_array() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_8").unwrap();
+        state.set_array("arr", vec!["one".to_string(), "two".to_string()]);
+        state.append_to_array("arr", vec!["three".to_string(), "four".to_string()]);
+
+        assert_eq!(state.get_array_length("arr"), 4);
+        assert_eq!(state.get_array_element("arr", 2), Some("three"));
+        assert_eq!(state.get_array_element("arr", 3), Some("four"));
+    }
+
+    #[test]
+    fn test_append_to_empty_array() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_9").unwrap();
+        state.append_to_array("arr", vec!["first".to_string()]);
+
+        assert_eq!(state.get_array_element("arr", 0), Some("first"));
+        assert_eq!(state.get_array_length("arr"), 1);
+    }
+
+    #[test]
+    fn test_append_to_scalar_converts() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_10").unwrap();
+        state.set_variable("var", "scalar");
+        state.append_to_array("var", vec!["new".to_string()]);
+
+        assert!(state.is_array("var"));
+        assert_eq!(state.get_array_element("var", 0), Some("scalar"));
+        assert_eq!(state.get_array_element("var", 1), Some("new"));
+    }
+
+    #[test]
+    fn test_scalar_and_array_separation() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_11").unwrap();
+        state.set_variable("scalar", "value");
+        state.set_array("arr", vec!["elem".to_string()]);
+
+        // Scalar returns Some
+        assert_eq!(state.get_variable("scalar"), Some("value"));
+        // Array returns None for get_variable
+        assert_eq!(state.get_variable("arr"), None);
+        // Scalar returns None for get_array_element
+        assert_eq!(state.get_array_element("scalar", 0), None);
+    }
+
+    #[test]
+    fn test_unset_array() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_12").unwrap();
+        state.set_array("arr", vec!["elem".to_string()]);
+        assert!(state.is_array("arr"));
+
+        state.unset_variable("arr");
+        assert!(!state.is_array("arr"));
+        assert_eq!(state.get_array_length("arr"), 0);
+    }
+
+    #[test]
+    fn test_export_array() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_13").unwrap();
+        state.set_array("arr", vec!["one".to_string(), "two".to_string(), "three".to_string()]);
+        state.export_variable("arr");
+
+        let exported = state.get_exported_env();
+        let arr_export = exported.iter().find(|(k, _)| k == "arr");
+        assert!(arr_export.is_some());
+        assert_eq!(arr_export.unwrap().1, "one two three");
+    }
+
+    #[test]
+    fn test_is_array() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_14").unwrap();
+        state.set_variable("scalar", "value");
+        state.set_array("arr", vec!["elem".to_string()]);
+
+        assert!(!state.is_array("scalar"));
+        assert!(state.is_array("arr"));
+        assert!(!state.is_array("nonexistent"));
+    }
+
+    #[test]
+    fn test_get_array_length_scalar() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_15").unwrap();
+        state.set_variable("scalar", "value");
+
+        assert_eq!(state.get_array_length("scalar"), 0);
+        assert_eq!(state.get_array_length("nonexistent"), 0);
+    }
+
+    #[test]
+    fn test_get_array_all_nonexistent() {
+        let state = ShellState::new("/tmp/vsh_array_test_16").unwrap();
+        assert_eq!(state.get_array_all("nonexistent"), None);
+    }
+
+    #[test]
+    fn test_get_array_all_scalar() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_17").unwrap();
+        state.set_variable("scalar", "value");
+        assert_eq!(state.get_array_all("scalar"), None);
+    }
+
+    #[test]
+    fn test_empty_array() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_18").unwrap();
+        state.set_array("arr", vec![]);
+
+        assert!(state.is_array("arr"));
+        assert_eq!(state.get_array_length("arr"), 0);
+        assert_eq!(state.get_array_all("arr").unwrap(), Vec::<&str>::new());
+        assert_eq!(state.get_array_indices("arr"), Vec::<usize>::new());
+    }
+
+    #[test]
+    fn test_array_with_empty_strings() {
+        let mut state = ShellState::new("/tmp/vsh_array_test_19").unwrap();
+        state.set_array("arr", vec!["".to_string(), "nonempty".to_string(), "".to_string()]);
+
+        assert_eq!(state.get_array_length("arr"), 3);
+        assert_eq!(state.get_array_element("arr", 0), Some(""));
+        assert_eq!(state.get_array_element("arr", 1), Some("nonempty"));
+        assert_eq!(state.get_array_element("arr", 2), Some(""));
+    }
+
+    #[test]
+    fn test_variable_value_scalar() {
+        let val = VariableValue::Scalar("test".to_string());
+        match val {
+            VariableValue::Scalar(s) => assert_eq!(s, "test"),
+            _ => panic!("Expected Scalar variant"),
+        }
+    }
+
+    #[test]
+    fn test_variable_value_array() {
+        let mut map = BTreeMap::new();
+        map.insert(0, "first".to_string());
+        map.insert(1, "second".to_string());
+        let val = VariableValue::Array(map.clone());
+
+        match val {
+            VariableValue::Array(arr) => assert_eq!(arr, map),
+            _ => panic!("Expected Array variant"),
+        }
+    }
+
+    #[test]
+    fn test_backward_compatibility() {
+        // Test that old scalar variable usage still works
+        let mut state = ShellState::new("/tmp/vsh_array_test_20").unwrap();
+
+        // set_variable should create scalar
+        state.set_variable("name", "value");
+        assert_eq!(state.get_variable("name"), Some("value"));
+        assert!(!state.is_array("name"));
+
+        // expand_variable should work
+        assert_eq!(state.expand_variable("name"), "value");
     }
 }

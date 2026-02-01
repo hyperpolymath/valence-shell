@@ -5,6 +5,37 @@ All notable changes to Valence Shell will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-01-30 (In Progress)
+
+### Added
+
+#### bash Tier 1 Compatibility (90% target)
+
+- **Parameter Expansion**: Full bash-style `${VAR...}` syntax (`src/parser.rs`)
+  - **Default values**: `${VAR:-default}`, `${VAR-default}` - Use fallback if unset/null
+  - **Assign default**: `${VAR:=default}`, `${VAR=default}` - Returns default (assignment in v1.1.1)
+  - **Use alternative**: `${VAR:+value}`, `${VAR+value}` - Value if set
+  - **Error if unset**: `${VAR:?message}`, `${VAR?message}` - Print error to stderr
+  - **String length**: `${#VAR}` - Character count (Unicode-aware)
+  - **Substring extraction**: `${VAR:offset}`, `${VAR:offset:length}` - Slice strings
+  - **Negative offset**: `${VAR: -5}` - Last N characters (space before `-` required)
+  - **Nested expansion**: `${VAR:-${DEFAULT:-fallback}}` - Multi-level fallback
+  - **67+ comprehensive tests** in `tests/parameter_expansion_tests.rs`
+  - See `docs/PARAMETER_EXPANSION.md` for complete guide
+
+### Known Limitations
+
+- **Assignment operators** (`${VAR:=default}`, `${VAR=default}`):
+  - Currently returns default value without persisting assignment
+  - Full assignment support deferred to v1.1.1 (requires mutable state in expand_variables)
+
+### Performance
+
+- All string operations are Unicode-aware (character-based, not byte-based)
+- Expansion is O(n) where n is string length
+- Substring extraction: O(n) for character indexing
+- Handles very long strings (tested up to 10,000 characters)
+
 ## [1.0.0] - 2026-01-30
 
 ### Added

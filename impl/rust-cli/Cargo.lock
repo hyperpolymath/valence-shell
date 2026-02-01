@@ -1470,6 +1470,7 @@ dependencies = [
  "proptest",
  "ratatui",
  "reedline",
+ "regex",
  "serde",
  "serde_json",
  "tempfile",

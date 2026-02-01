@@ -62,6 +62,18 @@ pub enum TestExpr {
     Not(Box<TestExpr>),
     And(Box<TestExpr>, Box<TestExpr>),
     Or(Box<TestExpr>, Box<TestExpr>),
+
+    /// Extended test operators (bash [[ ]] only)
+    /// Pattern matching: [[ $var == *.txt ]]
+    StringPatternMatch(String, String),
+    /// Pattern non-matching: [[ $var != *.txt ]]
+    StringPatternNoMatch(String, String),
+    /// Regex matching: [[ $var =~ ^[0-9]+$ ]]
+    StringRegexMatch(String, String),
+    /// Lexical less than: [[ $a < $b ]]
+    StringLexLess(String, String),
+    /// Lexical greater than: [[ $a > $b ]]
+    StringLexGreater(String, String),
 }
 
 impl TestExpr {
@@ -184,6 +196,41 @@ impl TestExpr {
             TestExpr::Or(left, right) => {
                 // Short-circuit evaluation
                 Ok(left.evaluate()? || right.evaluate()?)
+            }
+
+            // Extended test operators (bash [[ ]] only)
+            TestExpr::StringPatternMatch(string, pattern) => {
+                // Pattern matching with glob: [[ $var == *.txt ]]
+                match glob::Pattern::new(pattern) {
+                    Ok(pat) => Ok(pat.matches(string)),
+                    Err(e) => bail!("Invalid glob pattern '{}': {}", pattern, e),
+                }
+            }
+
+            TestExpr::StringPatternNoMatch(string, pattern) => {
+                // Inverse pattern matching: [[ $var != *.txt ]]
+                match glob::Pattern::new(pattern) {
+                    Ok(pat) => Ok(!pat.matches(string)),
+                    Err(e) => bail!("Invalid glob pattern '{}': {}", pattern, e),
+                }
+            }
+
+            TestExpr::StringRegexMatch(string, regex_pattern) => {
+                // Regex matching: [[ $var =~ ^[0-9]+$ ]]
+                match regex::Regex::new(regex_pattern) {
+                    Ok(re) => Ok(re.is_match(string)),
+                    Err(e) => bail!("Invalid regex pattern '{}': {}", regex_pattern, e),
+                }
+            }
+
+            TestExpr::StringLexLess(a, b) => {
+                // Lexical (alphabetical) comparison: [[ $a < $b ]]
+                Ok(a < b)
+            }
+
+            TestExpr::StringLexGreater(a, b) => {
+                // Lexical (alphabetical) comparison: [[ $a > $b ]]
+                Ok(a > b)
             }
         }
     }
@@ -363,6 +410,193 @@ pub fn execute_test(args: &[String], is_bracket: bool) -> Result<i32> {
     let expr = parse_test_expr(args, is_bracket)?;
     let result = expr.evaluate()?;
     Ok(if result { 0 } else { 1 })
+}
+
+/// Execute extended test command [[ ... ]]
+///
+/// Extended test supports:
+/// - Pattern matching: ==, != with glob patterns
+/// - Regex matching: =~
+/// - Lexical comparison: <, >
+/// - Modern operators: &&, || (instead of -a, -o)
+/// - No word splitting (variables don't need quotes)
+///
+/// # Returns
+/// - Ok(0) if test passes (true)
+/// - Ok(1) if test fails (false)
+/// - Err(_) if syntax error
+pub fn execute_extended_test(args: &[String]) -> Result<i32> {
+    if args.is_empty() {
+        // Empty [[ ]] is false
+        return Ok(1);
+    }
+
+    let (expr, pos) = parse_extended_or_expr(args, 0)?;
+
+    // Verify all args were consumed
+    if pos < args.len() {
+        bail!("[[: unexpected argument at position {}: '{}'", pos, args[pos]);
+    }
+
+    let result = expr.evaluate()?;
+    Ok(if result { 0 } else { 1 })
+}
+
+/// Parse OR expression (lowest precedence): expr || expr
+fn parse_extended_or_expr(args: &[String], start: usize) -> Result<(TestExpr, usize)> {
+    let (mut left, mut pos) = parse_extended_and_expr(args, start)?;
+
+    while pos < args.len() && args[pos] == "||" {
+        pos += 1; // consume ||
+        let (right, new_pos) = parse_extended_and_expr(args, pos)?;
+        left = TestExpr::Or(Box::new(left), Box::new(right));
+        pos = new_pos;
+    }
+
+    Ok((left, pos))
+}
+
+/// Parse AND expression: expr && expr
+fn parse_extended_and_expr(args: &[String], start: usize) -> Result<(TestExpr, usize)> {
+    let (mut left, mut pos) = parse_extended_unary_expr(args, start)?;
+
+    while pos < args.len() && args[pos] == "&&" {
+        pos += 1; // consume &&
+        let (right, new_pos) = parse_extended_unary_expr(args, pos)?;
+        left = TestExpr::And(Box::new(left), Box::new(right));
+        pos = new_pos;
+    }
+
+    Ok((left, pos))
+}
+
+/// Parse unary expression: ! expr or ( expr )
+fn parse_extended_unary_expr(args: &[String], start: usize) -> Result<(TestExpr, usize)> {
+    if start >= args.len() {
+        bail!("[[: missing argument");
+    }
+
+    match args[start].as_str() {
+        "!" => {
+            // Negation
+            let (expr, pos) = parse_extended_unary_expr(args, start + 1)?;
+            Ok((TestExpr::Not(Box::new(expr)), pos))
+        }
+        "(" => {
+            // Parenthesized expression
+            let (expr, mut pos) = parse_extended_or_expr(args, start + 1)?;
+            if pos >= args.len() || args[pos] != ")" {
+                bail!("[[: missing closing parenthesis");
+            }
+            pos += 1; // consume )
+            Ok((expr, pos))
+        }
+        _ => parse_extended_primary_expr(args, start),
+    }
+}
+
+/// Parse primary expression with extended operators
+fn parse_extended_primary_expr(args: &[String], start: usize) -> Result<(TestExpr, usize)> {
+    if start >= args.len() {
+        bail!("[[: missing argument");
+    }
+
+    let arg = &args[start];
+
+    // File test operators (same as regular test)
+    match arg.as_str() {
+        "-e" => {
+            if start + 1 >= args.len() {
+                bail!("[[: -e requires argument");
+            }
+            return Ok((TestExpr::FileExists(args[start + 1].clone()), start + 2));
+        }
+        "-f" => {
+            if start + 1 >= args.len() {
+                bail!("[[: -f requires argument");
+            }
+            return Ok((TestExpr::FileIsRegular(args[start + 1].clone()), start + 2));
+        }
+        "-d" => {
+            if start + 1 >= args.len() {
+                bail!("[[: -d requires argument");
+            }
+            return Ok((TestExpr::FileIsDirectory(args[start + 1].clone()), start + 2));
+        }
+        "-r" => {
+            if start + 1 >= args.len() {
+                bail!("[[: -r requires argument");
+            }
+            return Ok((TestExpr::FileIsReadable(args[start + 1].clone()), start + 2));
+        }
+        "-w" => {
+            if start + 1 >= args.len() {
+                bail!("[[: -w requires argument");
+            }
+            return Ok((TestExpr::FileIsWritable(args[start + 1].clone()), start + 2));
+        }
+        "-x" => {
+            if start + 1 >= args.len() {
+                bail!("[[: -x requires argument");
+            }
+            return Ok((TestExpr::FileIsExecutable(args[start + 1].clone()), start + 2));
+        }
+        "-s" => {
+            if start + 1 >= args.len() {
+                bail!("[[: -s requires argument");
+            }
+            return Ok((TestExpr::FileNotEmpty(args[start + 1].clone()), start + 2));
+        }
+        "-z" => {
+            if start + 1 >= args.len() {
+                bail!("[[: -z requires argument");
+            }
+            return Ok((TestExpr::StringEmpty(args[start + 1].clone()), start + 2));
+        }
+        "-n" => {
+            if start + 1 >= args.len() {
+                bail!("[[: -n requires argument");
+            }
+            return Ok((TestExpr::StringNotEmpty(args[start + 1].clone()), start + 2));
+        }
+        _ => {}
+    }
+
+    // Binary operators (extended test supports pattern/regex/lexical)
+    if start + 2 < args.len() {
+        let left = args[start].clone();
+        let op = &args[start + 1];
+        let right = args[start + 2].clone();
+
+        match op.as_str() {
+            // Pattern matching (glob)
+            "==" => return Ok((TestExpr::StringPatternMatch(left, right), start + 3)),
+            "!=" => return Ok((TestExpr::StringPatternNoMatch(left, right), start + 3)),
+
+            // Regex matching
+            "=~" => return Ok((TestExpr::StringRegexMatch(left, right), start + 3)),
+
+            // Lexical comparison
+            "<" => return Ok((TestExpr::StringLexLess(left, right), start + 3)),
+            ">" => return Ok((TestExpr::StringLexGreater(left, right), start + 3)),
+
+            // Integer comparisons (same as regular test)
+            "-eq" => return Ok((TestExpr::IntEqual(left, right), start + 3)),
+            "-ne" => return Ok((TestExpr::IntNotEqual(left, right), start + 3)),
+            "-lt" => return Ok((TestExpr::IntLessThan(left, right), start + 3)),
+            "-le" => return Ok((TestExpr::IntLessEqual(left, right), start + 3)),
+            "-gt" => return Ok((TestExpr::IntGreater(left, right), start + 3)),
+            "-ge" => return Ok((TestExpr::IntGreaterEqual(left, right), start + 3)),
+
+            // Old-style string comparison (still supported in [[]])
+            "=" => return Ok((TestExpr::StringEqual(left, right), start + 3)),
+
+            _ => {}
+        }
+    }
+
+    // Single argument - test if non-empty string
+    Ok((TestExpr::StringNotEmpty(args[start].clone()), start + 1))
 }
 
 #[cfg(test)]
