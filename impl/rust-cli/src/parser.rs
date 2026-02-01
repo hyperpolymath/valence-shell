@@ -44,6 +44,47 @@ enum WordPart {
     ProcessSub(ProcessSubType, String),
 }
 
+/// Parameter expansion operations supported in ${VAR...} syntax
+#[derive(Debug, Clone, PartialEq)]
+enum ExpansionOp {
+    /// Simple expansion: ${VAR}
+    Simple,
+    /// Use default value: ${VAR:-default} or ${VAR-default}
+    Default {
+        value: String,
+        check_null: bool,  // true for :-, false for -
+    },
+    /// Assign default value: ${VAR:=default} or ${VAR=default}
+    AssignDefault {
+        value: String,
+        check_null: bool,
+    },
+    /// Use alternative value: ${VAR:+value} or ${VAR+value}
+    UseAlternative {
+        value: String,
+        check_null: bool,
+    },
+    /// Error if unset: ${VAR:?message} or ${VAR?message}
+    ErrorIfUnset {
+        message: Option<String>,
+        check_null: bool,
+    },
+    /// String length: ${#VAR}
+    Length,
+    /// Substring extraction: ${VAR:offset} or ${VAR:offset:length}
+    Substring {
+        offset: i32,
+        length: Option<usize>,
+    },
+}
+
+/// Parsed parameter expansion from ${VAR...} syntax
+#[derive(Debug, Clone, PartialEq)]
+struct ParameterExpansion {
+    var_name: String,
+    operation: ExpansionOp,
+}
+
 /// Word with quote information for expansion
 #[derive(Debug, Clone, PartialEq)]
 struct QuotedWord {
@@ -140,6 +181,12 @@ enum Token {
 
     /// Logical OR operator: ||
     Or,
+
+    /// Extended test open: [[
+    ExtendedTestOpen,
+
+    /// Extended test close: ]]
+    ExtendedTestClose,
 }
 
 /// Parsed command with arguments and redirections.
@@ -221,6 +268,11 @@ pub enum Command {
         args: Vec<String>,
         redirects: Vec<Redirection>,
     },
+    /// Extended test [[ ... ]] - bash-style with pattern/regex matching
+    ExtendedTest {
+        args: Vec<String>,
+        redirects: Vec<Redirection>,
+    },
 
     // External command
     External {
@@ -247,6 +299,31 @@ pub enum Command {
     Assignment {
         name: String,
         value: String,
+    },
+
+    /// Array assignment (arr=(val1 val2 val3))
+    ///
+    /// Sets an indexed array variable with initial values
+    ArrayAssignment {
+        name: String,
+        elements: Vec<String>,
+    },
+
+    /// Array element assignment (arr[index]=value)
+    ///
+    /// Sets a single array element at the specified index (supports sparse arrays)
+    ArrayElementAssignment {
+        name: String,
+        index: usize,
+        value: String,
+    },
+
+    /// Array append (arr+=(val1 val2))
+    ///
+    /// Appends elements to an existing array
+    ArrayAppend {
+        name: String,
+        elements: Vec<String>,
     },
 
     /// Export command (export VAR or export VAR=value)
@@ -552,6 +629,30 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                         }
                     }
 
+                    '[' => {
+                        // Check for [[ (extended test) or [ (regular test/bracket)
+                        if chars.peek() == Some(&'[') {
+                            push_word!();
+                            chars.next();
+                            tokens.push(Token::ExtendedTestOpen);
+                        } else {
+                            // Regular '[' character, part of word
+                            current_literal.push(ch);
+                        }
+                    }
+
+                    ']' => {
+                        // Check for ]] (extended test close) or ] (regular bracket)
+                        if chars.peek() == Some(&']') {
+                            push_word!();
+                            chars.next();
+                            tokens.push(Token::ExtendedTestClose);
+                        } else {
+                            // Regular ']' character, part of word
+                            current_literal.push(ch);
+                        }
+                    }
+
                     // Regular character
                     _ => {
                         current_literal.push(ch);
@@ -785,6 +886,63 @@ fn parse_process_sub_output(chars: &mut std::iter::Peekable<std::str::Chars>) ->
 /// - Pipeline has less than 2 stages
 /// - Stage has no command name
 /// - Invalid redirections in last stage
+/// Parse extended test command [[ ... ]]
+fn parse_extended_test(tokens: &[Token]) -> Result<Command> {
+    // Verify structure: [[ ... ]]
+    if tokens.first() != Some(&Token::ExtendedTestOpen) {
+        return Err(anyhow!("Extended test must start with [["));
+    }
+
+    // Find closing ]]
+    let close_pos = tokens.iter().position(|t| matches!(t, Token::ExtendedTestClose))
+        .ok_or_else(|| anyhow!("Extended test missing closing ]]"))?;
+
+    // Extract arguments between [[ and ]]
+    let mut args = Vec::new();
+    for i in 1..close_pos {
+        if let Token::Word(w) = &tokens[i] {
+            args.push(quoted_word_to_string(w));
+        } else {
+            // For now, convert other tokens to strings
+            // TODO: Handle operators specially in Task #40
+            args.push(format!("{:?}", tokens[i]));
+        }
+    }
+
+    // Extract redirections after ]]
+    let mut redirects = Vec::new();
+    let mut i = close_pos + 1;
+    while i < tokens.len() {
+        match &tokens[i] {
+            Token::OutputRedirect => {
+                let file = expect_word(tokens, i + 1, "output redirection")?;
+                redirects.push(Redirection::Output { file });
+                i += 2;
+            }
+            Token::AppendRedirect => {
+                let file = expect_word(tokens, i + 1, "append redirection")?;
+                redirects.push(Redirection::Append { file });
+                i += 2;
+            }
+            Token::InputRedirect => {
+                let file = expect_word(tokens, i + 1, "input redirection")?;
+                redirects.push(Redirection::Input { file });
+                i += 2;
+            }
+            Token::ErrorRedirect => {
+                let file = expect_word(tokens, i + 1, "error redirection")?;
+                redirects.push(Redirection::ErrorOutput { file });
+                i += 2;
+            }
+            _ => {
+                return Err(anyhow!("Unexpected token after ]]"));
+            }
+        }
+    }
+
+    Ok(Command::ExtendedTest { args, redirects })
+}
+
 /// Parse logical operators (&& and ||)
 fn parse_logical_op(tokens: &[Token], op_pos: usize) -> Result<Command> {
     // Get the operator type
@@ -845,6 +1003,8 @@ fn tokens_to_string(tokens: &[Token]) -> Result<String> {
             Token::Background => result.push('&'),
             Token::And => return Err(anyhow!("Unexpected && in tokens_to_string")),
             Token::Or => return Err(anyhow!("Unexpected || in tokens_to_string")),
+            Token::ExtendedTestOpen => result.push_str("[["),
+            Token::ExtendedTestClose => result.push_str("]]"),
         }
     }
 
@@ -1028,6 +1188,10 @@ fn extract_redirections_from_tokens(tokens: &[Token]) -> Result<(Vec<Token>, Vec
             Token::And | Token::Or => {
                 return Err(anyhow!("Unexpected logical operator in stage"));
             }
+
+            Token::ExtendedTestOpen | Token::ExtendedTestClose => {
+                return Err(anyhow!("Unexpected [[ or ]] token - should be handled at top level"));
+            }
         }
     }
 
@@ -1073,25 +1237,97 @@ pub fn parse_command(input: &str) -> Result<Command> {
         return Err(anyhow!("Empty command"));
     }
 
-    // Check for variable assignment (VAR=value)
+    // Check for variable/array assignment
     // Must be first token and contain '=' but not be a redirection
     if tokens.len() >= 1 {
         if let Token::Word(first_word) = &tokens[0] {
             let first_str = quoted_word_to_string(first_word);
-            if let Some(eq_pos) = first_str.find('=') {
-                // Valid assignment: NAME=value
-                let name = &first_str[..eq_pos];
-                let value = &first_str[eq_pos + 1..];
 
-                // Variable name must be valid: start with letter/underscore, then alphanumeric/underscore
+            // Check for array element assignment: arr[index]=value
+            if let Some(bracket_pos) = first_str.find('[') {
+                if let Some(close_bracket) = first_str.find(']') {
+                    if let Some(eq_pos) = first_str.find('=') {
+                        if bracket_pos < close_bracket && close_bracket < eq_pos {
+                            let name = &first_str[..bracket_pos];
+                            let index_str = &first_str[bracket_pos + 1..close_bracket];
+                            let value = &first_str[eq_pos + 1..];
+
+                            if is_valid_var_name(name) {
+                                if let Ok(index) = index_str.parse::<usize>() {
+                                    return Ok(Command::ArrayElementAssignment {
+                                        name: name.to_string(),
+                                        index,
+                                        value: value.to_string(),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check for array append: arr+=(val1 val2)
+            if let Some(plus_pos) = first_str.find("+=(") {
+                let name = &first_str[..plus_pos];
                 if is_valid_var_name(name) {
-                    return Ok(Command::Assignment {
-                        name: name.to_string(),
-                        value: value.to_string(),
-                    });
+                    // Extract array elements from parentheses
+                    let rest = &first_str[plus_pos + 3..];
+                    if let Some(close_paren) = rest.rfind(')') {
+                        let elements_str = &rest[..close_paren];
+                        let elements: Vec<String> = elements_str
+                            .split_whitespace()
+                            .map(|s| s.to_string())
+                            .collect();
+                        return Ok(Command::ArrayAppend {
+                            name: name.to_string(),
+                            elements,
+                        });
+                    }
+                }
+            }
+
+            // Check for array assignment: arr=(val1 val2 val3)
+            if let Some(eq_pos) = first_str.find("=(") {
+                let name = &first_str[..eq_pos];
+                if is_valid_var_name(name) {
+                    // Extract array elements from parentheses
+                    let rest = &first_str[eq_pos + 2..];
+                    if let Some(close_paren) = rest.rfind(')') {
+                        let elements_str = &rest[..close_paren];
+                        let elements: Vec<String> = elements_str
+                            .split_whitespace()
+                            .map(|s| s.to_string())
+                            .collect();
+                        return Ok(Command::ArrayAssignment {
+                            name: name.to_string(),
+                            elements,
+                        });
+                    }
+                }
+            }
+
+            // Check for scalar assignment: VAR=value
+            if let Some(eq_pos) = first_str.find('=') {
+                // Make sure it's not already handled above
+                if !first_str.contains("=(") && !first_str.contains("[") && !first_str.contains("+=") {
+                    let name = &first_str[..eq_pos];
+                    let value = &first_str[eq_pos + 1..];
+
+                    // Variable name must be valid: start with letter/underscore, then alphanumeric/underscore
+                    if is_valid_var_name(name) {
+                        return Ok(Command::Assignment {
+                            name: name.to_string(),
+                            value: value.to_string(),
+                        });
+                    }
                 }
             }
         }
+    }
+
+    // Check for extended test [[ ... ]]
+    if tokens.first() == Some(&Token::ExtendedTestOpen) {
+        return parse_extended_test(&tokens);
     }
 
     // Check for logical operators (&&, ||) - lowest precedence
@@ -1219,6 +1455,11 @@ pub fn parse_command(input: &str) -> Result<Command> {
             Token::And | Token::Or => {
                 // Should never reach here - logical operators are caught at parse_command() entry
                 return Err(anyhow!("Unexpected logical operator in single command"));
+            }
+
+            Token::ExtendedTestOpen | Token::ExtendedTestClose => {
+                // Should never reach here - extended test is caught at parse_command() entry
+                return Err(anyhow!("Unexpected [[ or ]] in single command"));
             }
         }
     }
@@ -1469,6 +1710,235 @@ pub fn expand_with_process_sub(
     Ok((expanded, process_subs))
 }
 
+/// Parse parameter expansion syntax: ${VAR:-default}, ${VAR:offset}, ${#VAR}, etc.
+fn parse_parameter_expansion(content: &str) -> Result<ParameterExpansion, String> {
+    // Handle empty content
+    if content.is_empty() {
+        return Err("Empty parameter expansion".to_string());
+    }
+
+    let chars: Vec<char> = content.chars().collect();
+    let mut pos = 0;
+
+    // Check for length operator: ${#VAR}
+    if chars[0] == '#' {
+        let var_name = content[1..].to_string();
+        return Ok(ParameterExpansion {
+            var_name,
+            operation: ExpansionOp::Length,
+        });
+    }
+
+    // Extract variable name (until operator or end)
+    let var_name_end = chars.iter()
+        .position(|&c| matches!(c, ':' | '-' | '=' | '+' | '?'))
+        .unwrap_or(chars.len());
+
+    let var_name = content[..var_name_end].to_string();
+
+    // If no operator, simple expansion
+    if var_name_end == chars.len() {
+        return Ok(ParameterExpansion {
+            var_name,
+            operation: ExpansionOp::Simple,
+        });
+    }
+
+    pos = var_name_end;
+    let check_null = chars[pos] == ':';
+    if check_null {
+        pos += 1;  // Skip ':'
+    }
+
+    if pos >= chars.len() {
+        // ${VAR:} with nothing after - try substring with offset 0
+        return Ok(ParameterExpansion {
+            var_name,
+            operation: ExpansionOp::Substring { offset: 0, length: None },
+        });
+    }
+
+    let op_char = chars[pos];
+    let rest = &content[pos + 1..];
+
+    // Disambiguate operators from substring syntax
+    // - ${VAR-X}, ${VAR:-X} → Default operator (dash immediately after var or colon)
+    // - ${VAR: -5} → Substring (space after colon, then dash)
+    // - ${VAR:5} → Substring (digit after colon)
+
+    match op_char {
+        '-' => {
+            // ${VAR:-default} or ${VAR-default}
+            Ok(ParameterExpansion {
+                var_name,
+                operation: ExpansionOp::Default {
+                    value: rest.to_string(),
+                    check_null,
+                },
+            })
+        }
+        '=' => {
+            // ${VAR:=default} or ${VAR=default}
+            Ok(ParameterExpansion {
+                var_name,
+                operation: ExpansionOp::AssignDefault {
+                    value: rest.to_string(),
+                    check_null,
+                },
+            })
+        }
+        '+' => {
+            // ${VAR:+value} or ${VAR+value}
+            Ok(ParameterExpansion {
+                var_name,
+                operation: ExpansionOp::UseAlternative {
+                    value: rest.to_string(),
+                    check_null,
+                },
+            })
+        }
+        '?' => {
+            // ${VAR:?message} or ${VAR?message}
+            let message = if rest.is_empty() {
+                None
+            } else {
+                Some(rest.to_string())
+            };
+            Ok(ParameterExpansion {
+                var_name,
+                operation: ExpansionOp::ErrorIfUnset { message, check_null },
+            })
+        }
+        c if c.is_ascii_digit() || c.is_whitespace() => {
+            // ${VAR:offset} or ${VAR: -offset} (substring with space before negative)
+            let offset_str = content[pos..].to_string();
+            parse_substring_params(&offset_str)
+                .map(|(offset, length)| ParameterExpansion {
+                    var_name,
+                    operation: ExpansionOp::Substring { offset, length },
+                })
+        }
+        _ => Err(format!("Unknown expansion operator: {}", op_char)),
+    }
+}
+
+/// Parse substring parameters: offset or offset:length
+fn parse_substring_params(params: &str) -> Result<(i32, Option<usize>), String> {
+    let parts: Vec<&str> = params.split(':').collect();
+
+    match parts.len() {
+        1 => {
+            // Just offset (trim to handle ${VAR: -5} with space before negative)
+            let offset = parts[0].trim().parse::<i32>()
+                .map_err(|_| format!("Invalid offset: {}", parts[0]))?;
+            Ok((offset, None))
+        }
+        2 => {
+            // Offset and length (trim both parts)
+            let offset = parts[0].trim().parse::<i32>()
+                .map_err(|_| format!("Invalid offset: {}", parts[0]))?;
+            let length = parts[1].trim().parse::<usize>()
+                .map_err(|_| format!("Invalid length: {}", parts[1]))?;
+            Ok((offset, Some(length)))
+        }
+        _ => Err("Too many colons in substring expression".to_string()),
+    }
+}
+
+/// Apply parameter expansion operation
+fn apply_expansion(expansion: &ParameterExpansion, state: &crate::state::ShellState) -> String {
+    let var_value = state.get_variable(&expansion.var_name);
+    let is_unset = var_value.is_none();
+    let is_null = var_value.map(|v| v.is_empty()).unwrap_or(false);
+
+    match &expansion.operation {
+        ExpansionOp::Simple => {
+            // ${VAR} - just expand normally
+            state.expand_variable(&expansion.var_name)
+        }
+
+        ExpansionOp::Default { value, check_null } => {
+            // ${VAR:-default} or ${VAR-default}
+            if is_unset || (*check_null && is_null) {
+                // Recursively expand the default value
+                expand_variables(value, state)
+            } else {
+                var_value.unwrap().to_string()
+            }
+        }
+
+        ExpansionOp::AssignDefault { value, check_null } => {
+            // ${VAR:=default} or ${VAR=default}
+            // TODO: Assignment not implemented - requires mutable state
+            // For v1.1.0, just return default without assigning (like Default)
+            if is_unset || (*check_null && is_null) {
+                let default_expanded = expand_variables(value, state);
+                // Note: In bash, this would also assign to VAR
+                // Requires signature change: &mut ShellState
+                default_expanded
+            } else {
+                var_value.unwrap().to_string()
+            }
+        }
+
+        ExpansionOp::UseAlternative { value, check_null } => {
+            // ${VAR:+value} or ${VAR+value}
+            if is_unset || (*check_null && is_null) {
+                String::new()
+            } else {
+                expand_variables(value, state)
+            }
+        }
+
+        ExpansionOp::ErrorIfUnset { message, check_null } => {
+            // ${VAR:?message} or ${VAR?message}
+            if is_unset || (*check_null && is_null) {
+                let error_msg = message.as_deref().unwrap_or("parameter null or not set");
+                eprintln!("vsh: {}: {}", expansion.var_name, error_msg);
+                // Return empty string (bash exits non-interactively, but we continue)
+                String::new()
+            } else {
+                var_value.unwrap().to_string()
+            }
+        }
+
+        ExpansionOp::Length => {
+            // ${#VAR}
+            let value = state.expand_variable(&expansion.var_name);
+            value.chars().count().to_string()
+        }
+
+        ExpansionOp::Substring { offset, length } => {
+            // ${VAR:offset} or ${VAR:offset:length}
+            let value = state.expand_variable(&expansion.var_name);
+            apply_substring(&value, *offset, *length)
+        }
+    }
+}
+
+/// Apply substring extraction with bash-compatible negative offset handling
+fn apply_substring(value: &str, offset: i32, length: Option<usize>) -> String {
+    let chars: Vec<char> = value.chars().collect();
+    let len = chars.len() as i32;
+
+    // Handle negative offset (from end)
+    let start = if offset < 0 {
+        (len + offset).max(0) as usize
+    } else {
+        offset.min(len) as usize
+    };
+
+    match length {
+        Some(n) => {
+            let end = (start + n).min(chars.len());
+            chars[start..end].iter().collect()
+        }
+        None => {
+            chars[start..].iter().collect()
+        }
+    }
+}
+
 pub fn expand_variables(input: &str, state: &crate::state::ShellState) -> String {
     let mut result = String::new();
     let mut chars = input.chars().peekable();
@@ -1480,21 +1950,39 @@ pub fn expand_variables(input: &str, state: &crate::state::ShellState) -> String
         } else if ch == '$' {
             // Check for ${VAR} or $VAR
             if chars.peek() == Some(&'{') {
-                // Braced form: ${VAR}
+                // Braced form: ${VAR} or ${VAR:-default}, etc.
                 chars.next(); // consume '{'
-                let mut var_name = String::new();
+                let mut var_expr = String::new();
 
-                // Read until '}'
+                // Read until '}', handling nested braces
+                let mut brace_depth = 1;
                 while let Some(&c) = chars.peek() {
                     if c == '}' {
-                        chars.next(); // consume '}'
-                        break;
+                        brace_depth -= 1;
+                        if brace_depth == 0 {
+                            chars.next(); // consume '}'
+                            break;
+                        }
+                    } else if c == '{' {
+                        brace_depth += 1;
                     }
-                    var_name.push(chars.next().unwrap());
+                    var_expr.push(chars.next().unwrap());
                 }
 
-                // Expand the variable
-                result.push_str(&state.expand_variable(&var_name));
+                // Parse the parameter expansion
+                match parse_parameter_expansion(&var_expr) {
+                    Ok(expansion) => {
+                        let expanded = apply_expansion(&expansion, state);
+                        result.push_str(&expanded);
+                    }
+                    Err(err) => {
+                        // On parse error, keep the literal text (bash behavior)
+                        eprintln!("vsh: bad substitution: {}", err);
+                        result.push_str("${");
+                        result.push_str(&var_expr);
+                        result.push('}');
+                    }
+                }
             } else if let Some(&next_ch) = chars.peek() {
                 // Simple form: $VAR or special variables like $?, $$
                 if next_ch == '?' || next_ch == '$' {

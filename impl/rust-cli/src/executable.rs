@@ -336,6 +336,28 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::ExternalCommand { exit_code })
             }
 
+            Command::ExtendedTest { args, redirects } => {
+                // Extended test [[ ... ]] - NO word splitting, pattern matching enabled
+                // Expand variables but without word splitting (key difference from regular test)
+                let expanded_args: Vec<String> = args
+                    .iter()
+                    .map(|arg| crate::parser::expand_variables(arg, state))
+                    .collect();
+
+                let exit_code = if redirects.is_empty() {
+                    crate::test_command::execute_extended_test(&expanded_args)?
+                } else {
+                    let mut code = 0;
+                    redirection::capture_and_redirect(redirects, state, |_s| {
+                        code = crate::test_command::execute_extended_test(&expanded_args)?;
+                        Ok(())
+                    })?;
+                    code
+                };
+
+                Ok(ExecutionResult::ExternalCommand { exit_code })
+            }
+
             // External commands (not reversible by default, but redirections are)
             Command::External {
                 program,
@@ -439,6 +461,36 @@ impl ExecutableCommand for Command {
                 // Expand variables and command substitutions in the value
                 let expanded_value = crate::parser::expand_with_command_sub(value, state)?;
                 state.set_variable(name, expanded_value);
+                Ok(ExecutionResult::Success)
+            }
+
+            // Array assignment
+            Command::ArrayAssignment { name, elements } => {
+                // Expand variables in each element
+                let expanded_elements: Vec<String> = elements
+                    .iter()
+                    .map(|elem| crate::parser::expand_variables(elem, state))
+                    .collect();
+                state.set_array(name, expanded_elements);
+                Ok(ExecutionResult::Success)
+            }
+
+            // Array element assignment
+            Command::ArrayElementAssignment { name, index, value } => {
+                // Expand variables in the value
+                let expanded_value = crate::parser::expand_variables(value, state);
+                state.set_array_element(name, *index, expanded_value);
+                Ok(ExecutionResult::Success)
+            }
+
+            // Array append
+            Command::ArrayAppend { name, elements } => {
+                // Expand variables in each element
+                let expanded_elements: Vec<String> = elements
+                    .iter()
+                    .map(|elem| crate::parser::expand_variables(elem, state))
+                    .collect();
+                state.append_to_array(name, expanded_elements);
                 Ok(ExecutionResult::Success)
             }
 
@@ -594,6 +646,13 @@ impl ExecutableCommand for Command {
                     format!("[ {} ]", args.join(" "))
                 }
             }
+            Command::ExtendedTest { args, .. } => {
+                if args.is_empty() {
+                    "[[ ]]".to_string()
+                } else {
+                    format!("[[ {} ]]", args.join(" "))
+                }
+            }
             Command::External { program, args, .. } => {
                 if args.is_empty() {
                     program.clone()
@@ -617,6 +676,18 @@ impl ExecutableCommand for Command {
 
             Command::Assignment { name, value } => {
                 format!("{}={}", name, value)
+            }
+
+            Command::ArrayAssignment { name, elements } => {
+                format!("{}=({})", name, elements.join(" "))
+            }
+
+            Command::ArrayElementAssignment { name, index, value } => {
+                format!("{}[{}]={}", name, index, value)
+            }
+
+            Command::ArrayAppend { name, elements } => {
+                format!("{}+=({})", name, elements.join(" "))
             }
 
             Command::Export { name, value } => {
