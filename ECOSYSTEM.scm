@@ -4,7 +4,7 @@
 (ecosystem
  (version "1.0")
  (name "valence-shell")
- (type "TODO: library|application|tool|framework")
+ (type "library|application|tool|framework")
  (purpose "TODO: Brief purpose statement")
 
  (position-in-ecosystem
