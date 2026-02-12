@@ -766,17 +766,13 @@ fn test_glob_wildcard_expansion() {
     fs::write(temp.path().join("file2.txt"), "content2").unwrap();
     fs::write(temp.path().join("file3.log"), "content3").unwrap();
 
-    // Test *.txt pattern via external command
-    let output = Command::new("ls")
-        .arg("*.txt")
-        .current_dir(temp.path())
-        .output()
-        .unwrap();
+    // Test *.txt pattern via vsh's glob expansion
+    let matches = vsh::glob::expand_glob("*.txt", temp.path()).unwrap();
+    let names: Vec<String> = matches.iter().map(|p| p.display().to_string()).collect();
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("file1.txt"), "Should match file1.txt");
-    assert!(stdout.contains("file2.txt"), "Should match file2.txt");
-    assert!(!stdout.contains("file3.log"), "Should not match .log files");
+    assert!(names.contains(&"file1.txt".to_string()), "Should match file1.txt");
+    assert!(names.contains(&"file2.txt".to_string()), "Should match file2.txt");
+    assert!(!names.iter().any(|n| n.contains("file3.log")), "Should not match .log files");
 }
 
 /// Test: Question mark glob (file?.txt)
@@ -789,17 +785,13 @@ fn test_glob_question_mark() {
     fs::write(temp.path().join("file2.txt"), "").unwrap();
     fs::write(temp.path().join("file10.txt"), "").unwrap(); // Two chars, shouldn't match
 
-    // Test file?.txt pattern
-    let output = Command::new("ls")
-        .arg("file?.txt")
-        .current_dir(temp.path())
-        .output()
-        .unwrap();
+    // Test file?.txt pattern via vsh's glob expansion
+    let matches = vsh::glob::expand_glob("file?.txt", temp.path()).unwrap();
+    let names: Vec<String> = matches.iter().map(|p| p.display().to_string()).collect();
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("file1.txt"), "Should match single character");
-    assert!(stdout.contains("file2.txt"), "Should match single character");
-    assert!(!stdout.contains("file10.txt"), "Should not match two characters");
+    assert!(names.contains(&"file1.txt".to_string()), "Should match single character");
+    assert!(names.contains(&"file2.txt".to_string()), "Should match single character");
+    assert!(!names.contains(&"file10.txt".to_string()), "Should not match two characters");
 }
 
 /// Test: Brace expansion (file{1,2,3}.txt)
@@ -813,18 +805,18 @@ fn test_glob_brace_expansion() {
     fs::write(temp.path().join("file3.txt"), "").unwrap();
     fs::write(temp.path().join("file4.txt"), "").unwrap();
 
-    // Test file{1,2,3}.txt pattern (should match 1, 2, 3 but not 4)
-    let output = Command::new("ls")
-        .arg("file{1,2,3}.txt")
-        .current_dir(temp.path())
-        .output()
-        .unwrap();
+    // Test brace expansion via vsh's expand_braces
+    let expanded = vsh::glob::expand_braces("file{1,2,3}.txt");
+    assert_eq!(expanded, vec!["file1.txt", "file2.txt", "file3.txt"]);
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("file1.txt"), "Should match file1.txt");
-    assert!(stdout.contains("file2.txt"), "Should match file2.txt");
-    assert!(stdout.contains("file3.txt"), "Should match file3.txt");
-    // file4.txt may or may not appear - it's outside the brace expansion
+    // Each expanded pattern should match existing files when globbed
+    for pattern in &expanded {
+        let matches = vsh::glob::expand_glob(pattern, temp.path()).unwrap();
+        assert_eq!(matches.len(), 1, "Pattern {} should match one file", pattern);
+    }
+
+    // file4.txt should not be in the expansion
+    assert!(!expanded.contains(&"file4.txt".to_string()), "Should not include file4.txt");
 }
 
 /// Test: Empty glob matches return literal (POSIX behavior)
@@ -856,19 +848,17 @@ fn test_glob_multiple_args() {
     fs::write(temp.path().join("b1.log"), "").unwrap();
     fs::write(temp.path().join("b2.log"), "").unwrap();
 
-    // Test echo *.txt *.log (should expand both patterns)
-    let output = Command::new("echo")
-        .arg("*.txt")
-        .arg("*.log")
-        .current_dir(temp.path())
-        .output()
-        .unwrap();
+    // Test multiple patterns expanded independently via vsh's glob
+    let txt_matches = vsh::glob::expand_glob("*.txt", temp.path()).unwrap();
+    let log_matches = vsh::glob::expand_glob("*.log", temp.path()).unwrap();
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("a1.txt"), "Should expand *.txt");
-    assert!(stdout.contains("a2.txt"), "Should expand *.txt");
-    assert!(stdout.contains("b1.log"), "Should expand *.log");
-    assert!(stdout.contains("b2.log"), "Should expand *.log");
+    let txt_names: Vec<String> = txt_matches.iter().map(|p| p.display().to_string()).collect();
+    let log_names: Vec<String> = log_matches.iter().map(|p| p.display().to_string()).collect();
+
+    assert!(txt_names.contains(&"a1.txt".to_string()), "Should expand *.txt");
+    assert!(txt_names.contains(&"a2.txt".to_string()), "Should expand *.txt");
+    assert!(log_names.contains(&"b1.log".to_string()), "Should expand *.log");
+    assert!(log_names.contains(&"b2.log".to_string()), "Should expand *.log");
 }
 
 /// Test: Glob patterns do not expand in quoted strings
@@ -899,16 +889,12 @@ fn test_glob_hidden_files() {
     fs::write(temp.path().join(".hidden.txt"), "").unwrap();
     fs::write(temp.path().join("visible.txt"), "").unwrap();
 
-    // Test *.txt (should NOT match .hidden.txt)
-    let output = Command::new("ls")
-        .arg("*.txt")
-        .current_dir(temp.path())
-        .output()
-        .unwrap();
+    // Test *.txt (should NOT match .hidden.txt) via vsh's glob expansion
+    let matches = vsh::glob::expand_glob("*.txt", temp.path()).unwrap();
+    let names: Vec<String> = matches.iter().map(|p| p.display().to_string()).collect();
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("visible.txt"), "Should match visible files");
-    assert!(!stdout.contains(".hidden.txt"), "Should not match hidden files without explicit .");
+    assert!(names.contains(&"visible.txt".to_string()), "Should match visible files");
+    assert!(!names.iter().any(|n| n.contains(".hidden")), "Should not match hidden files without explicit .");
 }
 
 /// Test: Glob character class [0-9]
@@ -921,15 +907,11 @@ fn test_glob_character_class() {
     fs::write(temp.path().join("file2.txt"), "").unwrap();
     fs::write(temp.path().join("fileA.txt"), "").unwrap();
 
-    // Test file[0-9].txt pattern
-    let output = Command::new("ls")
-        .arg("file[0-9].txt")
-        .current_dir(temp.path())
-        .output()
-        .unwrap();
+    // Test file[0-9].txt pattern via vsh's glob expansion
+    let matches = vsh::glob::expand_glob("file[0-9].txt", temp.path()).unwrap();
+    let names: Vec<String> = matches.iter().map(|p| p.display().to_string()).collect();
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("file1.txt"), "Should match digit 1");
-    assert!(stdout.contains("file2.txt"), "Should match digit 2");
-    assert!(!stdout.contains("fileA.txt"), "Should not match letter A");
+    assert!(names.contains(&"file1.txt".to_string()), "Should match digit 1");
+    assert!(names.contains(&"file2.txt".to_string()), "Should match digit 2");
+    assert!(!names.contains(&"fileA.txt".to_string()), "Should not match letter A");
 }

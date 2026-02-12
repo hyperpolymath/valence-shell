@@ -49,7 +49,7 @@ fn stress_deep_nesting_1000_levels() {
 
     // Test undo (remove all levels)
     let undo_start = Instant::now();
-    let mut state = ShellState::new(temp.path()).unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Record the creation in state
     for i in 0..1000 {
@@ -59,7 +59,7 @@ fn stress_deep_nesting_1000_levels() {
 
     // Undo all 1000 operations
     for _ in 0..1000 {
-        state.pop_undo().unwrap();
+        vsh::commands::undo(&mut state, 1, false).unwrap();
     }
 
     let undo_time = undo_start.elapsed();
@@ -122,7 +122,7 @@ fn stress_large_file_1gb() {
     assert_eq!(metadata.len(), 1024 * 1024 * 1024, "File should be exactly 1GB");
 
     // Test operations on large file
-    let mut state = ShellState::new(temp.path()).unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Touch shouldn't fail on large file (just updates metadata)
     let touch_start = Instant::now();
@@ -153,7 +153,7 @@ fn stress_large_file_undo_streaming() {
     drop(file);
 
     // Verify we don't OOM when saving undo data for large file
-    let mut state = ShellState::new(temp.path()).unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // This should use streaming, not load all 100MB into memory
     let undo_save_start = Instant::now();
@@ -167,7 +167,7 @@ fn stress_large_file_undo_streaming() {
 
     // Undo should also be fast
     let undo_start = Instant::now();
-    state.pop_undo().unwrap();
+    vsh::commands::undo(&mut state, 1, false).unwrap();
     let undo_time = undo_start.elapsed();
 
     println!("✓ Undid large file operation in {:?}", undo_time);
@@ -182,7 +182,7 @@ fn stress_large_file_undo_streaming() {
 #[ignore]
 fn stress_many_operations_10000() {
     let temp = TempDir::new().unwrap();
-    let mut state = ShellState::new(temp.path()).unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     let start = Instant::now();
 
@@ -202,7 +202,7 @@ fn stress_many_operations_10000() {
     // Test undo performance (undo all 10,000)
     let undo_start = Instant::now();
     for _ in 0..10_000 {
-        state.pop_undo().unwrap();
+        vsh::commands::undo(&mut state, 1, false).unwrap();
     }
     let undo_time = undo_start.elapsed();
 
@@ -221,7 +221,7 @@ fn stress_many_operations_10000() {
 #[ignore]
 fn stress_history_memory_efficiency() {
     let temp = TempDir::new().unwrap();
-    let mut state = ShellState::new(temp.path()).unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Create 1000 operations
     for i in 0..1000 {
@@ -247,7 +247,7 @@ fn stress_history_memory_efficiency() {
 #[ignore]
 fn stress_undo_redo_efficiency() {
     let temp = TempDir::new().unwrap();
-    let mut state = ShellState::new(temp.path()).unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Create 100 operations
     for i in 0..100 {
@@ -257,7 +257,7 @@ fn stress_undo_redo_efficiency() {
     // Undo should be O(1) per operation
     let start = Instant::now();
     for _ in 0..100 {
-        state.pop_undo().unwrap();
+        vsh::commands::undo(&mut state, 1, false).unwrap();
     }
     let undo_time = start.elapsed();
 
@@ -295,7 +295,7 @@ fn stress_concurrent_multiple_instances() {
         let path = temp_path.clone();
 
         let handle = thread::spawn(move || {
-            let mut state = ShellState::new(&path).unwrap();
+            let mut state = ShellState::new(path.to_str().unwrap()).unwrap();
 
             // Each thread creates 100 files with unique names
             for i in 0..100 {
@@ -332,7 +332,7 @@ fn stress_concurrent_multiple_instances() {
 #[ignore]
 fn stress_concurrent_no_corruption() {
     let temp = TempDir::new().unwrap();
-    let state = Arc::new(Mutex::new(ShellState::new(temp.path()).unwrap()));
+    let state = Arc::new(Mutex::new(ShellState::new(temp.path().to_str().unwrap()).unwrap()));
 
     // Multiple threads sharing same ShellState (via Mutex)
     let mut handles = vec![];
@@ -377,7 +377,7 @@ fn stress_concurrent_no_corruption() {
 #[ignore]
 fn stress_resource_limits_max_history() {
     let temp = TempDir::new().unwrap();
-    let mut state = ShellState::new(temp.path()).unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Create operations until we hit a reasonable limit
     // In practice, there should be a configurable max history size

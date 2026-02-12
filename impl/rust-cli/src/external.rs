@@ -447,7 +447,7 @@ fn stdio_config_from_redirects(
 /// - Empty matches return literal: "*.xyz" if no .xyz files
 ///
 /// # Examples
-/// ```no_run
+/// ```ignore
 /// expand_glob_args(&["echo", "*.txt"], state)  // -> ["echo", "file1.txt", "file2.txt"]
 /// expand_glob_args(&["ls", "file?.rs"], state) // -> ["ls", "file1.rs", "file2.rs"]
 /// expand_glob_args(&["rm", "*.xyz"], state)    // -> ["rm", "*.xyz"] (no .xyz files)

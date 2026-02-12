@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Library interface for Valence Shell
 //!
 //! This module exposes internal components for:
@@ -13,7 +13,6 @@ pub mod audit_log;
 pub mod commands;
 pub mod confirmation;
 pub mod correction;
-pub mod daemon_client;
 pub mod enhanced_repl;
 pub mod executable;
 pub mod external;
@@ -34,10 +33,6 @@ pub mod secure_erase;
 pub mod signals;
 pub mod state;
 pub mod test_command;
-
-// Optional Lean 4 runtime verification
-#[cfg(feature = "lean-runtime-checks")]
-pub mod lean_ffi;
 
 pub mod verification;
 

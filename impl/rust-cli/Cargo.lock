@@ -1452,10 +1452,9 @@ dependencies = [
 
 [[package]]
 name = "vsh"
-version = "1.0.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
- "cc",
  "chrono",
  "clap",
  "colored",

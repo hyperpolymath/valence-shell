@@ -1,12 +1,11 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
-//! Benchmarks for Lean Runtime Verification Overhead
+// SPDX-License-Identifier: PMPL-1.0-or-later
+//! Benchmarks for core filesystem operations
 //!
-//! Measures the performance impact of optional Lean 4 precondition verification.
+//! Measures the performance of mkdir, rmdir, touch, rm, and operation sequences.
 //!
 //! Run with:
 //! ```bash
-//! cargo bench --features lean-runtime-checks
-//! cargo bench  # Without Lean (baseline)
+//! cargo bench
 //! ```
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};

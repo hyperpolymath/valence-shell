@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 ///
 /// # Examples
 /// ```
+/// use vsh::glob::contains_glob_pattern;
 /// assert!(contains_glob_pattern("*.txt"));
 /// assert!(contains_glob_pattern("file?.rs"));
 /// assert!(contains_glob_pattern("[a-z]*.log"));
@@ -92,8 +93,17 @@ pub fn expand_glob(pattern: &str, base_dir: &Path) -> Result<Vec<PathBuf>> {
         base_dir.join(pattern).to_string_lossy().to_string()
     };
 
-    // Use glob crate for pattern matching
-    let mut matches: Vec<PathBuf> = glob::glob(&full_pattern)
+    // Use glob crate for pattern matching with POSIX options
+    let options = glob::MatchOptions {
+        // POSIX: * and ? do not match leading dot (hidden files)
+        require_literal_leading_dot: true,
+        // Case-sensitive matching (POSIX default)
+        case_sensitive: true,
+        // Require literal separator
+        require_literal_separator: false,
+    };
+
+    let mut matches: Vec<PathBuf> = glob::glob_with(&full_pattern, options)
         .with_context(|| format!("Invalid glob pattern: {}", pattern))?
         .filter_map(|entry| entry.ok())
         .collect();
