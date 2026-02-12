@@ -1219,6 +1219,68 @@ fn extract_redirections_from_tokens(tokens: &[Token]) -> Result<(Vec<Token>, Vec
 /// // Creates Mkdir command with Output redirection
 /// # Ok::<(), anyhow::Error>(())
 /// ```
+/// Split input on unquoted semicolons into separate command strings.
+///
+/// Respects single quotes, double quotes, backslash escapes, and
+/// parenthesized groups (command substitution, subshells).
+///
+/// # Examples
+/// ```
+/// use vsh::parser::split_on_semicolons;
+///
+/// let parts = split_on_semicolons("echo hello; echo world");
+/// assert_eq!(parts, vec!["echo hello", " echo world"]);
+///
+/// // Semicolons inside quotes are not split
+/// let parts = split_on_semicolons("echo 'hello; world'");
+/// assert_eq!(parts, vec!["echo 'hello; world'"]);
+/// ```
+pub fn split_on_semicolons(input: &str) -> Vec<&str> {
+    let mut segments = Vec::new();
+    let mut start = 0;
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut escaped = false;
+    let mut paren_depth: i32 = 0;
+
+    for (byte_pos, ch) in input.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '\\' if !in_single_quote => {
+                escaped = true;
+            }
+            '\'' if !in_double_quote => {
+                in_single_quote = !in_single_quote;
+            }
+            '"' if !in_single_quote => {
+                in_double_quote = !in_double_quote;
+            }
+            '(' if !in_single_quote && !in_double_quote => {
+                paren_depth += 1;
+            }
+            ')' if !in_single_quote && !in_double_quote => {
+                if paren_depth > 0 {
+                    paren_depth -= 1;
+                }
+            }
+            ';' if !in_single_quote && !in_double_quote && paren_depth == 0 => {
+                segments.push(&input[start..byte_pos]);
+                start = byte_pos + 1; // ';' is ASCII, always 1 byte
+            }
+            _ => {}
+        }
+    }
+
+    // Add the final segment
+    segments.push(&input[start..]);
+
+    segments
+}
+
 pub fn parse_command(input: &str) -> Result<Command> {
     // Skip comments (lines starting with #)
     let trimmed = input.trim_start();
@@ -3693,5 +3755,70 @@ mod job_control_tests {
         let tokens = tokenize("cmd1 || cmd2").unwrap();
         assert_eq!(tokens.len(), 3);
         assert!(matches!(tokens[1], Token::Or));
+    }
+}
+
+#[cfg(test)]
+mod semicolon_tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_semicolon_split() {
+        let parts = split_on_semicolons("echo hello; echo world");
+        assert_eq!(parts, vec!["echo hello", " echo world"]);
+    }
+
+    #[test]
+    fn test_no_semicolon() {
+        let parts = split_on_semicolons("echo hello world");
+        assert_eq!(parts, vec!["echo hello world"]);
+    }
+
+    #[test]
+    fn test_multiple_semicolons() {
+        let parts = split_on_semicolons("a; b; c; d");
+        assert_eq!(parts, vec!["a", " b", " c", " d"]);
+    }
+
+    #[test]
+    fn test_semicolon_in_single_quotes() {
+        let parts = split_on_semicolons("echo 'hello; world'");
+        assert_eq!(parts, vec!["echo 'hello; world'"]);
+    }
+
+    #[test]
+    fn test_semicolon_in_double_quotes() {
+        let parts = split_on_semicolons("echo \"hello; world\"");
+        assert_eq!(parts, vec!["echo \"hello; world\""]);
+    }
+
+    #[test]
+    fn test_escaped_semicolon() {
+        let parts = split_on_semicolons("echo hello\\; world");
+        assert_eq!(parts, vec!["echo hello\\; world"]);
+    }
+
+    #[test]
+    fn test_semicolon_in_command_substitution() {
+        let parts = split_on_semicolons("echo $(echo a; echo b)");
+        assert_eq!(parts, vec!["echo $(echo a; echo b)"]);
+    }
+
+    #[test]
+    fn test_trailing_semicolon() {
+        let parts = split_on_semicolons("echo hello;");
+        assert_eq!(parts, vec!["echo hello", ""]);
+    }
+
+    #[test]
+    fn test_empty_between_semicolons() {
+        let parts = split_on_semicolons("echo a;; echo b");
+        assert_eq!(parts, vec!["echo a", "", " echo b"]);
+    }
+
+    #[test]
+    fn test_semicolon_only() {
+        let parts = split_on_semicolons(";");
+        assert_eq!(parts, vec!["", ""]);
     }
 }
