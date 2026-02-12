@@ -329,12 +329,18 @@ fn stdio_config_from_redirects(
     let mut stdout_cfg = Stdio::inherit();
     let mut stderr_cfg = Stdio::inherit();
 
+    // Track stdout's file handle for 2>&1 fd duplication
+    let mut stdout_file_dup: Option<File> = None;
+
     for redirect in redirects {
         match redirect {
             Redirection::Output { file } => {
                 let target = state.resolve_path(file);
                 let file_handle = File::create(&target)
                     .with_context(|| format!("Failed to open output file: {}", target.display()))?;
+                // Keep a clone for potential 2>&1 duplication
+                stdout_file_dup = Some(file_handle.try_clone()
+                    .context("Failed to duplicate stdout file handle for 2>&1 tracking")?);
                 stdout_cfg = Stdio::from(file_handle);
             }
 
@@ -345,6 +351,8 @@ fn stdio_config_from_redirects(
                     .append(true)
                     .open(&target)
                     .with_context(|| format!("Failed to open output file for append: {}", target.display()))?;
+                stdout_file_dup = Some(file_handle.try_clone()
+                    .context("Failed to duplicate stdout file handle for 2>&1 tracking")?);
                 stdout_cfg = Stdio::from(file_handle);
             }
 
@@ -380,16 +388,23 @@ fn stdio_config_from_redirects(
                     .try_clone()
                     .context("Failed to duplicate file handle")?;
 
+                stdout_file_dup = Some(file_handle.try_clone()
+                    .context("Failed to duplicate stdout file handle for 2>&1 tracking")?);
                 stdout_cfg = Stdio::from(file_handle);
                 stderr_cfg = Stdio::from(file_handle2);
             }
 
             Redirection::ErrorToOutput => {
-                // Redirect stderr to stdout's current target
-                // This is tricky with Stdio - need to use piped() and manual plumbing
-                // For now, use simpler approach: both to same file
-                // TODO: Implement proper fd duplication
-                stderr_cfg = Stdio::inherit(); // Fallback
+                // 2>&1: Redirect stderr to wherever stdout currently goes
+                // POSIX processes redirections left-to-right, so at this point
+                // stdout_file_dup reflects the current stdout target (if redirected)
+                if let Some(ref f) = stdout_file_dup {
+                    stderr_cfg = Stdio::from(f.try_clone()
+                        .context("Failed to duplicate fd for 2>&1")?);
+                } else {
+                    // stdout is still inherited (terminal), so stderr inherits too
+                    stderr_cfg = Stdio::inherit();
+                }
             }
 
             Redirection::HereDoc { content, expand, strip_tabs, .. } => {

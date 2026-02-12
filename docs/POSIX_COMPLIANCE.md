@@ -1,531 +1,270 @@
-# POSIX Compliance Roadmap - Valence Shell
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# POSIX Compliance Status - Valence Shell (v0.9.0)
 
 **Goal**: Full POSIX shell compliance with formal verification at each increment
 
-**Strategy**: Incremental milestones with useful functionality at each stage
+**Current Status**: Milestones 1-8 substantially complete; Milestones 9-14 not started
 
-**Current Status**: Phase 3 Complete (verified filesystem operations only)
-
----
-
-## What is POSIX Shell Compliance?
-
-**POSIX.1-2017 (IEEE Std 1003.1-2017)** defines two aspects:
-
-1. **POSIX Shell Command Language** - Syntax, semantics, builtins
-2. **POSIX System Interface** - Syscalls and C API
-
-Valence Shell targets **both**, incrementally.
+**Last Updated**: 2026-02-12 (Opus audit — rewritten from scratch)
 
 ---
 
-## Current State (v0.6.0)
+## Milestone Status Overview
 
-### ✅ What IS POSIX-Compliant Now
-
-**POSIX Syscall Interface** (proven in Coq, implemented in Rust/Elixir/Zig):
-- `mkdir(path, mode)` - with EEXIST, ENOENT error handling
-- `rmdir(path)` - with ENOTDIR, ENOTEMPTY handling
-- `open(path, O_CREAT)` - file creation
-- `unlink(path)` - file deletion
-- Error codes: EEXIST, ENOENT, EACCES, ENOTDIR, ENOTEMPTY
-
-**Verified Properties**:
-- Reversibility: `rmdir(mkdir(p)) = identity`
-- Composition: Sequences of operations reverse correctly
-- Independence: Operations on different paths don't interfere
-- **256+ theorems** across 6 proof systems
-
-### ❌ What is NOT Compliant Yet
-
-**POSIX Shell Features**:
-- ✗ Command parser (no syntax tree)
-- ✗ Pipelines (`cmd1 | cmd2`)
-- ✗ Redirections (`>`, `<`, `>>`, `2>&1`)
-- ✗ Variables (`$VAR`, `${VAR}`)
-- ✗ Glob expansion (`*.txt`, `[a-z]`)
-- ✗ Command substitution (`` `cmd` ``, `$(cmd)`)
-- ✗ Arithmetic expansion (`$((1 + 2))`)
-- ✗ Tilde expansion (`~/file`)
-- ✗ Quote processing (`"..."`, `'...'`, `\`)
-- ✗ Job control (`&`, `fg`, `bg`, `jobs`)
-- ✗ Shell builtins (cd, export, alias, etc.)
-- ✗ Control structures (if, while, for, case)
-- ✗ Functions
-- ✗ Shell scripts (.sh files)
+| # | Milestone | Status | Notes |
+|---|-----------|--------|-------|
+| 1 | Simple Command Execution | **Complete** | PATH lookup, args, exit status |
+| 2 | Redirections | **Mostly complete** | `2>&1` is a no-op (TODO) |
+| 3 | Pipelines | **Complete** | Multi-stage, exit code from last |
+| 4 | Variables | **Complete** | Scalars, arrays, parameter expansion |
+| 5 | Glob Expansion | **Complete** | POSIX-compliant + brace expansion |
+| 6 | Quote Processing | **Complete** | Single, double, backslash |
+| 7 | Command Substitution | **Complete** | `$(cmd)` and backticks |
+| 8 | Arithmetic | **Complete** | Full operator set including `**` |
+| 9 | Control Structures | **Not started** | Biggest gap — blocks all scripts |
+| 10 | Job Control | **Partial** | No SIGCHLD, no Ctrl+Z |
+| 11 | Shell Builtins | **Partial** | 20 implemented, ~25 missing |
+| 12 | Functions | **Not started** | No `func() { ... }` syntax |
+| 13 | Shell Scripts | **Not started** | No `.sh` file execution |
+| 14 | Advanced Features | **Partial** | Here docs, process sub, arrays done |
 
 ---
 
-## Incremental Roadmap (Option A)
+## Detailed Feature Status
 
-### **Milestone 1: Simple Command Execution** (3-4 months)
-**Goal**: Execute external commands with arguments
+### Milestone 1: Simple Command Execution — COMPLETE
 
-**Features**:
-- Basic command parser (no special syntax)
-- Execute external programs via `execve()`
-- Argument passing (no expansion yet)
-- Exit status handling
-- PATH lookup
+| Feature | Status | Implementation |
+|---------|--------|---------------|
+| Command parser with AST | Done | `parser.rs` (~2500 lines), 25+ Command variants |
+| External program execution | Done | `external.rs`, PATH lookup via `which` crate |
+| Argument passing | Done | Variable expansion in args |
+| Exit status handling | Done | `$?` tracked in ShellState |
+| PATH lookup | Done | Searches PATH directories |
 
-**Example**:
-```bash
-vsh> ls -la /tmp
-vsh> mkdir foo
-vsh> touch foo/bar.txt
-```
+### Milestone 2: Redirections — MOSTLY COMPLETE
 
-**Verification**:
-- Prove: Command parsing correctness
-- Prove: execve() preserves invariants
-- Test: Existing operations still work
+| Feature | Status | Implementation |
+|---------|--------|---------------|
+| Output redirect `>` | Done | `File::create()` in `external.rs` |
+| Append redirect `>>` | Done | `OpenOptions::append()` (fixed 2026-02-12) |
+| Input redirect `<` | Done | `File::open()` |
+| Error redirect `2>` | Done | Token-start-only detection (fixed 2026-02-12) |
+| Error append `2>>` | Done | `OpenOptions::append()` |
+| Both redirect `&>` | Done | Cloned file handle for stdout+stderr |
+| `2>&1` fd duplication | Done | Tracks stdout file handle for `try_clone()` (fixed 2026-02-12) |
+| Here documents `<<DELIM` | Done | Tab stripping, quoted delimiters, expansion |
+| Here strings `<<<word` | Done | Trailing newline added |
+| Undo tracking for redirections | Done | `redirection.rs` tracks file modifications |
 
-**Deliverable**: Can run external commands with literals only
+**Known issues**:
+- ~~`2>&1` does nothing~~ — **Fixed** (2026-02-12, tracks stdout file handle)
+- Heredoc/herestring temp files in `/tmp/` are never cleaned up
+- Temp file names are predictable (symlink attack risk)
 
----
+### Milestone 3: Pipelines — COMPLETE
 
-### **Milestone 2: Redirections** (2-3 months)
-**Goal**: File descriptor manipulation
+| Feature | Status | Implementation |
+|---------|--------|---------------|
+| Pipe operator `\|` | Done | `Command::Pipeline` variant |
+| Multi-stage pipes | Done | `execute_pipeline()` chains stdio |
+| Exit code from last stage | Done | POSIX behavior |
+| Process spawning | Done | `std::process::Command` |
 
-**Features**:
-- Output redirection (`>`, `>>`)
-- Input redirection (`<`)
-- Error redirection (`2>`, `2>&1`)
-- File descriptor duplication
-- Prove: fd operations are reversible (undo restores original fds)
+**Known issues**:
+- SIGINT during pipeline only kills current child; others may leak
 
-**Example**:
-```bash
-vsh> ls > files.txt
-vsh> cat < files.txt
-vsh> command 2> errors.log
-```
+### Milestone 4: Variables — COMPLETE
 
-**Verification**:
-- Model: File descriptor table in Coq
-- Prove: Redirection reversibility
-- Prove: fd leak prevention
+| Feature | Status | Implementation |
+|---------|--------|---------------|
+| Assignment `VAR=value` | Done | `Command::Assignment` |
+| Expansion `$VAR`, `${VAR}` | Done | `expand_variables()` in `parser.rs` |
+| `export VAR=value` | Done | `Command::Export` |
+| Special vars `$?`, `$$`, `$#`, `$@`, `$*` | Done | Tracked in ShellState |
+| Default value `${VAR:-default}` | Done | |
+| Assign default `${VAR:=default}` | **Incomplete** | Behaves like `:-` (no assignment side-effect) |
+| Alternative `${VAR:+alt}` | Done | |
+| Error `${VAR:?msg}` | Done | |
+| Length `${#VAR}` | Done | |
+| Substring `${VAR:offset:length}` | Done | |
+| Array variables `arr=(...)` | Done | Sparse arrays via BTreeMap |
+| Array element `arr[n]=val` | Done | |
+| Array append `arr+=(...)` | Done | |
 
----
+**Known issues**:
+- `$@` and `$*` behave identically (should differ in quoted context)
+- `${VAR:=default}` does not actually assign — same as `${VAR:-default}`
+- `export VAR` on unset var errors instead of creating empty exported var
 
-### **Milestone 3: Pipelines** (2-3 months)
-**Goal**: Inter-process communication
+### Milestone 5: Glob Expansion — COMPLETE
 
-**Features**:
-- Pipe creation (`|`)
-- Process spawning
-- Wait for completion
-- Exit status composition
+| Feature | Status | Implementation |
+|---------|--------|---------------|
+| `*` (match any) | Done | `glob` crate |
+| `?` (single char) | Done | |
+| `[...]` character class | Done | |
+| `[!...]` negation | Done | |
+| Hidden file exclusion | Done | `require_literal_leading_dot: true` (fixed 2026-02-12) |
+| Brace expansion `{a,b,c}` | Done | Nested braces supported |
+| Sorted results | Done | POSIX requirement |
 
-**Example**:
-```bash
-vsh> ls -la | grep ".txt"
-vsh> cat file.txt | wc -l
-```
+### Milestone 6: Quote Processing — COMPLETE
 
-**Verification**:
-- Prove: Pipe composition correctness
-- Prove: Resource cleanup guarantees
-- Prove: No data loss in pipes
+| Feature | Status | Implementation |
+|---------|--------|---------------|
+| Single quotes `'...'` | Done | All literal |
+| Double quotes `"..."` | Done | Expansion allowed |
+| Backslash escapes | Done | `$`, `` ` ``, `"`, `\`, newline in double quotes |
+| Unclosed quote detection | Done | |
+| Line continuation | Done | |
 
----
+### Milestone 7: Command Substitution — COMPLETE
 
-### **Milestone 4: Variables** (3-4 months)
-**Goal**: Environment and shell variables
+| Feature | Status | Implementation |
+|---------|--------|---------------|
+| `$(cmd)` | Done | `expand_command_substitution()` |
+| `` `cmd` `` (backticks) | Done | |
+| Nested `$(echo $(pwd))` | Done | Depth tracking |
+| Trailing newline stripping | Done | POSIX behavior |
 
-**Features**:
-- Variable assignment (`VAR=value`)
-- Variable expansion (`$VAR`, `${VAR}`)
-- Environment variables (`export`, `env`)
-- Special variables (`$?`, `$#`, `$@`, `$$`)
+### Milestone 8: Arithmetic Expansion — COMPLETE
 
-**Example**:
-```bash
-vsh> NAME="world"
-vsh> echo "Hello $NAME"
-vsh> export PATH="/usr/bin:$PATH"
-```
+| Feature | Status | Implementation |
+|---------|--------|---------------|
+| `$((expr))` | Done | Recursive descent parser in `arith.rs` |
+| `+`, `-`, `*`, `/`, `%` | Done | |
+| `**` (exponentiation) | Done | Beyond POSIX, right-associative |
+| Bitwise `&`, `\|`, `^`, `~`, `<<`, `>>` | Done | Shift range validated (fixed 2026-02-12) |
+| Comparison operators | Done | |
+| Logical `&&`, `\|\|`, `!` | Done | Short-circuit |
+| Parentheses | Done | |
+| Variable references | Done | |
+| Division by zero | Done | Returns error |
 
-**Verification**:
-- Model: Environment as map in Coq
-- Prove: Variable substitution correctness
-- Prove: export visibility semantics
+### Milestone 9: Control Structures — NOT STARTED
 
----
+**This is the single biggest gap preventing practical shell use.**
 
-### **Milestone 5: Glob Expansion** (2 months)
-**Goal**: Filename pattern matching
+| Feature | Status |
+|---------|--------|
+| `if`/`then`/`else`/`elif`/`fi` | Not implemented |
+| `while`/`do`/`done` | Not implemented |
+| `until`/`do`/`done` | Not implemented |
+| `for`/`in`/`do`/`done` | Not implemented |
+| `case`/`esac` | Not implemented |
+| `select` (bashism) | Not implemented |
 
-**Features**:
-- `*` (match any string)
-- `?` (match single char)
-- `[...]` (character class)
-- `[!...]` (negated class)
+No traces of control structure parsing exist in the codebase.
 
-**Example**:
-```bash
-vsh> ls *.txt
-vsh> rm test-?.log
-vsh> cat [A-Z]*.md
-```
+### Milestone 10: Job Control — PARTIAL
 
-**Verification**:
-- Prove: Glob expansion matches POSIX spec
-- Prove: No unintended file matches
-- Prove: Handles special chars correctly
+| Feature | Status | Implementation |
+|---------|--------|---------------|
+| Background `&` | Done | `Command::External` with `background: true` |
+| `jobs` | Done | `Command::Jobs` |
+| `fg` | Done | `Command::Fg` |
+| `bg` | Done | `Command::Bg` |
+| `kill` | Done | `Command::Kill` |
+| Job specs `%1`, `%+`, `%-`, `%name`, `%?pattern` | Done | `job.rs` |
+| **SIGCHLD handler** | **Not implemented** | Job states not auto-updated |
+| **Ctrl+Z (SIGTSTP)** | **Not implemented** | Cannot suspend foreground jobs |
+| **Process groups** | **Not implemented** | |
 
----
+### Milestone 11: Shell Builtins — PARTIAL
 
-### **Milestone 6: Quote Processing** (2 months)
-**Goal**: String parsing with escapes
+**Implemented**:
+`cd`, `pwd`, `ls`, `mkdir`, `rmdir`, `touch`, `rm`, `exit`/`quit`, `export`,
+`test`/`[`, `[[`, `jobs`, `fg`, `bg`, `kill`, `undo`, `redo`, `history`,
+`begin`/`commit`/`rollback`, `graph`, `proofs`
 
-**Features**:
-- Double quotes (`"..."` - expansion allowed)
-- Single quotes (`'...'` - literal)
-- Backslash escapes (`\n`, `\t`, `\\`)
-- Quote nesting rules
+**NOT implemented** (POSIX-required):
+`echo`, `printf`, `read`, `set`, `unset`, `readonly`, `alias`/`unalias`,
+`source`/`.`, `exec`, `eval`, `trap`, `true`/`false`, `type`, `command`,
+`hash`, `umask`, `wait`, `getopts`, `shift`, `break`, `continue`, `return`,
+`local`
 
-**Example**:
-```bash
-vsh> echo "Hello $NAME"
-vsh> echo 'Literal $NAME'
-vsh> echo "Quote: \"nested\""
-```
+### Milestone 12: Functions — NOT STARTED
 
-**Verification**:
-- Prove: Parser handles all quote combinations
-- Prove: No injection vulnerabilities
-- Prove: Escape sequences correct
+No function definition or calling syntax exists in the parser.
 
----
+### Milestone 13: Shell Scripts — NOT STARTED
 
-### **Milestone 7: Command Substitution** (2-3 months)
-**Goal**: Nested command execution
+No `.sh` file execution, no shebang handling.
 
-**Features**:
-- Backticks (`` `cmd` ``)
-- Modern syntax (`$(cmd)`)
-- Nested substitution
-- Exit status propagation
+### Milestone 14: Advanced Features — PARTIAL
 
-**Example**:
-```bash
-vsh> echo "Files: $(ls)"
-vsh> date=$(date +%Y-%m-%d)
-```
-
-**Verification**:
-- Prove: Substitution precedence rules
-- Prove: No code injection
-- Prove: Resource limits enforced
-
----
-
-### **Milestone 8: Arithmetic** (1-2 months)
-**Goal**: Integer math in shell
-
-**Features**:
-- Arithmetic expansion (`$((expr))`)
-- Operators: `+`, `-`, `*`, `/`, `%`
-- Comparisons: `<`, `>`, `<=`, `>=`, `==`, `!=`
-- Variables in expressions
-
-**Example**:
-```bash
-vsh> echo $((2 + 3))
-vsh> i=$((i + 1))
-```
-
-**Verification**:
-- Prove: Arithmetic evaluation correctness
-- Prove: Overflow handling
-- Prove: Division by zero safety
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Here documents | Done | `<<DELIM`, `<<-DELIM` |
+| Here strings | Done | `<<<word` |
+| Process substitution | Done | `<(cmd)`, `>(cmd)` via FIFOs |
+| Brace expansion | Done | Nested support |
+| Extended test `[[ ]]` | Done | Pattern matching |
+| Array variables | Done | Sparse indexed arrays |
+| Tilde expansion | **Partial** | Only `~/` in `cd` command |
+| Coprocesses | Not implemented | |
+| Associative arrays | Not implemented | |
 
 ---
 
-### **Milestone 9: Control Structures** (4-6 months)
-**Goal**: Conditional execution and loops
+## Critical Missing Features (by impact)
 
-**Features**:
-- `if/then/else/fi`
-- `while/do/done`
-- `for/in/do/done`
-- `case/esac`
-- Test conditions (`[`, `[[`, `test`)
-
-**Example**:
-```bash
-vsh> if [ -f file.txt ]; then
-       cat file.txt
-     fi
-
-vsh> for f in *.txt; do
-       echo "Processing $f"
-     done
-```
-
-**Verification**:
-- Prove: Control flow correctness
-- Prove: Loop termination guarantees
-- Prove: Condition evaluation matches POSIX
+1. **Control structures** — Blocks ALL script execution
+2. **Functions** — No `func() { ... }`
+3. **`echo` builtin** — Delegates to external `/usr/bin/echo`
+4. ~~**`2>&1` fd duplication**~~ — **Done** (tracks stdout file handle for `try_clone()`)
+5. **Word splitting (`$IFS`)** — Unquoted expansions not split
+6. ~~**Semicolons**~~ — **Done** (`cmd1; cmd2` splits and executes sequentially)
+7. **Tilde expansion** — Only works for `~/` in `cd`
+8. **`read` builtin** — Cannot read user input into variables
+9. **`set`/`unset`/`readonly`** — Cannot manage shell options
+10. **`source`/`.` and `eval`** — Cannot include scripts
 
 ---
 
-### **Milestone 10: Job Control** (3-4 months)
-**Goal**: Background processes and signals
+## What IS Verified
 
-**Features**:
-- Background execution (`&`)
-- Job list (`jobs`)
-- Foreground (`fg`)
-- Background (`bg`)
-- Signal handling (Ctrl+C, Ctrl+Z)
-
-**Example**:
-```bash
-vsh> long-running-cmd &
-[1] 12345
-vsh> jobs
-[1]+  Running    long-running-cmd &
-vsh> fg %1
-```
-
-**Verification**:
-- Prove: Process group semantics
-- Prove: Signal delivery correctness
-- Prove: No zombie processes
+- **200+ theorems** across 6 proof systems (Lean 4, Coq, Agda, Isabelle/HOL, Mizar, Z3)
+- **31 proof holes** remain (26 gaps, 3 axioms, 2 structural) — see `docs/PROOF_HOLES_AUDIT.md`
+- **Proven properties**: Reversibility, composition, independence, type preservation
+- **Correspondence**: 28 tests validate Rust matches Lean 4 theorems (~85% confidence)
+- **No mechanized extraction** — Lean 4 → Rust is via testing, not proven
 
 ---
 
-### **Milestone 11: Shell Builtins** (4-6 months)
-**Goal**: Internal commands
+## Test Coverage
 
-**Features**:
-- Directory: `cd`, `pwd`, `pushd`, `popd`
-- Variables: `export`, `unset`, `set`, `readonly`
-- Control: `exit`, `return`, `break`, `continue`
-- I/O: `echo`, `printf`, `read`
-- Utilities: `test`, `[`, `[[`, `true`, `false`
-- Jobs: `fg`, `bg`, `jobs`, `kill`, `wait`
-- Aliases: `alias`, `unalias`
-- Shell: `exec`, `eval`, `source`, `.`
+**541 tests passing, 0 failures, 14 ignored** (as of 2026-02-12)
 
-**Verification per builtin**:
-- Prove: Matches POSIX specification
-- Prove: Side effects are reversible (where applicable)
-
----
-
-### **Milestone 12: Functions** (2-3 months)
-**Goal**: User-defined commands
-
-**Features**:
-- Function definition
-- Parameter passing (`$1`, `$2`, ...)
-- Local variables
-- Return values
-- Recursion limits
-
-**Example**:
-```bash
-vsh> greet() {
-       echo "Hello $1"
-     }
-vsh> greet World
-```
-
-**Verification**:
-- Prove: Function call/return correctness
-- Prove: Variable scope rules
-- Prove: Stack overflow prevention
+| Suite | Count |
+|-------|-------|
+| Unit tests (lib) | 220 |
+| Correspondence | 28 |
+| Extended | 55 |
+| Integration | 35 + 10 |
+| Lean4 proptest | 16 |
+| Parameter expansion | 67 |
+| Property correspondence | 15 |
+| Property | 28 |
+| Security | 15 |
+| Doctests | 52 |
 
 ---
 
-### **Milestone 13: Shell Scripts** (3-4 months)
-**Goal**: Execute .sh files
+## Honest Assessment
 
-**Features**:
-- Shebang handling (`#!/usr/bin/env vsh`)
-- Script parsing
-- Source command (`.`, `source`)
-- Command-line arguments to scripts
+**Milestones 1-8** are substantially complete with the caveats noted above.
+The shell can execute external commands, pipe them together, redirect I/O,
+expand variables/globs/arithmetic/commands, and process quotes correctly.
 
-**Example**:
-```bash
-#!/usr/bin/env vsh
-# script.sh
-for arg in "$@"; do
-  echo "Arg: $arg"
-done
-```
+**Milestones 9-14** are the gap between "working REPL" and "usable shell."
+Control structures and functions are the critical path. Without them, vsh
+cannot run any real shell scripts.
 
-**Verification**:
-- Prove: Script execution matches interactive mode
-- Prove: Argument passing correctness
-- Prove: File permissions checked
+**Estimated effort to full POSIX compliance**: 12-18 months from current state
+(significantly less than the original 3-5 year estimate, since M1-M8 are done).
 
 ---
-
-### **Milestone 14: Advanced Features** (6-12 months)
-**Goal**: Complete POSIX compliance
-
-**Features**:
-- Tilde expansion (`~`, `~user`)
-- Brace expansion (`{a,b,c}`)
-- Process substitution (`<(cmd)`, `>(cmd)`)
-- Coprocesses
-- Arrays (if beyond POSIX)
-- Associative arrays
-- Extended test (`[[ ]]`)
-- Here documents (`<<EOF`)
-- Here strings (`<<<`)
-
----
-
-## Verification Strategy Per Milestone
-
-Each milestone follows this pattern:
-
-### 1. **Specification Phase**
-- Write formal semantics in Coq
-- Define abstract syntax tree (AST)
-- Model runtime state changes
-
-### 2. **Proof Phase**
-- Prove correctness theorems
-- Cross-validate in 2+ proof systems
-- Ensure composition with existing theorems
-
-### 3. **Extraction Phase**
-- Extract verified code to OCaml
-- Prove correspondence to Coq model
-- Integrate with FFI layer
-
-### 4. **Testing Phase**
-- POSIX conformance tests
-- Comparison with bash behavior
-- Fuzzing for edge cases
-
-### 5. **Integration Phase**
-- Merge with main codebase
-- Update all proof systems
-- Document verification boundaries
-
----
-
-## Timeline Summary
-
-| Milestone | Duration | Cumulative | Functionality |
-|-----------|----------|-----------|---------------|
-| 1. Simple Commands | 3-4 mo | 3-4 mo | Run external programs |
-| 2. Redirections | 2-3 mo | 5-7 mo | File I/O control |
-| 3. Pipelines | 2-3 mo | 7-10 mo | IPC between commands |
-| 4. Variables | 3-4 mo | 10-14 mo | State management |
-| 5. Glob Expansion | 2 mo | 12-16 mo | Pattern matching |
-| 6. Quote Processing | 2 mo | 14-18 mo | String handling |
-| 7. Command Subst | 2-3 mo | 16-21 mo | Nested execution |
-| 8. Arithmetic | 1-2 mo | 17-23 mo | Math in shell |
-| 9. Control Structures | 4-6 mo | 21-29 mo | if/while/for |
-| 10. Job Control | 3-4 mo | 24-33 mo | Background jobs |
-| 11. Shell Builtins | 4-6 mo | 28-39 mo | Internal commands |
-| 12. Functions | 2-3 mo | 30-42 mo | User-defined cmds |
-| 13. Shell Scripts | 3-4 mo | 33-46 mo | .sh file execution |
-| 14. Advanced | 6-12 mo | 39-58 mo | Full POSIX |
-
-**Total**: ~3-5 years for full POSIX compliance with verification
-
----
-
-## Interim Deliverables
-
-Each milestone produces a **usable shell** with incrementally more features:
-
-- **After M1**: Basic shell (better than `sh` from 1970s)
-- **After M3**: Useful for simple scripts
-- **After M6**: Most common shell patterns work
-- **After M9**: Feature-complete for most users
-- **After M14**: Full POSIX compatibility
-
----
-
-## Dependencies
-
-### Prerequisites for Each Milestone
-- Coq 8.18+ (proof development)
-- OCaml 5.0+ (extraction target)
-- Rust 1.75+ (CLI/FFI implementation)
-- 6 proof assistants (cross-validation)
-
-### Parallel Work Streams
-While working on shell features (Milestones 1-14), these run in parallel:
-
-1. **Extraction Gap Closure** (ongoing)
-   - Verify Coq → OCaml correspondence
-   - FFI layer verification
-
-2. **Performance Optimization** (after M6)
-   - Once syntax is stable
-   - Target: 5ms cold start
-
-3. **Security Audit** (after M11)
-   - External review
-   - Fuzzing campaigns
-
-4. **RMO/GDPR** (parallel to M7-10)
-   - Secure deletion proofs
-   - MAA framework extensions
-
----
-
-## Verification Boundaries
-
-### What WILL Be Proven
-- Command syntax parsing correctness
-- Execution semantics match POSIX spec
-- Filesystem operations preserve invariants
-- No resource leaks (fds, processes, memory)
-- Security properties (no injection, no privilege escalation)
-
-### What Will NOT Be Proven
-- External program behavior (unverified binaries)
-- Operating system kernel correctness
-- Hardware correctness
-- Timing/performance characteristics
-- Cryptographic primitives (use verified libraries)
-
----
-
-## Success Criteria
-
-### Per Milestone
-- ✅ All proofs compile in 6 systems
-- ✅ Extraction produces working code
-- ✅ POSIX conformance tests pass
-- ✅ No regression in previous milestones
-- ✅ Documentation complete
-
-### Final (M14)
-- ✅ Passes POSIX shell test suite
-- ✅ Runs real-world shell scripts
-- ✅ Performance competitive with bash
-- ✅ External security audit passed
-- ✅ Production deployment ready
-
----
-
-## Related Documents
-
-- `README.adoc` - Project overview
-- `STATE.scm` - Current project state
-- `ECOSYSTEM.scm` - Ecosystem relationships
-- `proofs/README.md` - Proof documentation
-- `docs/EXTRACTION_STRATEGY.md` - Extraction gap closure plan
-- `.claude/plans/magical-yawning-canyon.md` - Implementation plan
-
----
-
-**Status**: Roadmap approved, starting with immediate fixes and M1 planning
-
-**Last Updated**: 2026-01-28
 
 **Author**: Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>

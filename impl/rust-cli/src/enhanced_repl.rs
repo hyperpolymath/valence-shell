@@ -251,16 +251,29 @@ pub fn run(state: &mut ShellState) -> Result<()> {
                     continue;
                 }
 
-                // Execute command
-                match execute_line(state, input) {
-                    Ok(should_exit) => {
-                        if should_exit {
-                            break;
+                // Split on semicolons and execute each segment
+                let segments = parser::split_on_semicolons(input);
+                let mut should_break = false;
+                for segment in segments {
+                    let segment = segment.trim();
+                    if segment.is_empty() || segment.starts_with('#') {
+                        continue;
+                    }
+                    match execute_line(state, segment) {
+                        Ok(should_exit) => {
+                            if should_exit {
+                                should_break = true;
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("{} {}", Color::Red.paint("Error:"), e);
+                            // POSIX: continue executing remaining commands after error
                         }
                     }
-                    Err(e) => {
-                        eprintln!("{} {}", Color::Red.paint("Error:"), e);
-                    }
+                }
+                if should_break {
+                    break;
                 }
             }
             Ok(Signal::CtrlD) => {
