@@ -980,7 +980,7 @@ fn prop_logical_and_short_circuit() {
         let cmd = parse_command(&cmd_str).unwrap();
 
         // Execute
-        let mut state = ShellState::new(temp.path()).unwrap();
+        let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
         let _ = cmd.execute(&mut state);
 
         // The directory should NOT exist (mkdir didn't run due to short-circuit)
@@ -1017,7 +1017,7 @@ fn prop_logical_or_short_circuit() {
         let cmd = parse_command(&cmd_str).unwrap();
 
         // Execute
-        let mut state = ShellState::new(temp.path()).unwrap();
+        let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
         let _ = cmd.execute(&mut state);
 
         // The second directory should NOT exist (mkdir didn't run due to short-circuit)
@@ -1030,31 +1030,29 @@ fn prop_logical_or_short_circuit() {
 /// Quoted patterns should not be expanded even if they match files
 #[test]
 fn prop_quote_prevents_glob() {
-    proptest!(|()| {
-        use vsh::quotes::parse_quotes;
-        use vsh::quotes::QuoteState;
+    use vsh::quotes::parse_quotes;
+    use vsh::quotes::QuoteState;
 
-        // Test various quoted glob patterns
-        let test_cases = vec![
-            ("'*.txt'", true),  // Single quotes - no expansion
-            ("\"*.txt\"", true),  // Double quotes - no expansion
-            ("*.txt", false),   // Unquoted - should expand
-            ("'[abc]'", true),  // Bracket glob in quotes
-            ("'{1,2,3}'", true), // Brace expansion in quotes
-        ];
+    // Test various quoted glob patterns
+    let test_cases = vec![
+        ("'*.txt'", true),  // Single quotes - no expansion
+        ("\"*.txt\"", true),  // Double quotes - no expansion
+        ("*.txt", false),   // Unquoted - should expand
+        ("'[abc]'", true),  // Bracket glob in quotes
+        ("'{1,2,3}'", true), // Brace expansion in quotes
+    ];
 
-        for (input, should_be_quoted) in test_cases {
-            let segments = parse_quotes(input).unwrap();
+    for (input, should_be_quoted) in test_cases {
+        let segments = parse_quotes(input).unwrap();
 
-            if should_be_quoted {
-                // At least one segment should be quoted
-                let has_quoted = segments.iter().any(|seg| {
-                    !matches!(seg.state, QuoteState::Unquoted)
-                });
-                prop_assert!(has_quoted, "Pattern {} should have quoted segments", input);
-            }
+        if should_be_quoted {
+            // At least one segment should be quoted
+            let has_quoted = segments.iter().any(|seg| {
+                !matches!(seg.state, QuoteState::Unquoted)
+            });
+            assert!(has_quoted, "Pattern {} should have quoted segments", input);
         }
-    });
+    }
 }
 
 /// Property: Glob expansion is deterministic
@@ -1075,8 +1073,8 @@ fn prop_glob_deterministic() {
         use vsh::glob::expand_glob;
         let pattern = format!("{}/*.txt", temp.path().to_string_lossy());
 
-        let expansion1 = expand_glob(&pattern).unwrap();
-        let expansion2 = expand_glob(&pattern).unwrap();
+        let expansion1 = expand_glob(&pattern, temp.path()).unwrap();
+        let expansion2 = expand_glob(&pattern, temp.path()).unwrap();
 
         prop_assert_eq!(expansion1, expansion2, "Glob expansion should be deterministic");
     });

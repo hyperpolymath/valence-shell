@@ -22,7 +22,7 @@ use vsh::state::ShellState;
 #[test]
 fn security_no_command_injection_via_path() {
     let temp = TempDir::new().unwrap();
-    let mut state = ShellState::new(temp.path()).unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Attempt command injection via path
     let malicious_paths = vec![
@@ -77,7 +77,7 @@ fn security_no_shell_metacharacter_execution() {
 #[test]
 fn security_path_traversal_protection() {
     let temp = TempDir::new().unwrap();
-    let mut state = ShellState::new(temp.path()).unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Attempt path traversal
     let traversal_attempts = vec![
@@ -110,7 +110,7 @@ fn security_path_traversal_protection() {
 #[test]
 fn security_absolute_path_handling() {
     let temp = TempDir::new().unwrap();
-    let mut state = ShellState::new(temp.path()).unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Attempt to use absolute paths
     let result = vsh::commands::mkdir(&mut state, "/tmp/escape", true);
@@ -136,7 +136,7 @@ fn security_absolute_path_handling() {
 #[test]
 fn security_null_byte_injection() {
     let temp = TempDir::new().unwrap();
-    let mut state = ShellState::new(temp.path()).unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Null byte injection attempts
     let null_byte_paths = vec![
@@ -161,7 +161,7 @@ fn security_null_byte_injection() {
 #[test]
 fn security_extreme_path_length() {
     let temp = TempDir::new().unwrap();
-    let mut state = ShellState::new(temp.path()).unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Create extremely long path (PATH_MAX is typically 4096)
     let long_path = "a".repeat(10000);
@@ -181,7 +181,7 @@ fn security_extreme_path_length() {
 #[test]
 fn security_unicode_handling() {
     let temp = TempDir::new().unwrap();
-    let mut state = ShellState::new(temp.path()).unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Unicode in paths (valid on modern filesystems)
     let unicode_paths = vec![
@@ -209,7 +209,7 @@ fn security_unicode_handling() {
 #[test]
 fn security_operation_history_bounds() {
     let temp = TempDir::new().unwrap();
-    let mut state = ShellState::new(temp.path()).unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Create many operations
     for i in 0..1000 {
@@ -252,7 +252,7 @@ fn security_no_infinite_loops_in_parser() {
 #[test]
 fn security_sandbox_enforcement() {
     let temp = TempDir::new().unwrap();
-    let state = ShellState::new(temp.path()).unwrap();
+    let state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Root should be set to sandbox
     assert_eq!(state.root, fs::canonicalize(temp.path()).unwrap());
@@ -287,7 +287,7 @@ fn security_glob_expansion_bounded() {
 
     // Glob expansion should handle large results
     let pattern = format!("{}/*.txt", temp.path().display());
-    let result = vsh::glob::expand_glob(&pattern);
+    let result = vsh::glob::expand_glob(&pattern, temp.path());
 
     assert!(result.is_ok());
     let expanded = result.unwrap();
@@ -300,13 +300,13 @@ fn security_glob_expansion_bounded() {
 fn security_recursive_glob_bounded() {
     let temp = TempDir::new().unwrap();
 
-    // Create nested structure (10 levels, 5 dirs per level)
+    // Create nested structure (5 levels, 3 dirs per level = 363 total dirs)
     let mut paths = vec![temp.path().to_path_buf()];
 
-    for level in 0..10 {
+    for level in 0..5 {
         let mut new_paths = vec![];
         for parent in &paths {
-            for i in 0..5 {
+            for i in 0..3 {
                 let new_path = parent.join(format!("level{}_dir{}", level, i));
                 fs::create_dir(&new_path).unwrap();
                 new_paths.push(new_path);
@@ -315,8 +315,8 @@ fn security_recursive_glob_bounded() {
         paths = new_paths;
     }
 
-    // Total directories: 5^10 = 9,765,625 (too many!)
-    // Glob should have depth limit or timeout
+    // Total directories: 3^1 + 3^2 + ... + 3^5 = 363
+    // Glob should have depth limit or timeout for larger structures
 
     // This would be a recursive glob like: **/*
     // Should either limit depth or timeout gracefully

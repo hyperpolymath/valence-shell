@@ -2,11 +2,11 @@
 
 [package]
 name = "vsh"
-version = "1.0.0"
+version = "0.9.0"
 edition = "2021"
 authors = ["Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>"]
 description = "Valence Shell - A formally verified reversible shell"
-license = "PLMP-1.0-or-later"
+license = "PMPL-1.0-or-later"
 repository = "https://github.com/hyperpolymath/valence-shell"
 keywords = ["shell", "reversible", "formal-verification", "undo"]
 categories = ["command-line-utilities", "filesystem"]
@@ -79,18 +79,10 @@ tempfile = "3.8"
 criterion = "0.5"
 
 [features]
-# Optional Lean 4 runtime verification (precondition checking)
-# Adds ~5% overhead, provides mathematical guarantees on operation safety
-lean-runtime-checks = []
-
 # Enhanced REPL with syntax highlighting and tab completion (default)
 # Disable with --no-default-features for minimal build
 default = ["enhanced-repl"]
 enhanced-repl = []
-
-[build-dependencies]
-# Link to Zig FFI library
-cc = "1.0"
 
 [profile.release]
 lto = true
@@ -106,7 +98,7 @@ name = "vsh"
 path = "src/main.rs"
 
 [[bench]]
-name = "lean_verification_overhead"
+name = "operation_benchmarks"
 harness = false
 
 [[bench]]

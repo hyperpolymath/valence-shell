@@ -1,0 +1,101 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+name: ECHIDNA Validation
+
+on:
+  push:
+    paths:
+      - 'proofs/**'
+      - 'impl/rust-cli/src/**'
+      - 'impl/rust-cli/tests/**'
+      - 'scripts/validate-with-echidna.sh'
+      - '.github/workflows/echidna-validation.yml'
+  pull_request:
+    paths:
+      - 'proofs/**'
+      - 'impl/rust-cli/**'
+
+permissions: read-all
+
+jobs:
+  echidna-verify:
+    name: ECHIDNA Proof Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7  # stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5  # v2
+        with:
+          workspaces: impl/rust-cli
+
+      - name: Build ECHIDNA from source
+        run: |
+          git clone --depth 1 https://github.com/hyperpolymath/echidna.git /tmp/echidna
+          cd /tmp/echidna
+          cargo build --release --bin echidna
+          echo "/tmp/echidna/target/release" >> $GITHUB_PATH
+
+      - name: Verify ECHIDNA available
+        run: echidna list-provers
+
+      - name: Run ECHIDNA validation pipeline
+        run: bash scripts/validate-with-echidna.sh --verbose
+        env:
+          ECHIDNA_BIN: /tmp/echidna/target/release/echidna
+
+  correspondence:
+    name: Lean 4 ↔ Rust Correspondence
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7  # stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5  # v2
+        with:
+          workspaces: impl/rust-cli
+
+      - name: Run correspondence tests
+        working-directory: impl/rust-cli
+        run: cargo test --test correspondence_tests --verbose
+
+      - name: Run property correspondence tests
+        working-directory: impl/rust-cli
+        run: cargo test --test property_tests --verbose
+
+      - name: Run security tests
+        working-directory: impl/rust-cli
+        run: cargo test --test security_tests --verbose
+
+      - name: Count proof holes
+        run: |
+          echo "=== Proof Hole Audit ==="
+          echo ""
+          echo "--- Lean 4 (sorry) ---"
+          grep -rn "sorry" proofs/lean4/ || echo "(none)"
+          echo ""
+          echo "--- Coq (Admitted) ---"
+          grep -rn "Admitted" proofs/coq/ || echo "(none)"
+          echo ""
+          echo "--- Agda (postulate) ---"
+          grep -rn "postulate" proofs/agda/ || echo "(none)"
+          echo ""
+          LEAN_HOLES=$(grep -r "sorry" proofs/lean4/ 2>/dev/null | wc -l || echo 0)
+          COQ_HOLES=$(grep -r "Admitted" proofs/coq/ 2>/dev/null | wc -l || echo 0)
+          AGDA_HOLES=$(grep -r "postulate" proofs/agda/ 2>/dev/null | wc -l || echo 0)
+          TOTAL=$((LEAN_HOLES + COQ_HOLES + AGDA_HOLES))
+          echo "Total proof holes: $TOTAL (Lean: $LEAN_HOLES, Coq: $COQ_HOLES, Agda: $AGDA_HOLES)"
+          echo ""
+          if [ "$TOTAL" -gt 45 ]; then
+            echo "WARNING: Proof holes increased beyond baseline (41). Investigate."
+            exit 1
+          fi

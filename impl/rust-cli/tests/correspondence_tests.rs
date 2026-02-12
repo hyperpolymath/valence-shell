@@ -500,16 +500,16 @@ fn test_undo_correspondence() -> Result<()> {
 
     // Initial state
     touch(&mut state, "file1.txt", false)?;
-    let history_len_before = state.operation_history().len();
+    let history_len_before = state.history.len();
 
     // Perform operation
     mkdir(&mut state, "new_dir", false)?;
     assert!(state.resolve_path("new_dir").exists());
-    let history_len_after = state.operation_history().len();
+    let history_len_after = state.history.len();
     assert_eq!(history_len_after, history_len_before + 1);
 
     // Undo should restore
-    state.undo()?;
+    vsh::commands::undo(&mut state, 1, false)?;
     assert!(!state.resolve_path("new_dir").exists());
     assert!(state.resolve_path("file1.txt").exists());
 
@@ -527,11 +527,11 @@ fn test_redo_correspondence() -> Result<()> {
     assert!(state.resolve_path("test_dir").exists());
 
     // Undo
-    state.undo()?;
+    vsh::commands::undo(&mut state, 1, false)?;
     assert!(!state.resolve_path("test_dir").exists());
 
     // Redo
-    state.redo()?;
+    vsh::commands::redo(&mut state, 1, false)?;
     assert!(state.resolve_path("test_dir").exists());
 
     Ok(())
@@ -554,9 +554,9 @@ fn test_undo_redo_cycles() -> Result<()> {
     assert!(state.resolve_path("file.txt").exists());
 
     // Undo all
-    state.undo()?; // undo touch
-    state.undo()?; // undo mkdir dir2
-    state.undo()?; // undo mkdir dir1
+    vsh::commands::undo(&mut state, 1, false)?; // undo touch
+    vsh::commands::undo(&mut state, 1, false)?; // undo mkdir dir2
+    vsh::commands::undo(&mut state, 1, false)?; // undo mkdir dir1
 
     // None exist
     assert!(!state.resolve_path("dir1").exists());
@@ -564,9 +564,9 @@ fn test_undo_redo_cycles() -> Result<()> {
     assert!(!state.resolve_path("file.txt").exists());
 
     // Redo all
-    state.redo()?; // redo mkdir dir1
-    state.redo()?; // redo mkdir dir2
-    state.redo()?; // redo touch
+    vsh::commands::redo(&mut state, 1, false)?; // redo mkdir dir1
+    vsh::commands::redo(&mut state, 1, false)?; // redo mkdir dir2
+    vsh::commands::redo(&mut state, 1, false)?; // redo touch
 
     // All exist again
     assert!(state.resolve_path("dir1").exists());
@@ -674,15 +674,15 @@ fn test_variables_in_redirections() -> Result<()> {
     state.set_variable("OUTFILE", "test_output.txt");
 
     // Verify variable expansion works
-    let expanded = crate::parser::expand_variables("$OUTFILE", &state);
+    let expanded = vsh::parser::expand_variables("$OUTFILE", &state);
     assert_eq!(expanded, "test_output.txt");
 
     // Verify with braced form
-    let expanded2 = crate::parser::expand_variables("${OUTFILE}", &state);
+    let expanded2 = vsh::parser::expand_variables("${OUTFILE}", &state);
     assert_eq!(expanded2, "test_output.txt");
 
     // Test that resolve_path works with expanded variables
-    let path = state.resolve_path(&crate::parser::expand_variables("$OUTFILE", &state));
+    let path = state.resolve_path(&vsh::parser::expand_variables("$OUTFILE", &state));
     assert!(path.to_string_lossy().contains("test_output.txt"));
 
     Ok(())

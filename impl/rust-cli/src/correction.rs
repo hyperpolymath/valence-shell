@@ -127,10 +127,10 @@ fn get_all_commands() -> Vec<String> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use vsh::correction::suggest_correction;
 ///
-/// // Typical typo
+/// // Typical typo (depends on system PATH)
 /// assert_eq!(suggest_correction("sl"), Some("ls".to_string()));
 ///
 /// // Command not found, no good match
@@ -164,9 +164,10 @@ pub fn suggest_correction(cmd: &str) -> Option<String> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use vsh::correction::suggest_corrections;
 ///
+/// // Depends on system PATH
 /// let suggestions = suggest_corrections("gti", 3);
 /// assert!(suggestions.contains(&"git".to_string()));
 /// ```

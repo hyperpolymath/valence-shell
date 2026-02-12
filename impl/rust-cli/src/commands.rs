@@ -467,7 +467,7 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
 
         let new_op = Operation::new(op.op_type, op.path.clone(), None);
         let new_id = new_op.id;
-        state.record_operation(new_op);
+        state.record_redo_operation(new_op);
 
         println!(
             "{} {} {}",

@@ -333,6 +333,30 @@ impl ShellState {
         }
     }
 
+    /// Record an operation from a redo without clearing the redo stack.
+    ///
+    /// Unlike [`record_operation`], this preserves remaining redo entries
+    /// so that multiple sequential redos work correctly.
+    pub fn record_redo_operation(&mut self, mut op: Operation) {
+        if let Some(ref mut txn) = self.active_transaction {
+            op.transaction_id = Some(txn.id);
+            txn.operations.push(op.id);
+        }
+
+        self.history.push(op);
+        self.enforce_history_limit();
+
+        // Persist state - warn on failure but don't abort
+        if let Err(e) = self.save() {
+            eprintln!(
+                "{} Failed to save state: {}",
+                "Warning:".bright_yellow(),
+                e
+            );
+            eprintln!("Redo succeeded but may not persist across restarts");
+        }
+    }
+
     /// Enforce history size limit by removing oldest operations
     ///
     /// When history exceeds max_history_size, removes the oldest operations.
