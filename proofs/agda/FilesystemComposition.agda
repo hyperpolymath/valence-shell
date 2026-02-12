@@ -62,37 +62,107 @@ data AllReversible : List Operation → Filesystem → Set where
     AllReversible ops (applyOp op fs) →
     AllReversible (op ∷ ops) fs
 
--- Helper: rmdir-mkdir reversibility (symmetric to mkdir-rmdir)
-postulate
-  rmdir-mkdir-reversible : ∀ (p : Path) (fs : Filesystem) →
-    RmdirPrecondition p fs →
-    applyOp (mkdirOp p) (applyOp (rmdirOp p) fs) ≡ fs
+-- NOTE: The reverse-direction reversibility theorems (rmdir→mkdir, delete→create)
+-- require that the original node had defaultPerms, because mkdir/createFile always
+-- create nodes with defaultPerms. This is a known model limitation.
+-- In the Rust implementation, all operations use default permissions,
+-- so this constraint is always satisfied in practice.
 
--- Helper: deleteFile-createFile reversibility
-postulate
-  deleteFile-createFile-reversible : ∀ (p : Path) (fs : Filesystem) →
-    DeleteFilePrecondition p fs →
-    applyOp (createFileOp p) (applyOp (deleteFileOp p) fs) ≡ fs
+-- Helper constraint: directory at path has default permissions
+HasDefaultDirPerms : Path → Filesystem → Set
+HasDefaultDirPerms p fs = fs p ≡ just (mkFSNode Directory defaultPerms)
 
--- Single operation reversibility
+-- Helper constraint: file at path has default permissions
+HasDefaultFilePerms : Path → Filesystem → Set
+HasDefaultFilePerms p fs = fs p ≡ just (mkFSNode File defaultPerms)
+
+-- Helper: rmdir-mkdir reversibility (requires default perms)
+rmdir-mkdir-reversible : ∀ (p : Path) (fs : Filesystem) →
+  RmdirPrecondition p fs →
+  HasDefaultDirPerms p fs →
+  applyOp (mkdirOp p) (applyOp (rmdirOp p) fs) ≡ fs
+rmdir-mkdir-reversible p fs pre hperms = funext helper
+  where
+    helper : ∀ p' → mkdir p (rmdir p fs) p' ≡ fs p'
+    helper p' with p path-≟ p'
+    ... | yes refl with p path-≟ p
+        ... | yes _ = sym hperms
+        ... | no p≢p = ⊥-elim (p≢p refl)
+          where
+            open import Data.Empty using (⊥-elim)
+    ... | no p≢p' with p path-≟ p'
+        ... | yes p≡p' = ⊥-elim (p≢p' p≡p')
+          where
+            open import Data.Empty using (⊥-elim)
+        ... | no _ = refl
+
+-- Helper: deleteFile-createFile reversibility (requires default perms)
+deleteFile-createFile-reversible : ∀ (p : Path) (fs : Filesystem) →
+  DeleteFilePrecondition p fs →
+  HasDefaultFilePerms p fs →
+  applyOp (createFileOp p) (applyOp (deleteFileOp p) fs) ≡ fs
+deleteFile-createFile-reversible p fs pre hperms = funext helper
+  where
+    helper : ∀ p' → createFile p (deleteFile p fs) p' ≡ fs p'
+    helper p' with p path-≟ p'
+    ... | yes refl with p path-≟ p
+        ... | yes _ = sym hperms
+        ... | no p≢p = ⊥-elim (p≢p refl)
+          where
+            open import Data.Empty using (⊥-elim)
+    ... | no p≢p' with p path-≟ p'
+        ... | yes p≡p' = ⊥-elim (p≢p' p≡p')
+          where
+            open import Data.Empty using (⊥-elim)
+        ... | no _ = refl
+
+-- Default-perms witness for reverse operations.
+-- mkdir/createFile always create with defaultPerms, so:
+-- - Forward mkdir/createFile: reverse (rmdir/delete) doesn't need perms witness
+-- - Forward rmdir/deleteFile: reverse (mkdir/create) needs original to have had defaultPerms
+-- In the Rust implementation, all nodes use default permissions, so this always holds.
+data HasDefaultPerms (op : Operation) (fs : Filesystem) : Set where
+  mkdirPerms : ∀ {p} → op ≡ mkdirOp p → HasDefaultPerms op fs
+  createFilePerms : ∀ {p} → op ≡ createFileOp p → HasDefaultPerms op fs
+  rmdirPerms : ∀ {p} → op ≡ rmdirOp p → HasDefaultDirPerms p fs → HasDefaultPerms op fs
+  deleteFilePerms : ∀ {p} → op ≡ deleteFileOp p → HasDefaultFilePerms p fs → HasDefaultPerms op fs
+
+-- Extended Reversible: includes default-perms witness
+record ReversibleDP (op : Operation) (fs : Filesystem) : Set where
+  field
+    precondition : opPrecondition op fs
+    reversePrecondition : opPrecondition (reverseOp op) (applyOp op fs)
+    defaultPerms : HasDefaultPerms op fs
+
+-- Single operation reversibility (with default-perms constraint)
 singleOpReversible : ∀ (op : Operation) (fs : Filesystem) →
-  Reversible op fs →
+  ReversibleDP op fs →
   applyOp (reverseOp op) (applyOp op fs) ≡ fs
 singleOpReversible (mkdirOp p) fs rev =
-  mkdir-rmdir-reversible p fs (Reversible.precondition rev)
-singleOpReversible (rmdirOp p) fs rev =
-  rmdir-mkdir-reversible p fs (Reversible.precondition rev)
+  mkdir-rmdir-reversible p fs (ReversibleDP.precondition rev)
+singleOpReversible (rmdirOp p) fs rev with ReversibleDP.defaultPerms rev
+... | rmdirPerms refl hperms =
+  rmdir-mkdir-reversible p fs (ReversibleDP.precondition rev) hperms
 singleOpReversible (createFileOp p) fs rev =
-  createFile-deleteFile-reversible p fs (Reversible.precondition rev)
-singleOpReversible (deleteFileOp p) fs rev =
-  deleteFile-createFile-reversible p fs (Reversible.precondition rev)
+  createFile-deleteFile-reversible p fs (ReversibleDP.precondition rev)
+singleOpReversible (deleteFileOp p) fs rev with ReversibleDP.defaultPerms rev
+... | deleteFilePerms refl hperms =
+  deleteFile-createFile-reversible p fs (ReversibleDP.precondition rev) hperms
 
--- Main composition theorem
+-- All operations in sequence are reversible (with default perms)
+data AllReversibleDP : List Operation → Filesystem → Set where
+  nilReversibleDP : ∀ {fs} → AllReversibleDP [] fs
+  consReversibleDP : ∀ {op ops fs} →
+    ReversibleDP op fs →
+    AllReversibleDP ops (applyOp op fs) →
+    AllReversibleDP (op ∷ ops) fs
+
+-- Main composition theorem (with default-perms constraint)
 operationSequenceReversible : ∀ (ops : List Operation) (fs : Filesystem) →
-  AllReversible ops fs →
+  AllReversibleDP ops fs →
   applySequence (reverseSequence ops) (applySequence ops fs) ≡ fs
-operationSequenceReversible [] fs nilReversible = refl
-operationSequenceReversible (op ∷ ops) fs (consReversible {op} {ops} {fs} rev revRest) =
+operationSequenceReversible [] fs nilReversibleDP = refl
+operationSequenceReversible (op ∷ ops) fs (consReversibleDP {op} {ops} {fs} rev revRest) =
   let fs' = applyOp op fs
       ih = operationSequenceReversible ops fs' revRest
       single = singleOpReversible op fs rev

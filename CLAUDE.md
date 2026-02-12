@@ -56,26 +56,27 @@ The Rust CLI is a functional interactive shell with these features:
 | Extended | 55 | Advanced features |
 | Integration | 35 | End-to-end |
 | Integration (extra) | 10 | Edge cases |
+| Lean4 proptest correspondence | 16 | Property-based Lean validation |
 | Parameter expansion | 67 | Variable/parameter tests |
 | Property correspondence | 15 | Property-based Lean validation |
 | Property | 28 | General property tests |
 | Security | 15 | Injection, traversal, validation |
 | Doctests | 52 | Inline examples |
-| **Total passing** | **525** | **0 failures** |
-| Ignored (stress) | 15 | Run manually with `--ignored` |
+| **Total passing** | **541** | **0 failures** |
+| Ignored (stress+1) | 14 | Run manually with `--ignored` |
 
 ### Codebase Metrics
 
 - 15,720 lines of Rust across 30 source files
 - ~200+ formal theorems across 6 proof systems
-- 41 proof holes across 17 proof files (28 gaps, 3 axioms, 10 structural)
+- 31 proof holes across 17 proof files (26 gaps, 3 axioms, 2 structural)
 
 ## Critical Issues
 
 ### Critical Priority
 
 1. **No mechanized Lean -> Rust correspondence** — testing only, ~85% confidence
-2. **28 real proof gaps** across 17 files (plus 3 axioms, 10 structural — see `docs/PROOF_HOLES_AUDIT.md`)
+2. **26 real proof gaps** across 17 files (plus 3 axioms, 2 structural — see `docs/PROOF_HOLES_AUDIT.md`)
 3. **NOT production-ready** — research prototype only
 
 ### High Priority
@@ -113,6 +114,18 @@ The Rust CLI is a functional interactive shell with these features:
 - **Redo bug**: `record_operation()` cleared redo stack, breaking multi-step redo. Added `record_redo_operation()` in `state.rs`
 - **Glob POSIX compliance**: `expand_glob` now uses `require_literal_leading_dot: true` (hidden files not matched by `*`)
 - **4 doctest fixes**: Missing imports, PATH-dependent assertions
+- **Append redirection truncation**: `>>` used `File::create()` (truncates!) instead of `OpenOptions::append()` in `external.rs`
+- **`2>` tokenization**: `file2>out` incorrectly split as `file [2>] out` instead of `file2 [>] out` — now only treats `2>` as error redirect when `2` starts a new token
+- **Logical operator precedence**: `a && b || c` parsed as `a && (b || c)` — fixed to left-to-right `(a && b) || c` via `rposition`
+- **Shift overflow panic**: `$((1 << 64))` panicked — now returns error for shift counts >= 64
+- **Path traversal**: `resolve_path("../../etc/passwd")` could escape sandbox — now normalizes `..` components and clamps to root
+- **Version mismatch**: `main.rs` reported version 1.0.0 and "256 proofs" — fixed to 0.9.0 and "200+ theorems"
+
+### Dead Code Removed
+- `QuotedWord::with_quote_type()` — never called (parser.rs)
+- `RedirectSetup::get_file()` — never called (redirection.rs)
+- `JobTable::get_job_mut()` — never called (job.rs)
+- `JobTable::cleanup_done_jobs()` — never called (job.rs)
 
 ### Documentation Fixes
 - Downgraded version from 1.0.0 to 0.9.0 (honest)
@@ -207,20 +220,21 @@ vsh::parser::expand_variables(&input, &state);
 
 ### Immediate Priorities
 
-1. **Close 28 proof gaps** (prioritized in `docs/PROOF_HOLES_AUDIT.md`)
-2. **Remove dead code**: `lean_ffi.rs`, `daemon_client.rs`
-3. **Fix git author** on future commits (currently `Test <test@example.com>`)
+1. **Close remaining 31 proof gaps** (prioritized in `docs/PROOF_HOLES_AUDIT.md`)
+2. **Fix git author** on future commits (currently `Test <test@example.com>`)
+3. **Rewrite `docs/POSIX_COMPLIANCE.md`** — severely outdated (see POSIX audit notes below)
 
 ### This Week
 
 1. Set up Echidna property-based validation pipeline
 2. Begin mechanized Lean -> Rust correspondence (even partial)
-3. Audit Sonnet's mega-commit for correctness beyond test files
+3. Implement `2>&1` fd duplication (currently a TODO no-op in `external.rs`)
 
 ### This Month
 
 1. Achieve 95%+ correspondence confidence via property testing
-2. Complete POSIX compliance for implemented features
+2. Implement control structures (`if`/`then`/`else`/`fi`, `while`/`for`, `case`)
+3. Implement `echo` builtin and word splitting (`$IFS`)
 3. Begin Idris2 extraction path for v2.0
 
 ### What NOT to Do
@@ -271,8 +285,28 @@ PMPL-1.0-or-later (Palimpsest License)
 
 ---
 
-**Last Updated**: 2026-02-12 (Opus honest audit and fixes)
+## POSIX Compliance Audit Notes (2026-02-12)
+
+`docs/POSIX_COMPLIANCE.md` is **severely outdated** — it claims nothing beyond filesystem
+syscalls is implemented, but the shell actually has: command parsing with full AST, pipelines,
+redirections (7 of 8 types), variables with parameter expansion, glob/brace expansion,
+command/process substitution, arithmetic expansion, quote processing, job control basics,
+test/[/[[ builtins, logical operators, and here documents. Milestones 1-8 from the roadmap
+are substantially complete.
+
+**Most critical missing POSIX features** (ranked by impact):
+1. Control structures (if/then/else/fi, while/for, case) — blocks all script execution
+2. Functions — no func() { ... } syntax
+3. echo builtin — delegates to external /usr/bin/echo
+4. 2>&1 fd duplication — falls back to Stdio::inherit() (TODO in external.rs:382)
+5. Word splitting ($IFS) — unquoted variable expansions not split
+6. Tilde expansion — only works for ~/ in cd command
+7. read builtin, set/unset/readonly, source/., eval, semicolons as separators
+
+---
+
+**Last Updated**: 2026-02-12 (Opus source audit, bug fixes, dead code removal)
 **Version**: 0.9.0
 **Status**: Advanced research prototype — NOT production-ready
-**Tests**: 525 passing, 0 failures, 15 ignored
+**Tests**: 541 passing, 0 failures, 14 ignored
 **Completion**: ~65%

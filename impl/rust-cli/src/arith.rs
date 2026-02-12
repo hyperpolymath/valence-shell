@@ -653,8 +653,20 @@ pub fn eval_arith(expr: &ArithExpr, state: &ShellState) -> Result<i64> {
                 ArithOp::BitAnd => Ok(lval & rval),
                 ArithOp::BitOr => Ok(lval | rval),
                 ArithOp::BitXor => Ok(lval ^ rval),
-                ArithOp::ShiftLeft => Ok(lval << rval),
-                ArithOp::ShiftRight => Ok(lval >> rval),
+                ArithOp::ShiftLeft => {
+                    if rval < 0 || rval >= 64 {
+                        Err(anyhow!("Shift count out of range: {}", rval))
+                    } else {
+                        Ok(lval << rval)
+                    }
+                }
+                ArithOp::ShiftRight => {
+                    if rval < 0 || rval >= 64 {
+                        Err(anyhow!("Shift count out of range: {}", rval))
+                    } else {
+                        Ok(lval >> rval)
+                    }
+                }
 
                 // Comparison (return 0 or 1)
                 ArithOp::Lt => Ok(if lval < rval { 1 } else { 0 }),

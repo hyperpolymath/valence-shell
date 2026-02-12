@@ -42,7 +42,7 @@
       (rust-cli
        (status . "working-prototype")
        (completion . 75)
-       (details . "v0.9.0 - Working shell with 525 tests passing (15 ignored). 15,720 lines across 30 source files. Features: pipelines, redirections, process substitution, arithmetic, here docs, job control, glob expansion, quote processing, test/[[ conditionals, variables. Dead code: lean_ffi.rs, daemon_client.rs. Redo bug FIXED (multi-redo now works). Glob POSIX hidden file behavior FIXED."))
+       (details . "v0.9.0 - Working shell with 541 tests passing (14 ignored). Features: pipelines, redirections, process substitution, arithmetic, here docs, job control, glob expansion, quote processing, test/[[ conditionals, variables. Bugs fixed: redo, glob hidden files, append truncation, 2> tokenization, logical op precedence, shift overflow, path traversal sandbox escape, version mismatch. Dead code removed: lean_ffi.rs, daemon_client.rs, 4 unused methods."))
 
       (elixir-impl
        (status . "stale")
@@ -99,12 +99,11 @@
     (blockers-and-issues
      (critical
       "NO mechanized Lean → Rust correspondence (manual testing only, 85% confidence)"
-      "41 proof holes across 17 proof files (28 gaps, 3 axioms, 10 structural — see docs/PROOF_HOLES_AUDIT.md)"
+      "31 proof holes across 17 proof files (26 gaps, 3 axioms, 2 structural — see docs/PROOF_HOLES_AUDIT.md). 10 holes closed in 2026-02-12 proof session."
       "NOT production-ready — research prototype only")
 
      (high
       "47/58 commits authored as Test <test@example.com> (Sonnet damage)"
-      "Dead code: lean_ffi.rs (library doesn't exist), daemon_client.rs (no daemon)"
       "No Echidna integration for automated verification")
 
      (medium
@@ -133,18 +132,25 @@
       "Fixed 4 pre-existing doctest failures (imports, PATH-dependent tests)"
       "Downgraded version from 1.0.0 to 0.9.0 (honest)"
       "Rewrote STATE.scm from inflated 1114-line mess to honest assessment"
-      "Rewrote ECOSYSTEM.scm with accurate status"))
+      "Rewrote ECOSYSTEM.scm with accurate status"
+      "Fixed append redirection truncation (>> used File::create instead of OpenOptions::append)"
+      "Fixed 2> tokenization (file2>out split wrong; now only treats 2> as redirect at token start)"
+      "Fixed logical operator precedence (position→rposition for left-to-right associativity)"
+      "Fixed shift overflow panic ($((1 << 64)) now returns error instead of panicking)"
+      "Fixed path traversal sandbox escape (resolve_path now normalizes .. and clamps to root)"
+      "Fixed version/proof count in main.rs (1.0.0→0.9.0, 256→200+)"
+      "Removed dead code: with_quote_type, get_file, get_job_mut, cleanup_done_jobs"
+      "Closed 10 proof holes across Lean 4, Coq, Agda (41→31)"))
 
     (critical-next-actions
      (immediate
-      "Close 54 proof holes or document which are intentional axioms"
-      "Remove dead code (lean_ffi.rs, daemon_client.rs)"
+      "Close remaining 31 proof holes or document which are intentional axioms"
       "Fix git author on future commits (not Test <test@example.com>)")
 
      (this-week
       "Set up Echidna property-based validation pipeline"
       "Begin mechanized Lean → Rust correspondence (even partial)"
-      "Audit Sonnet's v1.0.0 mega-commit for correctness")
+      "Rewrite POSIX_COMPLIANCE.md to reflect actual implementation state")
 
      (this-month
       "Achieve 95%+ correspondence confidence via property testing"

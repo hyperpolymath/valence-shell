@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # RSR-compliant .gitignore
 
 # OS & Editor
@@ -55,6 +55,14 @@ __pycache__/
 /.stack-work/
 /dist-newstyle/
 
+# Proof system artifacts
+*.vo
+*.vok
+*.vos
+*.glob
+*.agdai
+.lake/
+
 # Chapel
 *.chpl.tmp.*
 
@@ -68,6 +76,7 @@ secrets/
 # Test/Coverage
 /coverage/
 htmlcov/
+*.proptest-regressions
 
 # Logs
 *.log

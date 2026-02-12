@@ -95,7 +95,7 @@ jobs:
           TOTAL=$((LEAN_HOLES + COQ_HOLES + AGDA_HOLES))
           echo "Total proof holes: $TOTAL (Lean: $LEAN_HOLES, Coq: $COQ_HOLES, Agda: $AGDA_HOLES)"
           echo ""
-          if [ "$TOTAL" -gt 45 ]; then
-            echo "WARNING: Proof holes increased beyond baseline (41). Investigate."
+          if [ "$TOTAL" -gt 35 ]; then
+            echo "WARNING: Proof holes increased beyond baseline (31). Investigate."
             exit 1
           fi

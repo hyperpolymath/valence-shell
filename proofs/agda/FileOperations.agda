@@ -59,22 +59,15 @@ createFile-deleteFile-reversible : ∀ p fs →
   deleteFile p (createFile p fs) ≡ fs
 createFile-deleteFile-reversible p fs pre = funext helper
   where
+    open import Data.Empty using (⊥-elim)
+
     helper : ∀ p' → deleteFile p (createFile p fs) p' ≡ fs p'
     helper p' with p path-≟ p'
     ... | yes refl with p path-≟ p
-        ... | yes _ with CreateFilePrecondition.notExists pre
-            ... | notEx = ⊥-elim (notEx (FSNode.permissions node , prf))
-              where
-                open import Data.Empty using (⊥-elim)
-                postulate node : FSNode
-                postulate prf : fs p ≡ just node
+        ... | yes _ = not-path-exists-nothing (CreateFilePrecondition.notExists pre)
         ... | no p≢p = ⊥-elim (p≢p refl)
-          where
-            open import Data.Empty using (⊥-elim)
     ... | no p≢p' with p path-≟ p'
         ... | yes p≡p' = ⊥-elim (p≢p' p≡p')
-          where
-            open import Data.Empty using (⊥-elim)
         ... | no _ = refl
 
 -- Additional Theorems
@@ -90,12 +83,20 @@ createFile-preserves-other-paths p p' fs p≢p' with p path-≟ p'
 
 -- File Isolation Theorem
 
+-- File isolation: operations on p1 preserve existence of p2 (p1 ≠ p2)
 file-isolation : ∀ p1 p2 fs →
   ¬ (p1 ≡ p2) →
   pathExists p2 fs →
   pathExists p2 (createFile p1 fs) × pathExists p2 (deleteFile p1 fs)
 file-isolation p1 p2 fs p1≢p2 (node , prf) =
-  ((node , createFile-preserves p1≢p2) , (node , deleteFile-preserves p1≢p2))
+  ((node , createFile-preserves-other p1≢p2) , (node , deleteFile-preserves-other p1≢p2))
   where
-    postulate createFile-preserves : ¬ (p1 ≡ p2) → fs p2 ≡ createFile p1 fs p2
-    postulate deleteFile-preserves : ¬ (p1 ≡ p2) → fs p2 ≡ deleteFile p1 fs p2
+    createFile-preserves-other : ¬ (p1 ≡ p2) → fs p2 ≡ createFile p1 fs p2
+    createFile-preserves-other h = createFile-preserves-other-paths p1 p2 fs h
+
+    deleteFile-preserves-other : ¬ (p1 ≡ p2) → fs p2 ≡ deleteFile p1 fs p2
+    deleteFile-preserves-other h with p1 path-≟ p2
+    ... | yes p≡ = ⊥-elim (h p≡)
+      where
+        open import Data.Empty using (⊥-elim)
+    ... | no _ = refl

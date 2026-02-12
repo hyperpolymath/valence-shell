@@ -29,7 +29,7 @@ use vsh::repl as repl_impl;
 #[derive(Parser)]
 #[command(name = "vsh")]
 #[command(author = "Hyperpolymath")]
-#[command(version = "1.0.0")]
+#[command(version = "0.9.0")]
 #[command(about = "A formally verified reversible shell", long_about = None)]
 struct Cli {
     /// Enable verbose output showing proof references
@@ -197,7 +197,7 @@ fn print_banner() {
 ║    ╚═══╝  ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝ ║
 ║                                                               ║
 ║  The Thermodynamic Shell - Every operation is reversible     ║
-║  Backed by 256 formal proofs across 6 verification systems   ║
+║  Backed by 200+ formal theorems across 6 verification systems ║
 ╚═══════════════════════════════════════════════════════════╝
 "#
         .bright_blue()
