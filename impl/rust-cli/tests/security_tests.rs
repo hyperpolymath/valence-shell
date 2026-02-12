@@ -94,7 +94,7 @@ fn security_path_traversal_protection() {
         // Should either fail OR resolve to a safe path within sandbox
         if result.is_ok() {
             // If successful, verify the resolved path is within temp dir
-            let resolved = state.root.join(attempt);
+            let resolved = state.resolve_path(attempt);
             let canonical = fs::canonicalize(&resolved).unwrap();
 
             // Canonical path must start with temp.path()

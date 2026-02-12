@@ -133,42 +133,6 @@ impl JobTable {
         None
     }
 
-    /// Get mutable job by specification
-    pub fn get_job_mut(&mut self, spec: &str) -> Option<&mut Job> {
-        if spec.is_empty() {
-            return None;
-        }
-
-        if spec == "%%" || spec == "%+" {
-            let id = self.current_job_id?;
-            return self.jobs.iter_mut().find(|j| j.id == id);
-        }
-
-        if spec == "%-" {
-            let id = self.previous_job_id?;
-            return self.jobs.iter_mut().find(|j| j.id == id);
-        }
-
-        if let Some(num_str) = spec.strip_prefix('%') {
-            if let Ok(id) = num_str.parse::<usize>() {
-                return self.jobs.iter_mut().find(|j| j.id == id);
-            }
-
-            if !num_str.starts_with('?') {
-                return self.jobs.iter_mut().find(|j| {
-                    let cmd = j.command.split_whitespace().next().unwrap_or("");
-                    cmd.starts_with(num_str)
-                });
-            }
-
-            if let Some(pattern) = num_str.strip_prefix('?') {
-                return self.jobs.iter_mut().find(|j| j.command.contains(pattern));
-            }
-        }
-
-        None
-    }
-
     /// Remove job from table
     pub fn remove_job(&mut self, id: usize) {
         self.jobs.retain(|j| j.id != id);
@@ -223,18 +187,6 @@ impl JobTable {
         &self.jobs
     }
 
-    /// Remove all done jobs
-    pub fn cleanup_done_jobs(&mut self) {
-        let done_ids: Vec<usize> = self.jobs
-            .iter()
-            .filter(|j| j.state == JobState::Done)
-            .map(|j| j.id)
-            .collect();
-
-        for id in done_ids {
-            self.remove_job(id);
-        }
-    }
 }
 
 impl Default for JobTable {

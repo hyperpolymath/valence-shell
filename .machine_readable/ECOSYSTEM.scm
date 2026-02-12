@@ -27,7 +27,7 @@
     (reason . "Both implement MAA framework primitives")))
 
   (what-this-is
-   "Formally verified shell with ~200+ theorems across 6 proof systems (41 proof holes remain — see docs/PROOF_HOLES_AUDIT.md)"
+   "Formally verified shell with ~200+ theorems across 6 proof systems (31 proof holes remain — see docs/PROOF_HOLES_AUDIT.md)"
    "Advanced research prototype with working shell features (v0.9.0, ~65% complete)"
    "Functional shell with pipelines, redirections, variables, job control, process substitution"
    "Implementation of MAA (Mutually Assured Accountability) framework"

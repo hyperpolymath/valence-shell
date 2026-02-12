@@ -158,27 +158,29 @@ postulate
   funext : ∀ {A : Set} {B : A → Set} {f g : (x : A) → B x} →
            (∀ x → f x ≡ g x) → f ≡ g
 
+-- Helper: from ¬ pathExists, derive fs p ≡ nothing
+not-path-exists-nothing : ∀ {p : Path} {fs : Filesystem} →
+  ¬ pathExists p fs → fs p ≡ nothing
+not-path-exists-nothing {p} {fs} notEx with fs p
+... | nothing = refl
+... | just node = ⊥-elim (notEx (node , refl))
+  where
+    open import Data.Empty using (⊥-elim)
+
 mkdir-rmdir-reversible : ∀ p fs →
   MkdirPrecondition p fs →
   rmdir p (mkdir p fs) ≡ fs
 mkdir-rmdir-reversible p fs pre = funext helper
   where
+    open import Data.Empty using (⊥-elim)
+
     helper : ∀ p' → rmdir p (mkdir p fs) p' ≡ fs p'
     helper p' with p path-≟ p'
     ... | yes refl with p path-≟ p
-        ... | yes _ with MkdirPrecondition.notExists pre
-            ... | notEx = ⊥-elim (notEx (FSNode.permissions node , prf))
-              where
-                open import Data.Empty using (⊥-elim)
-                postulate node : FSNode
-                postulate prf : fs p ≡ just node
+        ... | yes _ = not-path-exists-nothing (MkdirPrecondition.notExists pre)
         ... | no p≢p = ⊥-elim (p≢p refl)
-          where
-            open import Data.Empty using (⊥-elim)
     ... | no p≢p' with p path-≟ p'
         ... | yes p≡p' = ⊥-elim (p≢p' p≡p')
-          where
-            open import Data.Empty using (⊥-elim)
         ... | no _ = refl
 
 -- Additional Theorems

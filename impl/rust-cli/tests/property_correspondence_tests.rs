@@ -312,23 +312,31 @@ proptest! {
         let temp = tempdir().unwrap();
         let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
-        // Create all directories
+        // Deduplicate paths to avoid EEXIST on repeated mkdir
+        let mut unique_paths: Vec<&String> = Vec::new();
         for path in &paths {
+            if !unique_paths.iter().any(|p| *p == path) {
+                unique_paths.push(path);
+            }
+        }
+
+        // Create all directories
+        for path in &unique_paths {
             mkdir(&mut state, path, false).unwrap();
         }
 
         // Verify all exist
-        for path in &paths {
+        for path in &unique_paths {
             prop_assert!(state.resolve_path(path).exists(), "path {} should exist", path);
         }
 
         // Delete all directories
-        for path in &paths {
+        for path in &unique_paths {
             rmdir(&mut state, path, false).unwrap();
         }
 
         // Verify none exist
-        for path in &paths {
+        for path in &unique_paths {
             prop_assert!(!state.resolve_path(path).exists(), "path {} should not exist", path);
         }
     }

@@ -506,11 +506,39 @@ impl ShellState {
     }
 
     /// Resolve a path relative to sandbox root
+    /// Prevents path traversal attacks via `..` components
     pub fn resolve_path(&self, path: &str) -> PathBuf {
-        if path.starts_with('/') {
+        let raw = if path.starts_with('/') {
             self.root.join(&path[1..])
         } else {
             self.root.join(path)
+        };
+
+        // Normalize path components to prevent traversal via ..
+        let mut normalized = PathBuf::new();
+        for component in raw.components() {
+            match component {
+                std::path::Component::ParentDir => {
+                    // Only pop if we're still within the sandbox root
+                    if normalized.starts_with(&self.root) && normalized != self.root {
+                        normalized.pop();
+                    }
+                    // If popping would escape root, silently clamp to root
+                }
+                std::path::Component::CurDir => {
+                    // Skip . components
+                }
+                other => {
+                    normalized.push(other);
+                }
+            }
+        }
+
+        // Final safety check: ensure result is within sandbox
+        if !normalized.starts_with(&self.root) {
+            self.root.clone()
+        } else {
+            normalized
         }
     }
 

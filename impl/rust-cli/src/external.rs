@@ -331,10 +331,20 @@ fn stdio_config_from_redirects(
 
     for redirect in redirects {
         match redirect {
-            Redirection::Output { file } | Redirection::Append { file } => {
+            Redirection::Output { file } => {
                 let target = state.resolve_path(file);
                 let file_handle = File::create(&target)
                     .with_context(|| format!("Failed to open output file: {}", target.display()))?;
+                stdout_cfg = Stdio::from(file_handle);
+            }
+
+            Redirection::Append { file } => {
+                let target = state.resolve_path(file);
+                let file_handle = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&target)
+                    .with_context(|| format!("Failed to open output file for append: {}", target.display()))?;
                 stdout_cfg = Stdio::from(file_handle);
             }
 

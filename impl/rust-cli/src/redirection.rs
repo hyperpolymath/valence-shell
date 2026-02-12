@@ -392,11 +392,6 @@ impl RedirectSetup {
         Ok(())
     }
 
-    /// Get file at index (for manual fd setup)
-    pub fn get_file(&mut self, index: usize) -> Option<&mut File> {
-        self.opened_files.get_mut(index)
-    }
-
     /// Record all modifications as undoable operations
     pub fn record_for_undo(self, state: &mut ShellState) -> Result<()> {
         use crate::state::{Operation, OperationType};

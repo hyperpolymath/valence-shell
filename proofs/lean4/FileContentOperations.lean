@@ -293,6 +293,27 @@ def truncateFile (p : Path) (size : Nat) (fs : FilesystemWithContent)
 
 -- Append/Truncate Reversibility
 
+/-- Helper: readFile after writeFile returns the written content -/
+theorem readFile_after_writeFile (p : Path) (content : FileContent)
+    (fs : FilesystemWithContent)
+    (hpre : WriteFilePrecondition p fs) :
+    readFile p (writeFile p content fs) = some content := by
+  unfold readFile writeFile
+  simp only [ite_true]
+  obtain ⟨node, hnode, htype, _⟩ := hpre
+  rw [hnode]
+  cases hn : node.nodeType with
+  | file => simp only [hn]
+  | directory => rw [hn] at htype; cases htype
+
+/-- Helper: String.take s.length on (s ++ t) returns s.
+    This is a standard property of string take/append.
+    Note: depends on Lean 4 stdlib String.take behavior. -/
+private theorem string_take_append_length (s t : String) :
+    (String.append s t).take s.length = s := by
+  sorry -- Requires Lean 4 String.take/append library lemma
+         -- Proof: take n chars of (s ++ t) where n = |s| = first |s| chars = s
+
 /-- Truncating to original size after append restores filesystem -/
 theorem append_truncate_reversible (p : Path) (data : FileContent)
     (fs : FilesystemWithContent)
@@ -300,12 +321,52 @@ theorem append_truncate_reversible (p : Path) (data : FileContent)
     (hpre : WriteFilePrecondition p fs)
     (hold : readFile p fs = some content) :
     truncateFile p content.length (appendFile p data fs) = fs := by
-  sorry
+  -- Strategy:
+  -- 1. appendFile writes (content ++ data) via writeFile
+  -- 2. truncateFile reads it back, truncates to content.length
+  -- 3. (content ++ data).take content.length = content (string_take_append_length)
+  -- 4. writeFile content (writeFile (content++data) fs) = fs (writeFileReversible)
+  unfold truncateFile appendFile
+  rw [hold]
+  -- Now goal: truncateFile reduces to reading the written content and truncating
+  have hread := readFile_after_writeFile p (String.append content data) fs hpre
+  rw [hread]
+  -- Goal: writeFile p ((content ++ data).take content.length) (writeFile p (content ++ data) fs) = fs
+  rw [string_take_append_length content data]
+  exact writeFileReversible p fs content (String.append content data) hpre hold
 
-/-- Truncating with empty content is equivalent to writing empty -/
-theorem truncate_to_zero_is_write_empty (p : Path) (fs : FilesystemWithContent) :
+/-- Well-formed filesystem: all file nodes have content -/
+def WellFormedContent (fs : FilesystemWithContent) : Prop :=
+  ∀ p node, fs p = some node → node.nodeType = FSNodeType.file →
+    ∃ c, node.nodeContent = some c
+
+/-- Truncating to 0 is writing empty (requires well-formedness).
+    Without WellFormedContent, the theorem is false: a file node with
+    nodeContent = none would make truncateFile a no-op but writeFile
+    would set content to some "". -/
+theorem truncate_to_zero_is_write_empty (p : Path) (fs : FilesystemWithContent)
+    (hwf : WellFormedContent fs) :
     truncateFile p 0 fs = writeFile p emptyContent fs := by
-  sorry
+  funext p'
+  unfold truncateFile writeFile readFile
+  by_cases h : p = p'
+  · subst h
+    simp only [ite_true]
+    cases hfs : fs p with
+    | none => simp [hfs]
+    | some node =>
+      cases hnt : node.nodeType with
+      | file =>
+        simp only [hfs, hnt]
+        obtain ⟨c, hc⟩ := hwf p node hfs hnt
+        simp only [hc]
+        -- Goal reduces to: some { ..., nodeContent := some (c.take 0) }
+        --                 = some { ..., nodeContent := some "" }
+        -- Since String.take 0 = "" for any string
+        simp only [String.take]
+      | directory =>
+        simp only [hfs, hnt]
+  · simp only [h, ite_false]
 
 /-- Truncate-restore reversibility (via writeFileReversible) -/
 theorem truncate_restore_reversible (p : Path) (fs : FilesystemWithContent)

@@ -100,13 +100,6 @@ impl QuotedWord {
         }
     }
 
-    fn with_quote_type(quote_type: QuoteType) -> Self {
-        Self {
-            parts: Vec::new(),
-            quote_type,
-        }
-    }
-
     fn is_empty(&self) -> bool {
         self.parts.is_empty()
     }
@@ -571,8 +564,11 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
 
                     '2' => {
                         // Check if this is start of 2> or 2>&1
-                        if chars.peek() == Some(&'>') {
-                            push_word!();
+                        // Only treat as redirect if '2' is the start of a new token
+                        // (not part of a word like "file2>out")
+                        if current_literal.is_empty() && current_word.is_empty()
+                            && chars.peek() == Some(&'>')
+                        {
                             chars.next(); // consume >
 
                             match chars.peek() {
@@ -1331,7 +1327,9 @@ pub fn parse_command(input: &str) -> Result<Command> {
     }
 
     // Check for logical operators (&&, ||) - lowest precedence
-    if let Some(op_pos) = tokens.iter().position(|t| matches!(t, Token::And | Token::Or)) {
+    // Use rposition to find RIGHTMOST operator for left-to-right associativity:
+    // "a && b || c" splits at || giving "(a && b) || c" (POSIX correct)
+    if let Some(op_pos) = tokens.iter().rposition(|t| matches!(t, Token::And | Token::Or)) {
         return parse_logical_op(&tokens, op_pos);
     }
 

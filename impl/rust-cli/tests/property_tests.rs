@@ -998,6 +998,9 @@ fn prop_logical_or_short_circuit() {
         use vsh::executable::ExecutableCommand;
         use vsh::state::ShellState;
 
+        // Skip when paths are identical (target2 would already exist from setup)
+        prop_assume!(path1 != path2);
+
         let temp = TempDir::new().unwrap();
 
         // Create first dir
