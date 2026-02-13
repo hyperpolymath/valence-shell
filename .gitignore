@@ -90,3 +90,6 @@ htmlcov/
 # Strategic analysis - local notes only
 STRATEGIC_ANALYSIS.md
 docs/strategic/
+
+# Crash recovery artifacts
+ai-cli-crash-capture/
