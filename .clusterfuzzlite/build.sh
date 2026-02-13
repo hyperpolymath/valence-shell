@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-cd $SRC/valence-shell/impl/rust-cli
+cd "$SRC"/valence-shell/impl/rust-cli
 
 # Install cargo-fuzz if not present
 cargo install cargo-fuzz --force
