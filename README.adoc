@@ -35,33 +35,35 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 
 === Key Features
 
-**Formal Verification:**
-* ✅ **Formally Proven Reversibility**: `rmdir(mkdir(p, fs)) = fs`
-* ✅ **Polyglot Verification**: 6 proof systems (Coq, Lean 4, Agda, Isabelle, Mizar, Z3)
-* ✅ **~256 Theorems**: Proven across different logical foundations
-* ✅ **Content Operations**: File read/write with proven reversibility
-* ✅ **MAA Framework**: Mutually Assured Accountability with audit trails
+= Features
 
-**Shell Features (v1.0.0):**
-* ✅ **Unix Pipelines**: Multi-stage pipelines (cmd1 | cmd2 | cmd3)
-* ✅ **I/O Redirections**: All POSIX redirections (>, >>, <, 2>, 2>>, &>, 2>&1)
-* ✅ **Process Substitution**: <(cmd) and >(cmd) with FIFO implementation
-* ✅ **Arithmetic Expansion**: $((expr)) with full operator support
-* ✅ **Here Documents**: <<DELIMITER, <<-DELIMITER, <<<word
-* ✅ **Job Control**: Background jobs, fg, bg, kill, job specifications
-* ✅ **Shell Variables**: $VAR, export, assignment, expansion
-* ✅ **GDPR Compliance**: Secure deletion (obliterate) + audit logging
-* ✅ **Syntax Highlighting**: Real-time color-coded REPL
-* ✅ **Command Correction**: Intelligent typo suggestions
-* ✅ **Friendly Errors**: fish-style helpful error messages
-* ✅ **Smart Pager**: Auto-paging for long output
-* ✅ **3-Tier Help**: Quick/verbose/man page documentation
-* ✅ **187 Tests Passing**: 131 unit + 46 integration + 10 v1.0 feature tests
+== Formal Verification
+* [x] Formally Proven Reversibility: `rmdir(mkdir(p, fs)) = fs`
+* [x] Polyglot Verification: 6 proof systems (Coq, Lean 4, Agda, Isabelle, Mizar, Z3)
+* [x] ~256 Theorems: Proven across different logical foundations
+* [x] Content Operations: File read/write with proven reversibility
+* [x] MAA Framework: Mutually Assured Accountability with audit trails
 
-**Implementation:**
-* ✅ **Production-Ready Rust CLI**: 95% complete, fully functional shell
-* ✅ **Offline-First**: All proofs verifiable air-gapped
-* ✅ **Fuzzing**: 4 fuzz targets with cargo-fuzz integration
+== Shell Features (v1.0.0)
+* [x] Unix Pipelines: Multi-stage pipelines (`cmd1 | cmd2 | cmd3`)
+* [x] I/O Redirections: All POSIX redirections (`>`, `>>`, `<`, `2>`, `2>>`, `&>`, `2>&1`)
+* [x] Process Substitution: `<(cmd)` and `>(cmd)` with FIFO implementation
+* [x] Arithmetic Expansion: `$expr` with full operator support
+* [x] Here Documents: `<<DELIMITER`, `<←DELIMITER`, `<<<word`
+* [x] Job Control: Background jobs, `fg`, `bg`, `kill`, job specifications
+* [x] Shell Variables: `$VAR`, `export`, assignment, expansion
+* [x] GDPR Compliance: Secure deletion (`obliterate`) + audit logging
+* [x] Syntax Highlighting: Real-time color-coded REPL
+* [x] Command Correction: Intelligent typo suggestions
+* [x] Friendly Errors: fish-style helpful error messages
+* [x] Smart Pager: Auto-paging for long output
+* [x] 3-Tier Help: Quick/verbose/man page documentation
+* [x] 187 Tests Passing: 131 unit + 46 integration + 10 v1.0 feature tests
+
+== Implementation
+* [x] Production-Ready Rust CLI: 95% complete, fully functional shell
+* [x] Offline-First: All proofs verifiable air-gapped
+* [x] Fuzzing: 4 fuzz targets with `cargo-fuzz` integration
 
 === What Makes This Different?
 
