@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v4
 
       - name: Install Lean 4
         run: |
@@ -46,7 +46,7 @@ jobs:
           toolchain: stable
 
       - name: Cache Lean build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: proofs/lean4/.lake
           key: ${{ runner.os }}-lean-${{ hashFiles('proofs/lean4/lakefile.lean', 'proofs/lean4/lean-toolchain') }}
@@ -115,7 +115,7 @@ jobs:
           # Note: with-lean binary would be in different target dir, skip for now
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: lean-extraction-artifacts
           path: |
@@ -130,7 +130,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Install Lean 4
         run: |
@@ -172,7 +172,7 @@ jobs:
           cargo bench --bench lean_verification_overhead -- --baseline baseline
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: benchmark-results
           path: impl/rust-cli/target/criterion/
