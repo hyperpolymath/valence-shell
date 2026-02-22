@@ -568,3 +568,8 @@ See link:LICENSE[LICENSE] for full text.
 
 [.text-center]
 _"Every operation reversible. Every claim proven. Every contributor valued."_
+
+
+== Architecture
+
+See link:TOPOLOGY.md[TOPOLOGY.md] for a visual architecture map and completion dashboard.
