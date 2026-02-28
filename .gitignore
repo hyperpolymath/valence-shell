@@ -91,5 +91,9 @@ htmlcov/
 STRATEGIC_ANALYSIS.md
 docs/strategic/
 
+# Shared libraries
+*.so
+*.dylib
+
 # Crash recovery artifacts
 ai-cli-crash-capture/
