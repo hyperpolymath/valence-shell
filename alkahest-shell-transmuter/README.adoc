@@ -1,0 +1,91 @@
+image:https://img.shields.io/badge/License-PMPL--1.0-blue.svg[License: PMPL-1.0,link="https://github.com/hyperpolymath/palimpsest-license"]
+
+= Alkahest: The Universal Shell Transmuter
+
+
+
+
+Jonathan D.A. Jewell <hyperpolymath@example.com>
+v0.1.0-alpha, 2025-12-19
+:toc: left
+:sectnums:
+:stem: latex
+:source-highlighter: highlight.js
+:description: A formal transmutation engine for shell logic using Ephapax linear types and Nickel IR.
+
+image::https://img.shields.io/badge/Logic-Ephapax-purple.svg[Ephapax]
+image::https://img.shields.io/badge/IR-Nickel-yellow.svg[Nickel]
+image::https://img.shields.io/badge/Security-Linear_Types-red.svg[Linear Types]
+image::https://img.shields.io/badge/Target-WASM-blue.svg[WASM]
+
+== 🔬 Abstract: The Problem of "Dirty" Shell Logic
+
+Traditional shell scripting (POSIX Bash, Zsh) treats commands as strings and execution as an unverified sequence of side effects. This leads to **State Contamination**: leaked file descriptors, dangling pipes, and non-deterministic resource exhaustion.
+
+**Alkahest** solves this by treating shell logic as **Matter**. Using the **Ephapax** formal framework, it dissolves imperative shell strings into a resource-safe intermediate representation (Nickel), allowing for the safe "factorisation" of logic across 17 different shell environments.
+
+== 🏗️ The Transmutation Pipeline
+
+The process follows a strict thermodynamic flow of information:
+
+
+
+1. **Ingress (Lexical Capture)**: Raw shell commands are captured and lexed into an Abstract Syntax Tree (AST) using a ReScript-based WASM parser.
+2. **Dissolution (Formal Verification)**: The AST is passed to the **Ephapax Engine**. Here, **Linear Logic** is applied. Every pipe, redirection, and variable is treated as a linear resource ($!R$) that must be consumed exactly once.
+3. **Equilibrium (Nickel IR)**: The verified logic is emitted as **Nickel code**. This is the project's "Single Source of Truth"—a declarative, modular, and contract-validated representation of the intent.
+4. **Reconstitution (Factorisation)**: The Nickel IR is forwarded to the target "Factory" handlers, which emit the specific syntax for the 17 supported shells (Oil, Nushell, NGS, etc.).
+
+== 🛡️ Formal Foundations
+
+Alkahest is grounded in the **Ephapax Linear Type System**. 
+
+[latex]
+$$ \frac{\Gamma \vdash e_1 : A \otimes B \quad \Delta, x:A, y:B \vdash e_2 : C}{\Gamma, \Delta \vdash \text{let } (x,y) = e_1 \text{ in } e_2 : C} $$
+
+This ensures that in a transmutation like `cat src.adoc | grep "foo"`, the output of `cat` is physically bound to the input of `grep`. If the "Matter" is not properly handed over, the Transmuter fails at build-time.
+
+== 🛠️ Usage & The "Just Route"
+
+In accordance with project standards, all interactions are governed by `just`.
+
+=== Transmuting a Command
+
+To "wash" a command and see its factorised Nushell or Oil equivalent:
+
+[source, bash]
+----
+# Transmute a complex Bash pipe into all target shells
+just transmute "find . -name '*.adoc' | xargs -I{} cat {}"
+
+# Reconstitute for a specific target
+just reconstitute nushell
+----
+
+=== Deployment
+
+Alkahest is designed for **ASIC, Edge, and PC** environments. It is deployed as a standalone, zero-dependency WASM sidecar.
+
+[source, bash]
+----
+# Build the Podman-ready WASM engine
+just podman-build
+
+# Run a secure transmutation inside a container
+podman run alkahest-transmuter "ls -l | awk '{print $5}'"
+----
+
+== 📋 Supported Factorisation Targets
+
+| Shell Family | Primary Targets |
+| :--- | :--- |
+| **High-Assurance** | Oil (Priority), Nushell (Structured), NGS (Functional) |
+| **POSIX-Compliant** | Bash, Dash, Ash, Zsh, Ksh, Minix-Shell |
+| **C-Shell / Legacy** | Csh, Tcsh, Tsh |
+| **Specialized** | Elvish, Ion, Murex, PowerShell-Core, Cmd (PC) |
+
+== ⚖️ Licence
+
+EUPL-1.2 (European Union Public Licence) — Aligning with the Ephapax ecosystem.
+
+---
+*"Once for All" — verified once, factorised everywhere.*
