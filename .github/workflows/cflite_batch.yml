@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # ClusterFuzzLite Batch Fuzzing - Layer 6
 #
 # Runs weekly for 30 minutes per target for deep fuzzing
