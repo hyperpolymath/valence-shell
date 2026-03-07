@@ -252,7 +252,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: impl/rust-cli/target/${{ matrix.target }}/release/vsh${{ matrix.os == 'windows-latest' && '.exe' || '' }}
