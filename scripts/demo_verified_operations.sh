@@ -20,7 +20,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Test directory
-TEST_ROOT="/tmp/vsh_demo_$$"
+TEST_ROOT=""$HYPATIA_TMPDIR/vsh_demo_"$$"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}Valence Shell - Verified Operations Demo${NC}"

@@ -27,7 +27,7 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 
 # Test sandbox
-TEST_ROOT="/tmp/vsh_integration_test_$$"
+TEST_ROOT=""$HYPATIA_TMPDIR/vsh_integration_test_"$$"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Cleanup on exit

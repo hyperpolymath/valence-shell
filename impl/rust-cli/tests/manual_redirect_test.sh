@@ -6,7 +6,7 @@
 
 set -e
 
-TESTDIR="/tmp/vsh_redirect_manual_test_$$"
+TESTDIR=""$HYPATIA_TMPDIR/vsh_redirect_manual_test_"$$"
 VSH="./target/release/vsh"
 
 echo "=== Valence Shell - Built-in Redirection Manual Test ==="
