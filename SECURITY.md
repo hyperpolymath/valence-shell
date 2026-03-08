@@ -290,13 +290,8 @@ A manual security audit (P9) was performed across the Rust CLI codebase. Finding
 | **Missing SAFETY comments** | Low | All `unsafe` blocks now have `// SAFETY:` annotations explaining the invariants relied upon. |
 | **Null byte handling in chown** | Medium | Paths or usernames containing null bytes caused panics via `CString::new()`. Now returns a descriptive error instead of panicking. |
 | **Brace expansion DoS** | High | Nested brace expansion (e.g., `{1..9}{1..9}{1..9}{1..9}`) could generate unbounded results. Added 10,000 result limit. |
-
-### Pending (tracked for future work)
-
-| Issue | Severity | Status |
-|-------|----------|--------|
-| **Glob expansion DoS** | Medium | Patterns like `/**/**/**` could generate unbounded results. 100,000 result limit planned. |
-| **Shift overflow** | Low | `$((1 << 64))` was fixed in 2026-02-12, but other arithmetic edge cases may benefit from checked arithmetic throughout. |
+| **Glob expansion DoS** | Medium | Patterns like `/**/**/**` could generate unbounded results. Added 100,000 result limit. |
+| **Shift overflow** | Medium | Shift operations (`<<`, `>>`) now use `checked_shl`/`checked_shr` to return errors instead of panicking on overflow. |
 
 ### Audit Scope
 
