@@ -80,4 +80,4 @@ Each operation is backed by formal proofs:
 
 ## License
 
-PLMP-1.0-or-later
+PMPL-1.0-or-later

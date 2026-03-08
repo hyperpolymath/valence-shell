@@ -6,9 +6,7 @@ on:
     branches: [main]
     paths:
       - 'proofs/lean4/**'
-      - 'impl/ocaml/lean_wrapper.c'
-      - 'impl/rust-cli/src/lean_ffi.rs'
-      - 'impl/rust-cli/src/verification.rs'
+      - 'impl/rust-cli/src/proof_refs.rs'
       - '.github/workflows/lean-verification.yml'
   pull_request:
     paths:

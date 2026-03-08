@@ -1,0 +1,188 @@
+:: SPDX-License-Identifier: PMPL-1.0-or-later
+:: Valence Shell - Permission Operations
+::
+:: Formalizes chmod and chown as reversible operations.
+:: Proves that applying the old permission/ownership after a change
+:: restores the original filesystem state.
+
+environ
+
+ vocabularies NUMBERS, XBOOLE_0, SUBSET_1, RELAT_1, FUNCT_1, FINSEQ_1,
+              STRUCT_0, FILESYS, FILE_OPS, PERMISSIONS;
+ notations TARSKI, XBOOLE_0, SUBSET_1, RELAT_1, FUNCT_1, FINSEQ_1, XCMPLX_0,
+           NAT_1, STRUCT_0, FILESYS, FILE_OPS;
+ constructors NAT_1, FINSEQ_1, FILESYS, FILE_OPS;
+ registrations XBOOLE_0, SUBSET_1, NAT_1, FINSEQ_1;
+ requirements NUMERALS, SUBSET, BOOLE;
+
+begin
+
+:: ============================================================================
+:: Extended Types for Permission/Ownership
+:: ============================================================================
+
+:: Mode represents Unix permission bits (lower 12 bits of mode_t)
+:: Ownership represents uid/gid pair
+
+definition
+  let p be Path;
+  let fs be Filesystem;
+  pred chmod_precondition p, fs means
+    path_exists(p, fs);
+end;
+
+:: ============================================================================
+:: chmod Operation
+:: ============================================================================
+
+definition
+  let p be Path;
+  let newMode be Nat;
+  let fs be Filesystem;
+  func chmod(p, newMode, fs) -> Filesystem equals
+    :: Update mode bits at path p, preserving everything else
+    fs_update_mode(p, newMode, fs);
+end;
+
+:: ============================================================================
+:: chmod Theorems
+:: ============================================================================
+
+theorem Th_chmod_reversible:
+  for p being Path, fs being Filesystem, oldMode, newMode being Nat st
+    chmod_precondition p, fs &
+    fs_get_mode(p, fs) = oldMode
+  holds chmod(p, oldMode, chmod(p, newMode, fs)) = fs
+proof
+  let p be Path;
+  let fs be Filesystem;
+  let oldMode, newMode be Nat;
+  assume A1: chmod_precondition p, fs;
+  assume A2: fs_get_mode(p, fs) = oldMode;
+  :: chmod changes only the mode field at path p
+  :: Applying oldMode after newMode restores original mode
+  :: All other paths and fields are unchanged
+  thus chmod(p, oldMode, chmod(p, newMode, fs)) = fs
+    by A1, A2, FILE_OPS:Th_fs_update_mode_reversible;
+end;
+
+theorem Th_chmod_same_mode:
+  for p being Path, fs being Filesystem, m being Nat st
+    chmod_precondition p, fs &
+    fs_get_mode(p, fs) = m
+  holds chmod(p, m, fs) = fs
+proof
+  let p be Path;
+  let fs be Filesystem;
+  let m be Nat;
+  assume A1: chmod_precondition p, fs;
+  assume A2: fs_get_mode(p, fs) = m;
+  thus chmod(p, m, fs) = fs
+    by A1, A2, FILE_OPS:Th_fs_update_mode_identity;
+end;
+
+theorem Th_chmod_preserves_other:
+  for p1, p2 being Path, fs being Filesystem, m being Nat st
+    p1 <> p2
+  holds fs_get(chmod(p1, m, fs), p2) = fs_get(fs, p2)
+proof
+  let p1, p2 be Path;
+  let fs be Filesystem;
+  let m be Nat;
+  assume A1: p1 <> p2;
+  thus fs_get(chmod(p1, m, fs), p2) = fs_get(fs, p2)
+    by A1, FILE_OPS:Th_fs_update_preserves_other;
+end;
+
+:: ============================================================================
+:: chown Operation
+:: ============================================================================
+
+definition
+  let p be Path;
+  let fs be Filesystem;
+  pred chown_precondition p, fs means
+    path_exists(p, fs);
+end;
+
+definition
+  let p be Path;
+  let newUid, newGid be Nat;
+  let fs be Filesystem;
+  func chown(p, newUid, newGid, fs) -> Filesystem equals
+    :: Update ownership at path p, preserving everything else
+    fs_update_owner(p, newUid, newGid, fs);
+end;
+
+:: ============================================================================
+:: chown Theorems
+:: ============================================================================
+
+theorem Th_chown_reversible:
+  for p being Path, fs being Filesystem,
+      oldUid, oldGid, newUid, newGid being Nat st
+    chown_precondition p, fs &
+    fs_get_uid(p, fs) = oldUid &
+    fs_get_gid(p, fs) = oldGid
+  holds chown(p, oldUid, oldGid, chown(p, newUid, newGid, fs)) = fs
+proof
+  let p be Path;
+  let fs be Filesystem;
+  let oldUid, oldGid, newUid, newGid be Nat;
+  assume A1: chown_precondition p, fs;
+  assume A2: fs_get_uid(p, fs) = oldUid;
+  assume A3: fs_get_gid(p, fs) = oldGid;
+  :: chown changes only uid/gid at path p
+  :: Applying old uid/gid after new restores original ownership
+  thus chown(p, oldUid, oldGid, chown(p, newUid, newGid, fs)) = fs
+    by A1, A2, A3, FILE_OPS:Th_fs_update_owner_reversible;
+end;
+
+theorem Th_chown_same_owner:
+  for p being Path, fs being Filesystem, u, g being Nat st
+    chown_precondition p, fs &
+    fs_get_uid(p, fs) = u &
+    fs_get_gid(p, fs) = g
+  holds chown(p, u, g, fs) = fs
+proof
+  let p be Path;
+  let fs be Filesystem;
+  let u, g be Nat;
+  assume A1: chown_precondition p, fs;
+  assume A2: fs_get_uid(p, fs) = u;
+  assume A3: fs_get_gid(p, fs) = g;
+  thus chown(p, u, g, fs) = fs
+    by A1, A2, A3, FILE_OPS:Th_fs_update_owner_identity;
+end;
+
+theorem Th_chown_preserves_other:
+  for p1, p2 being Path, fs being Filesystem, u, g being Nat st
+    p1 <> p2
+  holds fs_get(chown(p1, u, g, fs), p2) = fs_get(fs, p2)
+proof
+  let p1, p2 be Path;
+  let fs be Filesystem;
+  let u, g be Nat;
+  assume A1: p1 <> p2;
+  thus fs_get(chown(p1, u, g, fs), p2) = fs_get(fs, p2)
+    by A1, FILE_OPS:Th_fs_update_preserves_other;
+end;
+
+:: ============================================================================
+:: Cross-operation Commutativity
+:: ============================================================================
+
+theorem Th_chmod_chown_commute:
+  for p being Path, fs being Filesystem, m, u, g being Nat
+  holds chmod(p, m, chown(p, u, g, fs)) = chown(p, u, g, chmod(p, m, fs))
+proof
+  let p be Path;
+  let fs be Filesystem;
+  let m, u, g be Nat;
+  :: chmod modifies mode field, chown modifies uid/gid fields
+  :: They operate on disjoint fields, so they commute
+  thus chmod(p, m, chown(p, u, g, fs)) = chown(p, u, g, chmod(p, m, fs))
+    by FILE_OPS:Th_disjoint_field_updates_commute;
+end;
+
+end

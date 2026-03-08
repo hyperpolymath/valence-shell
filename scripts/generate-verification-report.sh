@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Generate Verification Coverage Report
 
 set -euo pipefail

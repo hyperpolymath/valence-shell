@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Executable Command Trait
 //!
 //! Decouples command parsing from execution, creating a clean seam
@@ -113,6 +113,77 @@ impl ExecutableCommand for Command {
                     })?;
                 }
                 Ok(ExecutionResult::Success)
+            }
+
+            Command::Cp { src, dst, redirects } => {
+                let expanded_src = crate::parser::expand_variables(src, state);
+                let expanded_dst = crate::parser::expand_variables(dst, state);
+                if redirects.is_empty() {
+                    commands::cp(state, &expanded_src, &expanded_dst, false)?;
+                } else {
+                    redirection::capture_and_redirect(redirects, state, |s| {
+                        commands::cp(s, &expanded_src, &expanded_dst, false)
+                    })?;
+                }
+                Ok(ExecutionResult::Success)
+            }
+
+            Command::Mv { src, dst, redirects } => {
+                let expanded_src = crate::parser::expand_variables(src, state);
+                let expanded_dst = crate::parser::expand_variables(dst, state);
+                if redirects.is_empty() {
+                    commands::mv(state, &expanded_src, &expanded_dst, false)?;
+                } else {
+                    redirection::capture_and_redirect(redirects, state, |s| {
+                        commands::mv(s, &expanded_src, &expanded_dst, false)
+                    })?;
+                }
+                Ok(ExecutionResult::Success)
+            }
+
+            Command::Ln { target, link, redirects } => {
+                let expanded_target = crate::parser::expand_variables(target, state);
+                let expanded_link = crate::parser::expand_variables(link, state);
+                if redirects.is_empty() {
+                    commands::symlink(state, &expanded_target, &expanded_link, false)?;
+                } else {
+                    redirection::capture_and_redirect(redirects, state, |s| {
+                        commands::symlink(s, &expanded_target, &expanded_link, false)
+                    })?;
+                }
+                Ok(ExecutionResult::Success)
+            }
+
+            Command::Chmod { mode, path, redirects } => {
+                let expanded_mode = crate::parser::expand_variables(mode, state);
+                let expanded_path = crate::parser::expand_variables(path, state);
+                if redirects.is_empty() {
+                    commands::chmod(state, &expanded_mode, &expanded_path, false)?;
+                } else {
+                    redirection::capture_and_redirect(redirects, state, |s| {
+                        commands::chmod(s, &expanded_mode, &expanded_path, false)
+                    })?;
+                }
+                Ok(ExecutionResult::Success)
+            }
+
+            #[cfg(unix)]
+            Command::Chown { owner, path, redirects } => {
+                let expanded_owner = crate::parser::expand_variables(owner, state);
+                let expanded_path = crate::parser::expand_variables(path, state);
+                if redirects.is_empty() {
+                    commands::chown(state, &expanded_owner, &expanded_path, false)?;
+                } else {
+                    redirection::capture_and_redirect(redirects, state, |s| {
+                        commands::chown(s, &expanded_owner, &expanded_path, false)
+                    })?;
+                }
+                Ok(ExecutionResult::Success)
+            }
+
+            #[cfg(not(unix))]
+            Command::Chown { .. } => {
+                anyhow::bail!("chown not supported on this platform");
             }
 
             // Undo/redo operations
@@ -432,7 +503,7 @@ impl ExecutableCommand for Command {
             }
 
             // Pipeline commands (not reversible by default, but redirections are)
-            Command::Pipeline { stages, redirects, background: _ } => {
+            Command::Pipeline { stages, redirects, background } => {
                 // Expand variables and command substitutions in all pipeline stages
                 let expanded_stages: Result<Vec<(String, Vec<String>)>> = stages
                     .iter()
@@ -447,6 +518,13 @@ impl ExecutableCommand for Command {
                     .collect();
                 let expanded_stages = expanded_stages?;
 
+                if *background && !expanded_stages.is_empty() {
+                    // Background pipeline: launch first stage in background, pipe rest
+                    // For now, warn and run in foreground — full background pipeline
+                    // requires SIGCHLD handler and process group management for all stages
+                    eprintln!("vsh: background pipelines not yet fully supported, running in foreground");
+                }
+
                 let exit_code = external::execute_pipeline(&expanded_stages, redirects, state)
                     .unwrap_or_else(|e| {
                         eprintln!("Pipeline error: {}", e);
@@ -456,11 +534,11 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::ExternalCommand { exit_code })
             }
 
-            // Variable assignment
+            // Variable assignment (tracked for undo/redo)
             Command::Assignment { name, value } => {
                 // Expand variables and command substitutions in the value
                 let expanded_value = crate::parser::expand_with_command_sub(value, state)?;
-                state.set_variable(name, expanded_value);
+                state.set_variable_tracked(name, expanded_value);
                 Ok(ExecutionResult::Success)
             }
 
@@ -534,6 +612,270 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::Success)
             }
 
+            // Shell builtins
+
+            Command::Echo { args, no_newline, interpret_escapes, redirects } => {
+                let expanded_args: Vec<String> = args
+                    .iter()
+                    .map(|a| crate::parser::expand_variables(a, state))
+                    .collect();
+
+                let output = if *interpret_escapes {
+                    expanded_args.join(" ")
+                        .replace("\\n", "\n")
+                        .replace("\\t", "\t")
+                        .replace("\\\\", "\\")
+                        .replace("\\a", "\x07")
+                        .replace("\\b", "\x08")
+                } else {
+                    expanded_args.join(" ")
+                };
+
+                if redirects.is_empty() {
+                    if *no_newline {
+                        print!("{}", output);
+                        std::io::Write::flush(&mut std::io::stdout()).ok();
+                    } else {
+                        println!("{}", output);
+                    }
+                } else {
+                    let full_output = if *no_newline {
+                        output
+                    } else {
+                        format!("{}\n", output)
+                    };
+                    redirection::capture_and_redirect(redirects, state, |_s| {
+                        print!("{}", full_output);
+                        Ok(())
+                    })?;
+                }
+                Ok(ExecutionResult::Success)
+            }
+
+            Command::True => {
+                Ok(ExecutionResult::ExternalCommand { exit_code: 0 })
+            }
+
+            Command::False => {
+                Ok(ExecutionResult::ExternalCommand { exit_code: 1 })
+            }
+
+            Command::Read { var_name, prompt, redirects: _ } => {
+                let expanded_var = crate::parser::expand_variables(var_name, state);
+
+                if let Some(p) = prompt {
+                    let expanded_prompt = crate::parser::expand_variables(p, state);
+                    eprint!("{}", expanded_prompt);
+                    std::io::Write::flush(&mut std::io::stderr()).ok();
+                }
+
+                let mut input = String::new();
+                match std::io::stdin().read_line(&mut input) {
+                    Ok(0) => {
+                        // EOF
+                        Ok(ExecutionResult::ExternalCommand { exit_code: 1 })
+                    }
+                    Ok(_) => {
+                        let value = input.trim_end_matches('\n').trim_end_matches('\r');
+                        state.set_variable(expanded_var, value.to_string());
+                        Ok(ExecutionResult::Success)
+                    }
+                    Err(e) => Err(anyhow::anyhow!("read: {}", e)),
+                }
+            }
+
+            Command::Source { file } => {
+                let expanded_file = crate::parser::expand_variables(file, state);
+                let path = state.resolve_path(&expanded_file);
+
+                let content = std::fs::read_to_string(&path)
+                    .map_err(|e| anyhow::anyhow!("source: {}: {}", path.display(), e))?;
+
+                let mut last_result = ExecutionResult::Success;
+                for line in content.lines() {
+                    let line = line.trim();
+                    if line.is_empty() || line.starts_with('#') {
+                        continue;
+                    }
+                    let cmd = crate::parser::parse_command(line)?;
+                    last_result = cmd.execute(state)?;
+                    if matches!(last_result, ExecutionResult::Exit) {
+                        return Ok(ExecutionResult::Exit);
+                    }
+                }
+                Ok(last_result)
+            }
+
+            Command::Set { args } => {
+                if args.is_empty() {
+                    // Display all variables
+                    for (name, value) in state.get_all_variables() {
+                        println!("{}={}", name, value);
+                    }
+                } else if args[0] == "--" {
+                    // Set positional parameters: set -- arg1 arg2 ...
+                    let params: Vec<String> = args[1..].to_vec();
+                    state.set_positional_params(params);
+                } else if args[0].starts_with('-') || args[0].starts_with('+') {
+                    // Shell options (stub: just acknowledge)
+                    // -e: exit on error, -x: trace, -u: error on unset, etc.
+                    for arg in args {
+                        let enable = arg.starts_with('-');
+                        for ch in arg[1..].chars() {
+                            match ch {
+                                'e' => state.set_variable("SHOPT_E".to_string(), if enable { "1" } else { "0" }.to_string()),
+                                'x' => state.set_variable("SHOPT_X".to_string(), if enable { "1" } else { "0" }.to_string()),
+                                'u' => state.set_variable("SHOPT_U".to_string(), if enable { "1" } else { "0" }.to_string()),
+                                _ => {}
+                            }
+                        }
+                    }
+                } else {
+                    // Set positional params
+                    state.set_positional_params(args.clone());
+                }
+                Ok(ExecutionResult::Success)
+            }
+
+            Command::Unset { name } => {
+                let expanded_name = crate::parser::expand_variables(name, state);
+                state.unset_variable_tracked(&expanded_name);
+                Ok(ExecutionResult::Success)
+            }
+
+            Command::Eval { args } => {
+                if args.is_empty() {
+                    return Ok(ExecutionResult::Success);
+                }
+                let expanded_args: Vec<String> = args
+                    .iter()
+                    .map(|a| crate::parser::expand_variables(a, state))
+                    .collect();
+                let combined = expanded_args.join(" ");
+                let cmd = crate::parser::parse_command(&combined)?;
+                cmd.execute(state)
+            }
+
+            // Control structures
+
+            Command::If { condition, then_body, elif_parts, else_body } => {
+                // Execute condition and get exit code
+                let cond_result = condition.execute(state)?;
+                let cond_exit = match cond_result {
+                    ExecutionResult::Success => 0,
+                    ExecutionResult::Exit => return Ok(ExecutionResult::Exit),
+                    ExecutionResult::ExternalCommand { exit_code } => exit_code,
+                };
+
+                if cond_exit == 0 {
+                    // Condition succeeded — execute then body
+                    return execute_block(then_body, state);
+                }
+
+                // Try elif parts
+                for (elif_cond, elif_body) in elif_parts {
+                    let elif_result = elif_cond.execute(state)?;
+                    let elif_exit = match elif_result {
+                        ExecutionResult::Success => 0,
+                        ExecutionResult::Exit => return Ok(ExecutionResult::Exit),
+                        ExecutionResult::ExternalCommand { exit_code } => exit_code,
+                    };
+
+                    if elif_exit == 0 {
+                        return execute_block(elif_body, state);
+                    }
+                }
+
+                // Execute else body if present
+                if let Some(ref else_cmds) = else_body {
+                    return execute_block(else_cmds, state);
+                }
+
+                // No branch matched — return last condition's exit code
+                Ok(ExecutionResult::ExternalCommand { exit_code: 1 })
+            }
+
+            Command::WhileLoop { condition, body } => {
+                let mut last_result = ExecutionResult::Success;
+                // Safety: limit iterations to prevent infinite loops
+                let max_iterations = 100_000;
+                let mut iterations = 0;
+
+                loop {
+                    if iterations >= max_iterations {
+                        return Err(anyhow::anyhow!("while: exceeded {} iterations (safety limit)", max_iterations));
+                    }
+                    iterations += 1;
+
+                    // Check condition
+                    let cond_result = condition.execute(state)?;
+                    let cond_exit = match cond_result {
+                        ExecutionResult::Success => 0,
+                        ExecutionResult::Exit => return Ok(ExecutionResult::Exit),
+                        ExecutionResult::ExternalCommand { exit_code } => exit_code,
+                    };
+
+                    if cond_exit != 0 {
+                        break; // Condition failed — exit loop
+                    }
+
+                    // Execute body
+                    last_result = execute_block(body, state)?;
+                    if matches!(last_result, ExecutionResult::Exit) {
+                        return Ok(ExecutionResult::Exit);
+                    }
+
+                    // Check for SIGINT
+                    if crate::signals::is_interrupt_requested() {
+                        crate::signals::clear_interrupt();
+                        break;
+                    }
+                }
+
+                Ok(last_result)
+            }
+
+            Command::ForLoop { var, words, body } => {
+                let mut last_result = ExecutionResult::Success;
+
+                for word in words {
+                    // Expand variables in the word
+                    let expanded = crate::parser::expand_variables(word, state);
+                    // Set loop variable
+                    state.set_variable(var.clone(), expanded);
+
+                    // Execute body
+                    last_result = execute_block(body, state)?;
+                    if matches!(last_result, ExecutionResult::Exit) {
+                        return Ok(ExecutionResult::Exit);
+                    }
+
+                    // Check for SIGINT
+                    if crate::signals::is_interrupt_requested() {
+                        crate::signals::clear_interrupt();
+                        break;
+                    }
+                }
+
+                Ok(last_result)
+            }
+
+            Command::CaseStatement { word, arms } => {
+                let expanded_word = crate::parser::expand_variables(word, state);
+
+                for arm in arms {
+                    for pattern in &arm.patterns {
+                        let expanded_pattern = crate::parser::expand_variables(pattern, state);
+                        if case_pattern_matches(&expanded_word, &expanded_pattern) {
+                            return execute_block(&arm.body, state);
+                        }
+                    }
+                }
+
+                // No pattern matched
+                Ok(ExecutionResult::ExternalCommand { exit_code: 0 })
+            }
+
             // Logical operators (short-circuit evaluation)
             Command::LogicalOp { operator, left, right } => {
                 use crate::parser::LogicalOperator;
@@ -568,6 +910,32 @@ impl ExecutableCommand for Command {
                     }
                 }
             }
+
+            // Wow-factor features
+            Command::Explain { inner } => {
+                commands::explain_command(inner, state)?;
+                Ok(ExecutionResult::Success)
+            }
+            Command::Checkpoint { name } => {
+                commands::checkpoint(state, name)?;
+                Ok(ExecutionResult::Success)
+            }
+            Command::Restore { name } => {
+                commands::restore(state, name)?;
+                Ok(ExecutionResult::Success)
+            }
+            Command::Checkpoints => {
+                commands::list_checkpoints(state)?;
+                Ok(ExecutionResult::Success)
+            }
+            Command::Diff { target_op } => {
+                commands::diff_state(state, *target_op)?;
+                Ok(ExecutionResult::Success)
+            }
+            Command::Replay { start, end } => {
+                commands::replay(state, *start, *end)?;
+                Ok(ExecutionResult::Success)
+            }
         }
     }
 
@@ -578,11 +946,20 @@ impl ExecutableCommand for Command {
                 | Command::Rmdir { .. }
                 | Command::Touch { .. }
                 | Command::Rm { .. }
+                | Command::Cp { .. }
+                | Command::Mv { .. }
+                | Command::Ln { .. }
+                | Command::Chmod { .. }
+                | Command::Chown { .. }
         )
     }
 
     fn proof_reference(&self) -> Option<ProofReference> {
-        use crate::proof_refs::{MKDIR_RMDIR_REVERSIBLE, CREATE_DELETE_REVERSIBLE};
+        use crate::proof_refs::{
+            MKDIR_RMDIR_REVERSIBLE, CREATE_DELETE_REVERSIBLE,
+            COPY_FILE_REVERSIBLE, MOVE_REVERSIBLE, SYMLINK_UNLINK_REVERSIBLE,
+            CHMOD_REVERSIBLE, CHOWN_REVERSIBLE,
+        };
 
         match self {
             Command::Mkdir { .. } | Command::Rmdir { .. } => {
@@ -591,6 +968,11 @@ impl ExecutableCommand for Command {
             Command::Touch { .. } | Command::Rm { .. } => {
                 Some(CREATE_DELETE_REVERSIBLE)
             }
+            Command::Cp { .. } => Some(COPY_FILE_REVERSIBLE),
+            Command::Mv { .. } => Some(MOVE_REVERSIBLE),
+            Command::Ln { .. } => Some(SYMLINK_UNLINK_REVERSIBLE),
+            Command::Chmod { .. } => Some(CHMOD_REVERSIBLE),
+            Command::Chown { .. } => Some(CHOWN_REVERSIBLE),
             _ => None,
         }
     }
@@ -601,6 +983,11 @@ impl ExecutableCommand for Command {
             Command::Rmdir { path, .. } => format!("rmdir {}", path),
             Command::Touch { path, .. } => format!("touch {}", path),
             Command::Rm { path, .. } => format!("rm {}", path),
+            Command::Cp { src, dst, .. } => format!("cp {} {}", src, dst),
+            Command::Mv { src, dst, .. } => format!("mv {} {}", src, dst),
+            Command::Ln { target, link, .. } => format!("ln -s {} {}", target, link),
+            Command::Chmod { mode, path, .. } => format!("chmod {} {}", mode, path),
+            Command::Chown { owner, path, .. } => format!("chown {} {}", owner, path),
             Command::Undo { count } => format!("undo {}", count),
             Command::Redo { count } => format!("redo {}", count),
             Command::History { count, show_proofs } => {
@@ -737,6 +1124,110 @@ impl ExecutableCommand for Command {
                     LogicalOperator::Or => "||",
                 };
                 format!("{} {} {}", left.description(), op_str, right.description())
+            }
+
+            Command::Echo { args, .. } => format!("echo {}", args.join(" ")),
+            Command::True => "true".to_string(),
+            Command::False => "false".to_string(),
+            Command::Read { var_name, .. } => format!("read {}", var_name),
+            Command::Source { file } => format!("source {}", file),
+            Command::Set { args } => format!("set {}", args.join(" ")),
+            Command::Unset { name } => format!("unset {}", name),
+            Command::Eval { args } => format!("eval {}", args.join(" ")),
+
+            Command::If { condition, .. } => {
+                format!("if {} then ...", condition.description())
+            }
+
+            Command::WhileLoop { condition, .. } => {
+                format!("while {} do ...", condition.description())
+            }
+
+            Command::ForLoop { var, words, .. } => {
+                format!("for {} in {} do ...", var, words.join(" "))
+            }
+
+            Command::CaseStatement { word, .. } => {
+                format!("case {} in ...", word)
+            }
+
+            Command::Explain { inner } => format!("explain {}", inner.description()),
+            Command::Checkpoint { name } => format!("checkpoint {}", name),
+            Command::Restore { name } => format!("restore {}", name),
+            Command::Checkpoints => "checkpoints".to_string(),
+            Command::Diff { target_op } => format!("diff {}", target_op),
+            Command::Replay { start, end } => format!("replay {}..{}", start, end),
+        }
+    }
+}
+
+/// Execute a block of commands in sequence, returning the result of the last command
+fn execute_block(commands: &[Command], state: &mut ShellState) -> Result<ExecutionResult> {
+    let mut last_result = ExecutionResult::Success;
+    for cmd in commands {
+        last_result = cmd.execute(state)?;
+        match &last_result {
+            ExecutionResult::Exit => return Ok(ExecutionResult::Exit),
+            ExecutionResult::ExternalCommand { exit_code } => {
+                state.last_exit_code = *exit_code;
+            }
+            ExecutionResult::Success => {
+                state.last_exit_code = 0;
+            }
+        }
+    }
+    Ok(last_result)
+}
+
+/// Match a word against a case pattern (supports glob-style wildcards)
+fn case_pattern_matches(word: &str, pattern: &str) -> bool {
+    if pattern == "*" {
+        return true; // Match-all
+    }
+
+    // Use glob-style matching
+    // Simple implementation: * matches any sequence, ? matches one char
+    glob_match(pattern, word)
+}
+
+/// Simple glob pattern matching for case statements
+fn glob_match(pattern: &str, text: &str) -> bool {
+    let mut p = pattern.chars().peekable();
+    let mut t = text.chars().peekable();
+
+    glob_match_inner(&mut pattern.chars().collect::<Vec<_>>(), &mut text.chars().collect::<Vec<_>>(), 0, 0)
+}
+
+fn glob_match_inner(pattern: &[char], text: &[char], pi: usize, ti: usize) -> bool {
+    if pi == pattern.len() && ti == text.len() {
+        return true;
+    }
+    if pi == pattern.len() {
+        return false;
+    }
+
+    match pattern[pi] {
+        '*' => {
+            // Try matching 0 or more characters
+            for skip in 0..=(text.len() - ti) {
+                if glob_match_inner(pattern, text, pi + 1, ti + skip) {
+                    return true;
+                }
+            }
+            false
+        }
+        '?' => {
+            if ti < text.len() {
+                glob_match_inner(pattern, text, pi + 1, ti + 1)
+            } else {
+                false
+            }
+        }
+        ch => {
+            if ti < text.len() && text[ti] == ch {
+                glob_match_inner(pattern, text, pi + 1, ti + 1)
+            } else {
+                false
             }
         }
     }

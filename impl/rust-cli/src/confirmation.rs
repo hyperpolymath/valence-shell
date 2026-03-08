@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Confirmation prompts for destructive operations
 //!
 //! SAFETY CRITICAL: Prevents accidental data destruction

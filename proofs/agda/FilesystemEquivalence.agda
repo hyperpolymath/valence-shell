@@ -47,33 +47,47 @@ fsEquivIsEquivalence =
 
 -- Operations Preserve Equivalence
 
-postulate
-  mkdirPreservesEquiv : ∀ (p : Path) (fs1 fs2 : Filesystem) →
-    fs1 ≈ fs2 →
-    MkdirPrecondition p fs1 →
-    MkdirPrecondition p fs2 →
-    mkdir p fs1 ≈ mkdir p fs2
+-- General lemma: fsUpdate preserves equivalence.
+-- Since fsUpdate p n fs p' returns n when p = p' and fs p' otherwise,
+-- two equivalent filesystems remain equivalent after the same fsUpdate.
+fsUpdatePreservesEquiv : ∀ (p : Path) (n : Maybe FSNode) (fs1 fs2 : Filesystem) →
+  fs1 ≈ fs2 →
+  fsUpdate p n fs1 ≈ fsUpdate p n fs2
+fsUpdatePreservesEquiv p n fs1 fs2 heq p' with p path-≟ p'
+... | yes _ = refl      -- both sides return n
+... | no _  = heq p'    -- both sides return fs₁ p' ≡ fs₂ p'
 
-postulate
-  rmdirPreservesEquiv : ∀ (p : Path) (fs1 fs2 : Filesystem) →
-    fs1 ≈ fs2 →
-    RmdirPrecondition p fs1 →
-    RmdirPrecondition p fs2 →
-    rmdir p fs1 ≈ rmdir p fs2
+mkdirPreservesEquiv : ∀ (p : Path) (fs1 fs2 : Filesystem) →
+  fs1 ≈ fs2 →
+  MkdirPrecondition p fs1 →
+  MkdirPrecondition p fs2 →
+  mkdir p fs1 ≈ mkdir p fs2
+mkdirPreservesEquiv p fs1 fs2 heq _ _ =
+  fsUpdatePreservesEquiv p (just (mkFSNode Directory defaultPerms)) fs1 fs2 heq
 
-postulate
-  createFilePreservesEquiv : ∀ (p : Path) (fs1 fs2 : Filesystem) →
-    fs1 ≈ fs2 →
-    CreateFilePrecondition p fs1 →
-    CreateFilePrecondition p fs2 →
-    createFile p fs1 ≈ createFile p fs2
+rmdirPreservesEquiv : ∀ (p : Path) (fs1 fs2 : Filesystem) →
+  fs1 ≈ fs2 →
+  RmdirPrecondition p fs1 →
+  RmdirPrecondition p fs2 →
+  rmdir p fs1 ≈ rmdir p fs2
+rmdirPreservesEquiv p fs1 fs2 heq _ _ =
+  fsUpdatePreservesEquiv p nothing fs1 fs2 heq
 
-postulate
-  deleteFilePreservesEquiv : ∀ (p : Path) (fs1 fs2 : Filesystem) →
-    fs1 ≈ fs2 →
-    DeleteFilePrecondition p fs1 →
-    DeleteFilePrecondition p fs2 →
-    deleteFile p fs1 ≈ deleteFile p fs2
+createFilePreservesEquiv : ∀ (p : Path) (fs1 fs2 : Filesystem) →
+  fs1 ≈ fs2 →
+  CreateFilePrecondition p fs1 →
+  CreateFilePrecondition p fs2 →
+  createFile p fs1 ≈ createFile p fs2
+createFilePreservesEquiv p fs1 fs2 heq _ _ =
+  fsUpdatePreservesEquiv p (just (mkFSNode File defaultPerms)) fs1 fs2 heq
+
+deleteFilePreservesEquiv : ∀ (p : Path) (fs1 fs2 : Filesystem) →
+  fs1 ≈ fs2 →
+  DeleteFilePrecondition p fs1 →
+  DeleteFilePrecondition p fs2 →
+  deleteFile p fs1 ≈ deleteFile p fs2
+deleteFilePreservesEquiv p fs1 fs2 heq _ _ =
+  fsUpdatePreservesEquiv p nothing fs1 fs2 heq
 
 applyOpPreservesEquiv : ∀ (op : Operation) (fs1 fs2 : Filesystem) →
   fs1 ≈ fs2 →

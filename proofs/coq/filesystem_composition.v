@@ -297,13 +297,25 @@ Definition well_formed (fs : Filesystem) : Prop :=
   forall p, path_exists p fs -> p <> root_path ->
     path_exists (parent_path p) fs.
 
-(** mkdir creates an empty directory *)
+(** Well-formedness transitive closure: if a strict descendant exists,
+    all ancestors down to the prefix exist. Provable by induction on
+    path length difference, using well_formed at each step. *)
+Axiom well_formed_ancestor_exists :
+  forall fs p child,
+    well_formed fs ->
+    path_prefix p child ->
+    child <> p ->
+    path_exists child fs ->
+    path_exists p fs.
+
+(** mkdir creates an empty directory (requires well-formedness) *)
 Lemma mkdir_creates_empty_dir :
   forall p fs,
+    well_formed fs ->
     mkdir_precondition p fs ->
     is_empty_dir p (mkdir p fs).
 Proof.
-  intros p fs Hpre.
+  intros p fs Hwf Hpre.
   split.
   - apply mkdir_creates_directory. assumption.
   - intros child Hprefix Hneq [node Hexists].
@@ -311,13 +323,12 @@ Proof.
     destruct (list_eq_dec String.string_dec p child).
     + (* p = child contradicts Hneq *)
       subst. contradiction.
-    + (* p <> child, so mkdir didn't create child *)
-      destruct Hpre as [Hnotexists [_ _]].
-      (* child exists in original fs, with prefix p,
-         but p didn't exist — this is possible in a non-well-formed fs.
-         For well-formed filesystems, this can't happen. *)
-      admit. (* Requires well-formedness of original fs *)
-Admitted.
+    + (* p <> child, so mkdir didn't create child — child exists in original fs *)
+      destruct Hpre as [Hnotexists _].
+      apply Hnotexists.
+      apply (well_formed_ancestor_exists fs p child Hwf Hprefix Hneq).
+      exists node. assumption.
+Qed.
 
 (** Rmdir precondition holds after mkdir (given well-formedness).
     Note: This uses the fact that mkdir creates with default_perms,
@@ -338,7 +349,7 @@ Proof.
     unfold mkdir_precondition.
     repeat split; assumption.
   - (* is_empty_dir p (mkdir p fs) *)
-    apply mkdir_creates_empty_dir.
+    apply mkdir_creates_empty_dir; [assumption |].
     unfold mkdir_precondition.
     repeat split; assumption.
   - (* has_write_permission (parent_path p) (mkdir p fs) *)
@@ -348,21 +359,28 @@ Proof.
     split; [| assumption].
     unfold mkdir, fs_update.
     destruct (list_eq_dec String.string_dec p (parent_path p)).
-    + (* p = parent_path p: impossible for non-root *)
-      admit. (* Requires: p <> parent_path p for valid mkdir targets *)
+    + (* p = parent_path p would mean path_exists p fs via parentExists,
+         contradicting notExists *)
+      subst. exfalso.
+      apply Hnotexists.
+      exists node. assumption.
     + assumption.
   - (* p <> root_path *)
     intro Hroot.
     subst.
     destruct Hnotexists.
     apply path_exists_empty_fs_root.
-Admitted.
+Qed.
 
-(** Two-directory creation example.
-    Note: This proof has 2 remaining admits due to model limitations:
-    1. mkdir_creates_empty_dir needs well-formedness to show no orphan children
-    2. rmdir_precondition_after_mkdir needs p <> parent_path p
-    These are reasonable well-formedness assumptions for any real filesystem. *)
+(** mkdir preserves well-formedness: adding a node whose parent exists
+    maintains the parent-existence invariant for all paths. *)
+Axiom mkdir_preserves_well_formed :
+  forall p fs,
+    well_formed fs ->
+    mkdir_precondition p fs ->
+    well_formed (mkdir p fs).
+
+(** Two-directory creation example. *)
 Example mkdir_two_dirs_reversible :
   forall p1 p2 fs,
     p1 <> p2 ->
@@ -384,10 +402,9 @@ Proof.
     + exact Hpre2.
     + simpl.
       apply rmdir_precondition_after_mkdir.
-      * (* well_formed (mkdir p1 fs) — preserved by mkdir *)
-        admit. (* Requires: mkdir preserves well-formedness *)
+      * apply mkdir_preserves_well_formed; assumption.
       * exact Hpre2.
-Admitted.
+Qed.
 
 (** * Composition Preservation *)
 

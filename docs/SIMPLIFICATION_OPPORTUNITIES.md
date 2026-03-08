@@ -218,7 +218,7 @@ Create `scripts/new-operation-template.sh`:
 OPERATION_NAME=$1  # e.g., "chmod"
 
 cat > "impl/rust-cli/src/commands/${OPERATION_NAME}.rs" <<EOF
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! ${OPERATION_NAME^} operation
 //!
 //! Formal specification: proofs/lean4/Operations/${OPERATION_NAME^}.lean

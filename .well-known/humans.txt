@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# humanstxt.org
+
+/* TEAM */
+Maintainer: Jonathan D.A. Jewell (hyperpolymath)
+Contact: j.d.a.jewell@open.ac.uk
+From: United Kingdom
+
+/* SITE */
+Last update: 2026-03-08
+Standards: RSR (Rhodium Standard Repository)
+License: PMPL-1.0-or-later (Palimpsest MPL)
+Components: Rust CLI, Lean 4 proofs, Coq proofs, Agda proofs, Isabelle proofs, Z3 SMT
+Tools: cargo, just, Podman

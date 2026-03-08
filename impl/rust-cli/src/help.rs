@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! 3-Tier Help System
 //!
 //! Provides comprehensive help at three levels:

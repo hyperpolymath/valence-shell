@@ -13,6 +13,7 @@ Import ListNotations.
 
 Require Import filesystem_model.
 Require Import file_operations.
+Require Import filesystem_composition.
 
 (** * POSIX Error Codes *)
 
@@ -248,39 +249,23 @@ Qed.
 
 Theorem safe_mkdir_rmdir_reversible :
   forall p fs fs',
+    well_formed fs ->
     safe_mkdir p fs = Success fs' ->
     safe_rmdir p fs' = Success fs.
 Proof.
-  intros p fs fs' Hmkdir.
+  intros p fs fs' Hwf Hmkdir.
   apply safe_mkdir_success_iff_precondition in Hmkdir.
   destruct Hmkdir as [Hpre Heq].
   subst fs'.
   apply safe_rmdir_success_iff_precondition.
   split.
-  - (* Prove rmdir_precondition *)
-    unfold rmdir_precondition.
-    repeat split.
-    + (* is_directory p (mkdir p fs) *)
-      apply mkdir_creates_directory.
-      assumption.
-    + (* is_empty_dir p (mkdir p fs) *)
-      unfold is_empty_dir.
-      split.
-      * apply mkdir_creates_directory. assumption.
-      * intros child Hprefix Hneq Hexists.
-        (* In a real proof, need to show mkdir doesn't create children *)
-        admit.
-    + (* has_write_permission (parent_path p) (mkdir p fs) *)
-      admit.
-    + (* p <> root_path *)
-      destruct Hpre as [Hnotexists _].
-      (* If p = root_path, then path_exists root_path fs, contradiction *)
-      admit.
+  - (* Prove rmdir_precondition — delegate to proven lemma *)
+    apply rmdir_precondition_after_mkdir; assumption.
   - (* Prove fs = rmdir p (mkdir p fs) *)
     symmetry.
     apply mkdir_rmdir_reversible.
     assumption.
-Admitted.
+Qed.
 
 (** * Summary of Error Modeling *)
 

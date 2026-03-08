@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: PLMP-1.0-or-later
+-- SPDX-License-Identifier: PMPL-1.0-or-later
 import Lake
 open Lake DSL
 
@@ -31,4 +31,7 @@ lean_lib RMOOperations where
   srcDir := "."
 
 lean_lib CopyMoveOperations where
+  srcDir := "."
+
+lean_lib PermissionOperations where
   srcDir := "."

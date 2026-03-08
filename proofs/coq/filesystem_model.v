@@ -246,16 +246,19 @@ Theorem mkdir_parent_still_exists :
     mkdir_precondition p fs ->
     path_exists (parent_path p) (mkdir p fs).
 Proof.
-  intros p fs [_ [Hparent _]].
+  intros p fs [HnotExists [Hparent _]].
   unfold path_exists in *.
   destruct Hparent as [node Hnode].
   exists node.
   unfold mkdir, fs_update.
   destruct (list_eq_dec String.string_dec p (parent_path p)).
-  - (* This would mean p = parent p, impossible for non-root *)
-    admit. (* Need to prove parent_path p <> p for non-root paths *)
+  - (* p = parent_path p would mean path_exists p fs (from parentExists),
+       contradicting notExists. Derive contradiction. *)
+    subst. exfalso.
+    apply HnotExists.
+    exists node. assumption.
   - assumption.
-Admitted.
+Qed.
 
 (** Helper axiom for functional extensionality
     In real development, import from Coq.Logic.FunctionalExtensionality *)

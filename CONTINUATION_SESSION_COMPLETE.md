@@ -96,7 +96,7 @@ This continuation session successfully completed **three major initiatives**:
 
 #### Documentation (7 new files):
 1. ✅ **LICENSE** (~150 lines)
-   - Single license: Palimpsest-MPL 1.0 or later (PLMP-1.0-or-later)
+   - Single license: Palimpsest-MPL 1.0 or later (PMPL-1.0-or-later)
    - Attribution + modification history required
    - Modification history section (palimpsest record)
 

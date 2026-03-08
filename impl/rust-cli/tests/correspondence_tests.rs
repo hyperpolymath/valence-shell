@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Correspondence Tests - Verify Rust implementation matches Lean 4 theorems
 //!
 //! These tests verify that the Rust implementation correctly implements

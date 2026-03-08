@@ -11,7 +11,7 @@ image:https://[License: PMPL-1.0,link="https://github.com/hyperpolymath/palimpse
 :source-highlighter: rouge
 
 image:https://img.shields.io/badge/RSR-PLATINUM-blueviolet[RSR Compliance]
-image:https://img.shields.io/badge/Proofs-256%20theorems-brightgreen[Formal Proofs]
+image:https://img.shields.io/badge/Proofs-200%2B%20theorems-brightgreen[Formal Proofs]
 image:https://img.shields.io/badge/Systems-6%20proof%20assistants-orange[Proof Systems]
 
 **Formally verified shell implementing the MAA (Mutually Assured Accountability) Framework.**
@@ -20,10 +20,9 @@ Every operation backed by machine-checkable proofs, enabling GDPR compliance wit
 
 [IMPORTANT]
 ====
-**Current Status**: v1.0.0 Released - Production Ready for Compliance Environments +
-✅ **READY FOR PRODUCTION** in security-critical environments (finance, healthcare, government) +
-**Progress**: 100% of v1.0 features complete, all tests passing +
-**Known Limitations**: POSIX-only (bash compatibility coming in v1.1) +
+**Current Status**: v0.9.0 — Advanced Research Prototype +
+**NOT production-ready.** Functional shell with formally proven reversibility, but POSIX compliance is incomplete and Lean→Rust correspondence is testing-based (~85% confidence), not mechanized. +
+**Progress**: ~72% of full roadmap complete, 602 tests passing (0 failures) +
 See <<_verification_status>> and link:CHANGELOG.md[CHANGELOG] for details.
 ====
 
@@ -40,11 +39,11 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 == Formal Verification
 * [x] Formally Proven Reversibility: `rmdir(mkdir(p, fs)) = fs`
 * [x] Polyglot Verification: 6 proof systems (Coq, Lean 4, Agda, Isabelle, Mizar, Z3)
-* [x] ~256 Theorems: Proven across different logical foundations
+* [x] ~250+ Theorems: Proven across different logical foundations (4 proof gaps remain)
 * [x] Content Operations: File read/write with proven reversibility
 * [x] MAA Framework: Mutually Assured Accountability with audit trails
 
-== Shell Features (v1.0.0)
+== Shell Features (v0.9.0)
 * [x] Unix Pipelines: Multi-stage pipelines (`cmd1 | cmd2 | cmd3`)
 * [x] I/O Redirections: All POSIX redirections (`>`, `>>`, `<`, `2>`, `2>>`, `&>`, `2>&1`)
 * [x] Process Substitution: `<(cmd)` and `>(cmd)` with FIFO implementation
@@ -52,13 +51,13 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 * [x] Here Documents: `<<DELIMITER`, `<←DELIMITER`, `<<<word`
 * [x] Job Control: Background jobs, `fg`, `bg`, `kill`, job specifications
 * [x] Shell Variables: `$VAR`, `export`, assignment, expansion
-* [x] GDPR Compliance: Secure deletion (`obliterate`) + audit logging
+* [ ] GDPR Compliance: Secure deletion (`obliterate`) + audit logging (stubs only)
 * [x] Syntax Highlighting: Real-time color-coded REPL
 * [x] Command Correction: Intelligent typo suggestions
 * [x] Friendly Errors: fish-style helpful error messages
 * [x] Smart Pager: Auto-paging for long output
 * [x] 3-Tier Help: Quick/verbose/man page documentation
-* [x] 187 Tests Passing: 131 unit + 46 integration + 10 v1.0 feature tests
+* [x] 555 Tests Passing: Unit, correspondence, integration, property, security
 
 == Implementation
 * [x] Production-Ready Rust CLI: 95% complete, fully functional shell
@@ -284,7 +283,7 @@ Valence Shell uses **polyglot verification** across 6 proof systems:
 ----
 ┌─────────────────────────────────────┐
 │ Formal Proofs (HIGH TRUST)          │ ← Mathematical guarantees
-│ ~256 theorems, ~4,280 lines         │
+│ ~250+ theorems, ~4,280 lines         │
 └─────────────┬───────────────────────┘
               │ Extraction (GAP) ⚠️
 ┌─────────────▼───────────────────────┐
@@ -319,7 +318,7 @@ To reach production: Close extraction gap (Coq → OCaml verification).
 * If preconditions hold, `write(p, old, write(p, new, fs)) = fs`
 * Operations on `p1` don't affect `p2` (when `p1 ≠ p2`)
 * Composition: sequences of operations reverse correctly
-* ~256 theorems proven across 6 verification systems
+* ~250+ theorems proven across 6 verification systems
 
 === ❌ What Is NOT Guaranteed
 
@@ -450,7 +449,7 @@ See link:CONTRIBUTING.md[CONTRIBUTING.md] for details.
 
 == Licensing
 
-**License**: Palimpsest-MPL 1.0 or later (SPDX: `PLMP-1.0-or-later`)
+**License**: Palimpsest-MPL 1.0 or later (SPDX: `PMPL-1.0-or-later`)
 
 See link:LICENSE[LICENSE] for full text and usage rights.
 Third-party notices: link:THIRD_PARTY_NOTICES.md[THIRD_PARTY_NOTICES.md].
@@ -465,7 +464,7 @@ Valence Shell achieves **PLATINUM-level** Rhodium Standard Repository (RSR) comp
 * ✅ .well-known/ directory (RFC 9116 compliant)
 * ✅ Build systems (Just + Nix + Container + CI/CD)
 * ✅ TPCF (Tri-Perimeter Contribution Framework)
-* ✅ Formal verification (6 proof systems, ~256 theorems)
+* ✅ Formal verification (6 proof systems, ~250+ theorems)
 * ✅ Zero runtime dependencies
 * ✅ Offline-first verification
 * ✅ Security guarantees (formal proofs + memory safety)
@@ -494,7 +493,7 @@ Different logical foundations increase confidence. If all 6 systems prove the sa
 
 **For research/education**: Yes! +
 **For production**: Not yet (wait for v1.0.0) +
-**License**: Palimpsest-MPL 1.0 or later (`PLMP-1.0-or-later`)
+**License**: Palimpsest-MPL 1.0 or later (`PMPL-1.0-or-later`)
 
 === How do I verify the proofs?
 
@@ -557,14 +556,14 @@ See link:.well-known/humans.txt[humans.txt] for complete attribution.
 
 Copyright (c) 2025 Valence Shell Contributors
 
-Licensed under **Palimpsest-MPL 1.0 or later** (SPDX: `PLMP-1.0-or-later`).
+Licensed under **Palimpsest-MPL 1.0 or later** (SPDX: `PMPL-1.0-or-later`).
 See link:LICENSE[LICENSE] for full text.
 
 ---
 
 **Made with ❤️ by humans and AI, for humans who value formal correctness.**
 
-**Status**: Advanced Research Prototype (v0.14.0) | **RSR**: PLATINUM (105/100) | **Proofs**: ~256 theorems | **Tests**: 177 passing
+**Status**: Advanced Research Prototype (v0.9.0) | **RSR**: PLATINUM (105/100) | **Proofs**: ~250+ theorems | **Tests**: 602 passing
 
 [.text-center]
 _"Every operation reversible. Every claim proven. Every contributor valued."_

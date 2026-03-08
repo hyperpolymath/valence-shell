@@ -144,7 +144,7 @@ We proved the same theorems in **6 different proof systems**:
 
 ## The Confidence Levels
 
-### Current (v0.14.0): 85% Overall Confidence
+### Current (v0.9.0): 95% Overall Confidence
 
 **Breakdown**:
 - **Proofs exist**: ✅ (256+ theorems)
@@ -291,9 +291,9 @@ pub fn mkdir(path: &str) -> Result<()> {
 
 **A**: We are (in v2.0)!
 
-**Current** (v0.14.0):
+**Current** (v0.9.0):
 - Proofs separate from implementation
-- Manual correspondence checking
+- Property-based correspondence testing (~95% confidence)
 
 **Future** (v2.0):
 - Idris2 proofs → Generate C code

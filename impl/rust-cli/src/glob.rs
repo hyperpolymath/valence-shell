@@ -13,8 +13,12 @@
 //! // Returns: ["file1.txt", "file2.txt", ...]
 //! ```
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
+
+/// Maximum number of results from glob expansion (prevents resource exhaustion from
+/// patterns like `/**/*` on deep directory trees).
+const MAX_GLOB_RESULTS: usize = 100_000;
 
 /// Check if a string contains glob metacharacters
 ///
@@ -111,6 +115,16 @@ pub fn expand_glob(pattern: &str, base_dir: &Path) -> Result<Vec<PathBuf>> {
     // Sort results (POSIX requirement)
     matches.sort();
 
+    // Guard against resource exhaustion from overly broad patterns
+    if matches.len() > MAX_GLOB_RESULTS {
+        bail!(
+            "Glob pattern '{}' matched {} files (limit: {})",
+            pattern,
+            matches.len(),
+            MAX_GLOB_RESULTS,
+        );
+    }
+
     // Convert absolute paths back to relative if needed
     if !pattern.starts_with('/') {
         matches = matches
@@ -145,7 +159,19 @@ pub fn expand_glob(pattern: &str, base_dir: &Path) -> Result<Vec<PathBuf>> {
 ///     vec!["src/main.rs", "src/lib.rs"]
 /// );
 /// ```
+/// Maximum number of results from brace expansion (prevents exponential blowup from
+/// patterns like `{a,b}{a,b}{a,b}...` which grow as 2^N).
+const MAX_BRACE_RESULTS: usize = 10_000;
+
 pub fn expand_braces(pattern: &str) -> Vec<String> {
+    expand_braces_limited(pattern, MAX_BRACE_RESULTS)
+}
+
+fn expand_braces_limited(pattern: &str, remaining: usize) -> Vec<String> {
+    if remaining == 0 {
+        return vec![pattern.to_string()];
+    }
+
     // Find first unescaped {
     let mut chars = pattern.chars().enumerate().peekable();
     let mut brace_start = None;
@@ -186,12 +212,17 @@ pub fn expand_braces(pattern: &str) -> Vec<String> {
                     return vec![pattern.to_string()];
                 }
 
-                // Expand each alternative
+                // Expand each alternative with remaining budget
                 let mut results = Vec::new();
+                let mut budget = remaining;
                 for alt in alternatives {
+                    if budget == 0 {
+                        break;
+                    }
                     let expanded = format!("{}{}{}", prefix, alt, suffix);
-                    // Recursively expand nested braces
-                    results.extend(expand_braces(&expanded));
+                    let sub = expand_braces_limited(&expanded, budget);
+                    budget = budget.saturating_sub(sub.len());
+                    results.extend(sub);
                 }
 
                 return results;

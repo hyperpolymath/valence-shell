@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # asdf version management for Elixir implementation
 elixir 1.19.4-otp-28
 erlang 28.3.1

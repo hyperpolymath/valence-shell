@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Rust NIF for Valence Shell secure erase operations
 //!
 //! Exposes hardware-based secure erase functions to Elixir

@@ -50,12 +50,22 @@ symlink-unlink-reversible p fs pre = funext helper
     helper : ∀ p' → unlink p (symlink p fs) p' ≡ fs p'
     helper p' with p path-≟ p'
     ... | yes refl with p path-≟ p
-        ... | yes _ with SymlinkPrecondition.notExists pre
-            ... | notEx = ⊥-elim (notEx (node , prf))
-              where
-                open import Data.Empty using (⊥-elim)
-                postulate node : FSNode
-                postulate prf : fs p ≡ just node
+        ... | yes _ =
+            -- After unlink p (symlink p fs), at path p we get:
+            -- fsUpdate p nothing (fsUpdate p (just (mkFSNode File defaultPerms)) fs) p
+            -- = nothing (by definition of fsUpdate with p ≟ p = yes)
+            --
+            -- We need to show: nothing ≡ fs p
+            -- From precondition: ¬ pathExists p fs, i.e. ¬ (∃ node. fs p ≡ just node)
+            -- Therefore fs p ≡ nothing
+            not-exists-is-nothing (SymlinkPrecondition.notExists pre)
+          where
+            open import Data.Empty using (⊥-elim)
+            -- If no node exists at p, then fs p = nothing
+            not-exists-is-nothing : ¬ pathExists p fs → nothing ≡ fs p
+            not-exists-is-nothing notEx with fs p
+            ... | nothing = refl
+            ... | just node = ⊥-elim (notEx (node , refl))
         ... | no p≢p = ⊥-elim (p≢p refl)
           where
             open import Data.Empty using (⊥-elim)

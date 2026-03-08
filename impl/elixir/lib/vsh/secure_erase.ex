@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 defmodule VSH.SecureErase do
   @moduledoc """
   Hardware-based secure erase for SSDs using NIST SP 800-88 Purge methods.

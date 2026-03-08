@@ -416,18 +416,21 @@ fn stdio_config_from_redirects(
                     state,
                 )?;
 
-                // Create temporary file with processed content
-                let temp_path = format!("/tmp/vsh-heredoc-{}-{}",
-                    std::process::id(),
-                    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
-                );
-                std::fs::write(&temp_path, &processed)?;
-
-                let file_handle = File::open(&temp_path)
-                    .with_context(|| format!("Failed to open here document temp file: {}", temp_path))?;
-                stdin_cfg = Stdio::from(file_handle);
-
-                // TODO: Track temp file for cleanup
+                // Write heredoc content to a pipe instead of a temp file (avoids
+                // predictable temp path + symlink attacks entirely).
+                use std::os::unix::io::FromRawFd;
+                let mut pipe_fds = [0i32; 2];
+                // SAFETY: pipe() is a POSIX syscall; pipe_fds is a valid 2-element array.
+                if unsafe { libc::pipe(pipe_fds.as_mut_ptr()) } != 0 {
+                    anyhow::bail!("Failed to create pipe for here document: {}", std::io::Error::last_os_error());
+                }
+                // SAFETY: pipe_fds[1] is a valid file descriptor from pipe().
+                let mut write_end = unsafe { File::from_raw_fd(pipe_fds[1]) };
+                std::io::Write::write_all(&mut write_end, processed.as_bytes())?;
+                drop(write_end); // Close write end so reader gets EOF
+                // SAFETY: pipe_fds[0] is a valid file descriptor from pipe().
+                let read_end = unsafe { File::from_raw_fd(pipe_fds[0]) };
+                stdin_cfg = Stdio::from(read_end);
             }
 
             Redirection::HereString { content, expand } => {
@@ -439,18 +442,20 @@ fn stdio_config_from_redirects(
                     format!("{}\n", content)
                 };
 
-                // Create temporary file
-                let temp_path = format!("/tmp/vsh-herestring-{}-{}",
-                    std::process::id(),
-                    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
-                );
-                std::fs::write(&temp_path, &processed)?;
-
-                let file_handle = File::open(&temp_path)
-                    .with_context(|| format!("Failed to open here string temp file: {}", temp_path))?;
-                stdin_cfg = Stdio::from(file_handle);
-
-                // TODO: Track temp file for cleanup
+                // Write here string content to a pipe (avoids predictable temp paths).
+                use std::os::unix::io::FromRawFd;
+                let mut pipe_fds = [0i32; 2];
+                // SAFETY: pipe() is a POSIX syscall; pipe_fds is a valid 2-element array.
+                if unsafe { libc::pipe(pipe_fds.as_mut_ptr()) } != 0 {
+                    anyhow::bail!("Failed to create pipe for here string: {}", std::io::Error::last_os_error());
+                }
+                // SAFETY: pipe_fds[1] is a valid file descriptor from pipe().
+                let mut write_end = unsafe { File::from_raw_fd(pipe_fds[1]) };
+                std::io::Write::write_all(&mut write_end, processed.as_bytes())?;
+                drop(write_end); // Close write end so reader gets EOF
+                // SAFETY: pipe_fds[0] is a valid file descriptor from pipe().
+                let read_end = unsafe { File::from_raw_fd(pipe_fds[0]) };
+                stdin_cfg = Stdio::from(read_end);
             }
         }
     }

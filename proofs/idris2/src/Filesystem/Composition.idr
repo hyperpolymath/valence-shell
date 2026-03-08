@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: PLMP-1.0-or-later
+-- SPDX-License-Identifier: PMPL-1.0-or-later
 -- Filesystem Composition - Operation Sequences and Undo/Redo
 --
 -- Proves that sequences of reversible operations are themselves reversible.

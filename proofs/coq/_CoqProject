@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Valence Shell — Coq Proof Project
+#
+# Build: coq_makefile -f _CoqProject -o Makefile && make
+
+-Q . ValenceShell
+
+filesystem_model.v
+file_operations.v
+file_content_operations.v
+copy_move_operations.v
+symlink_operations.v
+permission_operations.v
+filesystem_composition.v
+filesystem_equivalence.v
+posix_errors.v
+rmo_operations.v
+extraction.v

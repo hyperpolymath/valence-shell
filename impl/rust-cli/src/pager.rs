@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Smart Pager (fish-style)
 //!
 //! Automatically pages long output to prevent terminal flooding.

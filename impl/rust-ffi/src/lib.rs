@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Valence Shell FFI Layer
 //!
 //! This crate provides the FFI (Foreign Function Interface) layer that bridges

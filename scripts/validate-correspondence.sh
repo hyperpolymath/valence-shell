@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 # Validate Lean 4 ↔ Rust Correspondence
 #
 # This script validates that Rust implementation matches Lean 4 specifications

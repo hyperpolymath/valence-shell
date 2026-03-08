@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Arithmetic Expression Evaluation
 //!
 //! Implements POSIX arithmetic expansion for `$((expression))` syntax.
@@ -657,14 +657,16 @@ pub fn eval_arith(expr: &ArithExpr, state: &ShellState) -> Result<i64> {
                     if rval < 0 || rval >= 64 {
                         Err(anyhow!("Shift count out of range: {}", rval))
                     } else {
-                        Ok(lval << rval)
+                        lval.checked_shl(rval as u32)
+                            .ok_or_else(|| anyhow!("Arithmetic overflow: {} << {}", lval, rval))
                     }
                 }
                 ArithOp::ShiftRight => {
                     if rval < 0 || rval >= 64 {
                         Err(anyhow!("Shift count out of range: {}", rval))
                     } else {
-                        Ok(lval >> rval)
+                        lval.checked_shr(rval as u32)
+                            .ok_or_else(|| anyhow!("Arithmetic overflow: {} >> {}", lval, rval))
                     }
                 }
 

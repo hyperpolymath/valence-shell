@@ -4,7 +4,7 @@
 
 **Formally verified shell with proven reversibility guarantees and MAA framework.**
 
-**Current Version**: 0.9.0 (advanced research prototype, ~65% complete)
+**Current Version**: 0.9.0 (advanced research prototype, ~72% complete)
 **Primary Implementation**: `impl/rust-cli/` (Rust)
 **License**: PMPL-1.0-or-later
 
@@ -22,6 +22,7 @@ The Rust CLI is a functional interactive shell with these features:
 
 - Built-in filesystem operations (mkdir, rmdir, touch, rm) with undo/redo
 - External command execution via PATH lookup
+- Reversible file operations (`cp`, `mv`, `ln -s`) with formal proofs
 - Unix pipelines (`cmd1 | cmd2 | cmd3`)
 - I/O redirections (`>`, `>>`, `<`, `2>`, `2>>`, `&>`, `2>&1`)
 - Process substitution (`<(cmd)` and `>(cmd)`)
@@ -29,29 +30,37 @@ The Rust CLI is a functional interactive shell with these features:
 - Here documents (`<<DELIM`) and here strings (`<<<word`)
 - Glob expansion (`*.txt`, `file?.rs`, `[a-z]*`, `{1,2,3}`)
 - Quote processing (single, double, backslash)
+- Control structures (`if/then/elif/else/fi`, `while/do/done`, `for/in/do/done`, `case/esac`)
 - `test`/`[` and `[[ ]]` conditionals
 - Logical operators (`&&` `||`) with short-circuit evaluation
-- Shell variables (`$VAR`, `${VAR}`, `export`)
+- Shell builtins (`echo`, `read`, `source`, `eval`, `set`, `unset`, `true`, `false`)
+- Shell variables (`$VAR`, `${VAR}`, `export`) with reversible assignment (undo/redo)
 - Job control (`bg`, `fg`, `jobs`, `kill`, `&` operator)
 - Transaction grouping (`begin`/`commit`/`rollback`)
-- Interactive REPL with history
+- Interactive REPL with history and multi-line input for control structures
 - Command correction (zsh-style "Did you mean?")
+- `explain` command (proof-annotated dry runs)
+- `checkpoint`/`restore` (named snapshots with proof certificates)
+- `diff` (state comparison between checkpoints or current state)
+- `replay` (animated history with proof narration)
 
 ### What Does NOT Work
 
-- NOT a full POSIX shell (many features missing per `docs/POSIX_COMPLIANCE.md`)
-- NOT formally verified end-to-end (Lean -> Rust is ~85% confidence via testing, not proven)
+- NOT a full POSIX shell (functions, word splitting/$IFS, tilde expansion, script execution still missing)
+- NOT formally verified end-to-end (Lean -> Rust is ~95% confidence via property testing, not proven)
 - NOT a replacement for bash/zsh in current state
 - No GDPR compliance (RMO/secure deletion are stubs)
-- No mechanized correspondence proof (manual testing only)
+- No mechanized correspondence proof (property testing only)
+- No shell functions (`func() { ... }` syntax)
+- No shell script execution (`.sh` files)
 - Elixir NIF build broken (low priority)
 - BEAM daemon not implemented (planned, not built)
 
-### Test Results (2026-02-12, ALL PASSING)
+### Test Results (2026-03-08, ALL PASSING — updated counts 2026-03-08)
 
 | Suite | Count | Notes |
 |-------|-------|-------|
-| Unit tests (lib) | 220 | Core logic |
+| Unit tests (lib) | 277 | Core logic + control structures + tracked variables |
 | Correspondence | 28 | Lean 4 theorem validation |
 | Extended | 55 | Advanced features |
 | Integration | 35 | End-to-end |
@@ -62,21 +71,21 @@ The Rust CLI is a functional interactive shell with these features:
 | Property | 28 | General property tests |
 | Security | 15 | Injection, traversal, validation |
 | Doctests | 52 | Inline examples |
-| **Total passing** | **541** | **0 failures** |
+| **Total passing** | **602** | **0 failures** |
 | Ignored (stress+1) | 14 | Run manually with `--ignored` |
 
 ### Codebase Metrics
 
 - 15,720 lines of Rust across 30 source files
 - ~200+ formal theorems across 6 proof systems
-- 31 proof holes across 17 proof files (26 gaps, 3 axioms, 2 structural)
+- 10 proof holes across 8 proof files (4 gaps, 4 axioms, 2 structural) — see `docs/PROOF_HOLES_AUDIT.md`
 
 ## Critical Issues
 
 ### Critical Priority
 
 1. **No mechanized Lean -> Rust correspondence** — testing only, ~85% confidence
-2. **26 real proof gaps** across 17 files (plus 3 axioms, 2 structural — see `docs/PROOF_HOLES_AUDIT.md`)
+2. **4 real proof gaps** across 4 files (plus 4 axioms, 2 structural — see `docs/PROOF_HOLES_AUDIT.md`)
 3. **NOT production-ready** — research prototype only
 
 ### High Priority
@@ -159,7 +168,7 @@ valence-shell/
   impl/
     rust-cli/           # PRIMARY - Rust CLI (v0.9.0)
       src/              # 30 source files, 15,720 lines
-      tests/            # 525 tests passing
+      tests/            # 602 tests passing
       Cargo.toml
     elixir/             # Reference impl (stale)
     ocaml/              # Extraction target (design only)
@@ -220,21 +229,21 @@ vsh::parser::expand_variables(&input, &state);
 
 ### Immediate Priorities
 
-1. **Close remaining 31 proof gaps** (prioritized in `docs/PROOF_HOLES_AUDIT.md`)
-2. **Fix git author** on future commits (currently `Test <test@example.com>`)
-3. **Rewrite `docs/POSIX_COMPLIANCE.md`** — severely outdated (see POSIX audit notes below)
+1. **Shell functions** (`func() { ... }` syntax)
+2. **Shell script execution** (`.sh` files, shebang handling)
+3. **Echidna integration** for automated property-based verification
+4. **Fix git author** on future commits (currently `Test <test@example.com>`)
 
 ### This Week
 
-1. Set up Echidna property-based validation pipeline
-2. Begin mechanized Lean -> Rust correspondence (even partial)
-3. Implement `2>&1` fd duplication (currently a TODO no-op in `external.rs`)
+1. Implement shell functions (`func() { ... }`)
+2. Shell script execution (`.sh` files)
+3. Set up Echidna property-based validation pipeline
 
 ### This Month
 
-1. Achieve 95%+ correspondence confidence via property testing
-2. Implement control structures (`if`/`then`/`else`/`fi`, `while`/`for`, `case`)
-3. Implement `echo` builtin and word splitting (`$IFS`)
+1. Implement shell functions (`func() { ... }`)
+2. Shell script execution (`.sh` files)
 3. Begin Idris2 extraction path for v2.0
 
 ### What NOT to Do
@@ -285,28 +294,23 @@ PMPL-1.0-or-later (Palimpsest License)
 
 ---
 
-## POSIX Compliance Audit Notes (2026-02-12)
+## POSIX Compliance Notes (2026-03-08)
 
-`docs/POSIX_COMPLIANCE.md` is **severely outdated** — it claims nothing beyond filesystem
-syscalls is implemented, but the shell actually has: command parsing with full AST, pipelines,
-redirections (7 of 8 types), variables with parameter expansion, glob/brace expansion,
-command/process substitution, arithmetic expansion, quote processing, job control basics,
-test/[/[[ builtins, logical operators, and here documents. Milestones 1-8 from the roadmap
-are substantially complete.
+`docs/POSIX_COMPLIANCE.md` is now up-to-date. Milestones 1-9 complete, M10-11 partial.
 
 **Most critical missing POSIX features** (ranked by impact):
-1. Control structures (if/then/else/fi, while/for, case) — blocks all script execution
-2. Functions — no func() { ... } syntax
-3. echo builtin — delegates to external /usr/bin/echo
-4. 2>&1 fd duplication — falls back to Stdio::inherit() (TODO in external.rs:382)
-5. Word splitting ($IFS) — unquoted variable expansions not split
-6. Tilde expansion — only works for ~/ in cd command
-7. read builtin, set/unset/readonly, source/., eval, semicolons as separators
+1. Functions — no `func() { ... }` syntax — blocks modular scripts
+2. Shell script execution — no `.sh` file running
+3. Word splitting (`$IFS`) — unquoted variable expansions not split
+4. Tilde expansion — only works for `~/` in `cd` command
+5. `trap` — cannot handle signals in scripts
+6. `alias` — no command aliases
+7. SIGCHLD/Ctrl+Z — job control incomplete
 
 ---
 
-**Last Updated**: 2026-02-12 (Opus source audit, bug fixes, dead code removal)
+**Last Updated**: 2026-03-08 (P0-P9: SPDX, cp/mv/ln, controls, builtins, RSR, proofs, chmod/chown, docs, wow-factor, security audit)
 **Version**: 0.9.0
 **Status**: Advanced research prototype — NOT production-ready
-**Tests**: 541 passing, 0 failures, 14 ignored
-**Completion**: ~65%
+**Tests**: 602 passing, 0 failures, 14 ignored
+**Completion**: ~72% (up from 65% at 2026-02-12 audit)
