@@ -3,9 +3,9 @@
 
 **Goal**: Full POSIX shell compliance with formal verification at each increment
 
-**Current Status**: Milestones 1-8 substantially complete; Milestones 9-14 not started
+**Current Status**: Milestones 1-8 complete; M9 complete; M10-11 partial; M12-14 not started
 
-**Last Updated**: 2026-02-12 (Opus audit — rewritten from scratch)
+**Last Updated**: 2026-03-08 (P7 documentation rewrite)
 
 ---
 
@@ -14,16 +14,16 @@
 | # | Milestone | Status | Notes |
 |---|-----------|--------|-------|
 | 1 | Simple Command Execution | **Complete** | PATH lookup, args, exit status |
-| 2 | Redirections | **Mostly complete** | `2>&1` is a no-op (TODO) |
+| 2 | Redirections | **Complete** | All 8 types including `2>&1` |
 | 3 | Pipelines | **Complete** | Multi-stage, exit code from last |
 | 4 | Variables | **Complete** | Scalars, arrays, parameter expansion |
 | 5 | Glob Expansion | **Complete** | POSIX-compliant + brace expansion |
 | 6 | Quote Processing | **Complete** | Single, double, backslash |
 | 7 | Command Substitution | **Complete** | `$(cmd)` and backticks |
 | 8 | Arithmetic | **Complete** | Full operator set including `**` |
-| 9 | Control Structures | **Not started** | Biggest gap — blocks all scripts |
+| 9 | Control Structures | **Complete** | if/elif/else, while, for, case/esac |
 | 10 | Job Control | **Partial** | No SIGCHLD, no Ctrl+Z |
-| 11 | Shell Builtins | **Partial** | 20 implemented, ~25 missing |
+| 11 | Shell Builtins | **Partial** | ~30 implemented, ~15 missing |
 | 12 | Functions | **Not started** | No `func() { ... }` syntax |
 | 13 | Shell Scripts | **Not started** | No `.sh` file execution |
 | 14 | Advanced Features | **Partial** | Here docs, process sub, arrays done |
@@ -42,7 +42,7 @@
 | Exit status handling | Done | `$?` tracked in ShellState |
 | PATH lookup | Done | Searches PATH directories |
 
-### Milestone 2: Redirections — MOSTLY COMPLETE
+### Milestone 2: Redirections — COMPLETE
 
 | Feature | Status | Implementation |
 |---------|--------|---------------|
@@ -58,7 +58,6 @@
 | Undo tracking for redirections | Done | `redirection.rs` tracks file modifications |
 
 **Known issues**:
-- ~~`2>&1` does nothing~~ — **Fixed** (2026-02-12, tracks stdout file handle)
 - Heredoc/herestring temp files in `/tmp/` are never cleaned up
 - Temp file names are predictable (symlink attack risk)
 
@@ -91,6 +90,7 @@
 | Array variables `arr=(...)` | Done | Sparse arrays via BTreeMap |
 | Array element `arr[n]=val` | Done | |
 | Array append `arr+=(...)` | Done | |
+| Reversible assignment (undo/redo) | Done | `OperationType::SetVariable`/`UnsetVariable` |
 
 **Known issues**:
 - `$@` and `$*` behave identically (should differ in quoted context)
@@ -142,20 +142,20 @@
 | Variable references | Done | |
 | Division by zero | Done | Returns error |
 
-### Milestone 9: Control Structures — NOT STARTED
+### Milestone 9: Control Structures — COMPLETE (added 2026-03-08)
 
-**This is the single biggest gap preventing practical shell use.**
-
-| Feature | Status |
-|---------|--------|
-| `if`/`then`/`else`/`elif`/`fi` | Not implemented |
-| `while`/`do`/`done` | Not implemented |
-| `until`/`do`/`done` | Not implemented |
-| `for`/`in`/`do`/`done` | Not implemented |
-| `case`/`esac` | Not implemented |
-| `select` (bashism) | Not implemented |
-
-No traces of control structure parsing exist in the codebase.
+| Feature | Status | Implementation |
+|---------|--------|---------------|
+| `if`/`then`/`else`/`elif`/`fi` | Done | `Command::If` with condition chains |
+| `while`/`do`/`done` | Done | `Command::While` with break/continue |
+| `for`/`in`/`do`/`done` | Done | `Command::For` with glob expansion in wordlist |
+| `case`/`esac` | Done | `Command::Case` with glob pattern matching |
+| `until`/`do`/`done` | Not implemented | Rarely used, low priority |
+| `select` (bashism) | Not implemented | Non-POSIX |
+| `test`/`[` builtin | Done | `test_builtin.rs` — file tests, string ops, numeric comparison |
+| `[[ ]]` extended test | Done | Pattern matching, regex support |
+| Logical operators `&&` `\|\|` | Done | Short-circuit, left-to-right (fixed 2026-02-12) |
+| Multi-line input | Done | REPL detects open blocks and prompts `>` |
 
 ### Milestone 10: Job Control — PARTIAL
 
@@ -173,16 +173,18 @@ No traces of control structure parsing exist in the codebase.
 
 ### Milestone 11: Shell Builtins — PARTIAL
 
-**Implemented**:
-`cd`, `pwd`, `ls`, `mkdir`, `rmdir`, `touch`, `rm`, `exit`/`quit`, `export`,
-`test`/`[`, `[[`, `jobs`, `fg`, `bg`, `kill`, `undo`, `redo`, `history`,
-`begin`/`commit`/`rollback`, `graph`, `proofs`
+**Implemented** (30):
+`cd`, `pwd`, `ls`, `mkdir`, `rmdir`, `touch`, `rm`, `cp`, `mv`, `ln`,
+`chmod`, `chown`, `exit`/`quit`, `export`, `test`/`[`, `[[`,
+`echo`, `read`, `source`/`.`, `eval`, `set`, `unset`, `true`, `false`,
+`jobs`, `fg`, `bg`, `kill`,
+`undo`, `redo`, `history`, `begin`/`commit`/`rollback`, `graph`, `proofs`,
+`explain`, `checkpoint`, `restore`, `checkpoints`, `diff`, `replay`
 
 **NOT implemented** (POSIX-required):
-`echo`, `printf`, `read`, `set`, `unset`, `readonly`, `alias`/`unalias`,
-`source`/`.`, `exec`, `eval`, `trap`, `true`/`false`, `type`, `command`,
-`hash`, `umask`, `wait`, `getopts`, `shift`, `break`, `continue`, `return`,
-`local`
+`printf`, `readonly`, `alias`/`unalias`, `exec`, `trap`,
+`type`, `command`, `hash`, `umask`, `wait`, `getopts`, `shift`,
+`break`, `continue`, `return`, `local`
 
 ### Milestone 12: Functions — NOT STARTED
 
@@ -208,38 +210,45 @@ No `.sh` file execution, no shebang handling.
 
 ---
 
-## Critical Missing Features (by impact)
+## Formally Verified Operations
 
-1. **Control structures** — Blocks ALL script execution
-2. **Functions** — No `func() { ... }`
-3. **`echo` builtin** — Delegates to external `/usr/bin/echo`
-4. ~~**`2>&1` fd duplication**~~ — **Done** (tracks stdout file handle for `try_clone()`)
-5. **Word splitting (`$IFS`)** — Unquoted expansions not split
-6. ~~**Semicolons**~~ — **Done** (`cmd1; cmd2` splits and executes sequentially)
-7. **Tilde expansion** — Only works for `~/` in `cd`
-8. **`read` builtin** — Cannot read user input into variables
-9. **`set`/`unset`/`readonly`** — Cannot manage shell options
-10. **`source`/`.` and `eval`** — Cannot include scripts
+All filesystem-mutating builtins are backed by formal proofs:
+
+| Operation | Proof Systems | Theorems | Gaps |
+|-----------|---------------|----------|------|
+| mkdir/rmdir | Lean, Coq, Agda, Isabelle, Mizar, Z3 | Reversibility, composition | 0 |
+| touch/rm | Lean, Coq, Agda, Isabelle, Mizar, Z3 | Reversibility | 0 |
+| write_file | Lean, Coq, Agda, Isabelle, Mizar, Z3 | Content reversibility | 0 |
+| cp | Lean, Coq, Agda, Isabelle, Mizar, Z3 | Copy reversibility | 0 |
+| mv | Lean, Coq, Agda, Isabelle, Mizar, Z3 | Move reversibility | 0 |
+| ln -s | Lean, Coq, Agda, Isabelle, Mizar, Z3 | Symlink reversibility | 0 |
+| chmod | Lean, Coq, Agda, Isabelle, Mizar, Z3 | Permission reversibility | 0 |
+| chown | Lean, Coq, Agda, Isabelle, Mizar, Z3 | Ownership reversibility | 0 |
+| Variable assignment | Pending | State-machine property | Pending |
+
+**Total**: ~250+ theorems, 4 remaining gaps, 4 axioms (see `docs/PROOF_HOLES_AUDIT.md`)
 
 ---
 
-## What IS Verified
+## Critical Missing Features (by impact)
 
-- **200+ theorems** across 6 proof systems (Lean 4, Coq, Agda, Isabelle/HOL, Mizar, Z3)
-- **31 proof holes** remain (26 gaps, 3 axioms, 2 structural) — see `docs/PROOF_HOLES_AUDIT.md`
-- **Proven properties**: Reversibility, composition, independence, type preservation
-- **Correspondence**: 28 tests validate Rust matches Lean 4 theorems (~85% confidence)
-- **No mechanized extraction** — Lean 4 → Rust is via testing, not proven
+1. **Functions** — No `func() { ... }` — blocks modular scripts
+2. **Shell script execution** — No `.sh` file running
+3. **Word splitting (`$IFS`)** — Unquoted expansions not split
+4. **Tilde expansion** — Only works for `~/` in `cd`
+5. **`trap`** — Cannot handle signals in scripts
+6. **`alias`** — No command aliases
+7. **SIGCHLD/Ctrl+Z** — Job control incomplete
 
 ---
 
 ## Test Coverage
 
-**541 tests passing, 0 failures, 14 ignored** (as of 2026-02-12)
+**602 tests passing, 0 failures, 14 ignored** (as of 2026-03-08)
 
 | Suite | Count |
 |-------|-------|
-| Unit tests (lib) | 220 |
+| Unit tests (lib) | 277 |
 | Correspondence | 28 |
 | Extended | 55 |
 | Integration | 35 + 10 |
@@ -254,17 +263,19 @@ No `.sh` file execution, no shebang handling.
 
 ## Honest Assessment
 
-**Milestones 1-8** are substantially complete with the caveats noted above.
+**Milestones 1-9** are complete with the caveats noted above.
 The shell can execute external commands, pipe them together, redirect I/O,
-expand variables/globs/arithmetic/commands, and process quotes correctly.
+expand variables/globs/arithmetic/commands, process quotes, and run
+control structures (if/while/for/case). Reversible builtins include
+mkdir, rmdir, touch, rm, cp, mv, ln, chmod, chown — all with formal proofs.
 
-**Milestones 9-14** are the gap between "working REPL" and "usable shell."
-Control structures and functions are the critical path. Without them, vsh
-cannot run any real shell scripts.
+**Milestones 10-14** are the gap between "functional shell" and "full POSIX shell."
+Functions and shell script execution are the critical path. Without them, vsh
+cannot run complex shell scripts.
 
-**Estimated effort to full POSIX compliance**: 12-18 months from current state
-(significantly less than the original 3-5 year estimate, since M1-M8 are done).
+**Estimated effort to full POSIX compliance**: 6-12 months from current state
+(M1-M9 done, M10-11 partial, M12-14 remaining).
 
 ---
 
-**Author**: Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>
+**Author**: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Process Substitution Implementation
 //!
 //! Implements POSIX-style process substitution for treating command output as files.
@@ -49,19 +49,23 @@ impl ProcessSubstitution {
         #[cfg(unix)]
         {
             use std::ffi::CString;
-            let path_cstr = CString::new(fifo_path.to_str().unwrap())?;
+            let path_str = fifo_path.to_str()
+                .ok_or_else(|| anyhow!("FIFO path contains invalid UTF-8: {}", fifo_path.display()))?;
+            let path_cstr = CString::new(path_str)
+                .map_err(|_| anyhow!("FIFO path contains null bytes: {}", fifo_path.display()))?;
+            // SAFETY: path_cstr is a valid NUL-terminated C string; mkfifo is a POSIX syscall
+            // that creates a FIFO special file at the given path with the specified permissions.
             let result = unsafe { libc::mkfifo(path_cstr.as_ptr(), 0o600) };
             if result != 0 {
                 let err = std::io::Error::last_os_error();
                 // If FIFO already exists, try to remove and recreate
                 if err.kind() == std::io::ErrorKind::AlreadyExists {
-                    if fifo_path.exists() {
-                        std::fs::remove_file(&fifo_path)?;
-                        let result = unsafe { libc::mkfifo(path_cstr.as_ptr(), 0o600) };
-                        if result != 0 {
-                            let err = std::io::Error::last_os_error();
-                            return Err(anyhow!("Failed to create FIFO {}: {}", fifo_path.display(), err));
-                        }
+                    std::fs::remove_file(&fifo_path)?;
+                    // SAFETY: same as above — path_cstr unchanged, mkfifo is safe with valid CString
+                    let result = unsafe { libc::mkfifo(path_cstr.as_ptr(), 0o600) };
+                    if result != 0 {
+                        let err = std::io::Error::last_os_error();
+                        return Err(anyhow!("Failed to create FIFO {}: {}", fifo_path.display(), err));
                     }
                 } else {
                     return Err(anyhow!("Failed to create FIFO {}: {}", fifo_path.display(), err));
@@ -117,12 +121,27 @@ impl ProcessSubstitution {
             }
         }
 
-        // Remove FIFO
-        if self.fifo_path.exists() {
-            std::fs::remove_file(&self.fifo_path)?;
+        // Remove FIFO (ignore NotFound — another process may have already cleaned it up)
+        match std::fs::remove_file(&self.fifo_path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
         }
 
         Ok(())
+    }
+}
+
+/// Safety net: remove FIFO on drop if cleanup() was never called
+impl Drop for ProcessSubstitution {
+    fn drop(&mut self) {
+        // Kill lingering child process
+        if let Some(ref mut child) = self.child_process {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        // Remove leaked FIFO (unconditional — ignore NotFound to avoid TOCTOU)
+        let _ = std::fs::remove_file(&self.fifo_path);
     }
 }
 

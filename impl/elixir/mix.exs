@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PLMP-1.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 
 defmodule VSH.MixProject do
   use Mix.Project
@@ -35,7 +35,7 @@ defmodule VSH.MixProject do
   defp package do
     [
       name: "vsh",
-      licenses: ["PLMP-1.0-or-later"],
+      licenses: ["PMPL-1.0-or-later"],
       links: %{
         "GitHub" => "https://github.com/hyperpolymath/valence-shell"
       }

@@ -30,3 +30,18 @@ pub fn verify_create_file(_root: &str, _path: &str) -> Result<()> {
 pub fn verify_delete_file(_root: &str, _path: &str) -> Result<()> {
     Ok(())
 }
+
+/// Verify file copy preconditions (stub — always succeeds)
+pub fn verify_copy_file(_root: &str, _src: &str, _dst: &str) -> Result<()> {
+    Ok(())
+}
+
+/// Verify move/rename preconditions (stub — always succeeds)
+pub fn verify_move(_root: &str, _src: &str, _dst: &str) -> Result<()> {
+    Ok(())
+}
+
+/// Verify symlink creation preconditions (stub — always succeeds)
+pub fn verify_symlink(_root: &str, _target: &str, _link: &str) -> Result<()> {
+    Ok(())
+}

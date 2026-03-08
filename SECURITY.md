@@ -2,12 +2,12 @@
 
 ## Supported Versions
 
-Valence Shell is currently in **research prototype** status (version 0.5.0). Security updates are provided on a best-effort basis for the current development version.
+Valence Shell is currently in **research prototype** status (version 0.9.0). Security updates are provided on a best-effort basis for the current development version.
 
 | Version | Supported          | Status |
 | ------- | ------------------ | ------ |
-| 0.5.x   | :white_check_mark: | Current development branch |
-| < 0.5.0 | :x:                | Historical/superseded |
+| 0.9.x   | :white_check_mark: | Current development branch |
+| < 0.9.0 | :x:                | Historical/superseded |
 
 **Note**: This is research software with formal proofs but unverified implementation. See [Production Readiness](#production-readiness) below.
 
@@ -23,7 +23,7 @@ Valence Shell uses **polyglot verification** across 6 proof systems:
 - File content operations (read/write) reversibility
 - Operation independence
 - Composition correctness
-- ~256 theorems across Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3
+- ~250+ theorems across Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3 (4 gaps remain)
 
 ⚠️ **Not Verified** (Manual Review Required):
 - OCaml FFI layer (filesystem_ffi.ml)
@@ -277,8 +277,37 @@ This security policy is inspired by:
 - **seL4 Kernel**: Formal verification security model
 - **CompCert Compiler**: Verified compilation security claims
 
+## Security Audit (2026-03-08)
+
+A manual security audit (P9) was performed across the Rust CLI codebase. Findings and fixes:
+
+### Fixed
+
+| Issue | Severity | Fix |
+|-------|----------|-----|
+| **Predictable temp file paths** | Medium | Here doc/here string temp files used predictable `/tmp/` paths (symlink attack risk). Replaced with pipes — no temp files created. |
+| **CString panic vectors** | Medium | `CString::new().unwrap()` in chown could panic on null bytes in input. Replaced with proper error handling that returns a graceful error message. |
+| **Missing SAFETY comments** | Low | All `unsafe` blocks now have `// SAFETY:` annotations explaining the invariants relied upon. |
+| **Null byte handling in chown** | Medium | Paths or usernames containing null bytes caused panics via `CString::new()`. Now returns a descriptive error instead of panicking. |
+| **Brace expansion DoS** | High | Nested brace expansion (e.g., `{1..9}{1..9}{1..9}{1..9}`) could generate unbounded results. Added 10,000 result limit. |
+
+### Pending (tracked for future work)
+
+| Issue | Severity | Status |
+|-------|----------|--------|
+| **Glob expansion DoS** | Medium | Patterns like `/**/**/**` could generate unbounded results. 100,000 result limit planned. |
+| **Shift overflow** | Low | `$((1 << 64))` was fixed in 2026-02-12, but other arithmetic edge cases may benefit from checked arithmetic throughout. |
+
+### Audit Scope
+
+- All `unsafe` blocks in Rust source (6 occurrences)
+- All `CString`/`CStr` usage (chown implementation)
+- Temp file creation patterns (here docs, process substitution)
+- Expansion algorithms (brace, glob, arithmetic) for resource exhaustion
+- Input validation on all user-facing commands
+
 ---
 
-**Last Updated**: 2025-11-22
-**Version**: 0.5.0
-**Policy Version**: 1.0
+**Last Updated**: 2026-03-08
+**Version**: 0.9.0
+**Policy Version**: 1.1

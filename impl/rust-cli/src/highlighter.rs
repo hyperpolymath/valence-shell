@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Syntax Highlighting for VSH
 //!
 //! Provides real-time syntax highlighting in the REPL using nu-ansi-term colors.
@@ -34,19 +34,23 @@ impl VshHighlighter {
             // Navigation
             "cd", "pwd", "pushd", "popd", "dirs",
             // File operations
-            "mkdir", "rmdir", "touch", "rm", "cp", "mv", "cat", "ls",
+            "mkdir", "rmdir", "touch", "rm", "cp", "mv", "ln", "cat", "ls",
             // VSH-specific
             "undo", "redo", "history",
             // Transactions
             "begin", "commit", "rollback",
             // Utilities
-            "echo", "help", "exit",
+            "echo", "help", "exit", "eval", "source", "read", "true", "false",
             // Test
             "test", "[",
             // Variables
             "export", "unset", "set",
             // Jobs
             "jobs", "fg", "bg", "kill",
+            // Control structures
+            "if", "then", "elif", "else", "fi",
+            "while", "until", "for", "do", "done",
+            "case", "esac", "in",
         ]
         .iter()
         .map(|s| s.to_string())

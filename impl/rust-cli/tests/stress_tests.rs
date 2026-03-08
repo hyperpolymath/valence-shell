@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Stress Tests - Layer 7
 //!
 //! Tests system behavior under extreme conditions:

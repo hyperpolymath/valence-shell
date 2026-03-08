@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Shell State Management
 //!
 //! Manages the undo/redo stack, transaction groups, and operation history.
@@ -69,6 +69,29 @@ pub enum OperationType {
     /// File was appended to by append redirection (>> or 2>>)
     /// undo_data contains original file size (u64 encoded as bytes)
     FileAppended,
+    /// Copy file: reversible via deleting the destination
+    /// undo_data contains destination path (src stored in path field)
+    CopyFile,
+    /// Move/rename: reversible via moving back
+    /// path stores "src\0dst" (null-separated pair)
+    Move,
+    /// Create a symbolic link: reversible via unlink
+    /// undo_data contains symlink target
+    Symlink,
+    /// Remove a symbolic link (inverse of Symlink)
+    Unlink,
+    /// Set a shell variable: reversible by restoring previous value (or unsetting)
+    /// path stores variable name, undo_data stores previous VariableValue as JSON (None = was unset)
+    SetVariable,
+    /// Unset a shell variable: reversible by restoring previous value
+    /// path stores variable name, undo_data stores previous VariableValue as JSON
+    UnsetVariable,
+    /// Change file permissions: reversible by restoring previous mode
+    /// path stores file path, undo_data stores previous mode as u32 LE bytes
+    Chmod,
+    /// Change file ownership: reversible by restoring previous uid/gid
+    /// path stores file path, undo_data stores previous uid:gid as "uid:gid" bytes
+    Chown,
     /// Hardware-level secure erase (NIST SP 800-88 Purge)
     /// NOT REVERSIBLE - destroys entire device
     HardwareErase,
@@ -88,6 +111,14 @@ impl OperationType {
             OperationType::WriteFile => Some(OperationType::WriteFile), // Self-inverse with old content
             OperationType::FileTruncated => Some(OperationType::WriteFile), // Restore original content
             OperationType::FileAppended => Some(OperationType::FileAppended), // Self-inverse (truncate to original size)
+            OperationType::CopyFile => Some(OperationType::DeleteFile), // Undo copy = delete destination
+            OperationType::Move => Some(OperationType::Move), // Self-inverse (move back)
+            OperationType::Symlink => Some(OperationType::Unlink),
+            OperationType::Unlink => Some(OperationType::Symlink),
+            OperationType::SetVariable => Some(OperationType::SetVariable), // Self-inverse (restore previous)
+            OperationType::UnsetVariable => Some(OperationType::SetVariable), // Restore = set previous value
+            OperationType::Chmod => Some(OperationType::Chmod), // Self-inverse (restore previous mode)
+            OperationType::Chown => Some(OperationType::Chown), // Self-inverse (restore previous uid:gid)
             OperationType::HardwareErase => None, // NOT REVERSIBLE
             OperationType::Obliterate => None, // NOT REVERSIBLE - GDPR deletion
         }
@@ -109,6 +140,14 @@ impl std::fmt::Display for OperationType {
             OperationType::WriteFile => write!(f, "write"),
             OperationType::FileTruncated => write!(f, "truncate"),
             OperationType::FileAppended => write!(f, "append"),
+            OperationType::CopyFile => write!(f, "cp"),
+            OperationType::Move => write!(f, "mv"),
+            OperationType::Symlink => write!(f, "ln -s"),
+            OperationType::Unlink => write!(f, "unlink"),
+            OperationType::SetVariable => write!(f, "set"),
+            OperationType::UnsetVariable => write!(f, "unset"),
+            OperationType::Chmod => write!(f, "chmod"),
+            OperationType::Chown => write!(f, "chown"),
             OperationType::HardwareErase => write!(f, "hardware_erase"),
             OperationType::Obliterate => write!(f, "obliterate"),
         }
@@ -268,6 +307,9 @@ pub struct ShellState {
 
     /// Job table for background job management
     pub jobs: crate::job::JobTable,
+
+    /// Named checkpoints mapping name → history index at checkpoint time
+    pub checkpoints: HashMap<String, (usize, DateTime<Utc>)>,
 }
 
 impl ShellState {
@@ -298,6 +340,7 @@ impl ShellState {
             positional_params: Vec::new(),
             fifo_counter: std::sync::atomic::AtomicUsize::new(0),
             jobs: crate::job::JobTable::new(),
+            checkpoints: HashMap::new(),
         };
 
         // Try to load existing state
@@ -598,9 +641,49 @@ impl ShellState {
     // Variable Management
     // =========================================================================
 
-    /// Set a shell variable
+    /// Set a shell variable (no undo tracking — use set_variable_tracked for reversibility)
     pub fn set_variable(&mut self, name: impl Into<String>, value: impl Into<String>) {
         self.variables.insert(name.into(), VariableValue::Scalar(value.into()));
+    }
+
+    /// Set a shell variable with undo tracking.
+    ///
+    /// Records the previous value (or absence) so the operation can be reversed.
+    pub fn set_variable_tracked(&mut self, name: impl Into<String>, value: impl Into<String>) {
+        let name = name.into();
+        let value = value.into();
+
+        // Capture previous state for undo
+        let previous = self.variables.get(&name).cloned();
+        let undo_data = serde_json::to_vec(&previous).unwrap_or_default();
+
+        // Perform the set
+        self.variables.insert(name.clone(), VariableValue::Scalar(value));
+
+        // Record operation
+        let op = Operation::new(OperationType::SetVariable, name, None)
+            .with_undo_data(undo_data);
+        self.record_operation(op);
+    }
+
+    /// Unset a shell variable with undo tracking.
+    pub fn unset_variable_tracked(&mut self, name: &str) {
+        // Capture previous state for undo
+        let previous = self.variables.get(name).cloned();
+        if previous.is_none() {
+            // Nothing to unset — no-op, no record
+            return;
+        }
+        let undo_data = serde_json::to_vec(&previous).unwrap_or_default();
+
+        // Perform the unset
+        self.variables.remove(name);
+        self.exported_vars.remove(name);
+
+        // Record operation
+        let op = Operation::new(OperationType::UnsetVariable, name.to_string(), None)
+            .with_undo_data(undo_data);
+        self.record_operation(op);
     }
 
     /// Get a shell variable value (scalar only)
@@ -616,6 +699,17 @@ impl ShellState {
     pub fn unset_variable(&mut self, name: &str) {
         self.variables.remove(name);
         self.exported_vars.remove(name);
+    }
+
+    /// Get all scalar variables as (name, value) pairs
+    pub fn get_all_variables(&self) -> Vec<(&str, String)> {
+        self.variables
+            .iter()
+            .filter_map(|(k, v)| match v {
+                VariableValue::Scalar(s) => Some((k.as_str(), s.clone())),
+                VariableValue::Array(_) => None,
+            })
+            .collect()
     }
 
     /// Export a variable (make it available to child processes)
@@ -1083,5 +1177,113 @@ mod tests {
 
         // expand_variable should work
         assert_eq!(state.expand_variable("name"), "value");
+    }
+
+    // ========================================================================
+    // Tracked variable operation tests (undo/redo)
+    // ========================================================================
+
+    #[test]
+    fn test_set_variable_tracked_records_operation() {
+        let mut state = ShellState::new("/tmp/vsh_tracked_var_1").unwrap();
+        state.set_variable_tracked("FOO", "bar");
+
+        assert_eq!(state.get_variable("FOO"), Some("bar"));
+        // Should have recorded a SetVariable operation
+        assert!(!state.history.is_empty());
+        let last_op = state.history.last().unwrap();
+        assert_eq!(last_op.op_type, OperationType::SetVariable);
+        assert_eq!(last_op.path, "FOO");
+    }
+
+    #[test]
+    fn test_set_variable_tracked_captures_previous() {
+        let mut state = ShellState::new("/tmp/vsh_tracked_var_2").unwrap();
+        // Set initial value
+        state.set_variable("FOO", "old_value");
+        // Now track-set a new value
+        state.set_variable_tracked("FOO", "new_value");
+
+        assert_eq!(state.get_variable("FOO"), Some("new_value"));
+        // undo_data should contain the previous value
+        let last_op = state.history.last().unwrap();
+        let previous: Option<VariableValue> =
+            serde_json::from_slice(last_op.undo_data.as_ref().unwrap()).unwrap();
+        assert_eq!(previous, Some(VariableValue::Scalar("old_value".to_string())));
+    }
+
+    #[test]
+    fn test_set_variable_tracked_new_var_captures_none() {
+        let mut state = ShellState::new("/tmp/vsh_tracked_var_3").unwrap();
+        state.set_variable_tracked("NEW_VAR", "value");
+
+        let last_op = state.history.last().unwrap();
+        let previous: Option<VariableValue> =
+            serde_json::from_slice(last_op.undo_data.as_ref().unwrap()).unwrap();
+        assert_eq!(previous, None);
+    }
+
+    #[test]
+    fn test_unset_variable_tracked_records_operation() {
+        let mut state = ShellState::new("/tmp/vsh_tracked_var_4").unwrap();
+        state.set_variable("FOO", "bar");
+        state.unset_variable_tracked("FOO");
+
+        assert_eq!(state.get_variable("FOO"), None);
+        let last_op = state.history.last().unwrap();
+        assert_eq!(last_op.op_type, OperationType::UnsetVariable);
+        assert_eq!(last_op.path, "FOO");
+    }
+
+    #[test]
+    fn test_unset_variable_tracked_noop_for_nonexistent() {
+        let mut state = ShellState::new("/tmp/vsh_tracked_var_5").unwrap();
+        let history_len = state.history.len();
+        state.unset_variable_tracked("NONEXISTENT");
+
+        // Should not record anything
+        assert_eq!(state.history.len(), history_len);
+    }
+
+    #[test]
+    fn test_operation_type_set_variable_inverse() {
+        assert_eq!(
+            OperationType::SetVariable.inverse(),
+            Some(OperationType::SetVariable)
+        );
+        assert_eq!(
+            OperationType::UnsetVariable.inverse(),
+            Some(OperationType::SetVariable)
+        );
+    }
+
+    // ========================================================================
+    // chmod/chown operation type tests
+    // ========================================================================
+
+    #[test]
+    fn test_chmod_inverse() {
+        assert_eq!(
+            OperationType::Chmod.inverse(),
+            Some(OperationType::Chmod)
+        );
+    }
+
+    #[test]
+    fn test_chown_inverse() {
+        assert_eq!(
+            OperationType::Chown.inverse(),
+            Some(OperationType::Chown)
+        );
+    }
+
+    #[test]
+    fn test_chmod_display() {
+        assert_eq!(format!("{}", OperationType::Chmod), "chmod");
+    }
+
+    #[test]
+    fn test_chown_display() {
+        assert_eq!(format!("{}", OperationType::Chown), "chown");
     }
 }

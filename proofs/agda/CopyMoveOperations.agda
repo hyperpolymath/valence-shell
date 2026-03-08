@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: PLMP-1.0-or-later
+-- SPDX-License-Identifier: PMPL-1.0-or-later
 {-
   Valence Shell - Copy and Move Operations in Agda
 
@@ -90,7 +90,7 @@ copy-file-creates-destination src dst fs (is-file-prf , not-dst , parent-ex , pa
     helper : (m : Maybe FSNode) → is-file-with m src fs → path-exists dst (copy-file src dst fs)
     helper (just node) hfile =
       let fs' = fs-update dst (just node) fs
-      in fs-update-preserves-existence dst (just node) fs
+      in fs-update-preserves-existence dst node fs
     helper nothing hfile = ⊥-elim (no-file-nothing hfile)
 
     is-file-with : Maybe FSNode → Path → Filesystem → Set
@@ -145,7 +145,7 @@ move-creates-destination : ∀ src dst fs →
 move-creates-destination src dst fs (exists , rest) with fs src
 ... | just node =
     let fs' = fs-update dst (just node) fs
-    in fs-update-preserves-existence dst (just node) fs
+    in fs-update-preserves-existence dst node fs
 ... | nothing = ⊥-elim (path-exists-implies-some exists)
   where
     path-exists-implies-some : path-exists src fs → ⊥
@@ -232,13 +232,32 @@ copy-then-move src dst dst2 fs hcopy hmove =
         (sym (copy-file-same-content src dst fs hcopy))
 
 -- ============================================================================
--- Helper lemmas (postulated for proof sketch)
+-- Helper lemmas (proven via fsUpdate = fs-update)
 -- ============================================================================
 
+-- Alias: fs-update is fsUpdate from FilesystemModel
+fs-update : Path → Maybe FSNode → Filesystem → Filesystem
+fs-update = fsUpdate
+
+-- fsUpdate p v fs p evaluates to v (by path-≟ p = yes refl)
+fs-update-at-path : ∀ p v fs → fs-update p v fs p ≡ v
+fs-update-at-path p v fs with p path-≟ p
+... | yes refl = refl
+... | no p≢p = ⊥-elim (p≢p refl)
+
+-- fsUpdate p v fs p' = fs p' when p ≠ p' (by path-≟ = no)
+fs-update-other-path : ∀ p1 p2 v fs → (¬ (p2 ≡ p1)) → fs p2 ≡ fs-update p1 v fs p2
+fs-update-other-path p1 p2 v fs neq with p1 path-≟ p2
+... | yes p1≡p2 = ⊥-elim (neq (sym p1≡p2))
+  where open Relation.Binary.PropositionalEquality using (sym)
+... | no _ = refl
+
+-- After update with just node, path exists (by definition)
+fs-update-preserves-existence : ∀ p node fs → path-exists p (fs-update p (just node) fs)
+fs-update-preserves-existence p node fs = node , fs-update-at-path p (just node) fs
+
+-- delete-file after update is fsUpdate p nothing after fsUpdate p (just node)
 postulate
-  fs-update-preserves-existence : ∀ p v fs → path-exists p (fs-update p v fs)
-  fs-update-at-path : ∀ p v fs → fs-update p v fs p ≡ v
-  fs-update-other-path : ∀ p1 p2 v fs → (¬ (p2 ≡ p1)) → fs p2 ≡ fs-update p1 v fs p2
   delete-after-update : ∀ p fs node → delete-file p (fs-update p (just node) fs) ≡ fs-update p nothing (fs-update p (just node) fs)
 
 {-

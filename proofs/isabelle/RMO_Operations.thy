@@ -1,4 +1,4 @@
-(* SPDX-License-Identifier: PLMP-1.0-or-later *)
+(* SPDX-License-Identifier: PMPL-1.0-or-later *)
 theory RMO_Operations
   imports Main FilesystemModel FileOperations
 begin
@@ -150,21 +150,33 @@ theorem obliterate_removes_mapping:
     shows "sfs_mapping (obliterate p sfs patterns) p = []"
   by (simp add: obliterate_def Let_def remove_block_mapping_def)
 
-text \<open>Theorem: RMO is NOT reversible (key distinction from RMR)\<close>
-theorem obliterate_not_reversible:
-  assumes "obliterate_precondition p sfs"
-      and "length patterns > 0"
-    shows "\<not> (\<exists>recover. recover (obliterate p sfs patterns) = sfs)"
+text \<open>RMO is not injective: different starting states produce the same result.
+  This is the correct formalization of non-reversibility — obliterate destroys
+  information, mapping multiple distinct starting states to the same output.
+  Note: The naive "\<not> (\<exists>recover. recover (obliterate ...) = sfs)" is false
+  because a constant function trivially satisfies it for any specific sfs.\<close>
+theorem obliterate_not_injective:
+  assumes "obliterate_precondition p sfs1"
+      and "obliterate_precondition p sfs2"
+      and "sfs_tree sfs1 = sfs_tree sfs2"
+      and "sfs_mapping sfs1 = sfs_mapping sfs2"
+      and "\<And>bid. bid \<notin> set (sfs_mapping sfs1 p) \<Longrightarrow>
+                  sfs_storage sfs1 bid = sfs_storage sfs2 bid"
+    shows "obliterate p sfs1 patterns = obliterate p sfs2 patterns"
 proof -
-  text \<open>After obliteration:
-    1. The path is removed from the tree
-    2. The block mapping is cleared
-    3. Block data is overwritten (original data destroyed)
-
-    No function can recover the original data because
-    it has been physically overwritten - this is information loss.\<close>
+  text \<open>The tree and mapping are identical by assumption.
+    delete_file and remove_block_mapping operate on tree and mapping only.
+    multi_pass_overwrite overwrites blocks mapped to p with fixed patterns,
+    so the result is independent of original block data.
+    Unrelated blocks are identical by assumption.\<close>
+  have tree_eq: "sfs_tree (multi_pass_overwrite sfs1 p patterns) =
+                 sfs_tree (multi_pass_overwrite sfs2 p patterns)"
+    using assms(3)
+    by (induct patterns arbitrary: sfs1 sfs2)
+       (auto simp: overwrite_path_blocks_def)
   show ?thesis
-    sorry \<comment> \<open>Requires proof of information destruction\<close>
+    using assms tree_eq
+    by (simp add: obliterate_def Let_def remove_block_mapping_def)
 qed
 
 text \<open>Theorem: Obliteration preserves unrelated paths\<close>

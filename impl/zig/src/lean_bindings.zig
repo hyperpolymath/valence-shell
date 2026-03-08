@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Lean 4 FFI Bindings for Zig
 //!
 //! This module provides Zig bindings to Lean 4 compiled verification code.

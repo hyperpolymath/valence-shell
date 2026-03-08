@@ -111,6 +111,8 @@ Definition remove_block_mapping (sfs : StorageFS) (p : Path) : StorageFS :=
 Definition obliterate_precondition (p : Path) (sfs : StorageFS) : Prop :=
   (* Path must exist as a file *)
   is_file p (sfs_tree sfs) /\
+  (* Parent must be writable (needed for delete_file_precondition) *)
+  has_write_permission (parent_path p) (sfs_tree sfs) /\
   (* Path must have associated storage blocks *)
   sfs_mapping sfs p <> [] /\
   (* All blocks must exist in storage *)
@@ -155,23 +157,27 @@ Theorem obliterate_removes_path :
     length patterns > 0 ->
     ~ path_exists p (sfs_tree (obliterate p sfs patterns)).
 Proof.
-  intros p sfs patterns [Hfile [Hblocks Hallexist]] Hlen.
+  intros p sfs patterns [Hfile [Hwrite [Hblocks Hallexist]]] Hlen.
   unfold obliterate.
   simpl.
   apply delete_file_removes_path.
   unfold delete_file_precondition.
   split.
-  - (* is_file still holds after overwrites *)
+  - (* is_file still holds after overwrites — overwrites preserve sfs_tree *)
     induction patterns.
     + simpl in Hlen. omega.
     + simpl.
       destruct patterns.
       * simpl. assumption.
       * apply IHpatterns. simpl. omega.
-  - (* has_write_permission holds - assumed from file existence *)
-    unfold has_write_permission.
-    admit. (* Would require full permission model *)
-Admitted.
+  - (* has_write_permission preserved — overwrites only change storage, not tree *)
+    induction patterns.
+    + simpl. assumption.
+    + simpl.
+      destruct patterns.
+      * simpl. assumption.
+      * apply IHpatterns. simpl. omega.
+Qed.
 
 (** Theorem: After obliteration, no blocks are mapped to path *)
 Theorem obliterate_removes_mapping :
@@ -198,7 +204,7 @@ Proof.
   induction patterns.
   - (* Base case: 0 patterns *)
     intros bid Hpre Hin.
-    destruct Hpre as [_ [_ Hexist]].
+    destruct Hpre as [_ [_ [_ Hexist]]].
     destruct (Hexist bid Hin) as [blk Hblk].
     exists blk. split.
     + assumption.
@@ -210,27 +216,33 @@ Admitted.
 
 (** * Non-Reversibility (Contrast with RMR) *)
 
-(** Key theorem: RMO is NOT reversible *)
-Theorem obliterate_not_reversible :
-  forall p sfs patterns,
-    obliterate_precondition p sfs ->
-    length patterns > 0 ->
-    (* There is no operation that recovers original state *)
-    ~ exists recover : StorageFS -> StorageFS,
-        recover (obliterate p sfs patterns) = sfs.
+(** RMO is not injective: different starting states produce the same result.
+    This is the correct formalization of "not reversible" — obliterate destroys
+    information, so multiple distinct starting states map to the same output.
+    The old statement (no recover function exists) was false because a constant
+    function trivially satisfies it for any specific sfs. *)
+Theorem obliterate_not_injective :
+  forall p sfs1 sfs2 patterns,
+    obliterate_precondition p sfs1 ->
+    obliterate_precondition p sfs2 ->
+    sfs_tree sfs1 = sfs_tree sfs2 ->
+    sfs_mapping sfs1 = sfs_mapping sfs2 ->
+    (* If storage differs only in blocks mapped to p *)
+    (forall bid, ~ In bid (sfs_mapping sfs1 p) ->
+      sfs_storage sfs1 bid = sfs_storage sfs2 bid) ->
+    (* Then obliteration produces the same result *)
+    obliterate p sfs1 patterns = obliterate p sfs2 patterns.
 Proof.
-  intros p sfs patterns Hpre Hlen [recover Hrecover].
-  (* After obliteration, the original data is overwritten *)
-  (* Storage blocks contain pattern data, not original data *)
-  (* This is information loss - unrecoverable *)
-
-  (* The key insight: block_data has been replaced *)
-  (* Even with recover function, original bytes are gone *)
-
-  (* For formal proof, we'd need to show that *)
-  (* obliterate maps all possible starting states to same end state *)
-  (* regarding the affected blocks' content *)
-  admit.
+  intros p sfs1 sfs2 patterns Hpre1 Hpre2 Htree Hmap Hother.
+  unfold obliterate.
+  rewrite Htree, Hmap.
+  f_equal.
+  (* Block mappings are the same after remove_block_mapping *)
+  (* Tree is the same after delete_file *)
+  (* Storage: multi_pass_overwrite with same patterns on same-mapped blocks *)
+  (* produces same result regardless of original block data *)
+  admit. (* Storage equality requires showing multi_pass_overwrite is determined
+            by mapping and patterns, not by original block data *)
 Admitted.
 
 (** * Preservation Theorems *)

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Property-Based Tests - Seam 0↔1 Validation
 //!
 //! These tests validate that the Rust implementation upholds the properties

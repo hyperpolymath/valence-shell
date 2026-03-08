@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: PLMP-1.0-or-later
+-- SPDX-License-Identifier: PMPL-1.0-or-later
 -- RMO (Remove-Match-Obliterate) - Irreversible Operations
 --
 -- Implements GDPR "right to be forgotten" with mathematical guarantees.

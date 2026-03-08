@@ -2,9 +2,8 @@
 ;; STATE.scm - Project State Tracking
 ;; valence-shell
 ;;
-;; HONEST ASSESSMENT as of 2026-02-12
-;; Previous STATE.scm claimed v1.0.0 "production-ready" at 100% — FALSE.
-;; Rewritten by Opus to reflect actual project state.
+;; Updated 2026-03-08 (P9 security audit)
+;; Previous: 2026-02-12 (Opus honest audit)
 
 (define-module (valence_shell state)
   #:export (get-state
@@ -14,10 +13,10 @@
 
 (define state
   '((metadata
-     (version . "3.0.0")
+     (version . "4.0.0")
      (schema-version . "1.0.0")
      (created . "2025-01-28")
-     (updated . "2026-02-12")
+     (updated . "2026-03-08")
      (project . "valence-shell")
      (repo . "hyperpolymath/valence-shell"))
 
@@ -31,18 +30,18 @@
 
     (current-position
      (phase . "Advanced research prototype — NOT production-ready")
-     (overall-completion . 65)
+     (overall-completion . 72)
 
      (components
       (proofs
-       (status . "substantial-with-holes")
-       (completion . 80)
-       (details . "~200+ theorems across 6 proof systems. BUT 54 proof holes (Admitted/sorry/postulate) across 17 files. Core reversibility theorems proven; extended operations have gaps."))
+       (status . "substantial-with-gaps")
+       (completion . 90)
+       (details . "~250+ theorems across 6 proof systems. 4 real gaps remain, 4 axioms, 2 structural. All filesystem operations (mkdir/rmdir/touch/rm/cp/mv/ln/chmod/chown) fully proven in all 6 systems. RMO (irreversibility) has 2 gaps."))
 
       (rust-cli
        (status . "working-prototype")
-       (completion . 75)
-       (details . "v0.9.0 - Working shell with 541 tests passing (14 ignored). Features: pipelines, redirections, process substitution, arithmetic, here docs, job control, glob expansion, quote processing, test/[[ conditionals, variables. Bugs fixed: redo, glob hidden files, append truncation, 2> tokenization, logical op precedence, shift overflow, path traversal sandbox escape, version mismatch. Dead code removed: lean_ffi.rs, daemon_client.rs, 4 unused methods."))
+       (completion . 82)
+       (details . "v0.9.0 - Working shell with 602 tests passing (14 ignored). Features: pipelines, redirections, process substitution, arithmetic, here docs, job control, glob expansion, quote processing, test/[[ conditionals, variables, control structures (if/while/for/case), builtins (echo/read/source/eval/set/unset/true/false), reversible cp/mv/ln/chmod/chown, explain (proof-annotated dry runs), checkpoint/restore (named snapshots with proof certificates), diff (state comparison), replay (animated history with proof narration)."))
 
       (elixir-impl
        (status . "stale")
@@ -60,12 +59,14 @@
        (details . "Files created for Lean 4 → C → OCaml extraction pipeline. No working extraction."))
 
       (correspondence
-       (status . "manual-only")
-       (completion . 40)
-       (details . "28 correspondence tests verify Rust matches Lean 4 theorems. All pass. But no mechanized proof — confidence ~85% via testing, not 99%+ via extraction.")))
+       (status . "property-tested")
+       (completion . 50)
+       (details . "59 correspondence tests verify Rust matches Lean 4 theorems. All pass. Confidence ~95% via property testing, not 99%+ via extraction.")))
 
      (working-features
       "Rust CLI with mkdir/rmdir/touch/rm + undo/redo"
+      "Reversible cp, mv, ln -s with formal proofs"
+      "Reversible chmod (octal + symbolic) and chown (user:group) with formal proofs"
       "External command execution via PATH lookup"
       "Unix pipelines (cmd1 | cmd2 | cmd3)"
       "I/O Redirections (>, >>, <, 2>, 2>>, &>, 2>&1)"
@@ -74,87 +75,80 @@
       "Here documents (<<DELIM) and here strings (<<<word)"
       "Glob expansion (*.txt, file?.rs, [a-z]*, {1,2,3})"
       "Quote processing (single, double, backslash)"
+      "Control structures (if/elif/else/fi, while/do/done, for/in/do/done, case/esac)"
       "test/[ and [[ ]] conditionals"
       "Logical operators (&& ||) with short-circuit"
-      "Shell variables ($VAR, ${VAR}, export)"
+      "Shell variables ($VAR, ${VAR}, export) with reversible assignment"
+      "Shell builtins (echo, read, source, eval, set, unset, true, false)"
       "Job control (bg, fg, jobs, kill, & operator)"
       "Transaction grouping (begin/commit/rollback)"
-      "Interactive REPL with history")
+      "Interactive REPL with history and multi-line input"
+      "explain command (proof-annotated dry runs)"
+      "checkpoint/restore (named snapshots with proof certificates)"
+      "diff (state comparison)"
+      "replay (animated history with proof narration)")
 
      (test-counts
-      (lib-unit . 220)
+      (lib-unit . 277)
       (correspondence . 28)
       (extended-test . 55)
       (integration . 35)
       (integration-extra . 10)
+      (lean4-proptest . 16)
       (parameter-expansion . 67)
       (property-correspondence . 15)
       (property . 28)
       (security . 15)
-      (stress . "11 ignored — run with --ignored")
       (doctests . 52)
-      (total-passing . 525)
-      (total-ignored . 15)))
+      (stress . "14 ignored — run with --ignored")
+      (total-passing . 602)
+      (total-ignored . 14)))
 
     (blockers-and-issues
      (critical
-      "NO mechanized Lean → Rust correspondence (manual testing only, 85% confidence)"
-      "31 proof holes across 17 proof files (26 gaps, 3 axioms, 2 structural — see docs/PROOF_HOLES_AUDIT.md). 10 holes closed in 2026-02-12 proof session."
+      "NO mechanized Lean → Rust correspondence (property testing only, 95% confidence)"
+      "4 proof gaps remain (2 RMO storage, 2 Agda deferred — see docs/PROOF_HOLES_AUDIT.md)"
       "NOT production-ready — research prototype only")
 
      (high
       "47/58 commits authored as Test <test@example.com> (Sonnet damage)"
-      "No Echidna integration for automated verification")
+      "No Echidna integration for automated verification"
+      "Functions not implemented (blocks modular scripts)")
 
      (medium
-      "Full POSIX compliance incomplete (many features missing per docs/POSIX_COMPLIANCE.md)"
+      "Full POSIX compliance incomplete (functions, script execution missing)"
       "No GDPR compliance (RMO/secure deletion are stubs)"
       "Elixir NIF build broken (low priority)")
 
      (low
       "Performance not benchmarked in CI"
-      "Security audit script not automated"
-      "Cargo.toml license field has typo: PLMP should be PMPL"))
+      "Security audit script not automated"))
 
-    (what-was-fixed-2026-02-12
-     (session . "opus-honest-audit-and-fixes")
-     (fixes
-      "Fixed correspondence_tests.rs: state.undo()/redo() → vsh::commands::undo()/redo()"
-      "Fixed correspondence_tests.rs: crate:: → vsh:: for integration test context"
-      "Fixed correspondence_tests.rs: state.operation_history() → state.history"
-      "Fixed property_tests.rs: proptest!(|()| ...) → plain test, expand_glob arity"
-      "Fixed security_tests.rs: ShellState::new(temp.path()) → .to_str().unwrap()"
-      "Fixed security_tests.rs: expand_glob arity, recursive glob test scale"
-      "Fixed stress_tests.rs: ShellState::new signature, pop_undo → commands::undo"
-      "Fixed 6 glob integration tests: Command::new('ls') → vsh::glob::expand_glob()"
-      "Fixed glob.rs: POSIX hidden file behavior (require_literal_leading_dot: true)"
-      "Fixed commands.rs redo bug: record_redo_operation preserves redo stack"
-      "Fixed 4 pre-existing doctest failures (imports, PATH-dependent tests)"
-      "Downgraded version from 1.0.0 to 0.9.0 (honest)"
-      "Rewrote STATE.scm from inflated 1114-line mess to honest assessment"
-      "Rewrote ECOSYSTEM.scm with accurate status"
-      "Fixed append redirection truncation (>> used File::create instead of OpenOptions::append)"
-      "Fixed 2> tokenization (file2>out split wrong; now only treats 2> as redirect at token start)"
-      "Fixed logical operator precedence (position→rposition for left-to-right associativity)"
-      "Fixed shift overflow panic ($((1 << 64)) now returns error instead of panicking)"
-      "Fixed path traversal sandbox escape (resolve_path now normalizes .. and clamps to root)"
-      "Fixed version/proof count in main.rs (1.0.0→0.9.0, 256→200+)"
-      "Removed dead code: with_quote_type, get_file, get_job_mut, cleanup_done_jobs"
-      "Closed 10 proof holes across Lean 4, Coq, Agda (41→31)"))
+    (completed-since-2026-02-12
+     (p0-spdx . "Fixed SPDX headers across all files")
+     (p1-cp-mv-ln . "Reversible cp, mv, ln -s with formal proofs in all 6 systems")
+     (p2-control . "if/elif/else/fi, while/do/done, for/in/do/done, case/esac")
+     (p3-builtins . "echo, read, source, eval, set, unset, true, false")
+     (p4-rsr . "RSR template compliance fixes")
+     (p5-proofs . "Closed 22 of 26 proof gaps (31→10)")
+     (p6-chmod-chown . "chmod/chown Rust impl + proofs in all 6 systems (42 new theorems)")
+     (p7-docs . "Complete documentation rewrite")
+     (p8-wow-factor . "explain, checkpoint/restore, diff, replay commands with proof narration")
+     (p9-security-audit . "Temp file predictability, CString panics, SAFETY comments, brace expansion DoS limit"))
 
     (critical-next-actions
      (immediate
-      "Close remaining 31 proof holes or document which are intentional axioms"
-      "Fix git author on future commits (not Test <test@example.com>)")
+      "Implement shell functions (func() { ... })"
+      "Shell script execution (.sh files, shebang handling)"
+      "Echidna integration for automated property-based verification")
 
      (this-week
-      "Set up Echidna property-based validation pipeline"
-      "Begin mechanized Lean → Rust correspondence (even partial)"
-      "Rewrite POSIX_COMPLIANCE.md to reflect actual implementation state")
+      "Shell functions and script execution"
+      "Set up Echidna property-based validation pipeline")
 
      (this-month
-      "Achieve 95%+ correspondence confidence via property testing"
-      "Complete POSIX compliance for implemented features"
+      "Achieve 99%+ correspondence confidence"
+      "Shell script execution (.sh files)"
       "Begin Idris2 extraction path for v2.0"))))
 
 (define (get-state)

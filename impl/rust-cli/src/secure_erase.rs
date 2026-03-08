@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Hardware-based secure erase for SSDs
 //!
 //! Implements NIST SP 800-88 Purge methods:

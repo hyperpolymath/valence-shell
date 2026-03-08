@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Test Fixtures - Common setup for all tests
 //!
 //! Reduces duplication and ensures consistent test environment.

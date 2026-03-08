@@ -131,16 +131,19 @@ Theorem create_file_parent_still_exists :
     create_file_precondition p fs ->
     path_exists (parent_path p) (create_file p fs).
 Proof.
-  intros p fs [_ [Hparent _]].
+  intros p fs [HnotExists [Hparent _]].
   unfold path_exists in *.
   destruct Hparent as [node Hnode].
   exists node.
   unfold create_file, fs_update.
   destruct (list_eq_dec String.string_dec p (parent_path p)).
-  - (* This would mean p = parent p, impossible for non-root *)
-    admit.
+  - (* p = parent_path p would mean path_exists p fs (from parentExists),
+       contradicting notExists. Derive contradiction. *)
+    subst. exfalso.
+    apply HnotExists.
+    exists node. assumption.
   - assumption.
-Admitted.
+Qed.
 
 (** * Mixed Directory and File Operations *)
 

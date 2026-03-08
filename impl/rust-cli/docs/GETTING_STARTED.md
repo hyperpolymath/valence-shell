@@ -579,7 +579,7 @@ This is a research prototype. Use for experimentation and learning, not producti
 
 - **Issues**: https://github.com/hyperpolymath/valence-shell/issues
 - **Discussions**: https://github.com/hyperpolymath/valence-shell/discussions
-- **License**: Perpetual, Limited, Modifiable with Posterity (PLMP-1.0-or-later)
+- **License**: Perpetual, Limited, Modifiable with Posterity (PMPL-1.0-or-later)
 
 ---
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Append-Only Audit Log
 //!
 //! Provides tamper-resistant logging of all operations for compliance (SOC 2, GDPR, HIPAA).

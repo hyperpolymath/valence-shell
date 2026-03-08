@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Proof References
 //!
 //! Maps operations to their corresponding Coq/Lean4/Agda/Isabelle theorems.
@@ -56,6 +56,12 @@ impl ProofReference {
             OperationType::WriteFile => WRITE_FILE_REVERSIBLE,
             // File modifications from redirections - pending formal proofs
             OperationType::FileTruncated | OperationType::FileAppended => WRITE_FILE_REVERSIBLE,
+            OperationType::CopyFile => COPY_FILE_REVERSIBLE,
+            OperationType::Move => MOVE_REVERSIBLE,
+            OperationType::Symlink | OperationType::Unlink => SYMLINK_UNLINK_REVERSIBLE,
+            OperationType::Chmod => CHMOD_REVERSIBLE,
+            OperationType::Chown => CHOWN_REVERSIBLE,
+            OperationType::SetVariable | OperationType::UnsetVariable => VARIABLE_ASSIGNMENT_REVERSIBLE,
             OperationType::HardwareErase => HARDWARE_ERASE_IRREVERSIBLE,
             OperationType::Obliterate => OBLITERATE_IRREVERSIBLE,
         }
@@ -141,6 +147,83 @@ pub const COMPOSITION_REVERSIBLE: ProofReference = ProofReference {
     description: "apply_sequence(reverse(ops), apply_sequence(ops, fs)) = fs",
 };
 
+/// Proof reference for copy file reversibility.
+///
+/// Theorem: `deleteFile(copyFile(src, dst, fs)) = fs` when preconditions hold
+/// (source exists, destination doesn't exist).
+pub const COPY_FILE_REVERSIBLE: ProofReference = ProofReference {
+    theorem: "copyFile_reversible",
+    coq_location: "proofs/coq/copy_move_operations.v:L148",
+    lean_location: "proofs/lean4/CopyMoveOperations.lean:L101",
+    agda_location: "proofs/agda/CopyMoveOperations.agda:L95",
+    isabelle_location: "proofs/isabelle/CopyMoveOperations.thy:L90",
+    description: "deleteFile(copyFile(src, dst, fs)) = fs when preconditions hold",
+};
+
+/// Proof reference for move/rename reversibility.
+///
+/// Theorem: `move(dst, src, move(src, dst, fs)) = fs` when preconditions hold
+/// (source exists, destination doesn't exist, no directory-into-self).
+pub const MOVE_REVERSIBLE: ProofReference = ProofReference {
+    theorem: "move_reversible",
+    coq_location: "proofs/coq/copy_move_operations.v:L239",
+    lean_location: "proofs/lean4/CopyMoveOperations.lean:L156",
+    agda_location: "proofs/agda/CopyMoveOperations.agda:L150",
+    isabelle_location: "proofs/isabelle/CopyMoveOperations.thy:L145",
+    description: "move(dst, src, move(src, dst, fs)) = fs when preconditions hold",
+};
+
+/// Proof reference for symlink/unlink reversibility.
+///
+/// Theorem: `unlink(symlink(path, fs)) = fs` when preconditions hold
+/// (path doesn't exist, parent exists).
+pub const SYMLINK_UNLINK_REVERSIBLE: ProofReference = ProofReference {
+    theorem: "symlink_unlink_reversible",
+    coq_location: "proofs/coq/symlink_operations.v:L45",
+    lean_location: "proofs/lean4/SymlinkOperations.lean:L45",
+    agda_location: "proofs/agda/SymlinkOperations.agda:L42",
+    isabelle_location: "proofs/isabelle/SymlinkOperations.thy:L40",
+    description: "unlink(symlink(path, fs)) = fs when preconditions hold",
+};
+
+/// Proof reference for chmod reversibility.
+///
+/// Theorem: `chmod(old_mode, chmod(new_mode, path, fs)) = fs` when preconditions hold
+pub const CHMOD_REVERSIBLE: ProofReference = ProofReference {
+    theorem: "chmod_reversible",
+    coq_location: "proofs/coq/permission_operations.v:L67",
+    lean_location: "proofs/lean4/PermissionOperations.lean:L52",
+    agda_location: "proofs/agda/PermissionOperations.agda:L70",
+    isabelle_location: "proofs/isabelle/PermissionOperations.thy:L67",
+    description: "chmod(old_mode, chmod(new_mode, path, fs)) = fs when preconditions hold",
+};
+
+/// Proof reference for chown reversibility.
+///
+/// Theorem: `chown(old_uid, old_gid, chown(new_uid, new_gid, path, fs)) = fs`
+pub const CHOWN_REVERSIBLE: ProofReference = ProofReference {
+    theorem: "chown_reversible",
+    coq_location: "proofs/coq/permission_operations.v:L149",
+    lean_location: "proofs/lean4/PermissionOperations.lean:L135",
+    agda_location: "proofs/agda/PermissionOperations.agda:L119",
+    isabelle_location: "proofs/isabelle/PermissionOperations.thy:L166",
+    description: "chown(old_uid/gid, chown(new_uid/gid, path, fs)) = fs when preconditions hold",
+};
+
+/// Proof reference for variable assignment reversibility.
+///
+/// Theorem: `set(name, old_value, set(name, new_value, env)) = env`
+/// when previous value is captured.
+/// This is a state-machine property: capturing pre-state enables reversal.
+pub const VARIABLE_ASSIGNMENT_REVERSIBLE: ProofReference = ProofReference {
+    theorem: "variable_assignment_reversible",
+    coq_location: "proofs/coq/environment_model.v:pending",
+    lean_location: "proofs/lean4/EnvironmentModel.lean:pending",
+    agda_location: "proofs/agda/EnvironmentModel.agda:pending",
+    isabelle_location: "proofs/isabelle/EnvironmentModel.thy:pending",
+    description: "set(name, old, set(name, new, env)) = env (pre-state capture)",
+};
+
 /// Proof reference for hardware secure erase irreversibility.
 ///
 /// Theorem: Hardware erase operations have NO inverse - data destruction is permanent.
@@ -178,6 +261,11 @@ pub fn all_proofs() -> Vec<ProofReference> {
         MKDIR_RMDIR_REVERSIBLE,
         CREATE_DELETE_REVERSIBLE,
         WRITE_FILE_REVERSIBLE,
+        COPY_FILE_REVERSIBLE,
+        MOVE_REVERSIBLE,
+        SYMLINK_UNLINK_REVERSIBLE,
+        CHMOD_REVERSIBLE,
+        CHOWN_REVERSIBLE,
         COMPOSITION_REVERSIBLE,
     ]
 }
@@ -189,7 +277,7 @@ pub fn all_proofs() -> Vec<ProofReference> {
 pub fn print_verification_summary() {
     println!("{}", "═══ Formal Verification Status ═══".bright_blue().bold());
     println!();
-    println!("{}: ~256 theorems proven", "Total Proofs".bright_green());
+    println!("{}: ~250+ theorems proven", "Total Proofs".bright_green());
     println!("{}: 6", "Proof Systems".bright_green());
     println!();
 

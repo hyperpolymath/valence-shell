@@ -371,7 +371,7 @@ Must pass before merge.
 ## Licensing
 
 All contributions must be compatible with:
-- **Palimpsest-MPL 1.0 or later** (`PLMP-1.0-or-later`)
+- **Palimpsest-MPL 1.0 or later** (`PMPL-1.0-or-later`)
 
 By contributing, you agree to license your contributions under this license.
 

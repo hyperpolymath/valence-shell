@@ -140,15 +140,14 @@ Proof.
     subst.
     destruct (list_eq_dec string_dec p p); [|contradiction].
     (* Destination didn't exist before, so fs p = None *)
-    destruct Hnotdst.
-    unfold path_exists.
-    intro Hex.
-    destruct Hex as [node Hnode].
-    (* fs dst = None by Hnotdst *)
-    admit.
+    destruct (fs p) eqn:Hfsp.
+    + (* Some f — contradicts Hnotdst *)
+      exfalso. apply Hnotdst. exists f. assumption.
+    + (* None — both sides are None *)
+      reflexivity.
   - (* dst <> p *)
     destruct (list_eq_dec string_dec dst p); [contradiction|reflexivity].
-Admitted.
+Qed.
 
 (** * Move Operation Theorems *)
 
@@ -220,23 +219,25 @@ Proof.
     apply functional_extensionality.
     intros p.
     destruct (list_eq_dec string_dec dst p).
-    + (* dst = p *)
+    + (* dst = p: after reverse move, dst is cleared (None) = fs dst (also None) *)
       subst.
       destruct (list_eq_dec string_dec src p).
       * (* src = dst = p, contradiction *)
         contradiction.
-      * (* source wasn't at dst *)
+      * (* source wasn't at dst — result at p is None *)
         unfold fs_update.
         destruct (list_eq_dec string_dec dst p); [|contradiction].
-        destruct Hnotdst. exists node.
-        unfold path_exists. admit.
+        (* Goal: None = fs p, derive from ¬ path_exists p fs *)
+        destruct (fs p) eqn:Hfsp.
+        -- exfalso. apply Hnotdst. exists f. assumption.
+        -- reflexivity.
     + destruct (list_eq_dec string_dec src p).
       * (* src = p *)
         subst.
         assumption.
       * (* neither src nor dst *)
         destruct (list_eq_dec string_dec dst p); [contradiction|reflexivity].
-Admitted.
+Qed.
 
 (** * Preservation Theorems *)
 

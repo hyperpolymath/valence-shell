@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# =============================================================================
+# A2ML Trustfile - Valence Shell (vsh)
+# Formally verified reversible shell with MAA framework
+# =============================================================================
+
+---
+### [META]
+id: "did:web:github.com:hyperpolymath:valence-shell"
+version: "0.9.0"
+context:
+  - "https://a2ml.org/ns/v2"
+  - "https://leanprover-community.github.io/lean4"
+  - "https://hypatia.scans/ns/v1"
+meta:
+  generated: "2026-03-08T00:00:00Z"
+  expires: "2027-03-08T00:00:00Z"
+  integrity:
+    sha3-512: "PENDING_GENERATION"
+    shake256: "PENDING_GENERATION"
+  ci_cd:
+    github_actions: "https://github.com/hyperpolymath/valence-shell/blob/main/.github/workflows/hypatia-scan.yml"
+    hypatia_scan: "https://hypatia.scans/repos/valence-shell"
+
+---
+### [THREAT_MODEL]
+adversaries:
+  - type: "Command Injection"
+    mitigations:
+      - "Path traversal prevention → resolve_path() clamps to sandbox root."
+      - "Glob expansion → POSIX compliant, no hidden file matching by default."
+      - "Formal proofs → Lean 4 theorems for reversibility guarantees."
+  - type: "Data Loss"
+    mitigations:
+      - "RMR framework → All filesystem operations are reversible with undo/redo."
+      - "Transaction grouping → Atomic multi-operation rollback."
+      - "Operation history → Persistent state across sessions."
+  - type: "Privilege Escalation"
+    mitigations:
+      - "Sandbox root → All operations confined to declared root path."
+      - "No setuid → Shell runs as invoking user only."
+
+---
+### [TRUSTFILE]
+issuer: "did:web:github.com:hyperpolymath"
+verification_systems:
+  - name: "Lean 4"
+    role: "Primary source of truth"
+    location: "proofs/lean4/"
+  - name: "Coq"
+    role: "CIC foundation"
+    location: "proofs/coq/"
+  - name: "Agda"
+    role: "Intensional type theory"
+    location: "proofs/agda/"
+  - name: "Isabelle/HOL"
+    role: "Cross-validation"
+    location: "proofs/isabelle/"
+  - name: "Mizar"
+    role: "Set theory foundation"
+    location: "proofs/mizar/"
+  - name: "Z3 SMT"
+    role: "Automated verification"
+    location: "proofs/z3/"
+proof_status:
+  total_theorems: "250+"
+  proof_gaps: 4
+  axioms: 4
+  structural: 2
+  audit: "docs/PROOF_HOLES_AUDIT.md"
+
+---
+### [CONTAINER_SUPPLY_CHAIN]
+runtime:
+  engine: "Podman"
+  policy: "Rootless containers only. Never Docker."
+base_images:
+  provider: "Chainguard"
+  allowed:
+    - "cgr.dev/chainguard/wolfi-base:latest"
+    - "cgr.dev/chainguard/static:latest"
+
+---
+### [CI_CD]
+github_actions:
+  workflows:
+    - "hypatia-scan.yml"
+    - "codeql.yml"
+    - "scorecard.yml"
+    - "quality.yml"
+    - "mirror.yml"
+  test_suite:
+    total: 602
+    failures: 0
+    ignored: 14

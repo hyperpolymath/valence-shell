@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Integration Tests for Valence Shell v1.0
 //!
 //! Tests all new features added in this release:

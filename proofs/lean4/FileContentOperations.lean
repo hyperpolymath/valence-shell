@@ -311,8 +311,19 @@ theorem readFile_after_writeFile (p : Path) (content : FileContent)
     Note: depends on Lean 4 stdlib String.take behavior. -/
 private theorem string_take_append_length (s t : String) :
     (String.append s t).take s.length = s := by
-  sorry -- Requires Lean 4 String.take/append library lemma
-         -- Proof: take n chars of (s ++ t) where n = |s| = first |s| chars = s
+  -- Lean 4 strings are UTF-8 encoded. String.take operates on Unicode scalars.
+  -- For the abstract model, we work with the list-of-char representation.
+  -- Proof: (s ++ t).take |s| takes the first |s| characters of the concatenation,
+  -- which are exactly the characters of s.
+  --
+  -- Strategy: Convert to List Char via String.toList / String.mk,
+  -- use List.take_append (stdlib: List.take_left) to show
+  -- List.take s.length (s.toList ++ t.toList) = s.toList,
+  -- then reconstruct the String equality.
+  simp only [String.append, String.take, String.length]
+  rw [String.toList_append]
+  rw [List.take_left]
+  simp [String.mk_toList]
 
 /-- Truncating to original size after append restores filesystem -/
 theorem append_truncate_reversible (p : Path) (data : FileContent)

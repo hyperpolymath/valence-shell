@@ -275,22 +275,23 @@ Proof.
   apply H; assumption.
 Qed.
 
-(** ops_equiv is transitive *)
+(** ops_equiv is transitive — requires op2 precondition as hypothesis.
+    Without knowing that op2's precondition holds, we cannot apply
+    either H12 or H23 which both require it. *)
 Theorem ops_equiv_trans :
   forall op1 op2 op3,
     ops_equiv op1 op2 ->
     ops_equiv op2 op3 ->
+    (* Additional hypothesis: op2's precondition must hold wherever op1 and op3 do *)
+    (forall fs, op_precondition op1 fs -> op_precondition op3 fs ->
+                op_precondition op2 fs) ->
     ops_equiv op1 op3.
 Proof.
-  intros op1 op2 op3 H12 H23 fs Hpre1 Hpre3.
+  intros op1 op2 op3 H12 H23 Hpre2 fs Hpre1 Hpre3.
   apply (fs_equiv_trans (apply_op op1 fs) (apply_op op2 fs) (apply_op op3 fs)).
-  - apply H12; assumption.
-    (* Need to prove op_precondition op2 fs, but we don't have it *)
-    admit.
-  - apply H23.
-    + admit. (* Need op_precondition op2 fs *)
-    + assumption.
-Admitted.
+  - apply H12; [assumption | apply Hpre2; assumption].
+  - apply H23; [apply Hpre2; assumption | assumption].
+Qed.
 
 (** * Summary *)
 

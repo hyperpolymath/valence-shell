@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PLMP-1.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 //! Enhanced REPL with reedline
 //!
 //! Features:
@@ -27,8 +27,12 @@ use crate::state::ShellState;
 
 /// Shell commands for completion
 const BUILTIN_COMMANDS: &[&str] = &[
-    "cd", "pwd", "exit", "mkdir", "rmdir", "touch", "rm", "cp", "mv", "cat", "echo", "ls",
+    "cd", "pwd", "exit", "mkdir", "rmdir", "touch", "rm", "cp", "mv", "ln", "cat", "echo", "ls",
     "undo", "redo", "history", "begin", "commit", "rollback", "help",
+    "true", "false", "read", "source", "set", "unset", "eval", "export",
+    "if", "then", "elif", "else", "fi", "while", "until", "for", "do", "done", "case", "esac", "in",
+    "test", "jobs", "fg", "bg", "kill",
+    "chmod", "chown", "explain", "checkpoint", "restore", "checkpoints", "diff", "replay",
 ];
 
 /// Custom completer for VSH
@@ -126,6 +130,7 @@ struct VshPrompt {
     txn_name: Option<String>,
     undo_count: usize,
     cwd: String,
+    continuation: bool,
 }
 
 impl Prompt for VshPrompt {
@@ -142,6 +147,10 @@ impl Prompt for VshPrompt {
     }
 
     fn render_prompt_indicator(&self, _edit_mode: PromptEditMode) -> Cow<str> {
+        if self.continuation {
+            return Cow::Owned(Color::Yellow.paint("...> ").to_string());
+        }
+
         let undo_indicator = if self.undo_count > 0 {
             format!("({}) ", self.undo_count)
         } else {
@@ -223,6 +232,8 @@ pub fn run(state: &mut ShellState) -> Result<()> {
     })
     .expect("Error setting Ctrl-C handler");
 
+    let mut accumulated_input = String::new();
+
     loop {
         // Build prompt
         let txn_name = state
@@ -235,10 +246,12 @@ pub fn run(state: &mut ShellState) -> Result<()> {
             .and_then(|p| p.to_str().map(|s| s.to_string()))
             .unwrap_or_else(|| "/".to_string());
 
+        let is_continuation = !accumulated_input.is_empty();
         let prompt = VshPrompt {
             txn_name,
             undo_count,
             cwd,
+            continuation: is_continuation,
         };
 
         // Read input
@@ -247,41 +260,58 @@ pub fn run(state: &mut ShellState) -> Result<()> {
         match sig {
             Ok(Signal::Success(input)) => {
                 let input = input.trim();
+
+                // Multi-line accumulation for control structures
+                if !accumulated_input.is_empty() {
+                    accumulated_input.push_str("; ");
+                    accumulated_input.push_str(input);
+
+                    // Check if the control structure is now complete
+                    if parser::is_incomplete_control_structure(&accumulated_input) {
+                        continue; // Need more lines
+                    }
+
+                    // Complete — execute the accumulated input
+                    let full_input = std::mem::take(&mut accumulated_input);
+                    match execute_segments(state, &full_input) {
+                        Ok(true) => break,
+                        Ok(false) => {}
+                        Err(e) => eprintln!("{} {}", Color::Red.paint("Error:"), e),
+                    }
+                    continue;
+                }
+
                 if input.is_empty() || input.starts_with('#') {
                     continue;
                 }
 
-                // Split on semicolons and execute each segment
-                let segments = parser::split_on_semicolons(input);
-                let mut should_break = false;
-                for segment in segments {
-                    let segment = segment.trim();
-                    if segment.is_empty() || segment.starts_with('#') {
-                        continue;
-                    }
-                    match execute_line(state, segment) {
-                        Ok(should_exit) => {
-                            if should_exit {
-                                should_break = true;
-                                break;
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("{} {}", Color::Red.paint("Error:"), e);
-                            // POSIX: continue executing remaining commands after error
-                        }
-                    }
+                // Check if this starts an incomplete control structure
+                if parser::is_incomplete_control_structure(input) {
+                    accumulated_input = input.to_string();
+                    continue; // Switch to multi-line mode
                 }
-                if should_break {
-                    break;
+
+                // Execute input segments
+                match execute_segments(state, input) {
+                    Ok(true) => break,
+                    Ok(false) => {}
+                    Err(e) => eprintln!("{} {}", Color::Red.paint("Error:"), e),
                 }
             }
             Ok(Signal::CtrlD) => {
+                if !accumulated_input.is_empty() {
+                    accumulated_input.clear();
+                    eprintln!("{}", Color::Yellow.paint("Cancelled incomplete input"));
+                    continue;
+                }
                 println!("{}", Color::Blue.paint("\nGoodbye!"));
                 break;
             }
             Ok(Signal::CtrlC) => {
-                // Clear line on Ctrl+C
+                if !accumulated_input.is_empty() {
+                    accumulated_input.clear();
+                    // Cancel multi-line input
+                }
                 continue;
             }
             Err(err) => {
@@ -292,6 +322,27 @@ pub fn run(state: &mut ShellState) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Execute input split into semicolon-delimited segments.
+/// Returns Ok(true) if shell should exit.
+fn execute_segments(state: &mut ShellState, input: &str) -> Result<bool> {
+    let segments = parser::split_on_semicolons(input);
+    for segment in segments {
+        let segment = segment.trim();
+        if segment.is_empty() || segment.starts_with('#') {
+            continue;
+        }
+        match execute_line(state, segment) {
+            Ok(true) => return Ok(true),
+            Ok(false) => {}
+            Err(e) => {
+                eprintln!("{} {}", Color::Red.paint("Error:"), e);
+                // POSIX: continue executing remaining commands after error
+            }
+        }
+    }
+    Ok(false)
 }
 
 fn execute_line(state: &mut ShellState, input: &str) -> Result<bool> {
