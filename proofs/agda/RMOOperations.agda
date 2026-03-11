@@ -207,14 +207,30 @@ obliterate-removes-mapping : ∀ p sfs patterns →
 obliterate-removes-mapping p sfs patterns pre = refl  -- by construction of remove-block-mapping
 
 -- Theorem: RMO is NOT reversible (key distinction from RMR)
-obliterate-not-reversible : ∀ p sfs patterns →
-  obliterate-precondition p sfs →
-  length patterns > 0 →
-  ¬ ∃[ recover ] (recover (obliterate p sfs patterns) ≡ sfs)
-obliterate-not-reversible p sfs patterns pre len-pos (recover , eq) =
-  -- The original data is overwritten - information is destroyed
-  -- No function can recover the original bytes
-  {!!}  -- Proof requires showing information loss
+--
+-- NOTE: This theorem statement is UNPROVABLE as written. For any specific sfs,
+-- the function (const sfs) trivially satisfies: (const sfs) (obliterate p sfs patterns) ≡ sfs.
+-- The correct formalization (used in Lean 4 and Coq) is obliterate-not-injective:
+-- two filesystems differing only in block data for p produce identical results
+-- after obliteration, proving information loss.
+--
+-- TODO: Replace with obliterate-not-injective matching the Lean 4/Coq formulation:
+--   obliterate-not-injective : ∀ p sfs1 sfs2 patterns →
+--     obliterate-precondition p sfs1 →
+--     obliterate-precondition p sfs2 →
+--     StorageFS.sfs-tree sfs1 ≡ StorageFS.sfs-tree sfs2 →
+--     StorageFS.sfs-mapping sfs1 ≡ StorageFS.sfs-mapping sfs2 →
+--     (∀ bid → ¬ (bid ∈-list (StorageFS.sfs-mapping sfs1 p)) →
+--       StorageFS.sfs-storage sfs1 bid ≡ StorageFS.sfs-storage sfs2 bid) →
+--     obliterate p sfs1 patterns ≡ obliterate p sfs2 patterns
+--
+-- This is deferred pending the same storage-determinism lemma needed
+-- in the Lean 4 and Coq proofs (see those files for detailed proof sketches).
+postulate
+  obliterate-not-reversible : ∀ p sfs patterns →
+    obliterate-precondition p sfs →
+    length patterns > 0 →
+    ¬ ∃[ recover ] (recover (obliterate p sfs patterns) ≡ sfs)
 
 -- Theorem: Obliteration preserves unrelated paths
 obliterate-preserves-other-paths : ∀ p p' sfs patterns →
@@ -246,7 +262,8 @@ obliterate-leaves-no-trace p sfs patterns pre len-pos =
 
   ✓ obliterate-removes-path - RMO removes path from filesystem
   ✓ obliterate-removes-mapping - RMO removes block mappings
-  ✓ obliterate-not-reversible - RMO is NOT reversible (vs RMR)
+  ⚠ obliterate-not-reversible - POSTULATED (statement is unprovable as written;
+      needs reformulation to obliterate-not-injective, see Lean 4/Coq versions)
   ✓ obliterate-preserves-other-paths - RMO preserves unrelated paths
   ✓ obliterate-leaves-no-trace - GDPR Article 17 compliance
 -}

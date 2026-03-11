@@ -211,7 +211,36 @@ Proof.
     + simpl. omega.
   - (* Inductive case *)
     intros bid Hpre Hin.
-    admit. (* Complex induction over overwrite passes *)
+    (* PROOF OBLIGATION: Show that after (a :: rest) overwrite passes,
+       block bid has been overwritten >= S (length rest) times.
+
+       WHY DEFERRED: The inductive step requires showing:
+       1. overwrite_path_blocks increments block_overwritten for all
+          blocks in (sfs_mapping sfs p) — but the precondition refers
+          to the original sfs, while IH needs precondition on the
+          intermediate state after one pass.
+       2. Need a lemma: overwrite_path_blocks preserves
+          obliterate_precondition (tree and mapping unchanged, storage
+          blocks still exist but with incremented overwrite count).
+       3. Need a lemma: existsb (Nat.eqb bid) (sfs_mapping sfs p) = true
+          when In bid (sfs_mapping sfs p), connecting list membership to
+          the boolean guard in overwrite_path_blocks.
+
+       PROOF SKETCH:
+         For the inductive case (a :: rest):
+         - Let sfs1 = overwrite_path_blocks sfs p a.
+         - By In bid (sfs_mapping sfs p) and (3) above, sfs1 has
+           block_overwritten bid = S (block_overwritten_in_sfs bid).
+         - By (2), obliterate_precondition p sfs1 holds.
+         - By IH on rest with sfs1, block_overwritten after rest passes
+           >= length rest + (current overwrite count of bid in sfs1).
+         - Since sfs1 already incremented once: total >= S (length rest).
+
+       ADDITIONAL LEMMAS NEEDED:
+         overwrite_path_blocks_preserves_precondition
+         In_existsb_Nat_eqb
+         overwrite_path_blocks_increments_overwrite_count *)
+    admit.
 Admitted.
 
 (** * Non-Reversibility (Contrast with RMR) *)
@@ -241,8 +270,39 @@ Proof.
   (* Tree is the same after delete_file *)
   (* Storage: multi_pass_overwrite with same patterns on same-mapped blocks *)
   (* produces same result regardless of original block data *)
-  admit. (* Storage equality requires showing multi_pass_overwrite is determined
-            by mapping and patterns, not by original block data *)
+  (* PROOF OBLIGATION: Show that multi_pass_overwrite produces identical
+     storage for sfs1 and sfs2, given same mapping, same patterns, and
+     identical non-mapped blocks.
+
+     WHY DEFERRED: Requires an auxiliary lemma:
+       multi_pass_overwrite_storage_determined :
+         forall sfs1 sfs2 p patterns,
+           sfs_mapping sfs1 = sfs_mapping sfs2 ->
+           (forall bid, ~ In bid (sfs_mapping sfs1 p) ->
+             sfs_storage sfs1 bid = sfs_storage sfs2 bid) ->
+           sfs_storage (multi_pass_overwrite sfs1 p patterns) =
+             sfs_storage (multi_pass_overwrite sfs2 p patterns).
+
+     PROOF SKETCH:
+       Induction on patterns.
+       Base case: non-mapped blocks same by hypothesis. Mapped blocks:
+         after overwrite, overwrite_block produces data determined solely
+         by block size and pattern (map (pattern_byte pat) (seq 0 size)).
+         Two blocks with same size produce identical results.
+       Inductive step: After one pass of overwrite_path_blocks, mapped
+         blocks are now identical (same pattern applied, sizes determined
+         by original blocks which may differ but overwrite_block replaces
+         all data). Non-mapped blocks still identical. Apply IH.
+
+       KEY SUB-LEMMA: overwrite_block only depends on length (block_data blk),
+         not on the actual data. So if two blocks have the same length,
+         overwrite_block blk1 pat = overwrite_block blk2 pat (modulo block_id).
+
+     ADDITIONAL LEMMAS NEEDED:
+       overwrite_block_determined_by_length
+       overwrite_path_blocks_non_mapped_preserved
+       overwrite_path_blocks_mapped_determined *)
+  admit.
 Admitted.
 
 (** * Preservation Theorems *)

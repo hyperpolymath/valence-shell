@@ -257,8 +257,10 @@ fs-update-preserves-existence : ∀ p node fs → path-exists p (fs-update p (ju
 fs-update-preserves-existence p node fs = node , fs-update-at-path p (just node) fs
 
 -- delete-file after update is fsUpdate p nothing after fsUpdate p (just node)
-postulate
-  delete-after-update : ∀ p fs node → delete-file p (fs-update p (just node) fs) ≡ fs-update p nothing (fs-update p (just node) fs)
+-- Since delete-file p = fsUpdate p nothing (from FileOperations), the LHS
+-- and RHS are definitionally equal: both are fsUpdate p nothing (fsUpdate p (just node) fs).
+delete-after-update : ∀ p fs node → delete-file p (fs-update p (just node) fs) ≡ fs-update p nothing (fs-update p (just node) fs)
+delete-after-update p fs node = refl
 
 {-
   Summary of Proven Claims:

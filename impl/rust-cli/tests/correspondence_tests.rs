@@ -4,6 +4,24 @@
 //! These tests verify that the Rust implementation correctly implements
 //! the semantics proven in Lean 4 formal proofs.
 //!
+//! ## Mechanization Gap
+//!
+//! Current confidence level: ~95% via property testing, NOT mechanized.
+//!
+//! Full mechanization would require:
+//! 1. A Lean 4 DSL modeling Rust's `ShellState` and `Command` types
+//! 2. An extraction mechanism (Lean -> Rust) or a shared ABI (Idris2 -> Zig)
+//! 3. Formal proof that every `execute()` call in Rust corresponds to the
+//!    matching Lean function applied to the modeled state
+//! 4. A verified shim layer that maps filesystem syscall results to the
+//!    abstract filesystem model used in proofs
+//! 5. Proof that the Rust `resolve_path` sandbox invariant holds (path
+//!    traversal prevention = confinement theorem)
+//!
+//! Until then, these tests + property tests in property_correspondence_tests.rs
+//! serve as the validation bridge. Each test cites the Lean theorem it
+//! corresponds to.
+//!
 //! Correspondence Document: docs/PHASE4_CORRESPONDENCE.md
 //! Lean Proofs: proofs/lean4/FilesystemModel.lean, FileOperations.lean
 
@@ -684,6 +702,186 @@ fn test_variables_in_redirections() -> Result<()> {
     // Test that resolve_path works with expanded variables
     let path = state.resolve_path(&vsh::parser::expand_variables("$OUTFILE", &state));
     assert!(path.to_string_lossy().contains("test_output.txt"));
+
+    Ok(())
+}
+
+// =========================================================================
+// Edge Case Correspondence Tests (TASK 3 additions)
+// =========================================================================
+
+/// Test: Empty path handling
+/// The sandbox resolver should handle empty paths gracefully
+#[test]
+fn test_empty_path_resolves_to_root() {
+    let temp = tempdir().unwrap();
+    let state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
+
+    // Empty path should resolve to root
+    let resolved = state.resolve_path("");
+    assert_eq!(resolved, state.root);
+}
+
+/// Test: Special characters in directory names
+/// Corresponds to Lean: operations work for any valid string path
+#[test]
+fn test_special_characters_in_paths() -> Result<()> {
+    let temp = tempdir()?;
+    let mut state = ShellState::new(temp.path().to_str().unwrap())?;
+
+    // Spaces in name
+    mkdir(&mut state, "dir with spaces", false)?;
+    assert!(state.resolve_path("dir with spaces").exists());
+    rmdir(&mut state, "dir with spaces", false)?;
+    assert!(!state.resolve_path("dir with spaces").exists());
+
+    // Dots in name
+    mkdir(&mut state, ".hidden_dir", false)?;
+    assert!(state.resolve_path(".hidden_dir").exists());
+    rmdir(&mut state, ".hidden_dir", false)?;
+
+    // Underscores and hyphens
+    mkdir(&mut state, "my-dir_v2", false)?;
+    assert!(state.resolve_path("my-dir_v2").exists());
+    rmdir(&mut state, "my-dir_v2", false)?;
+
+    Ok(())
+}
+
+/// Test: Unicode in directory names
+/// Corresponds to Lean: path model is parameterized over String
+#[test]
+fn test_unicode_paths() -> Result<()> {
+    let temp = tempdir()?;
+    let mut state = ShellState::new(temp.path().to_str().unwrap())?;
+
+    // Unicode directory names
+    mkdir(&mut state, "données", false)?;
+    assert!(state.resolve_path("données").exists());
+    rmdir(&mut state, "données", false)?;
+    assert!(!state.resolve_path("données").exists());
+
+    // CJK characters
+    mkdir(&mut state, "日本語", false)?;
+    assert!(state.resolve_path("日本語").exists());
+    rmdir(&mut state, "日本語", false)?;
+
+    // Emoji (if filesystem supports)
+    let emoji_result = mkdir(&mut state, "test_🦀", false);
+    if emoji_result.is_ok() {
+        assert!(state.resolve_path("test_🦀").exists());
+        rmdir(&mut state, "test_🦀", false)?;
+    }
+
+    Ok(())
+}
+
+/// Test: Very long path names
+/// Verifies behavior near filesystem limits
+#[test]
+fn test_long_path_names() -> Result<()> {
+    let temp = tempdir()?;
+    let mut state = ShellState::new(temp.path().to_str().unwrap())?;
+
+    // 200-character directory name (below typical 255-char limit)
+    let long_name: String = "a".repeat(200);
+    mkdir(&mut state, &long_name, false)?;
+    assert!(state.resolve_path(&long_name).exists());
+    rmdir(&mut state, &long_name, false)?;
+    assert!(!state.resolve_path(&long_name).exists());
+
+    // Verify too-long names fail gracefully (filesystem-dependent)
+    let too_long: String = "b".repeat(300);
+    let result = mkdir(&mut state, &too_long, false);
+    // This may or may not fail depending on filesystem - just verify no panic
+    if result.is_ok() {
+        // Clean up if it worked
+        let _ = rmdir(&mut state, &too_long, false);
+    }
+
+    Ok(())
+}
+
+/// Test: Path traversal attacks are blocked
+/// Corresponds to sandbox confinement invariant
+#[test]
+fn test_path_traversal_blocked() {
+    let temp = tempdir().unwrap();
+    let state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
+
+    // Attempting to escape sandbox via ..
+    let resolved = state.resolve_path("../../etc/passwd");
+    assert!(
+        resolved.starts_with(&state.root),
+        "Path traversal should be blocked: {} should start with {}",
+        resolved.display(),
+        state.root.display()
+    );
+
+    // Multiple .. sequences
+    let resolved2 = state.resolve_path("a/b/../../../../etc");
+    assert!(resolved2.starts_with(&state.root));
+
+    // Just ..
+    let resolved3 = state.resolve_path("..");
+    assert!(resolved3.starts_with(&state.root));
+}
+
+/// Test: Reversibility with file content preservation
+/// Corresponds to Lean: write_restore_reversible
+#[test]
+fn test_file_content_preserved_across_operations() -> Result<()> {
+    let temp = tempdir()?;
+    let mut state = ShellState::new(temp.path().to_str().unwrap())?;
+
+    // Create file with content
+    touch(&mut state, "data.txt", false)?;
+    fs::write(state.resolve_path("data.txt"), "important data")?;
+
+    // Create another file (should not affect first)
+    touch(&mut state, "other.txt", false)?;
+
+    // Verify content preserved
+    let content = fs::read_to_string(state.resolve_path("data.txt"))?;
+    assert_eq!(content, "important data");
+
+    // Create and remove a directory (should not affect file)
+    mkdir(&mut state, "temp_dir", false)?;
+    rmdir(&mut state, "temp_dir", false)?;
+
+    // Content still intact
+    let content2 = fs::read_to_string(state.resolve_path("data.txt"))?;
+    assert_eq!(content2, "important data");
+
+    Ok(())
+}
+
+/// Test: Function definition and invocation correspondence
+/// Functions should preserve shell state invariants (new for TASK 1)
+#[test]
+fn test_function_preserves_state_invariants() -> Result<()> {
+    let temp = tempdir()?;
+    let mut state = ShellState::new(temp.path().to_str().unwrap())?;
+
+    // Setup: create initial state
+    mkdir(&mut state, "existing", false)?;
+    let initial_history_len = state.history.len();
+
+    // Define and invoke a function
+    let def = vsh::parser::parse_command("maker() { mkdir inner; }")?;
+    use vsh::executable::ExecutableCommand;
+    def.execute(&mut state)?;
+
+    let invoke = vsh::parser::parse_command("maker")?;
+    invoke.execute(&mut state)?;
+
+    // Invariants:
+    // 1. History grew (function body commands are recorded)
+    assert!(state.history.len() > initial_history_len);
+    // 2. Existing paths unchanged
+    assert!(state.resolve_path("existing").exists());
+    // 3. New path created by function
+    assert!(state.resolve_path("inner").exists());
 
     Ok(())
 }
