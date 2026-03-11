@@ -13,6 +13,8 @@ use std::fs;
 use std::path::PathBuf;
 use uuid::Uuid;
 
+use crate::functions::FunctionTable;
+use crate::posix_builtins::{AliasTable, TrapTable};
 use crate::proof_refs::ProofReference;
 
 /// Value type for shell variables - can be scalar or array
@@ -310,6 +312,15 @@ pub struct ShellState {
 
     /// Named checkpoints mapping name → history index at checkpoint time
     pub checkpoints: HashMap<String, (usize, DateTime<Utc>)>,
+
+    /// Shell function definitions and call stack
+    pub functions: FunctionTable,
+
+    /// Signal trap handlers (EXIT, INT, TERM, HUP)
+    pub traps: TrapTable,
+
+    /// Command aliases
+    pub aliases: AliasTable,
 }
 
 impl ShellState {
@@ -341,6 +352,9 @@ impl ShellState {
             fifo_counter: std::sync::atomic::AtomicUsize::new(0),
             jobs: crate::job::JobTable::new(),
             checkpoints: HashMap::new(),
+            functions: FunctionTable::new(),
+            traps: TrapTable::new(),
+            aliases: AliasTable::new(),
         };
 
         // Try to load existing state

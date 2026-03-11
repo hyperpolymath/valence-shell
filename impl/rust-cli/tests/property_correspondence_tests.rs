@@ -416,3 +416,90 @@ proptest! {
         prop_assert!(!state.resolve_path(&file_name).is_dir());
     }
 }
+
+// ============================================================================
+// Property 8: Sandbox Confinement (TASK 3 addition)
+// Corresponds to: path_traversal_blocked (security invariant)
+// ============================================================================
+
+/// Generate path traversal attack strings
+fn traversal_path() -> impl Strategy<Value = String> {
+    prop_oneof![
+        Just("..".to_string()),
+        Just("../..".to_string()),
+        Just("../../etc".to_string()),
+        Just("a/../../..".to_string()),
+        Just("a/b/c/../../../../tmp".to_string()),
+    ]
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(20))]
+
+    /// Property: resolve_path never escapes the sandbox root
+    #[test]
+    fn prop_sandbox_confinement(attack in traversal_path()) {
+        let temp = tempdir().unwrap();
+        let state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
+
+        let resolved = state.resolve_path(&attack);
+        prop_assert!(
+            resolved.starts_with(&state.root),
+            "resolve_path({}) = {} should start with {}",
+            attack, resolved.display(), state.root.display()
+        );
+    }
+
+    /// Property: Operations with special-character names are reversible
+    #[test]
+    fn prop_special_name_reversibility(
+        name in "[a-z][ a-z0-9._-]{0,10}"
+    ) {
+        let temp = tempdir().unwrap();
+        let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
+
+        // mkdir should succeed for valid filesystem names
+        let mk_result = mkdir(&mut state, &name, false);
+        if mk_result.is_ok() {
+            prop_assert!(state.resolve_path(&name).exists());
+            // rmdir should reverse it
+            let rm_result = rmdir(&mut state, &name, false);
+            prop_assert!(rm_result.is_ok());
+            prop_assert!(!state.resolve_path(&name).exists());
+        }
+        // If mkdir fails (e.g., OS doesn't like the name), that's also fine
+    }
+}
+
+// ============================================================================
+// Property 9: Variable Expansion Consistency (TASK 3 addition)
+// ============================================================================
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(50))]
+
+    /// Property: Setting and getting a variable is an identity operation
+    #[test]
+    fn prop_variable_set_get_identity(
+        name in "[a-z][a-z0-9_]{0,10}",
+        value in "[a-zA-Z0-9_ ]{0,20}"
+    ) {
+        let temp = tempdir().unwrap();
+        let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
+
+        state.set_variable(name.clone(), value.clone());
+        let retrieved = state.get_variable(&name);
+        prop_assert_eq!(retrieved, Some(value.as_str()));
+    }
+
+    /// Property: Unsetting a variable makes it absent
+    #[test]
+    fn prop_unset_removes_variable(name in "[a-z][a-z0-9_]{0,10}") {
+        let temp = tempdir().unwrap();
+        let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
+
+        state.set_variable(name.clone(), "value");
+        state.unset_variable(&name);
+        prop_assert!(state.get_variable(&name).is_none());
+    }
+}

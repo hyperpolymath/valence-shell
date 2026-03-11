@@ -96,6 +96,18 @@ test-cli:
     cd impl/rust-cli && cargo test
     @echo "✓ Rust CLI tests passed"
 
+# Run Rust CLI benchmarks
+bench:
+    @echo "Running benchmarks..."
+    cd impl/rust-cli && cargo bench --bench shell_benchmarks
+    @echo "✓ Benchmarks complete"
+
+# Run all benchmarks (including legacy)
+bench-all:
+    @echo "Running all benchmarks..."
+    cd impl/rust-cli && cargo bench
+    @echo "✓ All benchmarks complete"
+
 # Build all FFI layers
 build-ffi: build-ffi-zig build-ffi-ocaml
     @echo "✓ All FFI layers built"

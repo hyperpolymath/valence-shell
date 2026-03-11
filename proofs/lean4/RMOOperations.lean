@@ -194,7 +194,37 @@ theorem obliterate_not_injective (p : Path)
     rw [multiPassOverwrite_preserves_tree, multiPassOverwrite_preserves_tree, htree]
   constructor
   · -- storage: both overwrite the same blocks with same patterns, other blocks same
-    sorry -- requires showing multiPassOverwrite produces same storage given same mapping+patterns
+    -- PROOF OBLIGATION: multiPassOverwrite produces identical storage given:
+    --   (a) same block mapping (hmap), (b) same overwrite patterns, and
+    --   (c) non-mapped blocks are identical (hother).
+    --
+    -- WHY DEFERRED: Requires an auxiliary lemma:
+    --   multiPassOverwrite_storage_determined :
+    --     ∀ (sfs1 sfs2 : StorageFS) (p : Path) (patterns : List OverwritePattern),
+    --       sfs1.mapping = sfs2.mapping →
+    --       (∀ bid, bid ∉ sfs1.mapping p → sfs1.storage bid = sfs2.storage bid) →
+    --       (multiPassOverwrite sfs1 p patterns).storage =
+    --         (multiPassOverwrite sfs2 p patterns).storage
+    --
+    -- PROOF SKETCH:
+    --   Induction on patterns.
+    --   Base case: trivial (multiPassOverwrite [] = identity).
+    --   Inductive case: After one overwritePathBlocks pass, blocks in mapping p
+    --     are overwritten with the same pattern data (determined solely by pattern
+    --     and block size). Blocks NOT in mapping p are unchanged. Since block sizes
+    --     in the mapping are determined by storage (and non-mapped blocks are same
+    --     by hother), the result after one pass has the same property: non-mapped
+    --     blocks still equal, mapped blocks now identical. Apply IH.
+    --
+    --   The key sub-lemma is that overwriteBlock depends only on blockData.length
+    --   and the pattern, not on the original data. Two blocks with the same length
+    --   produce identical results after overwriteBlock.
+    --
+    -- ADDITIONAL LEMMAS NEEDED:
+    --   1. overwriteBlock_length_determined: block sizes equal → overwriteBlock equal
+    --   2. overwritePathBlocks_non_mapped_preserved: non-mapped blocks unchanged
+    --   3. overwritePathBlocks_mapped_determined: mapped blocks depend only on size+pattern
+    sorry
   · -- mapping: same since hmap
     funext p'
     simp [hmap]

@@ -439,6 +439,17 @@ impl ExecutableCommand for Command {
                 // Expand program name (no process substitutions in program name)
                 let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
 
+                // Check if the command is a shell function before external execution
+                if state.functions.is_defined(&expanded_program) {
+                    let func_def = state.functions.get(&expanded_program).unwrap().clone();
+                    // Expand arguments
+                    let expanded_args: Vec<String> = args
+                        .iter()
+                        .map(|a| crate::parser::expand_variables(a, state))
+                        .collect();
+                    return execute_function_call(&func_def, &expanded_args, state);
+                }
+
                 // Expand arguments with process substitutions
                 let mut all_process_subs = Vec::new();
                 let mut expanded_args = Vec::new();
@@ -686,7 +697,12 @@ impl ExecutableCommand for Command {
 
             Command::Source { file } => {
                 let expanded_file = crate::parser::expand_variables(file, state);
-                let path = state.resolve_path(&expanded_file);
+                // For absolute paths, use directly; for relative, resolve against root
+                let path = if expanded_file.starts_with('/') {
+                    std::path::PathBuf::from(&expanded_file)
+                } else {
+                    state.resolve_path(&expanded_file)
+                };
 
                 let content = std::fs::read_to_string(&path)
                     .map_err(|e| anyhow::anyhow!("source: {}: {}", path.display(), e))?;
@@ -739,7 +755,15 @@ impl ExecutableCommand for Command {
 
             Command::Unset { name } => {
                 let expanded_name = crate::parser::expand_variables(name, state);
-                state.unset_variable_tracked(&expanded_name);
+                if expanded_name.starts_with("-f ") {
+                    // unset -f: remove a function
+                    let func_name = &expanded_name[3..];
+                    if !state.functions.unset(func_name) {
+                        eprintln!("unset: {}: not a function", func_name);
+                    }
+                } else {
+                    state.unset_variable_tracked(&expanded_name);
+                }
                 Ok(ExecutionResult::Success)
             }
 
@@ -934,6 +958,102 @@ impl ExecutableCommand for Command {
             }
             Command::Replay { start, end } => {
                 commands::replay(state, *start, *end)?;
+                Ok(ExecutionResult::Success)
+            }
+
+            // Shell function definition
+            Command::FunctionDef { name, body } => {
+                use crate::functions::{FunctionDef as FuncDef, SourceLocation};
+                let def = FuncDef {
+                    name: name.clone(),
+                    body: body.clone(),
+                    source_location: SourceLocation {
+                        source: "stdin".to_string(),
+                        line: 0,
+                    },
+                };
+                state.functions.define(def);
+                Ok(ExecutionResult::Success)
+            }
+
+            // Return from function
+            Command::Return { code } => {
+                if state.functions.call_depth() == 0 {
+                    anyhow::bail!("return: can only return from a function");
+                }
+                let exit_code = code.unwrap_or(state.last_exit_code);
+                state.last_exit_code = exit_code;
+                Ok(ExecutionResult::ExternalCommand { exit_code })
+            }
+
+            // Local variable declaration
+            Command::Local { assignments } => {
+                if state.functions.call_depth() == 0 {
+                    anyhow::bail!("local: can only be used in a function");
+                }
+                for (name, value) in assignments {
+                    let expanded_name = crate::parser::expand_variables(name, state);
+                    let prev_value = state.get_variable(&expanded_name).map(|s| s.to_string());
+                    state.functions.declare_local(&expanded_name, prev_value);
+                    if let Some(val) = value {
+                        let expanded_val = crate::parser::expand_variables(val, state);
+                        state.set_variable(expanded_name, expanded_val);
+                    }
+                    // If no value, the variable is declared local but keeps current value
+                    // (or empty string if unset, per POSIX)
+                }
+                Ok(ExecutionResult::Success)
+            }
+
+            // Trap builtin
+            Command::Trap { action, signals } => {
+                use crate::posix_builtins::TrapSignal;
+                if action.is_none() && signals.is_empty() {
+                    // List all traps
+                    for (sig, action) in state.traps.list() {
+                        println!("trap -- '{}' {}", action, sig.name());
+                    }
+                } else if let Some(action) = action {
+                    for sig_name in signals {
+                        let expanded = crate::parser::expand_variables(sig_name, state);
+                        if let Some(sig) = TrapSignal::from_str(&expanded) {
+                            state.traps.set(sig, &action);
+                        } else {
+                            eprintln!("trap: {}: invalid signal specification", expanded);
+                        }
+                    }
+                }
+                Ok(ExecutionResult::Success)
+            }
+
+            // Alias builtin
+            Command::Alias { definitions } => {
+                if definitions.is_empty() {
+                    // List all aliases
+                    for (name, value) in state.aliases.list() {
+                        println!("alias {}='{}'", name, value);
+                    }
+                } else {
+                    for (name, value) in definitions {
+                        let expanded_value = crate::parser::expand_variables(value, state);
+                        state.aliases.set(name, &expanded_value);
+                    }
+                }
+                Ok(ExecutionResult::Success)
+            }
+
+            // Unalias builtin
+            Command::Unalias { names, all } => {
+                if *all {
+                    // unalias -a: remove all aliases (create a new empty table)
+                    state.aliases = crate::posix_builtins::AliasTable::new();
+                } else {
+                    for name in names {
+                        if !state.aliases.unset(name) {
+                            eprintln!("unalias: {}: not found", name);
+                        }
+                    }
+                }
                 Ok(ExecutionResult::Success)
             }
         }
@@ -1151,6 +1271,45 @@ impl ExecutableCommand for Command {
                 format!("case {} in ...", word)
             }
 
+            Command::FunctionDef { name, .. } => format!("{}() {{ ... }}", name),
+            Command::Return { code } => match code {
+                Some(c) => format!("return {}", c),
+                None => "return".to_string(),
+            },
+            Command::Local { assignments } => {
+                let vars: Vec<String> = assignments
+                    .iter()
+                    .map(|(n, v)| match v {
+                        Some(val) => format!("{}={}", n, val),
+                        None => n.clone(),
+                    })
+                    .collect();
+                format!("local {}", vars.join(" "))
+            }
+            Command::Trap { action, signals } => {
+                match action {
+                    Some(a) => format!("trap '{}' {}", a, signals.join(" ")),
+                    None => "trap".to_string(),
+                }
+            }
+            Command::Alias { definitions } => {
+                if definitions.is_empty() {
+                    "alias".to_string()
+                } else {
+                    let defs: Vec<String> = definitions
+                        .iter()
+                        .map(|(n, v)| format!("{}='{}'", n, v))
+                        .collect();
+                    format!("alias {}", defs.join(" "))
+                }
+            }
+            Command::Unalias { names, all } => {
+                if *all {
+                    "unalias -a".to_string()
+                } else {
+                    format!("unalias {}", names.join(" "))
+                }
+            }
             Command::Explain { inner } => format!("explain {}", inner.description()),
             Command::Checkpoint { name } => format!("checkpoint {}", name),
             Command::Restore { name } => format!("restore {}", name),
@@ -1159,6 +1318,78 @@ impl ExecutableCommand for Command {
             Command::Replay { start, end } => format!("replay {}..{}", start, end),
         }
     }
+}
+
+/// Execute a shell function call with arguments.
+///
+/// Steps:
+/// 1. Save current positional parameters
+/// 2. Set new positional parameters from function arguments
+/// 3. Push a function frame for local variable scoping
+/// 4. Execute each command in the function body
+/// 5. Restore positional parameters and local variables
+fn execute_function_call(
+    func_def: &crate::functions::FunctionDef,
+    args: &[String],
+    state: &mut ShellState,
+) -> Result<ExecutionResult> {
+    // Save current positional parameters
+    let saved_params = state.positional_params.clone();
+
+    // Set new positional parameters from function arguments
+    state.set_positional_params(args.to_vec());
+
+    // Push a function frame
+    state.functions.push_frame(saved_params.clone());
+
+    // Execute function body
+    let mut last_result = ExecutionResult::Success;
+    for cmd_str in &func_def.body {
+        let cmd_str = cmd_str.trim();
+        if cmd_str.is_empty() || cmd_str.starts_with('#') {
+            continue;
+        }
+
+        match crate::parser::parse_command(cmd_str) {
+            Ok(cmd) => {
+                last_result = cmd.execute(state)?;
+                match &last_result {
+                    ExecutionResult::Exit => break,
+                    ExecutionResult::ExternalCommand { exit_code } => {
+                        state.last_exit_code = *exit_code;
+                        // Check if this was a `return` command
+                        // (return sets exit code and we break out of the function)
+                        if cmd_str.starts_with("return") {
+                            break;
+                        }
+                    }
+                    ExecutionResult::Success => {
+                        state.last_exit_code = 0;
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("{}: {}", func_def.name, e);
+                state.last_exit_code = 1;
+            }
+        }
+    }
+
+    // Pop function frame and restore local variables
+    if let Some(frame) = state.functions.pop_frame() {
+        // Restore positional parameters
+        state.set_positional_params(frame.saved_params);
+
+        // Restore local variables to their previous values
+        for (var_name, prev_value) in &frame.saved_vars {
+            match prev_value {
+                Some(val) => state.set_variable(var_name.clone(), val.clone()),
+                None => { state.unset_variable(var_name); }
+            }
+        }
+    }
+
+    Ok(last_result)
 }
 
 /// Execute a block of commands in sequence, returning the result of the last command

@@ -1,7 +1,12 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # Valence Shell — Coq Proof Project
 #
+# Minimum supported Coq version: 8.18.0
+# Last verified working: Coq 8.20.1 (2026-03-10)
+# CI workflow: .github/workflows/validation.yml (verify-proofs job, currently disabled)
+#
 # Build: coq_makefile -f _CoqProject -o Makefile && make
+# No external dependencies (no opam packages beyond stdlib).
 
 -Q . ValenceShell
 

@@ -479,6 +479,46 @@ pub enum Command {
         start: usize,
         end: usize,
     },
+
+    // Shell functions and related builtins
+
+    /// Function definition: `fname() { commands; }` or `function fname { commands; }`
+    FunctionDef {
+        name: String,
+        body: Vec<String>,
+    },
+
+    /// Return from a function with optional exit code
+    Return {
+        code: Option<i32>,
+    },
+
+    /// Local variable declaration within a function: `local var=value` or `local var`
+    Local {
+        assignments: Vec<(String, Option<String>)>,
+    },
+
+    // POSIX builtins (trap, alias, unalias)
+
+    /// trap builtin: register signal handlers
+    /// `trap 'command' SIGNAL...` or `trap - SIGNAL...` or `trap` (list)
+    Trap {
+        action: Option<String>,
+        signals: Vec<String>,
+    },
+
+    /// alias builtin: define or list aliases
+    /// `alias name=value` or `alias` (list all)
+    Alias {
+        definitions: Vec<(String, String)>,
+    },
+
+    /// unalias builtin: remove aliases
+    /// `unalias name...` or `unalias -a` (remove all)
+    Unalias {
+        names: Vec<String>,
+        all: bool,
+    },
 }
 
 /// A single arm of a case statement: pattern) commands ;;
@@ -1475,6 +1515,12 @@ pub fn parse_command(input: &str) -> Result<Command> {
         return Err(anyhow!("Empty command"));
     }
 
+    // Check for function definitions before tokenization
+    // Function definitions contain braces which interact with tokenization
+    if let Some((name, body)) = crate::functions::parse_function_def(trimmed) {
+        return Ok(Command::FunctionDef { name, body });
+    }
+
     // Check for control structures before tokenization
     // Control structures are parsed at the string level because they contain
     // semicolons as internal separators between keywords
@@ -2244,9 +2290,15 @@ pub fn expand_variables(input: &str, state: &crate::state::ShellState) -> String
                     }
                 }
             } else if let Some(&next_ch) = chars.peek() {
-                // Simple form: $VAR or special variables like $?, $$
-                if next_ch == '?' || next_ch == '$' {
+                // Simple form: $VAR or special variables like $?, $$, $#, $@, $*
+                if next_ch == '?' || next_ch == '$' || next_ch == '#'
+                    || next_ch == '@' || next_ch == '*'
+                {
                     // Single-character special variable
+                    let var_name = chars.next().unwrap().to_string();
+                    result.push_str(&state.expand_variable(&var_name));
+                } else if next_ch.is_ascii_digit() {
+                    // Positional parameter: $0, $1, $2, ...
                     let var_name = chars.next().unwrap().to_string();
                     result.push_str(&state.expand_variable(&var_name));
                 } else if next_ch.is_alphabetic() || next_ch == '_' {
@@ -3328,11 +3380,85 @@ fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>,
             if args.is_empty() {
                 return Err(anyhow!("unset: missing variable name"));
             }
-            Ok(Command::Unset { name: args[0].clone() })
+            // Check for -f flag (unset function)
+            if args[0] == "-f" {
+                if args.len() < 2 {
+                    return Err(anyhow!("unset -f: missing function name"));
+                }
+                // We reuse Unset but prefix with "-f " so the executor can distinguish
+                Ok(Command::Unset { name: format!("-f {}", args[1]) })
+            } else {
+                Ok(Command::Unset { name: args[0].clone() })
+            }
         }
 
         "eval" => {
             Ok(Command::Eval { args })
+        }
+
+        "return" => {
+            let code = args.get(0).and_then(|s| s.parse::<i32>().ok());
+            Ok(Command::Return { code })
+        }
+
+        "local" => {
+            // local var=value var2 var3=value3
+            let mut assignments = Vec::new();
+            for arg in &args {
+                if let Some(eq_pos) = arg.find('=') {
+                    let name = arg[..eq_pos].to_string();
+                    let value = arg[eq_pos + 1..].to_string();
+                    assignments.push((name, Some(value)));
+                } else {
+                    assignments.push((arg.clone(), None));
+                }
+            }
+            if assignments.is_empty() {
+                return Err(anyhow!("local: missing variable name"));
+            }
+            Ok(Command::Local { assignments })
+        }
+
+        "trap" => {
+            if args.is_empty() {
+                // trap with no args: list all traps
+                Ok(Command::Trap { action: None, signals: vec![] })
+            } else if args.len() == 1 {
+                // trap SIGNAL (reset to default)
+                Ok(Command::Trap { action: Some("-".to_string()), signals: vec![args[0].clone()] })
+            } else {
+                // trap 'action' SIGNAL...
+                let action = args[0].clone();
+                let signals = args[1..].to_vec();
+                Ok(Command::Trap { action: Some(action), signals })
+            }
+        }
+
+        "alias" => {
+            if args.is_empty() {
+                // alias with no args: list all aliases
+                Ok(Command::Alias { definitions: vec![] })
+            } else {
+                let mut definitions = Vec::new();
+                for arg in &args {
+                    if let Some(eq_pos) = arg.find('=') {
+                        let name = arg[..eq_pos].to_string();
+                        let value = arg[eq_pos + 1..].to_string();
+                        definitions.push((name, value));
+                    }
+                    // If no '=', it's a query (show alias value) - treat as empty def list
+                }
+                Ok(Command::Alias { definitions })
+            }
+        }
+
+        "unalias" => {
+            if args.is_empty() {
+                return Err(anyhow!("unalias: missing alias name"));
+            }
+            let all = args.contains(&"-a".to_string());
+            let names = args.iter().filter(|a| *a != "-a").cloned().collect();
+            Ok(Command::Unalias { names, all })
         }
 
         // Conditionals
@@ -3721,8 +3847,9 @@ mod tests {
         // Test undefined variable (expands to empty string)
         assert_eq!(expand_variables("Hello $UNDEFINED", &state), "Hello ");
 
-        // Test literal $ (not followed by valid variable name)
-        assert_eq!(expand_variables("Price: $10", &state), "Price: $10");
+        // Test positional parameter expansion: $10 = ${1}0 (POSIX behavior)
+        // With no positional params set, $1 expands to "" so $10 → "0"
+        assert_eq!(expand_variables("Price: $10", &state), "Price: 0");
         assert_eq!(expand_variables("End$", &state), "End$");
     }
 

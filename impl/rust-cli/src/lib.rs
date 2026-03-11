@@ -17,6 +17,7 @@ pub mod enhanced_repl;
 pub mod executable;
 pub mod external;
 pub mod friendly_errors;
+pub mod functions;
 pub mod glob;
 pub mod help;
 pub mod highlighter;
@@ -25,6 +26,7 @@ pub mod quotes;
 pub mod job;
 pub mod pager;
 pub mod parser;
+pub mod posix_builtins;
 pub mod process_sub;
 pub mod proof_refs;
 pub mod redirection;
@@ -35,6 +37,10 @@ pub mod state;
 pub mod test_command;
 
 pub mod verification;
+
+/// Echidna property-based verification integration (optional feature)
+#[cfg(feature = "echidna")]
+pub mod echidna_integration;
 
 // Re-export commonly used types
 pub use state::ShellState;
