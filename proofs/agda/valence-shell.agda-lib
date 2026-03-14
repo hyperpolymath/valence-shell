@@ -1,0 +1,13 @@
+-- SPDX-License-Identifier: PMPL-1.0-or-later
+-- Valence Shell — Agda Proof Library
+--
+-- Minimum supported Agda version: 2.6.4
+-- Minimum agda-stdlib version:    2.0
+-- Last verified working: Agda 2.7.0.1 with stdlib 2.2 (2026-03-10)
+-- CI workflow: .github/workflows/validation.yml (verify-proofs job, currently disabled)
+--
+-- No external dependencies beyond agda-stdlib.
+
+name: valence-shell
+include: .
+depend: standard-library
