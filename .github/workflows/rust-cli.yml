@@ -28,7 +28,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db  # v2
+        uses: Swatinem/rust-cache@bc1860267c1b189716ecde249f61cf86e8408d91  # v2
         with:
           workspaces: impl/rust-cli
 
