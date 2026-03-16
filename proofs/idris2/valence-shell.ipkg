@@ -2,7 +2,7 @@
 package valence-shell
 
 version = 0.14.0
-authors = "Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>"
+authors = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
 license = "PMPL-1.0-or-later"
 
 brief = "Formally verified filesystem operations with provable reversibility"
