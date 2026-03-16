@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: PMPL-1.0-or-later
 ||| VALENCE-SHELL (vsh) — FFI Bridge Declarations
 |||
 ||| This module defines the formal bridge to the valence-shell native 
