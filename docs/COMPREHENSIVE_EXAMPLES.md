@@ -2,7 +2,7 @@
 
 **Version**: 0.7.1 (Phase 0 Sealing)
 **Date**: 2026-01-28
-**Author**: Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>
+**Author**: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 **License**: PMPL-1.0-or-later
 
 ---
@@ -1094,7 +1094,7 @@ Error: No operations to redo
 
 - GitLab: https://gitlab.com/non-initiate/rhodinised/vsh
 - GitHub: https://github.com/hyperpolymath/valence-shell
-- Email: jonathan.jewell@open.ac.uk
+- Email: j.d.a.jewell@open.ac.uk
 
 ---
 

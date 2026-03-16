@@ -637,6 +637,6 @@ Following ECHIDNA_INTEGRATION.md timeline:
 
 ---
 
-**Author**: Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>
+**Author**: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 **License**: PMPL-1.0-or-later
 **Date**: 2026-01-28
