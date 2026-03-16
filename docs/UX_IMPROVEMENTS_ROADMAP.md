@@ -522,7 +522,7 @@ vsh> undo
 .PP
 Full documentation: /usr/share/doc/vsh/USER_GUIDE.md
 .SH AUTHOR
-Jonathan D.A. Jewell <jonathan.jewell@open.ac.uk>
+Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 ```
 
 **Generate with**:
