@@ -273,7 +273,7 @@ diff baseline.txt with_lean.txt
 Add to `.github/workflows/lean-verification.yml`:
 
 ```yaml
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 name: Lean Verification Build
 
 on:
