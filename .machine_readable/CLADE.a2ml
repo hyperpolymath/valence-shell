@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Clade declaration — part of the gv-clade-index registry
+# See: https://github.com/hyperpolymath/gv-clade-index
+
+[identity]
+uuid = "908167d5-10d7-59ce-a11f-50dac264b765"
+primary-forge = "github"
+primary-owner = "hyperpolymath"
+canonical-name = "valence-shell"
+prefixed-name = "fv-valence-shell"
+
+[clade]
+primary = "fv"
+secondary = ["ix"]
+assigned = "2026-03-16"
+rationale = ""
+
+[forges]
+github = "hyperpolymath/valence-shell"
+gitlab = "hyperpolymath/valence-shell"
+bitbucket = "hyperpolymath/valence-shell"
+
+[lineage]
+type = "standalone"
+parent = "Formally verified shell — 250+ theorems across 6 proof systems"
+born = "2026-03-16"
