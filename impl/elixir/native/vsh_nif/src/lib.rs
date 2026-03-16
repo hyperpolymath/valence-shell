@@ -3,6 +3,7 @@
 //!
 //! Exposes hardware-based secure erase functions to Elixir
 
+#![forbid(unsafe_code)]
 use rustler::Atom;
 
 // Import from vsh crate
