@@ -12,7 +12,8 @@ on:
     - cron: '0 2 * * 0'
   workflow_dispatch:  # Manual trigger
 
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   batch_fuzzing:
