@@ -13,7 +13,8 @@ on:
       - 'impl/rust-cli/fuzz/**'
       - '.clusterfuzzlite/**'
 
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   pr_fuzzing:

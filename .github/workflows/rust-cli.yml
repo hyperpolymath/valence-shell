@@ -12,7 +12,8 @@ on:
       - 'impl/rust-cli/**'
       - 'proofs/lean4/**'
 
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   test:

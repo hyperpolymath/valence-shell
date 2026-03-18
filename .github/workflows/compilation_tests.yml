@@ -20,7 +20,8 @@ on:
       - 'impl/rust-cli/**'
       - '.github/workflows/compilation_tests.yml'
 
-permissions: read-all
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
