@@ -17,11 +17,14 @@ build/
 dist/
 out/
 
-# Dependencies
-/node_modules/
+# Dependencies (unanchored to match nested paths)
+node_modules/
 /vendor/
-/deps/
-/.elixir_ls/
+deps/
+.elixir_ls/
+
+# BEAM compiled files
+*.beam
 
 # Rust
 # Cargo.lock  # Keep for binaries
