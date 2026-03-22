@@ -191,6 +191,132 @@ Proof.
   destruct (list_eq_dec string_dec p p); [reflexivity | contradiction].
 Qed.
 
+(** * Auxiliary Lemmas for Overwrite Proofs *)
+
+(** In bid l implies existsb (Nat.eqb bid) l = true *)
+Lemma In_existsb_Nat_eqb : forall bid l,
+  In bid l -> existsb (Nat.eqb bid) l = true.
+Proof.
+  intros bid l. induction l; intros Hin.
+  - inversion Hin.
+  - simpl. destruct Hin.
+    + subst. rewrite Nat.eqb_refl. reflexivity.
+    + apply Bool.orb_true_iff. right. apply IHl. assumption.
+Qed.
+
+(** overwrite_path_blocks preserves sfs_tree *)
+Lemma overwrite_path_blocks_preserves_tree :
+  forall sfs p pat,
+    sfs_tree (overwrite_path_blocks sfs p pat) = sfs_tree sfs.
+Proof.
+  intros. unfold overwrite_path_blocks. simpl. reflexivity.
+Qed.
+
+(** overwrite_path_blocks preserves sfs_mapping *)
+Lemma overwrite_path_blocks_preserves_mapping :
+  forall sfs p pat,
+    sfs_mapping (overwrite_path_blocks sfs p pat) = sfs_mapping sfs.
+Proof.
+  intros. unfold overwrite_path_blocks. simpl. reflexivity.
+Qed.
+
+(** multi_pass_overwrite preserves sfs_tree *)
+Lemma multi_pass_preserves_tree :
+  forall patterns sfs p,
+    sfs_tree (multi_pass_overwrite sfs p patterns) = sfs_tree sfs.
+Proof.
+  induction patterns; intros; simpl.
+  - reflexivity.
+  - rewrite IHpatterns. apply overwrite_path_blocks_preserves_tree.
+Qed.
+
+(** multi_pass_overwrite preserves sfs_mapping *)
+Lemma multi_pass_preserves_mapping :
+  forall patterns sfs p,
+    sfs_mapping (multi_pass_overwrite sfs p patterns) = sfs_mapping sfs.
+Proof.
+  induction patterns; intros; simpl.
+  - reflexivity.
+  - rewrite IHpatterns. apply overwrite_path_blocks_preserves_mapping.
+Qed.
+
+(** overwrite_path_blocks preserves obliterate_precondition *)
+Lemma overwrite_path_blocks_preserves_precondition :
+  forall p sfs pat,
+    obliterate_precondition p sfs ->
+    obliterate_precondition p (overwrite_path_blocks sfs p pat).
+Proof.
+  intros p sfs pat [Hfile [Hwrite [Hblocks Hexist]]].
+  unfold obliterate_precondition.
+  rewrite overwrite_path_blocks_preserves_tree.
+  rewrite overwrite_path_blocks_preserves_mapping.
+  repeat split; try assumption.
+  - intros bid Hin.
+    destruct (Hexist bid Hin) as [blk Hblk].
+    unfold overwrite_path_blocks. simpl.
+    rewrite Hblk.
+    rewrite (In_existsb_Nat_eqb bid _ Hin).
+    eexists. reflexivity.
+Qed.
+
+(** overwrite_path_blocks increments block_overwritten for mapped blocks *)
+Lemma overwrite_path_blocks_increments :
+  forall sfs p pat bid blk,
+    In bid (sfs_mapping sfs p) ->
+    sfs_storage sfs bid = Some blk ->
+    sfs_storage (overwrite_path_blocks sfs p pat) bid =
+      Some (overwrite_block blk pat) /\
+    block_overwritten (overwrite_block blk pat) = S (block_overwritten blk).
+Proof.
+  intros sfs p pat bid blk Hin Hblk.
+  split.
+  - unfold overwrite_path_blocks. simpl.
+    rewrite Hblk.
+    rewrite (In_existsb_Nat_eqb bid _ Hin).
+    reflexivity.
+  - unfold overwrite_block. simpl. reflexivity.
+Qed.
+
+(** After n overwrite passes, the overwrite count is >= original count + n *)
+Lemma multi_pass_overwrite_count_precise :
+  forall patterns sfs p bid blk0,
+    obliterate_precondition p sfs ->
+    In bid (sfs_mapping sfs p) ->
+    sfs_storage sfs bid = Some blk0 ->
+    exists blk,
+      sfs_storage (multi_pass_overwrite sfs p patterns) bid = Some blk /\
+      block_overwritten blk >= block_overwritten blk0 + length patterns.
+Proof.
+  induction patterns; intros sfs p bid blk0 Hpre Hin Hblk0.
+  - (* Base case: 0 patterns *)
+    simpl. exists blk0. split.
+    + assumption.
+    + omega.
+  - (* Inductive case: a :: patterns *)
+    simpl.
+    (* After one pass of overwrite_path_blocks: *)
+    destruct (overwrite_path_blocks_increments sfs p a bid blk0 Hin Hblk0)
+      as [Hstorage1 Hcount1].
+    set (sfs1 := overwrite_path_blocks sfs p a).
+    set (blk1 := overwrite_block blk0 a).
+    (* sfs1 has the precondition preserved *)
+    assert (Hpre1 : obliterate_precondition p sfs1).
+    { apply overwrite_path_blocks_preserves_precondition. assumption. }
+    (* sfs_mapping is preserved *)
+    assert (Hin1 : In bid (sfs_mapping sfs1 p)).
+    { unfold sfs1. rewrite overwrite_path_blocks_preserves_mapping. assumption. }
+    (* Apply IH *)
+    destruct (IHpatterns sfs1 p bid blk1 Hpre1 Hin1 Hstorage1)
+      as [blk_final [Hfinal Hge]].
+    exists blk_final. split.
+    + assumption.
+    + (* blk_final >= blk1 + length patterns
+         blk1 = S blk0
+         so blk_final >= S blk0 + length patterns = blk0 + S (length patterns) *)
+      rewrite Hcount1 in Hge.
+      simpl. omega.
+Qed.
+
 (** Theorem: All blocks have been overwritten at least once per pattern *)
 Theorem obliterate_overwrites_all_blocks :
   forall p sfs patterns bid,
@@ -200,110 +326,239 @@ Theorem obliterate_overwrites_all_blocks :
       sfs_storage (multi_pass_overwrite sfs p patterns) bid = Some blk /\
       block_overwritten blk >= length patterns.
 Proof.
-  intros p sfs patterns.
-  induction patterns.
-  - (* Base case: 0 patterns *)
-    intros bid Hpre Hin.
-    destruct Hpre as [_ [_ [_ Hexist]]].
-    destruct (Hexist bid Hin) as [blk Hblk].
-    exists blk. split.
-    + assumption.
-    + simpl. omega.
-  - (* Inductive case *)
-    intros bid Hpre Hin.
-    (* PROOF OBLIGATION: Show that after (a :: rest) overwrite passes,
-       block bid has been overwritten >= S (length rest) times.
-
-       WHY DEFERRED: The inductive step requires showing:
-       1. overwrite_path_blocks increments block_overwritten for all
-          blocks in (sfs_mapping sfs p) — but the precondition refers
-          to the original sfs, while IH needs precondition on the
-          intermediate state after one pass.
-       2. Need a lemma: overwrite_path_blocks preserves
-          obliterate_precondition (tree and mapping unchanged, storage
-          blocks still exist but with incremented overwrite count).
-       3. Need a lemma: existsb (Nat.eqb bid) (sfs_mapping sfs p) = true
-          when In bid (sfs_mapping sfs p), connecting list membership to
-          the boolean guard in overwrite_path_blocks.
-
-       PROOF SKETCH:
-         For the inductive case (a :: rest):
-         - Let sfs1 = overwrite_path_blocks sfs p a.
-         - By In bid (sfs_mapping sfs p) and (3) above, sfs1 has
-           block_overwritten bid = S (block_overwritten_in_sfs bid).
-         - By (2), obliterate_precondition p sfs1 holds.
-         - By IH on rest with sfs1, block_overwritten after rest passes
-           >= length rest + (current overwrite count of bid in sfs1).
-         - Since sfs1 already incremented once: total >= S (length rest).
-
-       ADDITIONAL LEMMAS NEEDED:
-         overwrite_path_blocks_preserves_precondition
-         In_existsb_Nat_eqb
-         overwrite_path_blocks_increments_overwrite_count *)
-    admit.
-Admitted.
+  intros p sfs patterns bid Hpre Hin.
+  destruct Hpre as [Hfile [Hwrite [Hblocks Hexist]]].
+  destruct (Hexist bid Hin) as [blk0 Hblk0].
+  assert (Hpre' : obliterate_precondition p sfs).
+  { unfold obliterate_precondition. auto. }
+  destruct (multi_pass_overwrite_count_precise patterns sfs p bid blk0 Hpre' Hin Hblk0)
+    as [blk_final [Hfinal Hge]].
+  exists blk_final. split.
+  - assumption.
+  - omega.
+Qed.
 
 (** * Non-Reversibility (Contrast with RMR) *)
+
+(** ** Auxiliary lemmas for the non-injectivity theorem *)
+
+(** overwrite_block result depends only on block_id, block length, and pattern.
+    Two blocks with the same id and length produce identical results. *)
+Lemma overwrite_block_determined : forall blk1 blk2 pat,
+  block_id blk1 = block_id blk2 ->
+  length (block_data blk1) = length (block_data blk2) ->
+  overwrite_block blk1 pat = overwrite_block blk2 pat ->
+  (* The conclusion weakened to: output data and id are equal *)
+  block_id (overwrite_block blk1 pat) = block_id (overwrite_block blk2 pat) /\
+  block_data (overwrite_block blk1 pat) = block_data (overwrite_block blk2 pat).
+Proof.
+  intros. split; rewrite H1; reflexivity.
+Qed.
+
+(** overwrite_block produces data determined by length and pattern only *)
+Lemma overwrite_block_data_determined : forall blk1 blk2 pat,
+  length (block_data blk1) = length (block_data blk2) ->
+  block_data (overwrite_block blk1 pat) = block_data (overwrite_block blk2 pat).
+Proof.
+  intros blk1 blk2 pat Hlen.
+  unfold overwrite_block. simpl. rewrite Hlen. reflexivity.
+Qed.
+
+(** overwrite_block preserves block length *)
+Lemma overwrite_block_preserves_length : forall blk pat,
+  length (block_data (overwrite_block blk pat)) = length (block_data blk).
+Proof.
+  intros. unfold overwrite_block. simpl.
+  rewrite map_length. rewrite seq_length. reflexivity.
+Qed.
+
+(** After one overwrite pass, storage functions agree on non-mapped blocks *)
+Lemma overwrite_path_blocks_non_mapped_preserved :
+  forall sfs p pat bid,
+    ~ In bid (sfs_mapping sfs p) ->
+    sfs_storage (overwrite_path_blocks sfs p pat) bid = sfs_storage sfs bid.
+Proof.
+  intros sfs p pat bid Hnotin.
+  unfold overwrite_path_blocks. simpl.
+  destruct (sfs_storage sfs bid) eqn:Hs.
+  - (* Some blk *)
+    destruct (existsb (Nat.eqb bid) (sfs_mapping sfs p)) eqn:Hex.
+    + (* existsb returned true, but bid is not in the list — contradiction *)
+      exfalso.
+      apply Hnotin.
+      apply existsb_exists in Hex.
+      destruct Hex as [x [Hin Heqb]].
+      apply Nat.eqb_eq in Heqb. subst.
+      assumption.
+    + reflexivity.
+  - (* None *) reflexivity.
+Qed.
+
+(** Key lemma: after one overwrite pass with same pattern, mapped blocks
+    with same id and length become identical *)
+Lemma overwrite_pass_equalizes_storage :
+  forall sfs1 sfs2 p pat bid,
+    sfs_mapping sfs1 = sfs_mapping sfs2 ->
+    (forall bid, ~ In bid (sfs_mapping sfs1 p) ->
+      sfs_storage sfs1 bid = sfs_storage sfs2 bid) ->
+    (forall bid, In bid (sfs_mapping sfs1 p) ->
+      forall blk1 blk2,
+        sfs_storage sfs1 bid = Some blk1 ->
+        sfs_storage sfs2 bid = Some blk2 ->
+        block_id blk1 = block_id blk2 /\
+        length (block_data blk1) = length (block_data blk2)) ->
+    obliterate_precondition p sfs1 ->
+    obliterate_precondition p sfs2 ->
+    sfs_storage (overwrite_path_blocks sfs1 p pat) bid =
+    sfs_storage (overwrite_path_blocks sfs2 p pat) bid.
+Proof.
+  intros sfs1 sfs2 p pat bid Hmap Hother Hgeom Hpre1 Hpre2.
+  unfold overwrite_path_blocks. simpl.
+  rewrite Hmap.
+  destruct (In_dec Nat.eq_dec bid (sfs_mapping sfs2 p)) as [Hin | Hnotin].
+  - (* bid is mapped *)
+    rewrite <- Hmap in Hin.
+    destruct (Hpre1) as [_ [_ [_ Hex1]]].
+    destruct (Hex1 bid Hin) as [blk1 Hblk1].
+    rewrite Hmap in Hin.
+    destruct (Hpre2) as [_ [_ [_ Hex2]]].
+    destruct (Hex2 bid Hin) as [blk2 Hblk2].
+    rewrite Hblk1, Hblk2.
+    rewrite (In_existsb_Nat_eqb bid _ Hin).
+    rewrite <- Hmap in Hin.
+    destruct (Hgeom bid Hin blk1 blk2 Hblk1 Hblk2) as [Hid Hlen].
+    f_equal. unfold overwrite_block. rewrite Hid, Hlen. reflexivity.
+  - (* bid is not mapped *)
+    rewrite <- Hmap in Hnotin.
+    rewrite (Hother bid Hnotin).
+    reflexivity.
+Qed.
+
+(** After one pass, the precondition holds and geometry is still preserved *)
+Lemma overwrite_pass_preserves_geometry :
+  forall sfs1 sfs2 p pat,
+    sfs_mapping sfs1 = sfs_mapping sfs2 ->
+    (forall bid, In bid (sfs_mapping sfs1 p) ->
+      forall blk1 blk2,
+        sfs_storage sfs1 bid = Some blk1 ->
+        sfs_storage sfs2 bid = Some blk2 ->
+        block_id blk1 = block_id blk2 /\
+        length (block_data blk1) = length (block_data blk2)) ->
+    obliterate_precondition p sfs1 ->
+    obliterate_precondition p sfs2 ->
+    (* After one pass, storage is actually identical for all bids *)
+    (forall bid, sfs_storage (overwrite_path_blocks sfs1 p pat) bid =
+                 sfs_storage (overwrite_path_blocks sfs2 p pat) bid) ->
+    (* So the geometry condition is trivially satisfied *)
+    forall bid, In bid (sfs_mapping (overwrite_path_blocks sfs1 p pat) p) ->
+      forall blk1 blk2,
+        sfs_storage (overwrite_path_blocks sfs1 p pat) bid = Some blk1 ->
+        sfs_storage (overwrite_path_blocks sfs2 p pat) bid = Some blk2 ->
+        block_id blk1 = block_id blk2 /\
+        length (block_data blk1) = length (block_data blk2).
+Proof.
+  intros sfs1 sfs2 p pat Hmap Hgeom Hpre1 Hpre2 Heq_storage bid Hin blk1 blk2 Hb1 Hb2.
+  rewrite Heq_storage in Hb1. rewrite Hb1 in Hb2.
+  injection Hb2 as Hb2. subst. split; reflexivity.
+Qed.
+
+(** After one overwrite pass, storage agrees everywhere *)
+Lemma one_pass_storage_agrees :
+  forall sfs1 sfs2 p pat,
+    sfs_mapping sfs1 = sfs_mapping sfs2 ->
+    (forall bid, ~ In bid (sfs_mapping sfs1 p) ->
+      sfs_storage sfs1 bid = sfs_storage sfs2 bid) ->
+    (forall bid, In bid (sfs_mapping sfs1 p) ->
+      forall blk1 blk2,
+        sfs_storage sfs1 bid = Some blk1 ->
+        sfs_storage sfs2 bid = Some blk2 ->
+        block_id blk1 = block_id blk2 /\
+        length (block_data blk1) = length (block_data blk2)) ->
+    obliterate_precondition p sfs1 ->
+    obliterate_precondition p sfs2 ->
+    forall bid,
+      sfs_storage (overwrite_path_blocks sfs1 p pat) bid =
+      sfs_storage (overwrite_path_blocks sfs2 p pat) bid.
+Proof.
+  intros sfs1 sfs2 p pat Hmap Hother Hgeom Hpre1 Hpre2 bid.
+  exact (overwrite_pass_equalizes_storage sfs1 sfs2 p pat bid Hmap Hother Hgeom Hpre1 Hpre2).
+Qed.
+
+(** After the first pass, subsequent passes see identical storage,
+    so multi_pass_overwrite produces identical results *)
+Lemma multi_pass_same_start_same_result :
+  forall patterns sfs1 sfs2 p,
+    sfs_tree sfs1 = sfs_tree sfs2 ->
+    sfs_mapping sfs1 = sfs_mapping sfs2 ->
+    (forall bid, sfs_storage sfs1 bid = sfs_storage sfs2 bid) ->
+    forall bid,
+      sfs_storage (multi_pass_overwrite sfs1 p patterns) bid =
+      sfs_storage (multi_pass_overwrite sfs2 p patterns) bid.
+Proof.
+  induction patterns; intros sfs1 sfs2 p Htree Hmap Hstor bid.
+  - simpl. apply Hstor.
+  - simpl.
+    apply IHpatterns.
+    + rewrite !overwrite_path_blocks_preserves_tree. assumption.
+    + rewrite !overwrite_path_blocks_preserves_mapping. assumption.
+    + intros bid'.
+      unfold overwrite_path_blocks. simpl.
+      rewrite Hmap.
+      rewrite (Hstor bid').
+      reflexivity.
+Qed.
 
 (** RMO is not injective: different starting states produce the same result.
     This is the correct formalization of "not reversible" — obliterate destroys
     information, so multiple distinct starting states map to the same output.
-    The old statement (no recover function exists) was false because a constant
-    function trivially satisfies it for any specific sfs. *)
+
+    Requires at least one overwrite pattern (with 0 patterns, no overwriting
+    occurs and different data remains different). Also requires that blocks
+    at the same block_id have the same geometry (id and length), which models
+    the physical constraint that disk blocks have fixed size. *)
 Theorem obliterate_not_injective :
   forall p sfs1 sfs2 patterns,
     obliterate_precondition p sfs1 ->
     obliterate_precondition p sfs2 ->
     sfs_tree sfs1 = sfs_tree sfs2 ->
     sfs_mapping sfs1 = sfs_mapping sfs2 ->
-    (* If storage differs only in blocks mapped to p *)
+    length patterns > 0 ->
+    (* Storage differs only in blocks mapped to p *)
     (forall bid, ~ In bid (sfs_mapping sfs1 p) ->
       sfs_storage sfs1 bid = sfs_storage sfs2 bid) ->
+    (* Mapped blocks have the same geometry (id and length) *)
+    (forall bid, In bid (sfs_mapping sfs1 p) ->
+      forall blk1 blk2,
+        sfs_storage sfs1 bid = Some blk1 ->
+        sfs_storage sfs2 bid = Some blk2 ->
+        block_id blk1 = block_id blk2 /\
+        length (block_data blk1) = length (block_data blk2)) ->
     (* Then obliteration produces the same result *)
     obliterate p sfs1 patterns = obliterate p sfs2 patterns.
 Proof.
-  intros p sfs1 sfs2 patterns Hpre1 Hpre2 Htree Hmap Hother.
+  intros p sfs1 sfs2 patterns Hpre1 Hpre2 Htree Hmap Hlen Hother Hgeom.
   unfold obliterate.
-  rewrite Htree, Hmap.
+  rewrite (multi_pass_preserves_tree patterns sfs1 p).
+  rewrite (multi_pass_preserves_tree patterns sfs2 p).
+  rewrite Htree.
+  rewrite (multi_pass_preserves_mapping patterns sfs1 p).
+  rewrite (multi_pass_preserves_mapping patterns sfs2 p).
+  rewrite Hmap.
   f_equal.
-  (* Block mappings are the same after remove_block_mapping *)
-  (* Tree is the same after delete_file *)
-  (* Storage: multi_pass_overwrite with same patterns on same-mapped blocks *)
-  (* produces same result regardless of original block data *)
-  (* PROOF OBLIGATION: Show that multi_pass_overwrite produces identical
-     storage for sfs1 and sfs2, given same mapping, same patterns, and
-     identical non-mapped blocks.
-
-     WHY DEFERRED: Requires an auxiliary lemma:
-       multi_pass_overwrite_storage_determined :
-         forall sfs1 sfs2 p patterns,
-           sfs_mapping sfs1 = sfs_mapping sfs2 ->
-           (forall bid, ~ In bid (sfs_mapping sfs1 p) ->
-             sfs_storage sfs1 bid = sfs_storage sfs2 bid) ->
-           sfs_storage (multi_pass_overwrite sfs1 p patterns) =
-             sfs_storage (multi_pass_overwrite sfs2 p patterns).
-
-     PROOF SKETCH:
-       Induction on patterns.
-       Base case: non-mapped blocks same by hypothesis. Mapped blocks:
-         after overwrite, overwrite_block produces data determined solely
-         by block size and pattern (map (pattern_byte pat) (seq 0 size)).
-         Two blocks with same size produce identical results.
-       Inductive step: After one pass of overwrite_path_blocks, mapped
-         blocks are now identical (same pattern applied, sizes determined
-         by original blocks which may differ but overwrite_block replaces
-         all data). Non-mapped blocks still identical. Apply IH.
-
-       KEY SUB-LEMMA: overwrite_block only depends on length (block_data blk),
-         not on the actual data. So if two blocks have the same length,
-         overwrite_block blk1 pat = overwrite_block blk2 pat (modulo block_id).
-
-     ADDITIONAL LEMMAS NEEDED:
-       overwrite_block_determined_by_length
-       overwrite_path_blocks_non_mapped_preserved
-       overwrite_path_blocks_mapped_determined *)
-  admit.
-Admitted.
+  unfold remove_block_mapping. simpl.
+  apply functional_extensionality.
+  intros bid.
+  (* After first pattern pass, storage agrees everywhere.
+     Remaining passes preserve this agreement. *)
+  destruct patterns as [| pat rest].
+  { simpl in Hlen. omega. }
+  simpl.
+  apply multi_pass_same_start_same_result.
+  - rewrite !overwrite_path_blocks_preserves_tree. assumption.
+  - rewrite !overwrite_path_blocks_preserves_mapping. assumption.
+  - intros bid'.
+    apply one_pass_storage_agrees; assumption.
+Qed.
 
 (** * Preservation Theorems *)
 

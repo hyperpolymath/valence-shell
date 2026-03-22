@@ -224,7 +224,14 @@ theorem obliterate_not_injective (p : Path)
     --   1. overwriteBlock_length_determined: block sizes equal → overwriteBlock equal
     --   2. overwritePathBlocks_non_mapped_preserved: non-mapped blocks unchanged
     --   3. overwritePathBlocks_mapped_determined: mapped blocks depend only on size+pattern
-    sorry
+    --
+    -- BLOCKED: Proving functional extensionality on Storage (Nat → Option StorageBlock)
+    -- after multi-pass overwrite requires the 3 auxiliary lemmas above, plus induction
+    -- on the pattern list. The proof is structurally sound (sketch verified) but
+    -- formalizing it requires ~50 lines of auxiliary lemmas about List.map, List.range,
+    -- and overwriteBlock determinism. This is a genuine proof obligation, not a gap
+    -- in the theorem statement.
+    sorry  -- BLOCKED: requires 3 auxiliary lemmas (see comments above)
   · -- mapping: same since hmap
     funext p'
     simp [hmap]
