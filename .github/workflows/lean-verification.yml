@@ -114,7 +114,7 @@ jobs:
           # Note: with-lean binary would be in different target dir, skip for now
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: lean-extraction-artifacts
           path: |
@@ -171,7 +171,7 @@ jobs:
           cargo bench --bench lean_verification_overhead -- --baseline baseline
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: benchmark-results
           path: impl/rust-cli/target/criterion/
