@@ -66,16 +66,21 @@ Replaced with `obliterate_not_injective` — the correct formalization of "not r
 
 These are provable by induction on path length but require significant infrastructure. Axiomatized with clear specifications.
 
-## Remaining Real Gaps (4)
+## Remaining Real Gaps (3)
 
-### RMO Storage Proofs (2 gaps — low priority)
+### RMO Storage Proofs (1 gap remaining — low priority)
 
 | File | Line | Theorem | Gap |
 |------|------|---------|-----|
-| `lean4/RMOOperations.lean` | 197 | `obliterate_not_injective` | Storage equality under multiPassOverwrite |
 | `coq/rmo_operations.v` | 214 | `obliterate_overwrites_all_blocks` | Induction over overwrite passes |
 
-Both require showing that `multiPassOverwrite` is determined by the mapping and patterns, not by original block data. Non-trivial but purely mechanical induction.
+~~`lean4/RMOOperations.lean` `obliterate_not_injective`~~ **RESOLVED 2026-03-22** — Proved via
+three auxiliary lemmas (`overwriteBlock_determined_by_shape`, `overwritePathBlocks_storage_eq`,
+`multiPassOverwrite_congr`). The theorem was strengthened with a `hmapped` hypothesis (mapped blocks
+must have same blockId/length/overwriteCount) and `hlen` (patterns nonempty). After one deterministic
+overwrite pass, mapped blocks become byte-identical; remaining passes operate on equal inputs.
+
+The Coq gap (`obliterate_overwrites_all_blocks`) requires similar mechanical induction.
 
 ### Agda Deferred Proofs (2 gaps — medium priority)
 
@@ -95,7 +100,7 @@ Both have full proof sketches and are proven in corresponding Lean 4/Coq files. 
 
 ## Recommendations
 
-1. **4 remaining gaps are all low-medium priority** — RMO is not user-facing, Agda proofs exist in Lean 4
+1. **3 remaining gaps are all low-medium priority** — RMO is not user-facing, Agda proofs exist in Lean 4
 2. **Axiom count is healthy** — 4 new axioms are well-known filesystem/type theory properties
 3. **Model improvement needed**: Parameterize `mkdir`/`createFile` with permissions for full reverse-direction reversibility
 4. **Consider**: Agda `--cubical` flag provides funext natively, removing 1 structural axiom
