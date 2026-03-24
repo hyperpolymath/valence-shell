@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# valence-shell — Stapeln/Selur service definition.
+#
+# Formally verified shell with proven reversibility guarantees and MAA
+# framework. Reproducible verification container with Coq, Lean 4, Agda,
+# Z3, and OCaml/opam installed. Interactive container — runs /bin/bash
+# by default for proof verification workflows.
+#
+# Proof systems included:
+#   - Coq       — CIC foundation
+#   - Lean 4    — Primary source of truth (via elan)
+#   - Agda      — Intensional type theory (if available)
+#   - Z3        — SMT solver
+#   - OCaml     — Extraction target from Coq
+#
+# Usage:
+#   podman-compose -f selur-compose.toml run --rm app
+#   podman-compose -f selur-compose.toml run --rm app just verify-all
+#   just stack-up
+
+[project]
+name = "valence-shell"
+
+# =============================================================================
+# Valence Shell — Verification container (interactive)
+# =============================================================================
+[services.app]
+build = { context = ".", dockerfile = "Containerfile" }
+restart = "no"
+networks = ["default"]
+volumes = [
+  "valence-workspace:/workspace/valence-shell",
+]
+# No healthcheck — this is an interactive container, not a long-running service.
+# Start with: podman-compose run --rm app just verify-all
+
+# =============================================================================
+# Volumes
+# =============================================================================
+[volumes.valence-workspace]
+driver = "local"
