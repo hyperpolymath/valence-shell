@@ -63,7 +63,7 @@ sudo umount /dev/sda1  # Replace with actual partition
 
 ```bash
 # Start the daemon
-cd /var/mnt/eclipse/repos/valence-shell/impl/elixir
+cd /var$REPOS_DIR/valence-shell/impl/elixir
 iex -S mix
 
 # In IEx:
@@ -91,7 +91,7 @@ iex -S mix
 
 ```bash
 # Build the Rust CLI first
-cd /var/mnt/eclipse/repos/valence-shell/impl/rust-cli
+cd /var$REPOS_DIR/valence-shell/impl/rust-cli
 cargo build --release
 
 # Test drive detection (read-only)
@@ -172,11 +172,11 @@ VSH.SecureErase.nvme_sanitize("/dev/nvme0n1", block_erase: true)
 
 ```bash
 # Terminal 1: Start daemon
-cd /var/mnt/eclipse/repos/valence-shell/impl/elixir
+cd /var$REPOS_DIR/valence-shell/impl/elixir
 iex -S mix
 
 # Terminal 2: Test JSON-RPC call
-cd /var/mnt/eclipse/repos/valence-shell/impl/rust-cli
+cd /var$REPOS_DIR/valence-shell/impl/rust-cli
 cargo build --release
 
 # Add hardware_erase command to Rust CLI (see below)
@@ -276,7 +276,7 @@ nvme1n1   232.9G disk            # <- DO NOT TEST (system drive)
 └─nvme1n1p3 230G part /
 
 # 3. Start daemon and test
-$ cd /var/mnt/eclipse/repos/valence-shell/impl/elixir
+$ cd /var$REPOS_DIR/valence-shell/impl/elixir
 $ iex -S mix
 
 iex> {:ok, drive_type} = VSH.SecureErase.detect_drive_type("/dev/nvme0n1")

@@ -49,7 +49,7 @@ ls -la $(lean --print-prefix)/lib/lean/libleanshared.so
 ### Step 1: Build Lean Extraction Code
 
 ```bash
-cd /var/mnt/eclipse/repos/valence-shell/proofs/lean4
+cd /var$REPOS_DIR/valence-shell/proofs/lean4
 
 # Build extraction module
 lake build Extraction
@@ -76,7 +76,7 @@ ls -lh .lake/build/lib/Extraction.c
 ### Step 2: Build C Wrapper Library
 
 ```bash
-cd /var/mnt/eclipse/repos/valence-shell/impl/ocaml
+cd /var$REPOS_DIR/valence-shell/impl/ocaml
 
 # Build shared library
 make build-c
@@ -111,7 +111,7 @@ nm -D liblean_vsh.so | grep vsh_safe
 ### Step 3: Build Rust with Lean Verification
 
 ```bash
-cd /var/mnt/eclipse/repos/valence-shell/impl/rust-cli
+cd /var$REPOS_DIR/valence-shell/impl/rust-cli
 
 # Build without Lean (baseline)
 cargo build --release
@@ -222,7 +222,7 @@ cd impl/ocaml
 make build-c
 
 # Add to library path
-export LD_LIBRARY_PATH=/var/mnt/eclipse/repos/valence-shell/impl/ocaml:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/var$REPOS_DIR/valence-shell/impl/ocaml:$LD_LIBRARY_PATH
 
 # Or install systemwide
 sudo make install
@@ -423,6 +423,6 @@ Pattern: l_ + namespace + _ + module + _ + function
 
 - **Lean 4 FFI Guide**: https://lean-lang.org/lean4/doc/dev/ffi.html
 - **Lean Runtime Header**: `$(lean --print-prefix)/include/lean/lean.h`
-- **Extraction.lean**: `/var/mnt/eclipse/repos/valence-shell/proofs/lean4/Extraction.lean`
-- **C Wrapper**: `/var/mnt/eclipse/repos/valence-shell/impl/ocaml/lean_wrapper.c`
-- **Rust FFI**: `/var/mnt/eclipse/repos/valence-shell/impl/rust-cli/src/lean_ffi.rs`
+- **Extraction.lean**: `/var$REPOS_DIR/valence-shell/proofs/lean4/Extraction.lean`
+- **C Wrapper**: `/var$REPOS_DIR/valence-shell/impl/ocaml/lean_wrapper.c`
+- **Rust FFI**: `/var$REPOS_DIR/valence-shell/impl/rust-cli/src/lean_ffi.rs`

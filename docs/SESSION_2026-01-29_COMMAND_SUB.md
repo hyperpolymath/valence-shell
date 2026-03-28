@@ -126,13 +126,13 @@ Total: 128 tests passed
 
 ```bash
 vsh> echo PWD: $(pwd)
-PWD: /var/mnt/eclipse/repos/valence-shell/impl/rust-cli
+PWD: /var$REPOS_DIR/valence-shell/impl/rust-cli
 
 vsh> echo User: `whoami`
 User: hyper
 
 vsh> echo "Current dir: $(pwd)"
-Current dir: /var/mnt/eclipse/repos/valence-shell/impl/rust-cli
+Current dir: /var$REPOS_DIR/valence-shell/impl/rust-cli
 
 vsh> echo '$(pwd)'
 $(pwd)                     # Literal in single quotes
