@@ -27,7 +27,7 @@
 ### Installation
 
 ```bash
-cd /var/home/hyper/Documents/hyperpolymath-repos/valence-shell/impl/rust-cli
+cd /var$HOME/Documents/hyperpolymath-repos/valence-shell/impl/rust-cli
 cargo build --release
 ./target/release/vsh
 ```
@@ -227,7 +227,7 @@ vsh> undo                 # Undoes the touch, not the cat
 ### pwd - Print Working Directory
 ```bash
 vsh> pwd
-/var/home/hyper/Documents/hyperpolymath-repos/valence-shell
+/var$HOME/Documents/hyperpolymath-repos/valence-shell
 ```
 
 ### cd - Change Directory
@@ -238,20 +238,20 @@ vsh> cd /tmp
 vsh> pwd
 /tmp
 
-vsh> cd /var/home/hyper
+vsh> cd /var$HOME
 vsh> pwd
-/var/home/hyper
+/var$HOME
 ```
 
 #### Relative Paths
 ```bash
 vsh> cd Documents
 vsh> pwd
-/var/home/hyper/Documents
+/var$HOME/Documents
 
 vsh> cd ../Downloads
 vsh> pwd
-/var/home/hyper/Downloads
+/var$HOME/Downloads
 
 vsh> cd ../../tmp
 vsh> pwd
@@ -262,15 +262,15 @@ vsh> pwd
 ```bash
 vsh> cd ~
 vsh> pwd
-/var/home/hyper
+/var$HOME
 
 vsh> cd ~/Documents/repos
 vsh> pwd
-/var/home/hyper/Documents/repos
+/var$HOME/Documents/repos
 
 vsh> cd
 vsh> pwd
-/var/home/hyper
+/var$HOME
 # cd with no arguments goes home
 ```
 
@@ -280,9 +280,9 @@ vsh> cd /tmp
 vsh> pwd
 /tmp
 
-vsh> cd /var/home/hyper
+vsh> cd /var$HOME
 vsh> pwd
-/var/home/hyper
+/var$HOME
 
 vsh> cd -
 /tmp
@@ -290,9 +290,9 @@ vsh> pwd
 /tmp
 
 vsh> cd -
-/var/home/hyper
+/var$HOME
 vsh> pwd
-/var/home/hyper
+/var$HOME
 # cd - toggles between current and previous directory
 ```
 
@@ -584,15 +584,15 @@ file.txt
 ### Basic cd Usage
 ```bash
 vsh> pwd
-/var/home/hyper
+/var$HOME
 
 vsh> cd Documents
 vsh> pwd
-/var/home/hyper/Documents
+/var$HOME/Documents
 
 vsh> cd repos/valence-shell
 vsh> pwd
-/var/home/hyper/Documents/repos/valence-shell
+/var$HOME/Documents/repos/valence-shell
 ```
 
 ### Absolute Paths
@@ -608,32 +608,32 @@ vsh> pwd
 
 ### Parent Directory
 ```bash
-vsh> cd /var/home/hyper/Documents/repos/valence-shell/impl/rust-cli
+vsh> cd /var$HOME/Documents/repos/valence-shell/impl/rust-cli
 vsh> pwd
-/var/home/hyper/Documents/repos/valence-shell/impl/rust-cli
+/var$HOME/Documents/repos/valence-shell/impl/rust-cli
 
 vsh> cd ..
 vsh> pwd
-/var/home/hyper/Documents/repos/valence-shell/impl
+/var$HOME/Documents/repos/valence-shell/impl
 
 vsh> cd ../..
 vsh> pwd
-/var/home/hyper/Documents/repos
+/var$HOME/Documents/repos
 ```
 
 ### Home Directory
 ```bash
 vsh> cd ~
 vsh> pwd
-/var/home/hyper
+/var$HOME
 
 vsh> cd ~/Documents/repos
 vsh> pwd
-/var/home/hyper/Documents/repos
+/var$HOME/Documents/repos
 
 vsh> cd
 vsh> pwd
-/var/home/hyper
+/var$HOME
 # cd alone goes home
 ```
 
@@ -643,9 +643,9 @@ vsh> cd /tmp
 vsh> pwd
 /tmp
 
-vsh> cd /var/home/hyper
+vsh> cd /var$HOME
 vsh> pwd
-/var/home/hyper
+/var$HOME
 
 vsh> cd -
 /tmp
@@ -653,15 +653,15 @@ vsh> pwd
 /tmp
 
 vsh> cd -
-/var/home/hyper
+/var$HOME
 vsh> pwd
-/var/home/hyper
+/var$HOME
 
 # Toggle between two directories
 vsh> cd -
 /tmp
 vsh> cd -
-/var/home/hyper
+/var$HOME
 vsh> cd -
 /tmp
 ```
@@ -749,7 +749,7 @@ vsh> status
 
 ═══ Shell Status ═══
 
-  Sandbox root: /var/home/hyper/Documents/repos/valence-shell
+  Sandbox root: /var$HOME/Documents/repos/valence-shell
   Total operations: 8
   Undoable ops: 8
   Redo stack: 0
@@ -891,7 +891,7 @@ vsh> status
 
 ═══ Shell Status ═══
 
-  Sandbox root: /var/home/hyper/Documents/repos/valence-shell
+  Sandbox root: /var$HOME/Documents/repos/valence-shell
   Total operations: 47
   Undoable ops: 42
   Redo stack: 5
@@ -906,7 +906,7 @@ vsh/txn:feature-x [1↩]> status
 
 ═══ Shell Status ═══
 
-  Sandbox root: /var/home/hyper/Documents/repos/valence-shell
+  Sandbox root: /var$HOME/Documents/repos/valence-shell
   Total operations: 48
   Undoable ops: 43
   Redo stack: 0

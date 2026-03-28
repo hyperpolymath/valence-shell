@@ -32,7 +32,7 @@ Multiple arguments work too
 ### Print Working Directory
 ```bash
 vsh> pwd
-/var/home/hyper/Documents/hyperpolymath-repos/valence-shell
+/var$HOME/Documents/hyperpolymath-repos/valence-shell
 
 vsh> cd impl/rust-cli
 (external cd not implemented yet - use built-in ls)
@@ -218,7 +218,7 @@ cat: /etc/shadow: Permission denied
 ### Sandbox-Aware
 ```bash
 vsh> pwd
-/var/home/hyper/Documents/hyperpolymath-repos/valence-shell
+/var$HOME/Documents/hyperpolymath-repos/valence-shell
 
 vsh> ls /
 # External commands can see system, but built-ins operate in sandbox

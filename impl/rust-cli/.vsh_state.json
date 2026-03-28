@@ -3,7 +3,7 @@
     {
       "id": "ef3a5079-f5b0-43dc-abeb-531716164d7a",
       "op_type": "CreateFile",
-      "path": "/var/mnt/eclipse/repos/valence-shell/impl/rust-cli/$FILE",
+      "path": "/var$REPOS_DIR/valence-shell/impl/rust-cli/$FILE",
       "timestamp": "2026-01-29T10:47:32.752803024Z",
       "transaction_id": null,
       "undo_data": null,
