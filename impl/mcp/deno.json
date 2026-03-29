@@ -8,8 +8,8 @@
     "serve": "MCP_HTTP_MODE=true deno run --allow-read --allow-write --allow-net --allow-env src/Main.res.js"
   },
   "imports": {
-    "@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk@latest",
-    "@rescript/core": "npm:@rescript/core@latest"
+    "@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk@^1.28.0",
+    "@rescript/core": "npm:@rescript/core@^1.6.1"
   },
   "compilerOptions": {
     "lib": ["deno.ns", "deno.unstable"]
