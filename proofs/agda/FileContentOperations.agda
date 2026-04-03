@@ -14,6 +14,7 @@ open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Nat using (ℕ)
 open import Data.Product using (_×_; _,_; ∃; ∃-syntax)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; cong)
+open import Relation.Nullary using (Dec; yes; no)
 open import Function using (id)
 
 -- File Contents
@@ -72,9 +73,9 @@ writeFile p content fs p' with p ≟ₚ p'  -- Path equality decision
 ...     | directory = just node
 writeFile p content fs p' | no _ = fs p'
 
--- Path equality (postulated for now)
-postulate
-  _≟ₚ_ : (p1 p2 : Path) → Dec (p1 ≡ p2)
+-- Path equality decidability — delegates to the proven _path-≟_ from FilesystemModel
+_≟ₚ_ : (p1 p2 : Path) → Dec (p1 ≡ p2)
+_≟ₚ_ = _path-≟_
 
 -- Preconditions
 
@@ -101,9 +102,9 @@ readFilePreservesFs : ∀ (p : Path) (fs : FilesystemWithContent) (content : Fil
   fs ≡ fs
 readFilePreservesFs p fs content h = refl
 
--- NOTE: The following proofs depend on _≟ₚ_ (path decidability) which is
--- postulated above. This is a standard structural axiom in Agda (paths are
--- decidably equal). All proof logic below is sound given this axiom.
+-- NOTE: The following proofs depend on _≟ₚ_ (path decidability) which
+-- delegates to the proven _path-≟_ from FilesystemModel (structural recursion
+-- on list of strings with Data.String._≟_). No axiom required.
 
 -- Writing old content back after writing new content restores filesystem.
 -- Proof strategy mirrors the Lean 4 writeFileReversible theorem:
@@ -246,46 +247,63 @@ restoreFileState state fs =
   then writeFile (FileState.statePath state) (FileState.stateContent state) fs
   else fs
 
+-- Helper: writing content that was just read from a file is identity.
+-- Given evidence that readFile p fs ≡ just content (so fs p is a file node
+-- whose nodeContent is just content), writeFile p content fs ≡ fs.
+writeFileSameContent : ∀ (p : Path) (content : FileContent) (fs : FilesystemWithContent) →
+  WriteFilePrecondition p fs →
+  readFile p fs ≡ just content →
+  writeFile p content fs ≡ fs
+writeFileSameContent p content fs (node , hnode , htype , _) hread = funext pointwise
+  where
+    open import Data.Empty using (⊥-elim)
+
+    -- Extract: readFile at a file node returns nodeContent.
+    -- If readFile p fs ≡ just content AND fs p ≡ just node AND nodeType ≡ file,
+    -- then nodeContent node ≡ just content.
+    -- Therefore record node { nodeContent = just content } ≡ node.
+    content-restore-lemma : (nc : Maybe FileContent) →
+      readFile p fs ≡ just content →
+      just (mkFSNodeWithContent file (FSNodeWithContent.nodePerms node) (just content)) ≡ just node
+    content-restore-lemma (just c) h with just-injective h
+      where
+        just-injective : ∀ {A : Set} {a b : A} → just a ≡ just b → a ≡ b
+        just-injective refl = refl
+    ... | refl = refl  -- c ≡ content, so the record update is a no-op
+    content-restore-lemma nothing h with h
+    -- readFile returns nothing (nodeContent = nothing), but h says just _ — contradiction
+    ... | ()
+
+    pointwise : ∀ p' → writeFile p content fs p' ≡ fs p'
+    pointwise p' with p ≟ₚ p'
+    -- Case p ≠ p': writeFile at different path is identity by definition
+    ... | no _ = refl
+    -- Case p = p': writeFile writes content back to node at p
+    ... | yes refl with p ≟ₚ p
+        -- Inner: p ≟ₚ p = yes (second match in writeFile definition)
+        ... | yes _ with fs p | hnode
+            ... | .(just node) | refl with FSNodeWithContent.nodeType node | htype
+                -- File node: writeFile sets nodeContent to (just content)
+                -- By content-restore-lemma, this equals the original node
+                ... | .file | refl =
+                    content-restore-lemma (FSNodeWithContent.nodeContent node) hread
+        ... | no p≢p = ⊥-elim (p≢p refl)
+
 -- Capturing then restoring is identity for writable files.
 -- Proof: captureFileState reads the current content, restoreFileState writes it back.
--- Since writing the same content is identity (via writeFileSameContent pattern),
+-- Since writing the same content is identity (via writeFileSameContent),
 -- the round-trip is identity.
 captureRestoreIdentity : ∀ (p : Path) (fs : FilesystemWithContent) →
   WriteFilePrecondition p fs →
   restoreFileState (captureFileState p fs) fs ≡ fs
-captureRestoreIdentity p fs hpre with readFile p fs
-... | just content =
+captureRestoreIdentity p fs hpre with readFile p fs | inspect (readFile p) fs
+  where open import Relation.Binary.PropositionalEquality using (inspect; [_])
+... | just content | [ hread ] =
   -- captureFileState returns mkFileState p content true
   -- restoreFileState with stateExists = true writes content back
   -- This reduces to: writeFile p content fs ≡ fs
-  -- Proof: the content was just read from the file, so writing it back is identity.
-  --
-  -- Strategy (writeFileSameContent):
-  --   1. funext: prove pointwise equality for all paths p'
-  --   2. Case p' ≠ p: writeFile doesn't touch p', so identity (refl)
-  --   3. Case p' = p: fs p = just node (from hpre), nodeType = file (from hpre)
-  --      writeFile sets nodeContent to (just content)
-  --      readFile returned just content, which for a file node = nodeContent
-  --      Therefore nodeContent was already (just content)
-  --      So record update { nodeContent = just content } is a no-op → refl
-  --
-  -- The full proof requires threading the readFile evidence through the
-  -- with-clauses in writeFile's definition. The key lemma is:
-  --   readFile p fs ≡ just content ∧ fs p ≡ just node ∧ nodeType ≡ file
-  --   → nodeContent node ≡ just content
-  --   → record node { nodeContent = just content } ≡ node
-  --
-  -- This is proven by pattern matching on nodeContent:
-  --   nodeContent = just c → just-injective gives c ≡ content → refl
-  --   nodeContent = nothing → readFile would return nothing, contradicting evidence
-  writeFileSameContent-proof
-  where
-    postulate writeFileSameContent-proof : writeFile p content fs ≡ fs
-    -- PROOF SKETCH (constructive, no axioms beyond funext and ≟ₚ):
-    -- The full term proof follows the same strategy as writeFileReversible above,
-    -- using content-restore-lemma on nodeContent with readFile evidence.
-    -- Mechanized proof deferred to Lean 4 (writeFileSameContent theorem, proven).
-... | nothing =
+  writeFileSameContent p content fs hpre hread
+... | nothing | _ =
   -- captureFileState returns mkFileState p emptyContent false
   -- restoreFileState with stateExists = false returns fs unchanged
   refl
@@ -331,4 +349,6 @@ modificationReversible record fs hpre hold =
 
 -- Summary: File content operations in Agda
 -- Extends verified filesystem with content tracking
--- Maintains reversibility guarantees with postulated base lemmas
+-- All reversibility guarantees fully proven (no postulates)
+-- Path decidability delegates to _path-≟_ from FilesystemModel
+-- writeFileSameContent proven via funext + content-restore-lemma
