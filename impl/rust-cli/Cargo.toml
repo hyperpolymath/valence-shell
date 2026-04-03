@@ -17,7 +17,7 @@ clap = { version = "4.5", features = ["derive", "env"] }
 
 # Terminal UI
 crossterm = "0.28"
-ratatui = "0.29"
+ratatui = "0.30"
 
 # Async runtime (for BEAM communication)
 tokio = { version = "1.50", features = ["full"] }
