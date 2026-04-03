@@ -94,9 +94,15 @@ htmlcov/
 STRATEGIC_ANALYSIS.md
 docs/strategic/
 
-# Shared libraries
+# Shared libraries and object files
+*.o
 *.so
+*.so.*
 *.dylib
+
+# Zig build artifacts
+.zig-cache/
+zig-out/
 
 # Crash recovery artifacts
 ai-cli-crash-capture/
