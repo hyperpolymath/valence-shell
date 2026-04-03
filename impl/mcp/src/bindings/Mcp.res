@@ -1,7 +1,28 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
 // MCP SDK bindings for ReScript - Valence Shell
 
+// toolHandler type matches what the MCP SDK expects at the JS runtime boundary.
+// toolResult is structurally a JS object that the SDK handles as JSON.t.
+// We use a dedicated coercion (toolResultToJson) instead of scattered Obj.magic.
 type toolHandler = JSON.t => promise<JSON.t>
+
+// Safe coercion: toolResult is a plain JS record that the MCP SDK treats as JSON.t
+// at the FFI boundary. This replaces all Obj.magic calls in Server.res.
+let toolResultToJson: toolResult => JSON.t = result => {
+  let obj = Dict.make()
+  let contentArr = Array.map(result.content, item => {
+    let itemObj = Dict.make()
+    Dict.set(itemObj, "type", JSON.Encode.string(item.type_))
+    Dict.set(itemObj, "text", JSON.Encode.string(item.text))
+    JSON.Encode.object(itemObj)
+  })
+  Dict.set(obj, "content", JSON.Encode.array(contentArr))
+  switch result.isError {
+  | Some(true) => Dict.set(obj, "isError", JSON.Encode.bool(true))
+  | _ => ()
+  }
+  JSON.Encode.object(obj)
+}
 
 type toolSchema = {
   @as("type") type_: string,

@@ -153,7 +153,11 @@ rmdir-removes-path p fs pre (node , eq) with p path-≟ p
   where
     open import Data.Empty using (⊥-elim)
 
--- The Main Reversibility Theorem
+-- AXIOM: Functional extensionality (standard in intensional type theory).
+-- This is a well-known axiom that is consistent with Agda's type theory.
+-- It is provable in cubical Agda (--cubical flag) and available in the
+-- stdlib as Axiom.Extensionality.Propositional. We postulate it here to
+-- avoid a cubical dependency. See also: HoTT Book, Axiom 2.9.3.
 postulate
   funext : ∀ {A : Set} {B : A → Set} {f g : (x : A) → B x} →
            (∀ x → f x ≡ g x) → f ≡ g

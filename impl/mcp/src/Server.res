@@ -64,7 +64,7 @@ let mkdirHandler = async (params: JSON.t): promise<JSON.t> => {
   }
 
   switch path {
-  | None => Obj.magic(makeToolResult("Missing required parameter: path", ~isError=true))
+  | None => toolResultToJson(makeToolResult("Missing required parameter: path", ~isError=true))
   | Some(p) =>
     let result = await executeOperation(Mkdir, p)
     switch result {
@@ -83,9 +83,9 @@ let mkdirHandler = async (params: JSON.t): promise<JSON.t> => {
       Dict.set(response, "proofTheorem", JSON.Encode.string(proof.theorem))
       Dict.set(response, "proofLocation", JSON.Encode.string(proof.coqLocation))
 
-      Obj.magic(makeJsonResult(JSON.Encode.object(response)))
+      toolResultToJson(makeJsonResult(JSON.Encode.object(response)))
     | Error(msg) =>
-      Obj.magic(makeToolResult("mkdir failed: " ++ msg, ~isError=true))
+      toolResultToJson(makeToolResult("mkdir failed: " ++ msg, ~isError=true))
     }
   }
 }
@@ -101,7 +101,7 @@ let rmdirHandler = async (params: JSON.t): promise<JSON.t> => {
   }
 
   switch path {
-  | None => Obj.magic(makeToolResult("Missing required parameter: path", ~isError=true))
+  | None => toolResultToJson(makeToolResult("Missing required parameter: path", ~isError=true))
   | Some(p) =>
     let result = await executeOperation(Rmdir, p)
     switch result {
@@ -119,9 +119,9 @@ let rmdirHandler = async (params: JSON.t): promise<JSON.t> => {
       let proof = getProofRef(Rmdir)
       Dict.set(response, "proofTheorem", JSON.Encode.string(proof.theorem))
 
-      Obj.magic(makeJsonResult(JSON.Encode.object(response)))
+      toolResultToJson(makeJsonResult(JSON.Encode.object(response)))
     | Error(msg) =>
-      Obj.magic(makeToolResult("rmdir failed: " ++ msg, ~isError=true))
+      toolResultToJson(makeToolResult("rmdir failed: " ++ msg, ~isError=true))
     }
   }
 }
@@ -137,7 +137,7 @@ let touchHandler = async (params: JSON.t): promise<JSON.t> => {
   }
 
   switch path {
-  | None => Obj.magic(makeToolResult("Missing required parameter: path", ~isError=true))
+  | None => toolResultToJson(makeToolResult("Missing required parameter: path", ~isError=true))
   | Some(p) =>
     let result = await executeOperation(CreateFile, p)
     switch result {
@@ -152,9 +152,9 @@ let touchHandler = async (params: JSON.t): promise<JSON.t> => {
       Dict.set(response, "operationId", JSON.Encode.string(op.id))
       Dict.set(response, "undoCommand", JSON.Encode.string("vsh_rm " ++ p))
 
-      Obj.magic(makeJsonResult(JSON.Encode.object(response)))
+      toolResultToJson(makeJsonResult(JSON.Encode.object(response)))
     | Error(msg) =>
-      Obj.magic(makeToolResult("touch failed: " ++ msg, ~isError=true))
+      toolResultToJson(makeToolResult("touch failed: " ++ msg, ~isError=true))
     }
   }
 }
@@ -170,7 +170,7 @@ let rmHandler = async (params: JSON.t): promise<JSON.t> => {
   }
 
   switch path {
-  | None => Obj.magic(makeToolResult("Missing required parameter: path", ~isError=true))
+  | None => toolResultToJson(makeToolResult("Missing required parameter: path", ~isError=true))
   | Some(p) =>
     // Read content for undo before deleting
     let undoData = try {
@@ -192,9 +192,9 @@ let rmHandler = async (params: JSON.t): promise<JSON.t> => {
       Dict.set(response, "operationId", JSON.Encode.string(op.id))
       Dict.set(response, "canUndo", JSON.Encode.bool(true))
 
-      Obj.magic(makeJsonResult(JSON.Encode.object(response)))
+      toolResultToJson(makeJsonResult(JSON.Encode.object(response)))
     | Error(msg) =>
-      Obj.magic(makeToolResult("rm failed: " ++ msg, ~isError=true))
+      toolResultToJson(makeToolResult("rm failed: " ++ msg, ~isError=true))
     }
   }
 }
@@ -216,7 +216,7 @@ let undoHandler = async (params: JSON.t): promise<JSON.t> => {
   let ops = getUndoable(count)
 
   if Array.length(ops) == 0 {
-    Obj.magic(makeToolResult("Nothing to undo"))
+    toolResultToJson(makeToolResult("Nothing to undo"))
   } else {
     let undone = []
 
@@ -252,7 +252,7 @@ let undoHandler = async (params: JSON.t): promise<JSON.t> => {
     Dict.set(response, "operations", JSON.Encode.array(undone))
     Dict.set(response, "proofTheorem", JSON.Encode.string(compositionProof.theorem))
 
-    Obj.magic(makeJsonResult(JSON.Encode.object(response)))
+    toolResultToJson(makeJsonResult(JSON.Encode.object(response)))
   }
 }
 
@@ -305,11 +305,11 @@ let historyHandler = async (params: JSON.t): promise<JSON.t> => {
   Dict.set(response, "count", JSON.Encode.int(Array.length(items)))
   Dict.set(response, "operations", JSON.Encode.array(items))
 
-  Obj.magic(makeJsonResult(JSON.Encode.object(response)))
+  toolResultToJson(makeJsonResult(JSON.Encode.object(response)))
 }
 
 let statusHandler = async (_params: JSON.t): promise<JSON.t> => {
-  Obj.magic(makeJsonResult(stateToJson()))
+  toolResultToJson(makeJsonResult(stateToJson()))
 }
 
 let proofsHandler = async (_params: JSON.t): promise<JSON.t> => {
@@ -335,7 +335,7 @@ let proofsHandler = async (_params: JSON.t): promise<JSON.t> => {
     JSON.Encode.string("FFI layer implements precondition checks derived from proofs but is not mechanically verified"),
   )
 
-  Obj.magic(makeJsonResult(JSON.Encode.object(response)))
+  toolResultToJson(makeJsonResult(JSON.Encode.object(response)))
 }
 
 let beginHandler = async (params: JSON.t): promise<JSON.t> => {
@@ -349,7 +349,7 @@ let beginHandler = async (params: JSON.t): promise<JSON.t> => {
   }
 
   switch name {
-  | None => Obj.magic(makeToolResult("Missing required parameter: name", ~isError=true))
+  | None => toolResultToJson(makeToolResult("Missing required parameter: name", ~isError=true))
   | Some(n) =>
     let txnId = beginTransaction(n)
 
@@ -359,13 +359,13 @@ let beginHandler = async (params: JSON.t): promise<JSON.t> => {
     Dict.set(response, "name", JSON.Encode.string(n))
     Dict.set(response, "message", JSON.Encode.string("Transaction started. All operations will be grouped until commit or rollback."))
 
-    Obj.magic(makeJsonResult(JSON.Encode.object(response)))
+    toolResultToJson(makeJsonResult(JSON.Encode.object(response)))
   }
 }
 
 let commitHandler = async (_params: JSON.t): promise<JSON.t> => {
   switch commitTransaction() {
-  | None => Obj.magic(makeToolResult("No active transaction to commit", ~isError=true))
+  | None => toolResultToJson(makeToolResult("No active transaction to commit", ~isError=true))
   | Some(txn) =>
     let response = Dict.make()
     Dict.set(response, "success", JSON.Encode.bool(true))
@@ -373,13 +373,13 @@ let commitHandler = async (_params: JSON.t): promise<JSON.t> => {
     Dict.set(response, "name", JSON.Encode.string(txn.name))
     Dict.set(response, "operationCount", JSON.Encode.int(Array.length(txn.operations)))
 
-    Obj.magic(makeJsonResult(JSON.Encode.object(response)))
+    toolResultToJson(makeJsonResult(JSON.Encode.object(response)))
   }
 }
 
 let rollbackHandler = async (_params: JSON.t): promise<JSON.t> => {
   switch rollbackTransaction() {
-  | None => Obj.magic(makeToolResult("No active transaction to rollback", ~isError=true))
+  | None => toolResultToJson(makeToolResult("No active transaction to rollback", ~isError=true))
   | Some(txn) =>
     // Undo all operations in the transaction
     let undoneCount = ref(0)
@@ -412,7 +412,7 @@ let rollbackHandler = async (_params: JSON.t): promise<JSON.t> => {
     Dict.set(response, "name", JSON.Encode.string(txn.name))
     Dict.set(response, "rolledBackOperations", JSON.Encode.int(undoneCount.contents))
 
-    Obj.magic(makeJsonResult(JSON.Encode.object(response)))
+    toolResultToJson(makeJsonResult(JSON.Encode.object(response)))
   }
 }
 
@@ -546,7 +546,7 @@ let handleHttpRequest = async (body: string): promise<JSON.t> => {
     | "vsh_begin" => await beginHandler(toolParams)
     | "vsh_commit" => await commitHandler(toolParams)
     | "vsh_rollback" => await rollbackHandler(toolParams)
-    | _ => Obj.magic(makeToolResult("Unknown tool: " ++ toolName, ~isError=true))
+    | _ => toolResultToJson(makeToolResult("Unknown tool: " ++ toolName, ~isError=true))
     }
   | "tools/list" =>
     // Return available tools

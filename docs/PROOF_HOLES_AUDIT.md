@@ -8,10 +8,22 @@
 
 | Category | Count | Change | Action Required |
 |----------|-------|--------|-----------------|
-| **Real Gaps** | 4 | -22 | Need proving |
+| **Real Gaps** | 1 | -25 | Coq `obliterate_overwrites_all_blocks` only |
 | **Axioms** | 4 | +1 | Intentional — well-known properties |
-| **Structural** | 2 | 0 | Standard type theory axioms |
-| **Total** | **10** | **-21** | |
+| **Structural** | 1 | -1 | `funext` only (`_≟ₚ_` proven via `_path-≟_`) |
+| **Total** | **6** | **-25** | |
+
+### What Was Closed (2026-04-03 proof closure session)
+
+**Agda proof holes eliminated:**
+- `agda/FileContentOperations.agda` — `_≟ₚ_` postulate REMOVED: now delegates to proven `_path-≟_` from FilesystemModel
+- `agda/FileContentOperations.agda` — `writeFileSameContent-proof` postulate PROVEN: via funext + content-restore-lemma (same pattern as writeFileReversible)
+- `agda/RMOOperations.agda` — FALSE `obliterate-not-reversible` postulate REPLACED with proven `obliterate-not-injective` (correct formalization of information loss)
+- `agda/CopyMoveOperations.agda` — ALL 10 `{!!}` holes FILLED: rewrote file using correct names from FilesystemModel/FileOperations, proved all theorems including moveFile-reversible via funext + pointwise case analysis
+- `agda/FilesystemModel.agda` — `funext` postulate ANNOTATED as standard axiom (provable in cubical Agda, consistent with intensional TT)
+
+**ReScript Obj.magic elimination:**
+- `impl/mcp/src/Server.res` — ALL 24 `Obj.magic` calls REPLACED with type-safe `toolResultToJson` conversion function defined in Mcp.res bindings
 
 ### What Was Closed (2026-03-08 P5 session)
 
@@ -50,12 +62,13 @@ The `obliterate_not_reversible` theorem was **FALSE as stated** in all 3 systems
 
 Replaced with `obliterate_not_injective` — the correct formalization of "not reversible" as information loss: different starting states produce the same result after obliteration.
 
-## Structural Axioms (2) — Standard Type Theory
+## Structural Axioms (1) — Standard Type Theory
 
 | File | Line(s) | Name | Nature |
 |------|---------|------|--------|
-| `agda/FilesystemModel.agda` | 157-159 | `funext` | Functional extensionality (standard in intensional TT) |
-| `agda/FileContentOperations.agda` | 76-77 | `_≟ₚ_` | Path decidability instance (standard for decidable types) |
+| `agda/FilesystemModel.agda` | 161-163 | `funext` | Functional extensionality (standard in intensional TT, provable in cubical Agda) |
+
+~~`agda/FileContentOperations.agda` `_≟ₚ_`~~ **RESOLVED 2026-04-03** — Now delegates to proven `_path-≟_` from FilesystemModel (structural recursion on List String with Data.String._≟_).
 
 ## Well-Formedness Axioms (2) — Added 2026-03-08
 
@@ -66,7 +79,7 @@ Replaced with `obliterate_not_injective` — the correct formalization of "not r
 
 These are provable by induction on path length but require significant infrastructure. Axiomatized with clear specifications.
 
-## Remaining Real Gaps (3)
+## Remaining Real Gaps (1)
 
 ### RMO Storage Proofs (1 gap remaining — low priority)
 
@@ -80,16 +93,16 @@ three auxiliary lemmas (`overwriteBlock_determined_by_shape`, `overwritePathBloc
 must have same blockId/length/overwriteCount) and `hlen` (patterns nonempty). After one deterministic
 overwrite pass, mapped blocks become byte-identical; remaining passes operate on equal inputs.
 
+~~`agda/RMOOperations.agda` `obliterate-not-reversible`~~ **RESOLVED 2026-04-03** — FALSE statement
+replaced with proven `obliterate-not-injective` matching the Lean 4/Coq formulation.
+
 The Coq gap (`obliterate_overwrites_all_blocks`) requires similar mechanical induction.
 
-### Agda Deferred Proofs (2 gaps — medium priority)
+### Agda Deferred Proofs — ALL RESOLVED 2026-04-03
 
-| File | Line | Theorem | Gap |
-|------|------|---------|-----|
-| `agda/FileContentOperations.agda` | 283 | `writeFileSameContent-proof` | Write-same-content identity |
-| `agda/CopyMoveOperations.agda` | 260 | `delete-after-update` | delete_file = fsUpdate nothing after fsUpdate just |
+~~`agda/FileContentOperations.agda` `writeFileSameContent-proof`~~ **PROVEN** — via funext + content-restore-lemma.
 
-Both have full proof sketches and are proven in corresponding Lean 4/Coq files. The Agda proofs are deferred due to with-clause complexity.
+~~`agda/CopyMoveOperations.agda` holes~~ **PROVEN** — File rewritten with correct names from FilesystemModel/FileOperations. All theorems proven including moveFile-reversible via funext + pointwise case analysis on fsUpdate properties.
 
 ## Pre-existing Axioms (unchanged)
 
@@ -100,10 +113,10 @@ Both have full proof sketches and are proven in corresponding Lean 4/Coq files. 
 
 ## Recommendations
 
-1. **3 remaining gaps are all low-medium priority** — RMO is not user-facing, Agda proofs exist in Lean 4
-2. **Axiom count is healthy** — 4 new axioms are well-known filesystem/type theory properties
+1. **1 remaining gap is low priority** — Coq `obliterate_overwrites_all_blocks` requires mechanical induction, not conceptually hard
+2. **Axiom count is minimal** — 1 structural (funext), 2 well-formedness, 6 decidability, 1 Coq funext = all standard
 3. **Model improvement needed**: Parameterize `mkdir`/`createFile` with permissions for full reverse-direction reversibility
-4. **Consider**: Agda `--cubical` flag provides funext natively, removing 1 structural axiom
+4. **Consider**: Agda `--cubical` flag provides funext natively, removing the last structural axiom
 
 ## P6: chmod/chown Proofs (2026-03-08)
 
