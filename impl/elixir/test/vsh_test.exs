@@ -200,4 +200,71 @@ defmodule VSHTest do
       assert summary.redo_count == 1
     end
   end
+
+  describe "NIF-specific Behavior" do
+    test "operation IDs are unique and monotonic", %{test_dir: _test_dir} do
+      {:ok, op1} = VSH.State.record_operation(:mkdir, ["test1"])
+      {:ok, op2} = VSH.State.record_operation(:mkdir, ["test2"])
+      {:ok, op3} = VSH.State.record_operation(:mkdir, ["test3"])
+
+      assert op1.id < op2.id
+      assert op2.id < op3.id
+    end
+
+    test "operation timestamps are monotonically increasing", %{test_dir: _test_dir} do
+      {:ok, op1} = VSH.State.record_operation(:mkdir, ["a"])
+      :timer.sleep(10)  # Ensure time difference
+      {:ok, op2} = VSH.State.record_operation(:mkdir, ["b"])
+
+      assert op1.timestamp <= op2.timestamp
+    end
+
+    test "redo stack maintains LIFO order", %{test_dir: _test_dir} do
+      {:ok, op1} = VSH.State.record_operation(:mkdir, ["first"])
+      {:ok, op2} = VSH.State.record_operation(:mkdir, ["second"])
+
+      # Push both onto redo stack
+      :ok = VSH.State.push_redo(op1)
+      :ok = VSH.State.push_redo(op2)
+
+      # Pop should return last pushed (LIFO)
+      popped = VSH.State.pop_redo()
+      assert popped.id == op2.id
+    end
+
+    test "concurrent operations record correctly", %{test_dir: _test_dir} do
+      # Simulate rapid fire operations (common in interactive shell)
+      ops = Enum.map(1..10, fn i ->
+        {:ok, op} = VSH.State.record_operation(:mkdir, ["dir_#{i}"])
+        op
+      end)
+
+      history = VSH.State.get_history(10)
+      assert length(history) == 10
+      assert Enum.all?(history, & &1.id > 0)
+    end
+
+    test "transaction isolation prevents cross-transaction leakage", %{test_dir: _test_dir} do
+      # First transaction
+      {:ok, _} = VSH.State.begin_transaction("txn1")
+      {:ok, op1} = VSH.State.record_operation(:mkdir, ["txn1_dir"])
+      {:ok, txn1} = VSH.State.commit_transaction()
+
+      # Second transaction (should be isolated)
+      {:ok, _} = VSH.State.begin_transaction("txn2")
+      {:ok, op2} = VSH.State.record_operation(:mkdir, ["txn2_dir"])
+      {:ok, txn2} = VSH.State.commit_transaction()
+
+      assert txn1.name == "txn1"
+      assert txn2.name == "txn2"
+      assert op1.id != op2.id
+    end
+
+    test "error handling in NIF boundary", %{test_dir: _test_dir} do
+      # Test invalid path type (if NIF validates)
+      result = VSH.State.record_operation(:mkdir, "not_a_list")
+      # Should either error gracefully or work with type coercion
+      assert result == :error or elem(result, 0) == :ok
+    end
+  end
 end

@@ -282,3 +282,68 @@ test "audit_log_inverse" {
     try std.testing.expect(OperationType.rmdir.inverse() == .mkdir);
     try std.testing.expect(OperationType.read_file.inverse() == null);
 }
+
+test "audit_log_get_entry" {
+    const allocator = std.testing.allocator;
+
+    var log = try AuditLog.init(allocator, null);
+    defer log.deinit();
+
+    log.logOperation(.mkdir, "/test/path", .succeeded);
+    log.logOperation(.create_file, "/test/file.txt", .succeeded);
+
+    const entry1 = log.getEntry(1);
+    try std.testing.expect(entry1 != null);
+    try std.testing.expectEqualStrings(entry1.?.path, "/test/path");
+    try std.testing.expect(entry1.?.id == 1);
+
+    const entry2 = log.getEntry(2);
+    try std.testing.expect(entry2 != null);
+    try std.testing.expect(entry2.?.operation == .create_file);
+}
+
+test "audit_log_link_inverse" {
+    const allocator = std.testing.allocator;
+
+    var log = try AuditLog.init(allocator, null);
+    defer log.deinit();
+
+    log.logOperation(.mkdir, "/test/dir", .succeeded);
+    log.logOperation(.rmdir, "/test/dir", .succeeded);
+
+    // Link the inverse operation
+    log.linkInverse(1, 2);
+
+    const entry1 = log.getEntry(1);
+    try std.testing.expect(entry1 != null);
+    try std.testing.expect(entry1.?.inverse_id == 2);
+}
+
+test "audit_log_get_last_operation_id" {
+    const allocator = std.testing.allocator;
+
+    var log = try AuditLog.init(allocator, null);
+    defer log.deinit();
+
+    try std.testing.expect(log.getLastOperationId() == 0);
+
+    log.logOperation(.mkdir, "/test", .succeeded);
+    try std.testing.expect(log.getLastOperationId() == 1);
+
+    log.logOperation(.create_file, "/test/file", .succeeded);
+    try std.testing.expect(log.getLastOperationId() == 2);
+}
+
+test "audit_log_operation_failure" {
+    const allocator = std.testing.allocator;
+
+    var log = try AuditLog.init(allocator, null);
+    defer log.deinit();
+
+    log.logOperation(.mkdir, "/test", .succeeded);
+    log.logOperation(.mkdir, "/test", .{ .failed = .permission_denied });
+
+    try std.testing.expect(log.entries.items.len == 2);
+    try std.testing.expect(log.entries.items[0].status == .succeeded);
+    try std.testing.expect(log.entries.items[1].status == .failed);
+}
