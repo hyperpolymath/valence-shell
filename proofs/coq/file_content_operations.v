@@ -13,6 +13,8 @@ Require Import List.
 Require Import Bool.
 Import ListNotations.
 
+Require Import Coq.Logic.FunctionalExtensionality.
+
 Require Import filesystem_model.
 Require Import file_operations.
 
