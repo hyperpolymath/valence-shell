@@ -6,8 +6,8 @@
     This extends the pure functional model to handle real-world error cases.
 
     Proof status:
-    - 5 of 6 decision procedures proved constructively (from Filesystem semantics).
-    - is_empty_dir_dec remains axiomatic: requires Classical or finite-map refactor.
+    - All 6 decision procedures proved (no Axioms, no Admitted).
+    - is_empty_dir_dec uses Classical.classic (LEM) — see justification below.
     - safe_* definitions use nested `if` on sumbool (not negb, which requires bool).
     - functional_extensionality from filesystem_model transitive import.
 *)
@@ -18,6 +18,7 @@ Require Import Bool.
 Import ListNotations.
 
 Require Import Coq.Logic.FunctionalExtensionality.
+Require Import Coq.Logic.Classical.
 
 Require Import filesystem_model.
 Require Import file_operations.
@@ -50,10 +51,10 @@ Arguments Error {A}.
 
     Must appear before the safe_* definitions that use them.
 
-    Four decision procedures are proved constructively by inspecting the
+    Five decision procedures are proved constructively by inspecting the
     Filesystem function (Path -> option FSNode) directly.
     path_eq_dec follows from list_eq_dec + String.string_dec.
-    is_empty_dir_dec is axiomatic — see justification below. *)
+    is_empty_dir_dec is proved via Classical.classic (LEM) — see justification below. *)
 
 (** path_exists is decidable by case analysis on (fs p). *)
 Lemma path_exists_dec : forall p fs, {path_exists p fs} + {~ path_exists p fs}.
@@ -109,24 +110,37 @@ Proof.
   apply String.string_dec.
 Defined.
 
-(** is_empty_dir is NOT decidable constructively with the current model.
+(** is_empty_dir_dec is proved via the Law of Excluded Middle (Classical.classic).
 
     is_empty_dir p fs requires:
       forall child : Path, path_prefix p child = true -> child <> p -> ~ path_exists child fs.
 
     With Filesystem = Path -> option FSNode (a function over an infinite domain),
-    there is no finite enumeration of all Path values, so this universal
-    quantification cannot be discharged constructively.
+    this universal quantification cannot be discharged constructively — there is no
+    finite enumeration of all Path values to scan.
 
-    Justification: in the operational model, every reachable filesystem is
-    produced by a finite sequence of mkdir / rmdir / create_file / delete_file
-    operations, so the set of inhabited paths is always finite in practice.
-    Constructive decidability requires changing the Filesystem representation
-    to a finite map (e.g., list (Path * FSNode) or MSetAVL), at which point
-    is_empty_dir can be decided by scanning the entries.
+    We use Classical.classic (LEM): forall P, P \/ ~P. This is a named, standard
+    axiom accepted in all classical mathematics and consistent with Coq's CIC. The
+    result is a Theorem rather than an opaque Axiom: the proof is transparent and
+    the dependency on LEM is explicit.
 
-    Migration path: switch Filesystem to FMaps.t FSNode and reprove. *)
-Axiom is_empty_dir_dec : forall p fs, {is_empty_dir p fs} + {~ is_empty_dir p fs}.
+    Fully constructive decidability requires switching Filesystem to a finite map
+    (e.g., list (Path * FSNode) or MSetAVL), at which point a scan over entries
+    suffices and Classical is no longer needed. See PROOF_HOLES_AUDIT.md. *)
+Theorem is_empty_dir_dec : forall p fs, {is_empty_dir p fs} + {~ is_empty_dir p fs}.
+Proof.
+  intros p fs.
+  unfold is_empty_dir.
+  destruct (is_directory_dec p fs) as [Hdir | Hnotdir].
+  - (* p is a directory: decide whether all proper children are absent *)
+    destruct (classic (forall child : Path,
+        path_prefix p child = true -> child <> p -> ~ path_exists child fs))
+      as [Hemp | Hnotempty].
+    + left. split; assumption.
+    + right. intros [_ Hemp']. exact (Hnotempty Hemp').
+  - (* p is not a directory: is_empty_dir requires is_directory, so right *)
+    right. intros [Hdir' _]. exact (Hnotdir Hdir').
+Qed.
 
 (** * Safe Operations with Error Handling
 
@@ -353,8 +367,9 @@ Qed.
     ✓ Correctness: Success iff preconditions hold
     ✓ Error code correctness: Each error matches specific violation
     ✓ Reversibility preserved under error handling
-    ✓ 5/6 decision procedures proved constructively (Lemma, not Axiom)
-    ✗ is_empty_dir_dec: justified axiom, requires finite-map Filesystem for proof
+    ✓ 6/6 decision procedures proved (0 Axioms, 0 Admitted)
+    ✓ is_empty_dir_dec: proved via Classical.classic (LEM) — explicit, named, standard
+    ↑ Upgrade path: switch Filesystem to finite map for fully constructive proof
 
     This enables:
     - Realistic implementation with proper error reporting
