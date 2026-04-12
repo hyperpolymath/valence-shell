@@ -103,7 +103,7 @@ Definition has_write_permission (p : Path) (fs : Filesystem) : Prop :=
 Definition is_empty_dir (p : Path) (fs : Filesystem) : Prop :=
   is_directory p fs /\
   forall child : Path,
-    path_prefix p child ->
+    path_prefix p child = true ->
     child <> p ->
     ~ path_exists child fs.
 
@@ -193,7 +193,9 @@ Theorem rmdir_removes_path :
 Proof.
   intros p fs Hpre [node Hexists].
   unfold rmdir, fs_update in Hexists.
-  destruct (list_eq_dec String.string_dec p p); discriminate.
+  destruct (list_eq_dec String.string_dec p p) as [_ | Hneq].
+  - discriminate.
+  - exact (Hneq eq_refl).
 Qed.
 
 (** * The Main Reversibility Theorem *)
@@ -213,8 +215,9 @@ Proof.
     subst.
     destruct (list_eq_dec String.string_dec p' p'); [|contradiction].
     destruct Hpre as [Hnotexists _].
-    destruct Hnotexists.
-    assumption.
+    destruct (fs p') as [node |] eqn:Hfsp.
+    + exfalso. apply Hnotexists. unfold path_exists. exists node. exact Hfsp.
+    + reflexivity.
   - (* p <> p' *)
     destruct (list_eq_dec String.string_dec p p'); [contradiction|].
     reflexivity.
@@ -252,12 +255,9 @@ Proof.
   destruct Hparent as [node Hnode].
   exists node.
   unfold mkdir, fs_update.
-  destruct (list_eq_dec String.string_dec p (parent_path p)).
-  - (* p = parent_path p would mean path_exists p fs (from parentExists),
-       contradicting notExists. Derive contradiction. *)
-    subst. exfalso.
-    apply HnotExists.
-    exists node. assumption.
+  destruct (list_eq_dec String.string_dec p (parent_path p)) as [Heq | Hneq].
+  - (* p = parent_path p — contradicts HnotExists: p would already exist via Hnode *)
+    exfalso. apply HnotExists. exists node. rewrite Heq. exact Hnode.
   - assumption.
 Qed.
 

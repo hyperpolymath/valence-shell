@@ -8,7 +8,7 @@
 # Build: coq_makefile -f _CoqProject -o Makefile && make
 # No external dependencies (no opam packages beyond stdlib).
 
--Q . ValenceShell
+-R . ValenceShell
 
 filesystem_model.v
 file_operations.v
