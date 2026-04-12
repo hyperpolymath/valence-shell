@@ -77,7 +77,9 @@ Theorem delete_file_removes_path :
 Proof.
   intros p fs Hpre [node Hexists].
   unfold delete_file, fs_update in Hexists.
-  destruct (list_eq_dec String.string_dec p p); discriminate.
+  destruct (list_eq_dec String.string_dec p p) as [_ | Hneq].
+  - discriminate.
+  - exact (Hneq eq_refl).
 Qed.
 
 (** * File Reversibility Theorem *)
@@ -95,10 +97,12 @@ Proof.
   destruct (list_eq_dec String.string_dec p p').
   - (* p = p' *)
     subst.
-    destruct (list_eq_dec String.string_dec p' p'); [|contradiction].
-    destruct Hpre as [Hnotexists _].
-    destruct Hnotexists.
-    assumption.
+    destruct (list_eq_dec String.string_dec p' p') as [_ | Hneq].
+    + destruct Hpre as [Hnotexists _].
+      destruct (fs p') as [node |] eqn:Hfsp.
+      * exfalso. apply Hnotexists. unfold path_exists. exists node. exact Hfsp.
+      * reflexivity.
+    + exact (Hneq eq_refl).
   - (* p <> p' *)
     destruct (list_eq_dec String.string_dec p p'); [contradiction|].
     reflexivity.
@@ -136,12 +140,9 @@ Proof.
   destruct Hparent as [node Hnode].
   exists node.
   unfold create_file, fs_update.
-  destruct (list_eq_dec String.string_dec p (parent_path p)).
-  - (* p = parent_path p would mean path_exists p fs (from parentExists),
-       contradicting notExists. Derive contradiction. *)
-    subst. exfalso.
-    apply HnotExists.
-    exists node. assumption.
+  destruct (list_eq_dec String.string_dec p (parent_path p)) as [Heq | _].
+  - (* p = parent_path p — contradicts HnotExists: p already exists via Hnode *)
+    exfalso. apply HnotExists. exists node. rewrite Heq. exact Hnode.
   - assumption.
 Qed.
 

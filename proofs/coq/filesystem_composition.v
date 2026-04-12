@@ -470,18 +470,16 @@ Proof.
     exists node.
     split; [| assumption].
     unfold mkdir, fs_update.
-    destruct (list_eq_dec String.string_dec p (parent_path p)).
-    + (* p = parent_path p would mean path_exists p fs via parentExists,
-         contradicting notExists *)
-      subst. exfalso.
-      apply Hnotexists.
-      exists node. assumption.
+    destruct (list_eq_dec String.string_dec p (parent_path p)) as [Heq | _].
+    + (* p = parent_path p — contradicts Hnotexists: p already exists via Hnode *)
+      exfalso. apply Hnotexists. exists node. rewrite Heq. exact Hnode.
     + assumption.
   - (* p <> root_path *)
     intro Hroot.
     subst.
-    destruct Hnotexists.
-    apply path_exists_empty_fs_root.
+    apply Hnotexists.
+    unfold parent_exists in Hparent. simpl in Hparent.
+    exact Hparent.
 Qed.
 
 (** mkdir preserves well-formedness: adding a node whose parent exists

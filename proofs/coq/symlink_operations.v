@@ -48,7 +48,9 @@ Theorem unlink_removes_path :
 Proof.
   intros p fs Hexists [node Hnode].
   unfold unlink, fs_update in Hnode.
-  destruct (list_eq_dec String.string_dec p p); discriminate.
+  destruct (list_eq_dec String.string_dec p p) as [_ | Hneq].
+  - discriminate.
+  - exact (Hneq eq_refl).
 Qed.
 
 (** * Reversibility Theorem *)
