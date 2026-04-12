@@ -1227,14 +1227,15 @@ Honesty demands acknowledging what \valence{} does \emph{not} prove:
         match the model. Bridging this gap (e.g., via Creusot, Prusti, or
         Aeneas~\citep{ho2022}) is the most important future work.
 
-  \item \textbf{Proof holes}: The current proof suite contains 3 proof
-        obligations across 3 files: 1 genuine gap (Coq \texttt{filesystem\_composition.v}
+  \item \textbf{Proof holes}: The current proof suite contains 2 proof
+        obligations across 2 files: 1 genuine gap (Coq \texttt{filesystem\_composition.v}
         — \texttt{OpCreateDir} permissions not preserved under round-trip in the
-        abstract model), 1 stated axiom (\texttt{is\_empty\_dir\_dec}
-        decidability in \texttt{posix\_errors.v}; justified, requires
-        finite-map refactor), and 1 standard axiom (functional extensionality
-        in Agda \texttt{FilesystemModel.agda}; consistent with cubical type
-        theory).
+        abstract model), and 1 standard axiom (functional extensionality in Agda
+        \texttt{FilesystemModel.agda}; consistent with cubical type theory).
+        \texttt{is\_empty\_dir\_dec} (\texttt{posix\_errors.v}) is now a proved
+        Theorem using the Law of Excluded Middle (\texttt{Classical.classic}); a
+        fully constructive proof via finite-map Filesystem refactor is left as
+        future work.
 
   \item \textbf{External operations}: Operations executed via
         \texttt{PATH} lookup (e.g., \texttt{gcc}, \texttt{curl}) are
