@@ -142,17 +142,21 @@ Unix shells provide no formal guarantees about the reversibility of operations.
 A mistyped \texttt{rm -rf} can destroy months of work in milliseconds, and the
 traditional response---backups, snapshots, ``be careful''---shifts the burden of
 correctness entirely onto the human operator. We present \valence{}, an
-interactive shell in which every filesystem operation possesses a
-machine-checkable mathematical proof that it can be reversed. The core
-contribution is a \emph{reversible operation algebra} formalised in six
-independent proof assistants (\lean{}, Coq, Agda, Isabelle/HOL, Mizar, and F*),
-yielding over 200 verified theorems with multi-prover cross-validation. We
+interactive shell in which every built-in filesystem operation has a
+machine-checkable mathematical proof of reversibility \emph{in a formal
+abstract model}. The core contribution is a \emph{reversible operation algebra}
+formalised in six independent proof assistants (\lean{}, Coq, Agda,
+Isabelle/HOL, Mizar, and F*), yielding over 200 verified theorems; the same
+theorems are independently cross-validated across all six systems, providing
+confidence through prover diversity (the Rust implementation is validated by
+property-based testing, not mechanically verified against the model). We
 introduce the \emph{Mutually Assured Accountability} (\maa{}) framework, which
 decomposes shell operations into two formally distinct modes:
 \emph{Remove-Match-Reverse} (\rmr{}), providing proven undo/redo with
-transaction grouping, and \emph{Remove-Match-Obliterate} (\rmo{}), providing
-GDPR-compliant irreversible deletion with proofs of non-recoverability. We
-describe the Rust implementation (15,720 lines, 602 passing tests), the
+transaction grouping, and \emph{Remove-Match-Obliterate} (\rmo{}), a
+formally-specified irreversible deletion mode designed for GDPR compliance
+(currently a stub; full proof of non-recoverability is future work).
+We describe the Rust implementation (15,720 lines, 602 passing tests), the
 multi-prover verification strategy, and the algebraic structure---including
 Certified Null Operations (\cno{}), operation commutativity, and sequence
 composition---that makes reversibility a first-class mathematical property of
@@ -160,7 +164,7 @@ the shell rather than an ad-hoc afterthought.
 \end{abstract}
 
 \noindent\textbf{Keywords:} formal verification, reversible computing, shell
-design, interactive systems, proof assistants, GDPR compliance, undo mechanisms
+design, interactive systems, proof assistants, undo mechanisms, GDPR (planned)
 
 % =============================================================================
 % 1. INTRODUCTION
@@ -1223,10 +1227,14 @@ Honesty demands acknowledging what \valence{} does \emph{not} prove:
         match the model. Bridging this gap (e.g., via Creusot, Prusti, or
         Aeneas~\citep{ho2022}) is the most important future work.
 
-  \item \textbf{Proof holes}: The current proof suite contains 10 proof
-        obligations across 8 files: 4 genuine gaps requiring additional
-        lemmas, 4 stated axioms about list operations, and 2 structural
-        obligations that are trivially dischargeable.
+  \item \textbf{Proof holes}: The current proof suite contains 3 proof
+        obligations across 3 files: 1 genuine gap (Coq \texttt{filesystem\_composition.v}
+        — \texttt{OpCreateDir} permissions not preserved under round-trip in the
+        abstract model), 1 stated axiom (\texttt{is\_empty\_dir\_dec}
+        decidability in \texttt{posix\_errors.v}; justified, requires
+        finite-map refactor), and 1 standard axiom (functional extensionality
+        in Agda \texttt{FilesystemModel.agda}; consistent with cubical type
+        theory).
 
   \item \textbf{External operations}: Operations executed via
         \texttt{PATH} lookup (e.g., \texttt{gcc}, \texttt{curl}) are
