@@ -11,6 +11,7 @@ Require Import String.
 Require Import List.
 Require Import Bool.
 Require Import Arith.
+Require Import Coq.Logic.FunctionalExtensionality.
 Import ListNotations.
 
 (** * Path Model *)
@@ -260,7 +261,5 @@ Proof.
   - assumption.
 Qed.
 
-(** Helper axiom for functional extensionality
-    In real development, import from Coq.Logic.FunctionalExtensionality *)
-Axiom functional_extensionality : forall {A B : Type} (f g : A -> B),
-  (forall x, f x = g x) -> f = g.
+(* functional_extensionality is now provided by
+   Coq.Logic.FunctionalExtensionality (imported above). *)
