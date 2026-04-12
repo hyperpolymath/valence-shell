@@ -1,34 +1,46 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # STATE.a2ml — Project state checkpoint
-# Last updated: 2026-04-04 (CRG-C blitz completion)
+# Last updated: 2026-04-12 (P0 believe_me sweep + Coq proof debt closure)
 
 [metadata]
 project = "valence-shell"
 version = "0.9.0"
-last-updated = "2026-04-04"
+last-updated = "2026-04-12"
 status = "active"
 
 [project-context]
 name = "valence-shell"
-completion-percentage = 72
+completion-percentage = 74
 phase = "advanced-research-prototype"
 
 [recent-work]
-session = "2026-04-04 CRG-C Testing Blitz"
-focus = "Reach CRG C through benchmarking + E2E + language coverage expansion"
+session = "2026-04-12 P0 believe_me sweep / Coq proof debt closure"
+focus = "Close estate-wide proof debt — valence-shell Coq layer"
 tasks-completed = [
-  "Fixed + operational benchmark suite (23+ benchmarks)",
-  "E2E script execution tests (25 tests)",
-  "Zig audit.zig expansion (+5 tests)",
-  "Elixir NIF expansion (+6 test cases)",
-  "TEST-NEEDS.md audit + update"
+  "posix_errors.v: full rewrite — 5/6 decision procedures proved constructively (was Axiom)",
+  "posix_errors.v: fixed structural bug — negb(sumbool) type error in all safe_* defs",
+  "posix_errors.v: fixed forward-reference bug — axioms were declared after use",
+  "filesystem_model.v: fixed path_prefix return type (bool, not Prop) in is_empty_dir",
+  "filesystem_composition.v: proved well_formed_ancestor_exists (was Axiom, debt #1)",
+  "filesystem_composition.v: proved mkdir_preserves_well_formed (was Axiom, debt #2)",
+  "filesystem_composition.v: added 6 helper lemmas for path prefix / length reasoning",
+  "_CoqProject: -Q → -R (recursive logical path mapping, correct for subdir imports)",
+  "proofs/coq/.gitignore: added to exclude *.vo/*.vos/*.vok/*.glob/Makefile artifacts",
+  "Commit 1ef841c pushed to GitHub"
 ]
-test-metrics = {
-  benchmarks = 23,
-  e2e-tests = 25,
-  zig-tests-added = 5,
-  elixir-tests-added = 6,
-  total-increase = 59
-}
-crg-status = "C (COMPLETE)"
-goal-met = true
+
+[coq-proof-status]
+admitted = 0
+axioms-justified = 1
+axiom-detail = "is_empty_dir_dec: Filesystem = Path -> option FSNode is infinite-domain; universal quantification over all paths is not constructively decidable. Migration: switch to FMaps.t FSNode."
+proof-debt-items-closed = [1, 2]
+proof-debt-open = []
+
+[session-history]
+# 2026-04-04: CRG-C blitz — 59 new tests, benchmarks, E2E, Zig, Elixir
+# 2026-04-12: P0 sweep — Coq layer: 0 Admitted, 1 justified Axiom (was 3 Axiom + structural bugs)
+
+[crg]
+grade = "C"
+achieved = "2026-04-04"
+notes = "Coq proof completeness improved: was 3 Axiom (2 deferred + 1 justified), now 0 Admitted + 1 justified"
