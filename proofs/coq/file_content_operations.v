@@ -120,30 +120,31 @@ Theorem write_file_reversible :
     read_file p fs = Some old_content ->
     write_file p old_content (write_file p new_content fs) = fs.
 Proof.
-  intros p fs old_content new_content Hpre Hold.
+  intros p fs old_content new_content _Hpre Hold.
   unfold write_file.
   apply functional_extensionality.
   intros p'.
-  destruct (list_eq_dec String.string_dec p p').
+  destruct (list_eq_dec String.string_dec p p') as [Heqp | Hneqp].
   - (* p = p' *)
     subst p'.
     unfold read_file in Hold.
-    destruct Hpre as [node [Hnode [Htype [perms [Hperms Hwrite]]]]].
-    rewrite Hnode.
-    rewrite Htype.
     destruct (fs p) as [n|] eqn:Hfs; [|discriminate].
-    simpl in Hold.
     destruct (node_type n) eqn:Hntype; [|discriminate].
-    injection Hold as Heq.
-    subst old_content.
-    simpl.
-    rewrite Hfs.
-    rewrite Hntype.
-    destruct n; simpl in *.
-    subst node_type0.
+    rewrite Hntype in Hold. simpl in Hold.
+    destruct (node_content n) as [c|] eqn:Hcontent; [|discriminate].
+    injection Hold as Heq. subst c.
+    (* Both (list_eq_dec p p) branches are trivially left/right *)
+    destruct (list_eq_dec String.string_dec p p) as [_|Hcontra]; [|exact (Hcontra eq_refl)].
+    rewrite Hfs. rewrite Hntype.
+    (* After inner write: result is Some {|...; node_content := Some new_content|} *)
+    destruct (list_eq_dec String.string_dec p p) as [_|Hcontra]; [|exact (Hcontra eq_refl)].
+    rewrite Hfs. rewrite Hntype. simpl.
+    (* node_type of the intermediate node is File, so outer write applies old_content *)
+    destruct n as [nt perms cont]; simpl in *.
+    subst nt. subst cont.
     reflexivity.
   - (* p <> p' *)
-    reflexivity.
+    destruct (list_eq_dec String.string_dec p p'); [contradiction | reflexivity].
 Qed.
 
 (** * Content Preservation *)
