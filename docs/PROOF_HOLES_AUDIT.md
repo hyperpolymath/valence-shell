@@ -1,17 +1,17 @@
 # Proof Holes Audit - Valence Shell
 
-**Date**: 2026-03-08 (updated after P5 proof gap closure session)
+**Date**: 2026-04-12 (updated after P0 believe_me sweep — Coq layer)
 **Auditor**: Opus (deep audit + proof closure)
-**Total Holes**: 8 across 4 proof systems (down from 31)
+**Total Holes**: 6 across 4 proof systems (down from 31; -2 Coq axioms proved 2026-04-12)
 
 ## Summary
 
 | Category | Count | Change | Action Required |
 |----------|-------|--------|-----------------|
 | **Real Gaps** | 1 | -25 | Coq `obliterate_overwrites_all_blocks` only |
-| **Axioms** | 4 | +1 | Intentional — well-known properties |
+| **Axioms** | 1 | -3 | `is_empty_dir_dec` only (justified, infinite-domain) |
 | **Structural** | 1 | -1 | `funext` only (`_≟ₚ_` proven via `_path-≟_`) |
-| **Total** | **6** | **-25** | |
+| **Total** | **3** | **-28** | Updated 2026-04-12: 2 well-formedness + 5 decidability proofs closed |
 
 ### What Was Closed (2026-04-03 proof closure session)
 
@@ -70,14 +70,16 @@ Replaced with `obliterate_not_injective` — the correct formalization of "not r
 
 ~~`agda/FileContentOperations.agda` `_≟ₚ_`~~ **RESOLVED 2026-04-03** — Now delegates to proven `_path-≟_` from FilesystemModel (structural recursion on List String with Data.String._≟_).
 
-## Well-Formedness Axioms (2) — Added 2026-03-08
+## Well-Formedness Axioms — CLOSED 2026-04-12
 
-| File | Line | Name | Nature |
-|------|------|------|--------|
-| `coq/filesystem_composition.v` | 303 | `well_formed_ancestor_exists` | Well-formedness transitive closure (standard filesystem property) |
-| `coq/filesystem_composition.v` | 377 | `mkdir_preserves_well_formed` | mkdir preserves well-formedness (standard — adding a node with existing parent) |
+~~Both axioms proved 2026-04-12 (commit `1ef841c`):~~
 
-These are provable by induction on path length but require significant infrastructure. Axiomatized with clear specifications.
+| File | Name | Resolution |
+|------|------|------------|
+| ~~`coq/filesystem_composition.v`~~ | ~~`well_formed_ancestor_exists`~~ | **PROVED** via strong induction on path length, 6 helper lemmas (`path_prefix_refl`, `path_prefix_length`, `path_prefix_eq_of_same_length`, `path_prefix_app_invert`, `parent_path_lt`, `path_prefix_parent`) |
+| ~~`coq/filesystem_composition.v`~~ | ~~`mkdir_preserves_well_formed`~~ | **PROVED** via case split on q=p / q≠p, using `mkdir_precondition` for the q=p branch |
+
+Also closed 2026-04-12: `posix_errors.v` 5/6 decidability predicates converted from Axiom to Lemma (constructive proofs). One justified Axiom remains: `is_empty_dir_dec` — `Filesystem = Path -> option FSNode` is an infinite-domain function; universal quantification over all paths cannot be discharged constructively. Migration: switch to `FMaps.t FSNode`.
 
 ## Remaining Real Gaps (1)
 
@@ -108,8 +110,8 @@ The Coq gap (`obliterate_overwrites_all_blocks`) requires similar mechanical ind
 
 | File | Lines | Name | Nature |
 |------|-------|------|--------|
-| `coq/posix_errors.v` | 97-102 | Decidability axioms (6) | Standard decidable predicates |
-| `coq/filesystem_model.v` | 265 | `functional_extensionality` | Standard (could import from Coq.Logic) |
+| ~~`coq/posix_errors.v`~~ | ~~Decidability axioms (6)~~ | **CLOSED 2026-04-12** — 5/6 proved constructively; 1 justified (`is_empty_dir_dec`) |
+| ~~`coq/filesystem_model.v`~~ | ~~`functional_extensionality`~~ | **CLOSED (prior session)** — now imports from `Coq.Logic.FunctionalExtensionality` |
 
 ## Recommendations
 
