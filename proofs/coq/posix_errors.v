@@ -110,7 +110,7 @@ Defined.
 (** is_empty_dir is NOT decidable constructively with the current model.
 
     is_empty_dir p fs requires:
-      forall child : Path, path_prefix p child -> child <> p -> ~ path_exists child fs.
+      forall child : Path, path_prefix p child = true -> child <> p -> ~ path_exists child fs.
 
     With Filesystem = Path -> option FSNode (a function over an infinite domain),
     there is no finite enumeration of all Path values, so this universal

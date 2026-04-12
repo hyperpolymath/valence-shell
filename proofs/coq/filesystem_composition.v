@@ -9,6 +9,7 @@
 Require Import String.
 Require Import List.
 Require Import Bool.
+Require Import Arith.
 Import ListNotations.
 
 Require Import filesystem_model.
@@ -297,25 +298,127 @@ Definition well_formed (fs : Filesystem) : Prop :=
   forall p, path_exists p fs -> p <> root_path ->
     path_exists (parent_path p) fs.
 
+(** *** Path Prefix Helpers (needed for well_formed_ancestor_exists) *)
+
+(** path_prefix p p = true *)
+Lemma path_prefix_refl : forall p, path_prefix p p = true.
+Proof.
+  induction p as [|h t IH]; simpl; [reflexivity|].
+  rewrite String.eqb_refl. exact IH.
+Qed.
+
+(** path_prefix p c = true implies length p <= length c *)
+Lemma path_prefix_length : forall p c,
+  path_prefix p c = true -> length p <= length c.
+Proof.
+  induction p as [|h t IH]; intros c H.
+  - simpl. apply Nat.le_0_l.
+  - destruct c as [|ch ct]; [discriminate|].
+    simpl in H. destruct (String.eqb h ch); [|discriminate].
+    apply IH in H. simpl. apply le_n_S. exact H.
+Qed.
+
+(** path_prefix p c = true and length p = length c implies p = c *)
+Lemma path_prefix_eq_of_same_length : forall p c,
+  path_prefix p c = true -> length p = length c -> p = c.
+Proof.
+  induction p as [|ph pt IH]; intros c Hpre Hlen.
+  - destruct c; [reflexivity | discriminate].
+  - destruct c as [|ch ct]; [discriminate|].
+    simpl in Hpre. destruct (String.eqb ph ch) eqn:Heq; [|discriminate].
+    apply String.eqb_eq in Heq. subst ch.
+    f_equal. apply IH; [exact Hpre | simpl in Hlen; lia].
+Qed.
+
+(** If path_prefix p (q ++ [x]) and length p <= length q, then path_prefix p q *)
+Lemma path_prefix_app_invert : forall p q x,
+  path_prefix p (q ++ [x]) = true ->
+  length p <= length q ->
+  path_prefix p q = true.
+Proof.
+  induction p as [|ph pt IH]; intros q x Hpre Hlen.
+  - reflexivity.
+  - destruct q as [|qh qt]; [simpl in Hlen; lia|].
+    simpl in Hpre |- *. destruct (String.eqb ph qh) eqn:Heq; [|discriminate].
+    apply IH with x; [exact Hpre | simpl in Hlen; lia].
+Qed.
+
+(** parent_path of a non-empty list is strictly shorter *)
+Lemma parent_path_lt : forall p, p <> [] -> length (parent_path p) < length p.
+Proof.
+  intros p Hne.
+  destruct p as [|h t] using rev_ind; [contradiction|].
+  unfold parent_path. rewrite rev_app_distr. simpl. rewrite rev_involutive.
+  rewrite app_length. simpl. lia.
+Qed.
+
+(** If path_prefix p c and c <> p and c <> [], then path_prefix p (parent_path c) *)
+Lemma path_prefix_parent : forall p c,
+  path_prefix p c = true ->
+  c <> p ->
+  c <> [] ->
+  path_prefix p (parent_path c) = true.
+Proof.
+  intros p c Hpre Hneq Hne.
+  destruct c as [|ch ct] using rev_ind; [contradiction|].
+  unfold parent_path. rewrite rev_app_distr. simpl. rewrite rev_involutive.
+  apply path_prefix_app_invert with ch.
+  - exact Hpre.
+  - apply path_prefix_length in Hpre. rewrite app_length in Hpre. simpl in Hpre.
+    destruct (Nat.le_gt_cases (length p) (length ct)) as [Hle | Hgt].
+    + exact Hle.
+    + exfalso. apply Hneq.
+      apply path_prefix_eq_of_same_length; [exact Hpre|].
+      rewrite app_length. simpl. lia.
+Qed.
+
 (** Well-formedness transitive closure: if a strict descendant exists,
     all ancestors down to the prefix exist.
 
-    Proof strategy (deferred): induction on (length child - length p).
-    Base: length diff = 0 → child = p, contradicts child ≠ p.
-    Step: well_formed gives path_exists (parent_path child) fs; parent_path
-    child has length (length child - 1); path_prefix p (parent_path child) holds
-    (since p is still a proper prefix); recurse.
-
-    Deferred because it requires a path-length lemma and a path_prefix/parent_path
-    interaction lemma, both straightforward but adding ~30 lines of scaffolding.
-    Tracked as proof debt item #1 in docs/PROOF_HOLES_AUDIT.md. *)
-Axiom well_formed_ancestor_exists :
+    Proved by strong induction on length child: at each step, well_formed
+    gives path_exists (parent_path child) fs; path_prefix_parent shows
+    p is still a prefix of parent_path child; recurse on the shorter path. *)
+Lemma well_formed_ancestor_exists :
   forall fs p child,
     well_formed fs ->
-    path_prefix p child ->
+    path_prefix p child = true ->
     child <> p ->
     path_exists child fs ->
     path_exists p fs.
+Proof.
+  intros fs.
+  (* Strong induction on length child *)
+  assert (Hind : forall n child p,
+      length child <= n ->
+      well_formed fs ->
+      path_prefix p child = true ->
+      child <> p ->
+      path_exists child fs ->
+      path_exists p fs).
+  2: { intros p child Hwf Hpre Hneq Hex.
+       exact (Hind (length child) child p (Nat.le_refl _) Hwf Hpre Hneq Hex). }
+  induction n; intros child p Hlen Hwf Hpre Hneq Hex.
+  - (* length child = 0 → child = [] *)
+    destruct child; [|simpl in Hlen; lia].
+    destruct p; [exact (absurd eq_refl Hneq) | simpl in Hpre; discriminate].
+  - destruct child as [|ch ct].
+    + (* child = [] *)
+      destruct p; [exact (absurd eq_refl Hneq) | simpl in Hpre; discriminate].
+    + (* child = ch :: ct, non-empty *)
+      destruct (list_eq_dec String.string_dec p (parent_path (ch :: ct))) as [Heq | Hneq'].
+      * (* p = parent_path child: one well_formed step *)
+        subst p. apply Hwf. exact Hex. discriminate.
+      * (* p is a deeper ancestor: recurse *)
+        apply (Hind (parent_path (ch :: ct)) p).
+        -- (* parent_path is strictly shorter *)
+           assert (Hlt : length (parent_path (ch :: ct)) < length (ch :: ct)).
+           { apply parent_path_lt. discriminate. }
+           simpl in Hlen. lia.
+        -- exact Hwf.
+        -- apply path_prefix_parent; [exact Hpre | exact Hneq | discriminate].
+        -- exact Hneq'.
+        -- apply Hwf. exact Hex. discriminate.
+Qed.
 
 (** mkdir creates an empty directory (requires well-formedness) *)
 Lemma mkdir_creates_empty_dir :
@@ -384,22 +487,47 @@ Qed.
 (** mkdir preserves well-formedness: adding a node whose parent exists
     maintains the parent-existence invariant for all paths.
 
-    Proof strategy (deferred): unfold well_formed; for any q ≠ root_path, split
-    on whether q = p (just added by mkdir). If q = p: parent_path p exists by
-    mkdir_precondition (parent_exists clause). If q ≠ p: fs_update preserves
-    the original fs everywhere except p, so path_exists q (mkdir p fs) implies
-    path_exists q fs (since q ≠ p), and then well_formed fs gives
-    path_exists (parent_path q) fs; finally parent_path q ≠ p (because mkdir
-    only adds a fresh path with no children yet), so
-    path_exists (parent_path q) (mkdir p fs) follows.
-
-    Deferred: the "parent_path q ≠ p" sub-goal requires a lemma about
-    path_prefix ordering. Tracked as proof debt item #2 in PROOF_HOLES_AUDIT.md. *)
-Axiom mkdir_preserves_well_formed :
+    Proof: for any q with path_exists q (mkdir p fs) and q ≠ root_path:
+    - If q = p: parent_path p exists in fs by mkdir_precondition; it also
+      exists in mkdir p fs since mkdir only adds p (and p ≠ parent_path p).
+    - If q ≠ p: q existed in fs (fs_update only changes p); well_formed fs
+      gives path_exists (parent_path q) fs; whether parent_path q = p or not,
+      it exists in mkdir p fs. *)
+Lemma mkdir_preserves_well_formed :
   forall p fs,
     well_formed fs ->
     mkdir_precondition p fs ->
     well_formed (mkdir p fs).
+Proof.
+  intros p fs Hwf Hpre.
+  unfold well_formed.
+  intros q Hexq Hqnotroot.
+  destruct Hexq as [qnode Hqnode].
+  unfold mkdir, fs_update in Hqnode.
+  destruct (list_eq_dec String.string_dec p q) as [Heqpq | Hneqpq].
+  - (* q = p: just created by mkdir *)
+    subst q.
+    destruct Hpre as [Hnotex [Hparent _]].
+    destruct Hparent as [pnode Hpnode].
+    unfold path_exists. exists pnode.
+    unfold mkdir, fs_update.
+    destruct (list_eq_dec String.string_dec p (parent_path p)) as [Heqpp | Hneqpp].
+    + (* p = parent_path p means path_exists p fs — contradicts precondition *)
+      exfalso. apply Hnotex. exists pnode. rewrite <- Heqpp. exact Hpnode.
+    + exact Hpnode.
+  - (* q <> p: q existed in original fs *)
+    assert (Hqfs : fs q = Some qnode). { exact Hqnode. }
+    assert (Hparentq : path_exists (parent_path q) fs).
+    { apply Hwf. exists qnode. exact Hqfs. exact Hqnotroot. }
+    destruct Hparentq as [pqnode Hpqnode].
+    unfold path_exists.
+    unfold mkdir, fs_update.
+    destruct (list_eq_dec String.string_dec p (parent_path q)).
+    + (* p = parent_path q: mkdir just created it *)
+      exists (mkFSNode Directory default_perms). reflexivity.
+    + (* p ≠ parent_path q: it existed in fs *)
+      exists pqnode. exact Hpqnode.
+Qed.
 
 (** Two-directory creation example. *)
 Example mkdir_two_dirs_reversible :
