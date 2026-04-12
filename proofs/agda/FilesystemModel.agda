@@ -18,6 +18,7 @@ open import Relation.Nullary using (¬_; Dec; yes; no)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; cong; subst)
 open import Function using (_∘_)
 open import Axiom.Extensionality.Propositional using (Extensionality)
+open import Level using (lzero)
 
 -- Path Model
 PathComponent : Set
@@ -153,14 +154,12 @@ rmdir-removes-path p fs pre (node , eq) with p path-≟ p
   where
     open import Data.Empty using (⊥-elim)
 
--- AXIOM: Functional extensionality (standard in intensional type theory).
--- This is a well-known axiom that is consistent with Agda's type theory.
--- It is provable in cubical Agda (--cubical flag) and available in the
--- stdlib as Axiom.Extensionality.Propositional. We postulate it here to
--- avoid a cubical dependency. See also: HoTT Book, Axiom 2.9.3.
+-- AXIOM: Functional extensionality at level 0.
+-- Uses stdlib's canonical Extensionality type (Axiom.Extensionality.Propositional).
+-- Consistent with standard Agda type theory; provable under --cubical.
+-- See also: HoTT Book, Axiom 2.9.3.
 postulate
-  funext : ∀ {A : Set} {B : A → Set} {f g : (x : A) → B x} →
-           (∀ x → f x ≡ g x) → f ≡ g
+  funext : Extensionality lzero lzero
 
 -- Helper: from ¬ pathExists, derive fs p ≡ nothing
 not-path-exists-nothing : ∀ {p : Path} {fs : Filesystem} →
