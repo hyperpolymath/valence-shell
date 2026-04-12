@@ -298,8 +298,17 @@ Definition well_formed (fs : Filesystem) : Prop :=
     path_exists (parent_path p) fs.
 
 (** Well-formedness transitive closure: if a strict descendant exists,
-    all ancestors down to the prefix exist. Provable by induction on
-    path length difference, using well_formed at each step. *)
+    all ancestors down to the prefix exist.
+
+    Proof strategy (deferred): induction on (length child - length p).
+    Base: length diff = 0 → child = p, contradicts child ≠ p.
+    Step: well_formed gives path_exists (parent_path child) fs; parent_path
+    child has length (length child - 1); path_prefix p (parent_path child) holds
+    (since p is still a proper prefix); recurse.
+
+    Deferred because it requires a path-length lemma and a path_prefix/parent_path
+    interaction lemma, both straightforward but adding ~30 lines of scaffolding.
+    Tracked as proof debt item #1 in docs/PROOF_HOLES_AUDIT.md. *)
 Axiom well_formed_ancestor_exists :
   forall fs p child,
     well_formed fs ->
@@ -373,7 +382,19 @@ Proof.
 Qed.
 
 (** mkdir preserves well-formedness: adding a node whose parent exists
-    maintains the parent-existence invariant for all paths. *)
+    maintains the parent-existence invariant for all paths.
+
+    Proof strategy (deferred): unfold well_formed; for any q ≠ root_path, split
+    on whether q = p (just added by mkdir). If q = p: parent_path p exists by
+    mkdir_precondition (parent_exists clause). If q ≠ p: fs_update preserves
+    the original fs everywhere except p, so path_exists q (mkdir p fs) implies
+    path_exists q fs (since q ≠ p), and then well_formed fs gives
+    path_exists (parent_path q) fs; finally parent_path q ≠ p (because mkdir
+    only adds a fresh path with no children yet), so
+    path_exists (parent_path q) (mkdir p fs) follows.
+
+    Deferred: the "parent_path q ≠ p" sub-goal requires a lemma about
+    path_prefix ordering. Tracked as proof debt item #2 in PROOF_HOLES_AUDIT.md. *)
 Axiom mkdir_preserves_well_formed :
   forall p fs,
     well_formed fs ->
