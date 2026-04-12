@@ -4,6 +4,12 @@
     Proves error handling correctness and error-free operation equivalence.
 
     This extends the pure functional model to handle real-world error cases.
+
+    Proof status:
+    - 5 of 6 decision procedures proved constructively (from Filesystem semantics).
+    - is_empty_dir_dec remains axiomatic: requires Classical or finite-map refactor.
+    - safe_* definitions use nested `if` on sumbool (not negb, which requires bool).
+    - functional_extensionality from filesystem_model transitive import.
 *)
 
 Require Import String.
@@ -38,68 +44,142 @@ Inductive OperationResult (A : Type) : Type :=
 Arguments Success {A}.
 Arguments Error {A}.
 
-(** * Safe Operations with Error Handling *)
+(** * Decision Procedures
+
+    Must appear before the safe_* definitions that use them.
+
+    Four decision procedures are proved constructively by inspecting the
+    Filesystem function (Path -> option FSNode) directly.
+    path_eq_dec follows from list_eq_dec + String.string_dec.
+    is_empty_dir_dec is axiomatic — see justification below. *)
+
+(** path_exists is decidable by case analysis on (fs p). *)
+Lemma path_exists_dec : forall p fs, {path_exists p fs} + {~ path_exists p fs}.
+Proof.
+  intros p fs.
+  unfold path_exists.
+  destruct (fs p) as [node|].
+  - left. exists node. reflexivity.
+  - right. intros [node H]. discriminate.
+Defined.
+
+(** is_directory is decidable by inspecting the node_type field. *)
+Lemma is_directory_dec : forall p fs, {is_directory p fs} + {~ is_directory p fs}.
+Proof.
+  intros p fs.
+  unfold is_directory.
+  destruct (fs p) as [[ntype perms]|].
+  - destruct ntype.
+    + (* File *) right. intros [perms' H]. inversion H.
+    + (* Directory *) left. exists perms. reflexivity.
+  - right. intros [perms H]. discriminate.
+Defined.
+
+(** is_file is decidable by inspecting the node_type field. *)
+Lemma is_file_dec : forall p fs, {is_file p fs} + {~ is_file p fs}.
+Proof.
+  intros p fs.
+  unfold is_file.
+  destruct (fs p) as [[ntype perms]|].
+  - destruct ntype.
+    + (* File *) left. exists perms. reflexivity.
+    + (* Directory *) right. intros [perms' H]. inversion H.
+  - right. intros [perms H]. discriminate.
+Defined.
+
+(** has_write_permission is decidable by inspecting the node and its writable flag. *)
+Lemma has_write_permission_dec : forall p fs, {has_write_permission p fs} + {~ has_write_permission p fs}.
+Proof.
+  intros p fs.
+  unfold has_write_permission.
+  destruct (fs p) as [node|].
+  - destruct (writable (permissions node)) eqn:Hw.
+    + left. exists node. split; [reflexivity | assumption].
+    + right. intros [node' [Heq Hwr]].
+      inversion Heq. subst. rewrite Hw in Hwr. discriminate.
+  - right. intros [node [H _]]. discriminate.
+Defined.
+
+(** Path equality is decidable: Path = list string, decided by list_eq_dec + string_dec. *)
+Lemma path_eq_dec : forall p1 p2 : Path, {p1 = p2} + {p1 <> p2}.
+Proof.
+  apply list_eq_dec.
+  apply String.string_dec.
+Defined.
+
+(** is_empty_dir is NOT decidable constructively with the current model.
+
+    is_empty_dir p fs requires:
+      forall child : Path, path_prefix p child -> child <> p -> ~ path_exists child fs.
+
+    With Filesystem = Path -> option FSNode (a function over an infinite domain),
+    there is no finite enumeration of all Path values, so this universal
+    quantification cannot be discharged constructively.
+
+    Justification: in the operational model, every reachable filesystem is
+    produced by a finite sequence of mkdir / rmdir / create_file / delete_file
+    operations, so the set of inhabited paths is always finite in practice.
+    Constructive decidability requires changing the Filesystem representation
+    to a finite map (e.g., list (Path * FSNode) or MSetAVL), at which point
+    is_empty_dir can be decided by scanning the entries.
+
+    Migration path: switch Filesystem to FMaps.t FSNode and reprove. *)
+Axiom is_empty_dir_dec : forall p fs, {is_empty_dir p fs} + {~ is_empty_dir p fs}.
+
+(** * Safe Operations with Error Handling
+
+    safe_* definitions use nested `if` on sumbool values.
+    Using `negb (sumbool_val)` is a type error (negb : bool -> bool, not sumbool)
+    so we invert the condition by nesting the positive branch first. *)
 
 (** Safe mkdir - returns error codes instead of requiring preconditions *)
 Definition safe_mkdir (p : Path) (fs : Filesystem) : OperationResult Filesystem :=
   if path_exists_dec p fs then
-    Error EEXIST
-  else if negb (path_exists_dec (parent_path p) fs) then
-    Error ENOENT
-  else if negb (is_directory_dec (parent_path p) fs) then
-    Error ENOTDIR
-  else if negb (has_write_permission_dec (parent_path p) fs) then
-    Error EACCES
-  else
-    Success (mkdir p fs).
+    Error EEXIST                                     (* p already exists *)
+  else if path_exists_dec (parent_path p) fs then
+    if is_directory_dec (parent_path p) fs then
+      if has_write_permission_dec (parent_path p) fs then
+        Success (mkdir p fs)
+      else Error EACCES
+    else Error ENOTDIR
+  else Error ENOENT.                                 (* parent not found *)
 
 (** Safe rmdir - returns error codes *)
 Definition safe_rmdir (p : Path) (fs : Filesystem) : OperationResult Filesystem :=
-  if negb (path_exists_dec p fs) then
-    Error ENOENT
-  else if negb (is_directory_dec p fs) then
-    Error ENOTDIR
-  else if negb (is_empty_dir_dec p fs) then
-    Error ENOTEMPTY
-  else if negb (has_write_permission_dec (parent_path p) fs) then
-    Error EACCES
-  else if path_eq_dec p root_path then
-    Error EACCES  (* Cannot remove root *)
-  else
-    Success (rmdir p fs).
+  if path_exists_dec p fs then
+    if is_directory_dec p fs then
+      if is_empty_dir_dec p fs then
+        if has_write_permission_dec (parent_path p) fs then
+          if path_eq_dec p root_path then
+            Error EACCES                             (* cannot remove root *)
+          else
+            Success (rmdir p fs)
+        else Error EACCES
+      else Error ENOTEMPTY
+    else Error ENOTDIR
+  else Error ENOENT.
 
 (** Safe create_file - returns error codes *)
 Definition safe_create_file (p : Path) (fs : Filesystem) : OperationResult Filesystem :=
   if path_exists_dec p fs then
     Error EEXIST
-  else if negb (path_exists_dec (parent_path p) fs) then
-    Error ENOENT
-  else if negb (is_directory_dec (parent_path p) fs) then
-    Error ENOTDIR
-  else if negb (has_write_permission_dec (parent_path p) fs) then
-    Error EACCES
-  else
-    Success (create_file p fs).
+  else if path_exists_dec (parent_path p) fs then
+    if is_directory_dec (parent_path p) fs then
+      if has_write_permission_dec (parent_path p) fs then
+        Success (create_file p fs)
+      else Error EACCES
+    else Error ENOTDIR
+  else Error ENOENT.
 
 (** Safe delete_file - returns error codes *)
 Definition safe_delete_file (p : Path) (fs : Filesystem) : OperationResult Filesystem :=
-  if negb (path_exists_dec p fs) then
-    Error ENOENT
-  else if negb (is_file_dec p fs) then
-    Error EISDIR
-  else if negb (has_write_permission_dec (parent_path p) fs) then
-    Error EACCES
-  else
-    Success (delete_file p fs).
-
-(** * Decision Procedures (axiomatized for now) *)
-
-Axiom path_exists_dec : forall p fs, {path_exists p fs} + {~ path_exists p fs}.
-Axiom is_directory_dec : forall p fs, {is_directory p fs} + {~ is_directory p fs}.
-Axiom is_file_dec : forall p fs, {is_file p fs} + {~ is_file p fs}.
-Axiom has_write_permission_dec : forall p fs, {has_write_permission p fs} + {~ has_write_permission p fs}.
-Axiom is_empty_dir_dec : forall p fs, {is_empty_dir p fs} + {~ is_empty_dir p fs}.
-Axiom path_eq_dec : forall p1 p2 : Path, {p1 = p2} + {p1 <> p2}.
+  if path_exists_dec p fs then
+    if is_file_dec p fs then
+      if has_write_permission_dec (parent_path p) fs then
+        Success (delete_file p fs)
+      else Error EACCES
+    else Error EISDIR
+  else Error ENOENT.
 
 (** * Error Handling Correctness Theorems *)
 
@@ -113,7 +193,6 @@ Proof.
   - (* -> *)
     unfold safe_mkdir.
     intros H.
-    (* Check each condition *)
     destruct (path_exists_dec p fs); [discriminate|].
     destruct (path_exists_dec (parent_path p) fs); [|discriminate].
     destruct (is_directory_dec (parent_path p) fs); [|discriminate].
@@ -193,7 +272,6 @@ Proof.
   intros p fs Hnoexist Hnoparent.
   unfold safe_mkdir.
   destruct (path_exists_dec p fs); [contradiction|].
-  simpl.
   unfold parent_exists in Hnoparent.
   destruct (path_exists_dec (parent_path p) fs); [contradiction|].
   reflexivity.
@@ -219,7 +297,6 @@ Proof.
   intros p fs Hexists Hnotdir.
   unfold safe_rmdir.
   destruct (path_exists_dec p fs); [|contradiction].
-  simpl.
   destruct (is_directory_dec p fs); [contradiction|].
   reflexivity.
 Qed.
@@ -233,9 +310,7 @@ Proof.
   intros p fs Hisdir Hnotempty.
   unfold safe_rmdir.
   destruct (path_exists_dec p fs).
-  - simpl.
-    destruct (is_directory_dec p fs); [|contradiction].
-    simpl.
+  - destruct (is_directory_dec p fs); [|contradiction].
     destruct (is_empty_dir_dec p fs); [contradiction|].
     reflexivity.
   - exfalso.
@@ -276,6 +351,8 @@ Qed.
     ✓ Correctness: Success iff preconditions hold
     ✓ Error code correctness: Each error matches specific violation
     ✓ Reversibility preserved under error handling
+    ✓ 5/6 decision procedures proved constructively (Lemma, not Axiom)
+    ✗ is_empty_dir_dec: justified axiom, requires finite-map Filesystem for proof
 
     This enables:
     - Realistic implementation with proper error reporting
