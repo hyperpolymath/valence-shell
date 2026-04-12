@@ -22,7 +22,8 @@ Require Import String.
 Require Import List.
 Require Import Bool.
 Require Import Arith.
-Require Import Omega.
+Require Import Lia.
+Require Import Coq.Logic.FunctionalExtensionality.
 Import ListNotations.
 
 (* Import base filesystem model *)
