@@ -9,6 +9,8 @@ Require Import String.
 Require Import List.
 Import ListNotations.
 
+Require Import Coq.Logic.FunctionalExtensionality.
+
 Require Import filesystem_model.
 
 (** * Symlink Operations *)
