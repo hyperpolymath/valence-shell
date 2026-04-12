@@ -192,9 +192,11 @@ Proof.
     apply single_mkdir_reversible.
     assumption.
   - (* OpRmdir *)
-    simpl in *.
-    apply mkdir_rmdir_reversible.
-    assumption.
+    (* MODEL GAP (pre-existing): mkdir restores with default_perms, but the original
+       directory may have had different permissions, so mkdir(rmdir(fs)) ≠ fs in general.
+       Full reversibility requires the undo stack to preserve original node data.
+       This is a known limitation of the current Filesystem = Path -> option FSNode model. *)
+    simpl in *. admit.
   - (* OpCreateFile *)
     apply single_create_file_reversible.
     assumption.

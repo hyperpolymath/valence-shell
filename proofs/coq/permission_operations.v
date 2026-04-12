@@ -71,7 +71,6 @@ Proof.
     rewrite Hnode. simpl.
     destruct (list_eq_dec String.string_dec p p); [| contradiction].
     simpl.
-    rewrite Hnode.
     destruct node as [nt m o].
     simpl in Hmode. subst m.
     reflexivity.
@@ -107,13 +106,13 @@ Proof.
   apply functional_extensionality.
   intros p'.
   unfold chmod.
-  destruct (list_eq_dec String.string_dec p1 p'); destruct (list_eq_dec String.string_dec p2 p').
-  - subst. contradiction.
-  - subst. destruct (list_eq_dec String.string_dec p2 p1); [symmetry in e; contradiction |].
-    reflexivity.
-  - subst. destruct (list_eq_dec String.string_dec p1 p2); [contradiction |].
-    reflexivity.
-  - reflexivity.
+  destruct (list_eq_dec String.string_dec p1 p') as [Heq1 | Hneq1];
+  destruct (list_eq_dec String.string_dec p2 p') as [Heq2 | Hneq2].
+  - (* p1 = p' = p2 → p1 = p2, contradicts Hneq *)
+    exfalso. exact (Hneq (eq_trans Heq1 (eq_sym Heq2))).
+  - (* p1 = p', p2 ≠ p' *) reflexivity.
+  - (* p1 ≠ p', p2 = p' *) reflexivity.
+  - (* p1 ≠ p', p2 ≠ p' *) reflexivity.
 Qed.
 
 (** chmod preserves other paths *)
@@ -159,9 +158,8 @@ Proof.
   destruct (list_eq_dec String.string_dec p p').
   - subst p'.
     rewrite Hnode. simpl.
-    destruct (list_eq_dec String.string_dec p p); [| contradiction].
+    destruct (list_eq_dec String.string_dec p p) as [_ | Hnn]; [| exfalso; exact (Hnn eq_refl)].
     simpl.
-    rewrite Hnode.
     destruct node as [nt m o].
     simpl in Howner. subst o.
     reflexivity.
