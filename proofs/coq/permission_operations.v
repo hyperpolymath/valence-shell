@@ -12,6 +12,8 @@ Require Import Bool.
 Require Import Arith.
 Import ListNotations.
 
+Require Import Coq.Logic.FunctionalExtensionality.
+
 Require Import filesystem_model.
 
 (** * Extended Types for Permission/Ownership *)
