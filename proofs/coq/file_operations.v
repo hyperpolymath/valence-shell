@@ -13,6 +13,8 @@ Require Import Bool.
 Require Import Arith.
 Import ListNotations.
 
+Require Import Coq.Logic.FunctionalExtensionality.
+
 (* Import base filesystem model *)
 Require Import filesystem_model.
 
