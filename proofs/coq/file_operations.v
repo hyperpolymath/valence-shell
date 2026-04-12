@@ -104,7 +104,7 @@ Proof.
       destruct (fs p') as [node |] eqn:Hfsp.
       * exfalso. apply Hnotexists. unfold path_exists. exists node. exact Hfsp.
       * reflexivity.
-    + exact (Hneq eq_refl).
+    + exfalso. exact (Hneq eq_refl).
   - (* p <> p' *)
     destruct (list_eq_dec String.string_dec p p'); [contradiction|].
     reflexivity.
@@ -152,30 +152,28 @@ Qed.
 
 Theorem create_file_preserves_directories :
   forall p p' fs,
+    p <> p' ->
     is_directory p' fs ->
     is_directory p' (create_file p fs).
 Proof.
-  intros p p' fs [perms Hdir].
+  intros p p' fs Hneq [perms Hdir].
   unfold is_directory.
   exists perms.
   unfold create_file, fs_update.
-  destruct (list_eq_dec String.string_dec p p').
-  - subst. discriminate Hdir.
-  - assumption.
+  destruct (list_eq_dec String.string_dec p p'); [contradiction | assumption].
 Qed.
 
 Theorem mkdir_preserves_files :
   forall p p' fs,
+    p <> p' ->
     is_file p' fs ->
     is_file p' (mkdir p fs).
 Proof.
-  intros p p' fs [perms Hfile].
+  intros p p' fs Hneq [perms Hfile].
   unfold is_file.
   exists perms.
   unfold mkdir, fs_update.
-  destruct (list_eq_dec String.string_dec p p').
-  - subst. discriminate Hfile.
-  - assumption.
+  destruct (list_eq_dec String.string_dec p p'); [contradiction | assumption].
 Qed.
 
 (** * File/Directory Combination Theorems *)
@@ -193,8 +191,8 @@ Proof.
   split.
   - (* p1 is still a file after mkdir p2 *)
     apply mkdir_preserves_files.
-    apply create_file_creates_file.
-    assumption.
+    + intro H. exact (Hneq (eq_sym H)).
+    + apply create_file_creates_file. assumption.
   - (* p2 is a directory after mkdir *)
     apply mkdir_creates_directory.
     assumption.
@@ -213,15 +211,11 @@ Proof.
   intros p1 p2 fs Hneq [node Hexists].
   split.
   - (* create_file preserves p2 *)
-    unfold path_exists.
-    exists node.
-    apply create_file_preserves_other_paths.
-    assumption.
+    unfold path_exists. exists node.
+    rewrite <- create_file_preserves_other_paths; assumption.
   - (* delete_file preserves p2 *)
-    unfold path_exists.
-    exists node.
-    apply delete_file_preserves_other_paths.
-    assumption.
+    unfold path_exists. exists node.
+    rewrite <- delete_file_preserves_other_paths; assumption.
 Qed.
 
 (** Theorem: Reversible operations form a group-like structure *)
@@ -230,13 +224,13 @@ Theorem reversible_operations_compose :
     p1 <> p2 ->
     create_file_precondition p1 fs ->
     create_file_precondition p2 (create_file p1 fs) ->
-    delete_file p1 (delete_file p2 (create_file p2 (create_file p1 fs))) =
-    create_file p1 fs.
+    delete_file p1 (delete_file p2 (create_file p2 (create_file p1 fs))) = fs.
 Proof.
   intros p1 p2 fs Hneq Hpre1 Hpre2.
-  (* delete_file p2 (create_file p2 ...) = ... by reversibility *)
+  (* delete_file p2 (create_file p2 (create_file p1 fs)) = create_file p1 fs *)
   rewrite create_delete_file_reversible.
-  - reflexivity.
+  - (* delete_file p1 (create_file p1 fs) = fs *)
+    apply create_delete_file_reversible. assumption.
   - assumption.
 Qed.
 

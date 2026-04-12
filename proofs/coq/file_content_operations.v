@@ -30,7 +30,7 @@ Definition empty_content : FileContent := EmptyString.
 
 (** Extended filesystem node with content *)
 Record FSNodeWithContent : Type := mkFSNodeWithContent {
-  node_type : NodeType;
+  node_type : FSNodeType;
   node_perms : Permissions;
   node_content : option FileContent  (* None for directories, Some for files *)
 }.
@@ -45,10 +45,10 @@ Definition fs_to_fs_with_content (fs : Filesystem) : FilesystemWithContent :=
   fun p =>
     match fs p with
     | None => None
-    | Some node =>
-        Some {| node_type := get_node_type node;
-                node_perms := get_permissions node;
-                node_content := match get_node_type node with
+    | Some (mkFSNode nt perms) =>
+        Some {| node_type := nt;
+                node_perms := perms;
+                node_content := match nt with
                                | File => Some empty_content
                                | Directory => None
                                end |}
