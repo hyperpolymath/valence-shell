@@ -2,6 +2,8 @@
 # Inspired by Absolute Zero's justfile structure
 
 # Default recipe - show available commands
+import? "contractile.just"
+
 default:
     @just --list
 
