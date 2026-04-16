@@ -486,6 +486,9 @@ pub enum Command {
     FunctionDef {
         name: String,
         body: Vec<String>,
+        /// Raw text between the outermost `{` and `}`, preserving control
+        /// structures that the naive `;`/`\n` split in `body` fragments.
+        raw_body: String,
     },
 
     /// Return from a function with optional exit code
@@ -1517,8 +1520,8 @@ pub fn parse_command(input: &str) -> Result<Command> {
 
     // Check for function definitions before tokenization
     // Function definitions contain braces which interact with tokenization
-    if let Some((name, body)) = crate::functions::parse_function_def(trimmed) {
-        return Ok(Command::FunctionDef { name, body });
+    if let Some((name, body, raw_body)) = crate::functions::parse_function_def(trimmed) {
+        return Ok(Command::FunctionDef { name, body, raw_body });
     }
 
     // Check for control structures before tokenization

@@ -61,6 +61,12 @@ pub enum ExecutionResult {
 
     /// External command executed with exit code
     ExternalCommand { exit_code: i32 },
+
+    /// `return` was invoked inside a function. This variant propagates
+    /// up through nested control structures (if/while/for/case/&&/||)
+    /// until it is caught by `execute_function_call`, which converts it
+    /// back to a regular exit code result.
+    Return { exit_code: i32 },
 }
 
 impl ExecutableCommand for Command {
@@ -715,8 +721,15 @@ impl ExecutableCommand for Command {
                     }
                     let cmd = crate::parser::parse_command(line)?;
                     last_result = cmd.execute(state)?;
-                    if matches!(last_result, ExecutionResult::Exit) {
-                        return Ok(ExecutionResult::Exit);
+                    // Propagate Exit (shell-wide) and Return (function-scope).
+                    // A `return` inside a sourced file that was itself sourced
+                    // from a function must break out all the way to
+                    // `execute_function_call`.
+                    if matches!(
+                        last_result,
+                        ExecutionResult::Exit | ExecutionResult::Return { .. }
+                    ) {
+                        return Ok(last_result);
                     }
                 }
                 Ok(last_result)
@@ -788,6 +801,7 @@ impl ExecutableCommand for Command {
                 let cond_exit = match cond_result {
                     ExecutionResult::Success => 0,
                     ExecutionResult::Exit => return Ok(ExecutionResult::Exit),
+                    ExecutionResult::Return { .. } => return Ok(cond_result),
                     ExecutionResult::ExternalCommand { exit_code } => exit_code,
                 };
 
@@ -802,6 +816,7 @@ impl ExecutableCommand for Command {
                     let elif_exit = match elif_result {
                         ExecutionResult::Success => 0,
                         ExecutionResult::Exit => return Ok(ExecutionResult::Exit),
+                        ExecutionResult::Return { .. } => return Ok(elif_result),
                         ExecutionResult::ExternalCommand { exit_code } => exit_code,
                     };
 
@@ -836,6 +851,7 @@ impl ExecutableCommand for Command {
                     let cond_exit = match cond_result {
                         ExecutionResult::Success => 0,
                         ExecutionResult::Exit => return Ok(ExecutionResult::Exit),
+                        ExecutionResult::Return { .. } => return Ok(cond_result),
                         ExecutionResult::ExternalCommand { exit_code } => exit_code,
                     };
 
@@ -845,8 +861,8 @@ impl ExecutableCommand for Command {
 
                     // Execute body
                     last_result = execute_block(body, state)?;
-                    if matches!(last_result, ExecutionResult::Exit) {
-                        return Ok(ExecutionResult::Exit);
+                    if matches!(last_result, ExecutionResult::Exit | ExecutionResult::Return { .. }) {
+                        return Ok(last_result);
                     }
 
                     // Check for SIGINT
@@ -870,8 +886,8 @@ impl ExecutableCommand for Command {
 
                     // Execute body
                     last_result = execute_block(body, state)?;
-                    if matches!(last_result, ExecutionResult::Exit) {
-                        return Ok(ExecutionResult::Exit);
+                    if matches!(last_result, ExecutionResult::Exit | ExecutionResult::Return { .. }) {
+                        return Ok(last_result);
                     }
 
                     // Check for SIGINT
@@ -911,6 +927,7 @@ impl ExecutableCommand for Command {
                 let left_exit_code = match left_result {
                     ExecutionResult::Success => 0,
                     ExecutionResult::Exit => return Ok(ExecutionResult::Exit),
+                    ExecutionResult::Return { .. } => return Ok(left_result),
                     ExecutionResult::ExternalCommand { exit_code } => exit_code,
                 };
 
@@ -962,11 +979,12 @@ impl ExecutableCommand for Command {
             }
 
             // Shell function definition
-            Command::FunctionDef { name, body } => {
+            Command::FunctionDef { name, body, raw_body } => {
                 use crate::functions::{FunctionDef as FuncDef, SourceLocation};
                 let def = FuncDef {
                     name: name.clone(),
                     body: body.clone(),
+                    raw_body: raw_body.clone(),
                     source_location: SourceLocation {
                         source: "stdin".to_string(),
                         line: 0,
@@ -983,7 +1001,9 @@ impl ExecutableCommand for Command {
                 }
                 let exit_code = code.unwrap_or(state.last_exit_code);
                 state.last_exit_code = exit_code;
-                Ok(ExecutionResult::ExternalCommand { exit_code })
+                // Emit the sentinel Return variant so enclosing control
+                // structures short-circuit up to the function boundary.
+                Ok(ExecutionResult::Return { exit_code })
             }
 
             // Local variable declaration
@@ -1326,8 +1346,11 @@ impl ExecutableCommand for Command {
 /// 1. Save current positional parameters
 /// 2. Set new positional parameters from function arguments
 /// 3. Push a function frame for local variable scoping
-/// 4. Execute each command in the function body
-/// 5. Restore positional parameters and local variables
+/// 4. Parse the raw function body, splitting on semicolons/newlines with
+///    control-structure awareness (so `if/fi`, `for/done`, `while/done`,
+///    and `case/esac` work inside a function body)
+/// 5. Execute each segment; stop early on `return` / `exit`
+/// 6. Restore positional parameters and local variables
 fn execute_function_call(
     func_def: &crate::functions::FunctionDef,
     args: &[String],
@@ -1342,9 +1365,28 @@ fn execute_function_call(
     // Push a function frame
     state.functions.push_frame(saved_params.clone());
 
-    // Execute function body
+    // Execute function body. We prefer the raw body string (which preserves
+    // control-structure integrity) and fall back to the pre-split segments
+    // for older in-memory definitions.
+    let segments: Vec<String> = if !func_def.raw_body.is_empty() {
+        // Treat each line as a script line, then split that line on top-level
+        // semicolons (inside quotes / control structures those are preserved).
+        func_def
+            .raw_body
+            .lines()
+            .flat_map(|line| {
+                crate::parser::split_on_semicolons(line)
+                    .into_iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    } else {
+        func_def.body.clone()
+    };
+
     let mut last_result = ExecutionResult::Success;
-    for cmd_str in &func_def.body {
+    for cmd_str in &segments {
         let cmd_str = cmd_str.trim();
         if cmd_str.is_empty() || cmd_str.starts_with('#') {
             continue;
@@ -1355,13 +1397,18 @@ fn execute_function_call(
                 last_result = cmd.execute(state)?;
                 match &last_result {
                     ExecutionResult::Exit => break,
+                    // `return` (possibly from deep inside nested control
+                    // structures) — stop executing the body and convert the
+                    // sentinel into a regular exit-code result so the caller
+                    // sees `fn() returned N`, not the internal Return marker.
+                    ExecutionResult::Return { exit_code } => {
+                        let code = *exit_code;
+                        state.last_exit_code = code;
+                        last_result = ExecutionResult::ExternalCommand { exit_code: code };
+                        break;
+                    }
                     ExecutionResult::ExternalCommand { exit_code } => {
                         state.last_exit_code = *exit_code;
-                        // Check if this was a `return` command
-                        // (return sets exit code and we break out of the function)
-                        if cmd_str.starts_with("return") {
-                            break;
-                        }
                     }
                     ExecutionResult::Success => {
                         state.last_exit_code = 0;
@@ -1392,13 +1439,20 @@ fn execute_function_call(
     Ok(last_result)
 }
 
-/// Execute a block of commands in sequence, returning the result of the last command
+/// Execute a block of commands in sequence, returning the result of the last command.
+///
+/// Short-circuits on `Exit` (shell-wide) and `Return` (function-scope) so the
+/// signal propagates up through nested control structures.
 fn execute_block(commands: &[Command], state: &mut ShellState) -> Result<ExecutionResult> {
     let mut last_result = ExecutionResult::Success;
     for cmd in commands {
         last_result = cmd.execute(state)?;
         match &last_result {
             ExecutionResult::Exit => return Ok(ExecutionResult::Exit),
+            ExecutionResult::Return { exit_code } => {
+                state.last_exit_code = *exit_code;
+                return Ok(last_result);
+            }
             ExecutionResult::ExternalCommand { exit_code } => {
                 state.last_exit_code = *exit_code;
             }

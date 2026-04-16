@@ -172,7 +172,11 @@ fn execute_line(state: &mut ShellState, input: &str) -> Result<bool> {
     // Handle execution result
     match result {
         ExecutionResult::Exit => Ok(true),
-        ExecutionResult::ExternalCommand { exit_code } => {
+        ExecutionResult::ExternalCommand { exit_code }
+        | ExecutionResult::Return { exit_code } => {
+            // Return leaking past a function boundary is defensive: the
+            // `Command::Return` handler already errors if invoked outside
+            // a function, so we treat it as a plain exit-code result here.
             state.last_exit_code = exit_code;
             Ok(false)
         }
