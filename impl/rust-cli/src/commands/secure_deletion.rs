@@ -296,18 +296,18 @@ mod tests {
 
     #[test]
     fn test_secure_overwrite_3pass() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("TODO: handle error");
         let file_path = temp_dir.path().join("test.txt");
 
         // Create test file with known content
         let original = b"SENSITIVE DATA THAT MUST BE DESTROYED";
-        fs::write(&file_path, original).unwrap();
+        fs::write(&file_path, original).expect("TODO: handle error");
 
-        let file_size = fs::metadata(&file_path).unwrap().len();
-        secure_overwrite_3pass(&file_path, file_size).unwrap();
+        let file_size = fs::metadata(&file_path).expect("TODO: handle error").len();
+        secure_overwrite_3pass(&file_path, file_size).expect("TODO: handle error");
 
         // Verify content is overwritten (not original data)
-        let after = fs::read(&file_path).unwrap();
+        let after = fs::read(&file_path).expect("TODO: handle error");
         assert_eq!(after.len(), original.len());
         assert_ne!(&after[..], original);
     }
@@ -315,14 +315,14 @@ mod tests {
     #[test]
     #[ignore] // Requires user confirmation
     fn test_obliterate() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut state = ShellState::new(temp_dir.path().to_str().unwrap()).unwrap();
+        let temp_dir = TempDir::new().expect("TODO: handle error");
+        let mut state = ShellState::new(temp_dir.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
 
         let test_file = "sensitive.txt";
-        fs::write(temp_dir.path().join(test_file), "secret data").unwrap();
+        fs::write(temp_dir.path().join(test_file), "secret data").expect("TODO: handle error");
 
         // force=true to skip confirmation in test
-        obliterate(&mut state, test_file, false, true).unwrap();
+        obliterate(&mut state, test_file, false, true).expect("TODO: handle error");
 
         assert!(!temp_dir.path().join(test_file).exists());
     }

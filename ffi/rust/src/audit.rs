@@ -264,31 +264,31 @@ mod tests {
 
     #[test]
     fn test_audit_log_creation() {
-        let tmp = tempdir().unwrap();
+        let tmp = tempdir().expect("TODO: handle error");
         let path = tmp.path().join("audit.jsonl");
 
-        let mut log = AuditLog::new(path.clone()).unwrap();
+        let mut log = AuditLog::new(path.clone()).expect("TODO: handle error");
 
-        log.log_operation("mkdir", "/test/dir", None).unwrap();
-        log.log_operation("touch", "/test/file.txt", Some(0)).unwrap();
+        log.log_operation("mkdir", "/test/dir", None).expect("TODO: handle error");
+        log.log_operation("touch", "/test/file.txt", Some(0)).expect("TODO: handle error");
 
         assert_eq!(log.entry_count(), 2);
     }
 
     #[test]
     fn test_audit_log_integrity() {
-        let tmp = tempdir().unwrap();
+        let tmp = tempdir().expect("TODO: handle error");
         let path = tmp.path().join("audit.jsonl");
 
         {
-            let mut log = AuditLog::new(path.clone()).unwrap();
-            log.log_operation("mkdir", "/a", None).unwrap();
-            log.log_operation("mkdir", "/b", None).unwrap();
-            log.log_operation("rmdir", "/a", None).unwrap();
+            let mut log = AuditLog::new(path.clone()).expect("TODO: handle error");
+            log.log_operation("mkdir", "/a", None).expect("TODO: handle error");
+            log.log_operation("mkdir", "/b", None).expect("TODO: handle error");
+            log.log_operation("rmdir", "/a", None).expect("TODO: handle error");
         }
 
         // Verify integrity
-        let log = AuditLog::new(path).unwrap();
-        assert!(log.verify_integrity().unwrap());
+        let log = AuditLog::new(path).expect("TODO: handle error");
+        assert!(log.verify_integrity().expect("TODO: handle error"));
     }
 }

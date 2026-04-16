@@ -284,10 +284,10 @@ mod tests {
         let op = Operation::new(OperationType::Mkdir, "test_dir".to_string(), None);
         let entry = AuditEntry::from_operation(&op, "success", None);
 
-        let json_line = entry.to_json_line().unwrap();
+        let json_line = entry.to_json_line().expect("TODO: handle error");
         assert!(json_line.ends_with('\n'));
 
-        let parsed = AuditEntry::from_json_line(&json_line).unwrap();
+        let parsed = AuditEntry::from_json_line(&json_line).expect("TODO: handle error");
         assert_eq!(parsed.operation_id, entry.operation_id);
         assert_eq!(parsed.path, "test_dir");
         assert_eq!(parsed.outcome, "success");
@@ -295,22 +295,22 @@ mod tests {
 
     #[test]
     fn test_audit_log_append_and_read() {
-        let temp_file = NamedTempFile::new().unwrap();
+        let temp_file = NamedTempFile::new().expect("TODO: handle error");
         let log_path = temp_file.path().to_path_buf();
 
-        let log = AuditLog::new(log_path, None).unwrap();
+        let log = AuditLog::new(log_path, None).expect("TODO: handle error");
 
         // Append some entries
         let op1 = Operation::new(OperationType::Mkdir, "dir1".to_string(), None);
         let entry1 = AuditEntry::from_operation(&op1, "success", None);
-        log.append(&entry1).unwrap();
+        log.append(&entry1).expect("TODO: handle error");
 
         let op2 = Operation::new(OperationType::CreateFile, "file1".to_string(), None);
         let entry2 = AuditEntry::from_operation(&op2, "success", None);
-        log.append(&entry2).unwrap();
+        log.append(&entry2).expect("TODO: handle error");
 
         // Read back
-        let entries = log.read_all().unwrap();
+        let entries = log.read_all().expect("TODO: handle error");
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].path, "dir1");
         assert_eq!(entries[1].path, "file1");
@@ -318,21 +318,21 @@ mod tests {
 
     #[test]
     fn test_audit_log_filter_by_type() {
-        let temp_file = NamedTempFile::new().unwrap();
+        let temp_file = NamedTempFile::new().expect("TODO: handle error");
         let log_path = temp_file.path().to_path_buf();
 
-        let log = AuditLog::new(log_path, None).unwrap();
+        let log = AuditLog::new(log_path, None).expect("TODO: handle error");
 
         let op1 = Operation::new(OperationType::Mkdir, "dir1".to_string(), None);
-        log.append(&AuditEntry::from_operation(&op1, "success", None)).unwrap();
+        log.append(&AuditEntry::from_operation(&op1, "success", None)).expect("TODO: handle error");
 
         let op2 = Operation::new(OperationType::CreateFile, "file1".to_string(), None);
-        log.append(&AuditEntry::from_operation(&op2, "success", None)).unwrap();
+        log.append(&AuditEntry::from_operation(&op2, "success", None)).expect("TODO: handle error");
 
         let op3 = Operation::new(OperationType::Mkdir, "dir2".to_string(), None);
-        log.append(&AuditEntry::from_operation(&op3, "success", None)).unwrap();
+        log.append(&AuditEntry::from_operation(&op3, "success", None)).expect("TODO: handle error");
 
-        let mkdirs = log.read_by_type("Mkdir").unwrap();
+        let mkdirs = log.read_by_type("Mkdir").expect("TODO: handle error");
         assert_eq!(mkdirs.len(), 2);
         assert_eq!(mkdirs[0].path, "dir1");
         assert_eq!(mkdirs[1].path, "dir2");

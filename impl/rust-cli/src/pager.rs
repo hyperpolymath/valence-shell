@@ -307,7 +307,7 @@ mod tests {
         let short_content = "line 1\nline 2\nline 3\n";
 
         // Should not error
-        pager.page(short_content).unwrap();
+        pager.page(short_content).expect("TODO: handle error");
     }
 
     #[test]

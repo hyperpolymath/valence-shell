@@ -229,14 +229,14 @@ mod tests {
     #[test]
     fn test_resolve_simple_path() {
         let sandbox = PathBuf::from("/tmp/sandbox");
-        let resolved = resolve_path(&sandbox, "foo/bar").unwrap();
+        let resolved = resolve_path(&sandbox, "foo/bar").expect("TODO: handle error");
         assert_eq!(resolved, PathBuf::from("/tmp/sandbox/foo/bar"));
     }
 
     #[test]
     fn test_resolve_absolute_path() {
         let sandbox = PathBuf::from("/tmp/sandbox");
-        let resolved = resolve_path(&sandbox, "/foo/bar").unwrap();
+        let resolved = resolve_path(&sandbox, "/foo/bar").expect("TODO: handle error");
         assert_eq!(resolved, PathBuf::from("/tmp/sandbox/foo/bar"));
     }
 
@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn test_normalize_parent() {
         let sandbox = PathBuf::from("/tmp/sandbox");
-        let resolved = resolve_path(&sandbox, "foo/../bar").unwrap();
+        let resolved = resolve_path(&sandbox, "foo/../bar").expect("TODO: handle error");
         assert_eq!(resolved, PathBuf::from("/tmp/sandbox/bar"));
     }
 

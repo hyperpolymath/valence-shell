@@ -214,7 +214,7 @@ mod tests {
 
         let job = table.get_job("%1");
         assert!(job.is_some());
-        assert_eq!(job.unwrap().pgid, 1234);
+        assert_eq!(job.expect("TODO: handle error").pgid, 1234);
     }
 
     #[test]
@@ -226,12 +226,12 @@ mod tests {
         // %+ should be most recent (id2)
         let job = table.get_job("%+");
         assert!(job.is_some());
-        assert_eq!(job.unwrap().id, id2);
+        assert_eq!(job.expect("TODO: handle error").id, id2);
 
         // %- should be previous (id1)
         let job = table.get_job("%-");
         assert!(job.is_some());
-        assert_eq!(job.unwrap().id, id1);
+        assert_eq!(job.expect("TODO: handle error").id, id1);
     }
 
     #[test]
@@ -242,11 +242,11 @@ mod tests {
 
         let job = table.get_job("%sleep");
         assert!(job.is_some());
-        assert_eq!(job.unwrap().command, "sleep 10");
+        assert_eq!(job.expect("TODO: handle error").command, "sleep 10");
 
         let job = table.get_job("%find");
         assert!(job.is_some());
-        assert_eq!(job.unwrap().command, "find / -name test");
+        assert_eq!(job.expect("TODO: handle error").command, "find / -name test");
     }
 
     #[test]
@@ -256,7 +256,7 @@ mod tests {
 
         let job = table.get_job("%?name");
         assert!(job.is_some());
-        assert_eq!(job.unwrap().command, "find / -name test");
+        assert_eq!(job.expect("TODO: handle error").command, "find / -name test");
     }
 
     #[test]
@@ -275,7 +275,7 @@ mod tests {
         table.add_job(1234, "sleep 10".to_string(), vec![1234]);
 
         table.update_job_state(1234, JobState::Stopped);
-        let job = table.get_job("%1").unwrap();
+        let job = table.get_job("%1").expect("TODO: handle error");
         assert_eq!(job.state, JobState::Stopped);
     }
 

@@ -1680,7 +1680,7 @@ pub fn fg(state: &mut ShellState, job_spec: Option<&str>) -> Result<()> {
         // Update job state based on wait result
         if unsafe { libc::WIFSTOPPED(status) } {
             state.jobs.update_job_state(pgid, JobState::Stopped);
-            println!("\n[{}]+  Stopped              {}", job_id, state.jobs.get_job(spec).unwrap().command.trim_end_matches(" &"));
+            println!("\n[{}]+  Stopped              {}", job_id, state.jobs.get_job(spec).expect("TODO: handle error").command.trim_end_matches(" &"));
         } else {
             // Job completed - remove from table
             state.jobs.remove_job(job_id);
@@ -1734,7 +1734,7 @@ pub fn bg(state: &mut ShellState, job_spec: Option<&str>) -> Result<()> {
         state.jobs.update_job_state(pgid, JobState::Running);
 
         // Print job info (bash-style)
-        let job = state.jobs.get_job(spec).unwrap();
+        let job = state.jobs.get_job(spec).expect("TODO: handle error");
         println!("[{}]+ {}", job_id, job.command);
     }
 
@@ -2452,49 +2452,49 @@ mod tests {
 
     #[test]
     fn test_parse_chmod_octal_755() {
-        let result = parse_chmod_mode("755", 0o100644).unwrap();
+        let result = parse_chmod_mode("755", 0o100644).expect("TODO: handle error");
         assert_eq!(result & 0o7777, 0o755);
     }
 
     #[test]
     fn test_parse_chmod_octal_644() {
-        let result = parse_chmod_mode("644", 0o100755).unwrap();
+        let result = parse_chmod_mode("644", 0o100755).expect("TODO: handle error");
         assert_eq!(result & 0o7777, 0o644);
     }
 
     #[test]
     fn test_parse_chmod_symbolic_u_plus_x() {
-        let result = parse_chmod_mode("u+x", 0o100644).unwrap();
+        let result = parse_chmod_mode("u+x", 0o100644).expect("TODO: handle error");
         assert_eq!(result & 0o7777, 0o744);
     }
 
     #[test]
     fn test_parse_chmod_symbolic_go_minus_w() {
-        let result = parse_chmod_mode("go-w", 0o100666).unwrap();
+        let result = parse_chmod_mode("go-w", 0o100666).expect("TODO: handle error");
         assert_eq!(result & 0o7777, 0o644);
     }
 
     #[test]
     fn test_parse_chmod_symbolic_a_equals_r() {
-        let result = parse_chmod_mode("a=r", 0o100777).unwrap();
+        let result = parse_chmod_mode("a=r", 0o100777).expect("TODO: handle error");
         assert_eq!(result & 0o7777, 0o444);
     }
 
     #[test]
     fn test_parse_chmod_symbolic_plus_x() {
-        let result = parse_chmod_mode("+x", 0o100644).unwrap();
+        let result = parse_chmod_mode("+x", 0o100644).expect("TODO: handle error");
         assert_eq!(result & 0o7777, 0o755);
     }
 
     #[test]
     fn test_parse_chmod_symbolic_comma_separated() {
-        let result = parse_chmod_mode("u+x,go-w", 0o100666).unwrap();
+        let result = parse_chmod_mode("u+x,go-w", 0o100666).expect("TODO: handle error");
         assert_eq!(result & 0o7777, 0o744);
     }
 
     #[test]
     fn test_parse_chmod_preserves_file_type_bits() {
-        let result = parse_chmod_mode("755", 0o100644).unwrap();
+        let result = parse_chmod_mode("755", 0o100644).expect("TODO: handle error");
         assert_eq!(result & 0o170000, 0o100000);
     }
 
@@ -2507,14 +2507,14 @@ mod tests {
     fn test_chmod_undo_data_roundtrip() {
         let mode: u32 = 0o100755;
         let bytes = mode.to_le_bytes().to_vec();
-        let restored = u32::from_le_bytes(bytes[..4].try_into().unwrap());
+        let restored = u32::from_le_bytes(bytes[..4].try_into().expect("TODO: handle error"));
         assert_eq!(mode, restored);
     }
 
     #[cfg(unix)]
     #[test]
     fn test_parse_chown_user_only() {
-        let (uid, gid) = parse_chown_spec("1000", 500, 500).unwrap();
+        let (uid, gid) = parse_chown_spec("1000", 500, 500).expect("TODO: handle error");
         assert_eq!(uid, 1000);
         assert_eq!(gid, 500);
     }
@@ -2522,7 +2522,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_parse_chown_user_colon_group() {
-        let (uid, gid) = parse_chown_spec("1000:1001", 500, 500).unwrap();
+        let (uid, gid) = parse_chown_spec("1000:1001", 500, 500).expect("TODO: handle error");
         assert_eq!(uid, 1000);
         assert_eq!(gid, 1001);
     }
@@ -2530,7 +2530,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_parse_chown_colon_group_only() {
-        let (uid, gid) = parse_chown_spec(":1001", 500, 500).unwrap();
+        let (uid, gid) = parse_chown_spec(":1001", 500, 500).expect("TODO: handle error");
         assert_eq!(uid, 500);
         assert_eq!(gid, 1001);
     }
@@ -2542,20 +2542,20 @@ mod tests {
         let gid: u32 = 1001;
         let data = format!("{}:{}", uid, gid);
         let parts: Vec<&str> = data.splitn(2, ':').collect();
-        assert_eq!(parts[0].parse::<u32>().unwrap(), 1000);
-        assert_eq!(parts[1].parse::<u32>().unwrap(), 1001);
+        assert_eq!(parts[0].parse::<u32>().expect("TODO: handle error"), 1000);
+        assert_eq!(parts[1].parse::<u32>().expect("TODO: handle error"), 1001);
     }
 
     // ── P8: Wow-factor feature tests ──────────────────────────────────
 
     #[test]
     fn test_checkpoint_save_and_list() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
+        let tmp = tempfile::tempdir().expect("TODO: handle error");
+        let mut state = ShellState::new(tmp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
 
         assert!(state.checkpoints.is_empty());
 
-        checkpoint(&mut state, "clean").unwrap();
+        checkpoint(&mut state, "clean").expect("TODO: handle error");
         assert_eq!(state.checkpoints.len(), 1);
         assert!(state.checkpoints.contains_key("clean"));
 
@@ -2565,28 +2565,28 @@ mod tests {
 
     #[test]
     fn test_checkpoint_after_operations() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
+        let tmp = tempfile::tempdir().expect("TODO: handle error");
+        let mut state = ShellState::new(tmp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
 
-        mkdir(&mut state, "testdir", false).unwrap();
+        mkdir(&mut state, "testdir", false).expect("TODO: handle error");
         assert_eq!(state.history.len(), 1);
 
-        checkpoint(&mut state, "after-mkdir").unwrap();
+        checkpoint(&mut state, "after-mkdir").expect("TODO: handle error");
         let (idx, _) = state.checkpoints["after-mkdir"];
         assert_eq!(idx, 1);
     }
 
     #[test]
     fn test_checkpoint_overwrite() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
+        let tmp = tempfile::tempdir().expect("TODO: handle error");
+        let mut state = ShellState::new(tmp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
 
-        checkpoint(&mut state, "snap").unwrap();
+        checkpoint(&mut state, "snap").expect("TODO: handle error");
         let (idx1, _) = state.checkpoints["snap"];
 
-        mkdir(&mut state, "dir1", false).unwrap();
+        mkdir(&mut state, "dir1", false).expect("TODO: handle error");
 
-        checkpoint(&mut state, "snap").unwrap();
+        checkpoint(&mut state, "snap").expect("TODO: handle error");
         let (idx2, _) = state.checkpoints["snap"];
 
         assert!(idx2 > idx1);
@@ -2595,106 +2595,106 @@ mod tests {
 
     #[test]
     fn test_restore_to_checkpoint() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
+        let tmp = tempfile::tempdir().expect("TODO: handle error");
+        let mut state = ShellState::new(tmp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
 
-        checkpoint(&mut state, "start").unwrap();
+        checkpoint(&mut state, "start").expect("TODO: handle error");
 
-        mkdir(&mut state, "dir1", false).unwrap();
-        mkdir(&mut state, "dir2", false).unwrap();
+        mkdir(&mut state, "dir1", false).expect("TODO: handle error");
+        mkdir(&mut state, "dir2", false).expect("TODO: handle error");
         assert_eq!(state.history.len(), 2);
         assert!(tmp.path().join("dir1").exists());
         assert!(tmp.path().join("dir2").exists());
 
-        restore(&mut state, "start").unwrap();
+        restore(&mut state, "start").expect("TODO: handle error");
         assert!(!tmp.path().join("dir1").exists());
         assert!(!tmp.path().join("dir2").exists());
     }
 
     #[test]
     fn test_restore_nonexistent_checkpoint() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
+        let tmp = tempfile::tempdir().expect("TODO: handle error");
+        let mut state = ShellState::new(tmp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
         let result = restore(&mut state, "nope");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_restore_already_at_checkpoint() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
-        checkpoint(&mut state, "here").unwrap();
-        restore(&mut state, "here").unwrap();
+        let tmp = tempfile::tempdir().expect("TODO: handle error");
+        let mut state = ShellState::new(tmp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
+        checkpoint(&mut state, "here").expect("TODO: handle error");
+        restore(&mut state, "here").expect("TODO: handle error");
     }
 
     #[test]
     fn test_diff_state_empty() {
-        let tmp = tempfile::tempdir().unwrap();
-        let state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
-        diff_state(&state, 0).unwrap();
+        let tmp = tempfile::tempdir().expect("TODO: handle error");
+        let state = ShellState::new(tmp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
+        diff_state(&state, 0).expect("TODO: handle error");
     }
 
     #[test]
     fn test_diff_state_with_ops() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
+        let tmp = tempfile::tempdir().expect("TODO: handle error");
+        let mut state = ShellState::new(tmp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
 
-        mkdir(&mut state, "d1", false).unwrap();
+        mkdir(&mut state, "d1", false).expect("TODO: handle error");
         assert_eq!(state.history.len(), 1);
 
-        diff_state(&state, 0).unwrap();
+        diff_state(&state, 0).expect("TODO: handle error");
     }
 
     #[test]
     fn test_replay_empty_range() {
-        let tmp = tempfile::tempdir().unwrap();
-        let state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
-        replay(&state, 5, 5).unwrap();
-        replay(&state, 10, 5).unwrap();
+        let tmp = tempfile::tempdir().expect("TODO: handle error");
+        let state = ShellState::new(tmp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
+        replay(&state, 5, 5).expect("TODO: handle error");
+        replay(&state, 10, 5).expect("TODO: handle error");
     }
 
     #[test]
     fn test_replay_with_operations() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
+        let tmp = tempfile::tempdir().expect("TODO: handle error");
+        let mut state = ShellState::new(tmp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
 
-        mkdir(&mut state, "r1", false).unwrap();
-        mkdir(&mut state, "r2", false).unwrap();
+        mkdir(&mut state, "r1", false).expect("TODO: handle error");
+        mkdir(&mut state, "r2", false).expect("TODO: handle error");
 
-        replay(&state, 0, 2).unwrap();
+        replay(&state, 0, 2).expect("TODO: handle error");
     }
 
     #[test]
     fn test_replay_clamps_end() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
+        let tmp = tempfile::tempdir().expect("TODO: handle error");
+        let mut state = ShellState::new(tmp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
 
-        mkdir(&mut state, "clamp", false).unwrap();
+        mkdir(&mut state, "clamp", false).expect("TODO: handle error");
 
-        replay(&state, 0, 999).unwrap();
+        replay(&state, 0, 999).expect("TODO: handle error");
     }
 
     #[test]
     fn test_explain_mkdir() {
-        let tmp = tempfile::tempdir().unwrap();
-        let state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
+        let tmp = tempfile::tempdir().expect("TODO: handle error");
+        let state = ShellState::new(tmp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
         let cmd = crate::parser::Command::Mkdir {
             path: "newdir".to_string(),
             redirects: vec![],
         };
-        explain_command(&cmd, &state).unwrap();
+        explain_command(&cmd, &state).expect("TODO: handle error");
     }
 
     #[test]
     fn test_explain_external_command() {
-        let tmp = tempfile::tempdir().unwrap();
-        let state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
+        let tmp = tempfile::tempdir().expect("TODO: handle error");
+        let state = ShellState::new(tmp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
         let cmd = crate::parser::Command::External {
             program: "git".to_string(),
             args: vec!["status".to_string()],
             redirects: vec![],
             background: false,
         };
-        explain_command(&cmd, &state).unwrap();
+        explain_command(&cmd, &state).expect("TODO: handle error");
     }
 }
