@@ -360,7 +360,8 @@ fn execute_line(state: &mut ShellState, input: &str) -> Result<bool> {
     // Handle execution result
     match result {
         ExecutionResult::Exit => Ok(true),
-        ExecutionResult::ExternalCommand { exit_code } => {
+        ExecutionResult::ExternalCommand { exit_code }
+        | ExecutionResult::Return { exit_code } => {
             state.last_exit_code = exit_code;
             Ok(false)
         }
