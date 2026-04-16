@@ -27,9 +27,17 @@ pub struct SourceLocation {
 pub struct FunctionDef {
     /// Function name
     pub name: String,
-    /// Body of the function as raw command strings
-    /// Each entry is one command (semicolon-separated lines from the braces)
+    /// Body of the function as pre-split command strings.
+    ///
+    /// Kept for backward compatibility with callers (and tests) that worked
+    /// against the original naive split. Execution now prefers `raw_body`
+    /// because the naive split fragments control structures.
     pub body: Vec<String>,
+    /// The raw text between the opening and closing braces, preserving
+    /// semicolons, newlines, and nested blocks. This is what execution
+    /// should use so `if/fi`, `for/done`, `while/done`, and `case/esac`
+    /// work inside function bodies.
+    pub raw_body: String,
     /// Where the function was defined
     pub source_location: SourceLocation,
 }
@@ -142,8 +150,13 @@ impl Default for FunctionTable {
 /// 1. `fname() { commands; }` (POSIX standard)
 /// 2. `function fname { commands; }` (bash extension)
 ///
-/// Returns Some((name, body_commands)) on success, None if not a function definition.
-pub fn parse_function_def(input: &str) -> Option<(String, Vec<String>)> {
+/// Returns `Some((name, body_segments, raw_body))` on success, `None` if not
+/// a function definition.
+///
+/// `body_segments` is a naive semicolon/newline split kept for backward
+/// compatibility; `raw_body` is the exact text between the outermost
+/// braces and is what execution should consume.
+pub fn parse_function_def(input: &str) -> Option<(String, Vec<String>, String)> {
     let trimmed = input.trim();
 
     // Try syntax 1: fname() { commands; }
@@ -159,8 +172,56 @@ pub fn parse_function_def(input: &str) -> Option<(String, Vec<String>)> {
     None
 }
 
+/// Find the index of the closing `}` that matches the opening `{` at `open_idx`.
+///
+/// Tracks brace depth while respecting single-quoted, double-quoted, and
+/// backslash-escaped regions. Returns `None` if no matching close is found.
+fn find_matching_close_brace(input: &str, open_idx: usize) -> Option<usize> {
+    let bytes = input.as_bytes();
+    if open_idx >= bytes.len() || bytes[open_idx] != b'{' {
+        return None;
+    }
+    let mut depth: i32 = 1;
+    let mut i = open_idx + 1;
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut escaped = false;
+
+    while i < bytes.len() {
+        let ch = bytes[i] as char;
+        if escaped {
+            escaped = false;
+            i += 1;
+            continue;
+        }
+        match ch {
+            '\\' if !in_single => {
+                escaped = true;
+            }
+            '\'' if !in_double => {
+                in_single = !in_single;
+            }
+            '"' if !in_single => {
+                in_double = !in_double;
+            }
+            '{' if !in_single && !in_double => {
+                depth += 1;
+            }
+            '}' if !in_single && !in_double => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
 /// Try to parse `fname() { commands; }` syntax
-fn try_parse_posix_function(input: &str) -> Option<(String, Vec<String>)> {
+fn try_parse_posix_function(input: &str) -> Option<(String, Vec<String>, String)> {
     // Look for `name()` pattern followed by `{`
     let paren_pos = input.find("()")?;
     let name = input[..paren_pos].trim();
@@ -171,32 +232,36 @@ fn try_parse_posix_function(input: &str) -> Option<(String, Vec<String>)> {
     }
 
     // Find the body between { and }
-    let after_parens = input[paren_pos + 2..].trim();
+    let after_parens = input[paren_pos + 2..].trim_start();
 
     // Must start with {
     if !after_parens.starts_with('{') {
         return None;
     }
 
-    // Must end with }
-    if !after_parens.ends_with('}') {
+    // Locate the opening `{` inside the original input and find its match.
+    let open_idx = input.len() - after_parens.len();
+    let close_idx = find_matching_close_brace(input, open_idx)?;
+
+    // Everything after the matching `}` should be empty (or whitespace).
+    if !input[close_idx + 1..].trim().is_empty() {
         return None;
     }
 
-    // Extract body (everything between { and })
-    let body_str = after_parens[1..after_parens.len() - 1].trim();
-    let body = parse_function_body(body_str);
+    let raw_body = input[open_idx + 1..close_idx].trim().to_string();
+    let body = parse_function_body(&raw_body);
 
-    Some((name.to_string(), body))
+    Some((name.to_string(), body, raw_body))
 }
 
 /// Try to parse `function fname { commands; }` syntax (bash extension)
-fn try_parse_bash_function(input: &str) -> Option<(String, Vec<String>)> {
+fn try_parse_bash_function(input: &str) -> Option<(String, Vec<String>, String)> {
     if !input.starts_with("function ") {
         return None;
     }
 
-    let rest = input["function ".len()..].trim();
+    let rest = input["function ".len()..].trim_start();
+    let rest_start = input.len() - rest.len();
 
     // Find the name (until whitespace or `(` or `{`)
     let name_end = rest.find(|c: char| c.is_whitespace() || c == '(' || c == '{')?;
@@ -206,29 +271,32 @@ fn try_parse_bash_function(input: &str) -> Option<(String, Vec<String>)> {
         return None;
     }
 
-    let after_name = rest[name_end..].trim();
+    let after_name = rest[name_end..].trim_start();
 
     // Skip optional () if present
-    let body_start = if after_name.starts_with("()") {
-        after_name[2..].trim()
+    let body_start_str = if after_name.starts_with("()") {
+        after_name[2..].trim_start()
     } else {
         after_name
     };
 
     // Must start with {
-    if !body_start.starts_with('{') {
+    if !body_start_str.starts_with('{') {
         return None;
     }
 
-    // Must end with }
-    if !body_start.ends_with('}') {
+    // Compute absolute indices in the original `input` string.
+    let open_idx = rest_start + (rest.len() - body_start_str.len());
+    let close_idx = find_matching_close_brace(input, open_idx)?;
+
+    if !input[close_idx + 1..].trim().is_empty() {
         return None;
     }
 
-    let body_str = body_start[1..body_start.len() - 1].trim();
-    let body = parse_function_body(body_str);
+    let raw_body = input[open_idx + 1..close_idx].trim().to_string();
+    let body = parse_function_body(&raw_body);
 
-    Some((name.to_string(), body))
+    Some((name.to_string(), body, raw_body))
 }
 
 /// Parse the body of a function (content between braces) into individual commands
@@ -268,36 +336,61 @@ mod tests {
     fn test_parse_posix_function_def() {
         let result = parse_function_def("greet() { echo hello; }");
         assert!(result.is_some());
-        let (name, body) = result.expect("TODO: handle error");
+        let (name, body, raw_body) = result.expect("TODO: handle error");
         assert_eq!(name, "greet");
         assert_eq!(body, vec!["echo hello"]);
+        // raw_body preserves the trailing `;` — that's harmless.
+        assert_eq!(raw_body, "echo hello;");
     }
 
     #[test]
     fn test_parse_posix_function_multi_commands() {
         let result = parse_function_def("setup() { mkdir src; touch src/main.rs; echo done; }");
         assert!(result.is_some());
-        let (name, body) = result.expect("TODO: handle error");
+        let (name, body, raw_body) = result.expect("TODO: handle error");
         assert_eq!(name, "setup");
         assert_eq!(body, vec!["mkdir src", "touch src/main.rs", "echo done"]);
+        assert_eq!(raw_body, "mkdir src; touch src/main.rs; echo done;");
     }
 
     #[test]
     fn test_parse_bash_function_def() {
         let result = parse_function_def("function greet { echo hello; }");
         assert!(result.is_some());
-        let (name, body) = result.expect("TODO: handle error");
+        let (name, body, raw_body) = result.expect("TODO: handle error");
         assert_eq!(name, "greet");
         assert_eq!(body, vec!["echo hello"]);
+        assert_eq!(raw_body, "echo hello;");
     }
 
     #[test]
     fn test_parse_bash_function_with_parens() {
         let result = parse_function_def("function greet() { echo hello; }");
         assert!(result.is_some());
-        let (name, body) = result.expect("TODO: handle error");
+        let (name, body, raw_body) = result.expect("TODO: handle error");
         assert_eq!(name, "greet");
         assert_eq!(body, vec!["echo hello"]);
+        assert_eq!(raw_body, "echo hello;");
+    }
+
+    #[test]
+    fn test_parse_function_preserves_control_structure() {
+        // Critical: the raw body must preserve control structures so that
+        // execution can parse `if/fi`, `for/done`, etc. as single commands.
+        let result = parse_function_def("ifunc() { if true; then mkdir d; fi; }");
+        assert!(result.is_some());
+        let (name, _body, raw_body) = result.expect("TODO: handle error");
+        assert_eq!(name, "ifunc");
+        assert_eq!(raw_body, "if true; then mkdir d; fi;");
+    }
+
+    #[test]
+    fn test_parse_function_with_brace_in_string() {
+        // A `}` inside a quoted string must NOT be treated as the closing brace.
+        let result = parse_function_def("lit() { echo '}'; }");
+        assert!(result.is_some());
+        let (_name, _body, raw_body) = result.expect("TODO: handle error");
+        assert_eq!(raw_body, "echo '}';");
     }
 
     #[test]
@@ -333,6 +426,7 @@ mod tests {
         let def = FunctionDef {
             name: "greet".to_string(),
             body: vec!["echo hello".to_string()],
+            raw_body: "echo hello".to_string(),
             source_location: SourceLocation {
                 source: "stdin".to_string(),
                 line: 1,
@@ -350,6 +444,7 @@ mod tests {
         table.define(FunctionDef {
             name: "greet".to_string(),
             body: vec!["echo hello".to_string()],
+            raw_body: "echo hello".to_string(),
             source_location: SourceLocation {
                 source: "stdin".to_string(),
                 line: 1,
@@ -366,6 +461,7 @@ mod tests {
         table.define(FunctionDef {
             name: "greet".to_string(),
             body: vec!["echo hello".to_string()],
+            raw_body: "echo hello".to_string(),
             source_location: SourceLocation {
                 source: "stdin".to_string(),
                 line: 1,
@@ -374,6 +470,7 @@ mod tests {
         table.define(FunctionDef {
             name: "greet".to_string(),
             body: vec!["echo goodbye".to_string()],
+            raw_body: "echo goodbye".to_string(),
             source_location: SourceLocation {
                 source: "stdin".to_string(),
                 line: 5,
