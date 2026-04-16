@@ -260,7 +260,8 @@ fn execute_script_content(content: &str, state: &mut state::ShellState) -> Resul
                     let result = cmd.execute(state)?;
                     match result {
                         ExecutionResult::Exit => return Ok(()),
-                        ExecutionResult::ExternalCommand { exit_code } => {
+                        ExecutionResult::ExternalCommand { exit_code }
+                        | ExecutionResult::Return { exit_code } => {
                             state.last_exit_code = exit_code;
                         }
                         ExecutionResult::Success => {
