@@ -456,54 +456,54 @@ mod tests {
 
     #[test]
     fn test_file_type_detection() {
-        let tmp = tempdir().unwrap();
+        let tmp = tempdir().expect("TODO: handle error");
 
         // Create file
         let file_path = tmp.path().join("test.txt");
-        fs::write(&file_path, "content").unwrap();
+        fs::write(&file_path, "content").expect("TODO: handle error");
 
-        let info = FileInfo::from_path(&file_path).unwrap();
+        let info = FileInfo::from_path(&file_path).expect("TODO: handle error");
         assert_eq!(info.file_type, FileType::RegularFile);
 
         // Create directory
         let dir_path = tmp.path().join("subdir");
-        fs::create_dir(&dir_path).unwrap();
+        fs::create_dir(&dir_path).expect("TODO: handle error");
 
-        let info = FileInfo::from_path(&dir_path).unwrap();
+        let info = FileInfo::from_path(&dir_path).expect("TODO: handle error");
         assert_eq!(info.file_type, FileType::Directory);
     }
 
     #[test]
     fn test_list_directory() {
-        let tmp = tempdir().unwrap();
+        let tmp = tempdir().expect("TODO: handle error");
 
-        fs::write(tmp.path().join("a.txt"), "").unwrap();
-        fs::write(tmp.path().join("b.txt"), "").unwrap();
-        fs::create_dir(tmp.path().join("subdir")).unwrap();
+        fs::write(tmp.path().join("a.txt"), "").expect("TODO: handle error");
+        fs::write(tmp.path().join("b.txt"), "").expect("TODO: handle error");
+        fs::create_dir(tmp.path().join("subdir")).expect("TODO: handle error");
 
-        let entries = list_directory(tmp.path()).unwrap();
+        let entries = list_directory(tmp.path()).expect("TODO: handle error");
         assert_eq!(entries.len(), 3);
     }
 
     #[test]
     fn test_atomic_write() {
-        let tmp = tempdir().unwrap();
+        let tmp = tempdir().expect("TODO: handle error");
         let path = tmp.path().join("atomic.txt");
 
-        atomic_write(&path, b"test content").unwrap();
+        atomic_write(&path, b"test content").expect("TODO: handle error");
 
         assert!(path.exists());
-        assert_eq!(fs::read_to_string(&path).unwrap(), "test content");
+        assert_eq!(fs::read_to_string(&path).expect("TODO: handle error"), "test content");
     }
 
     #[test]
     fn test_directory_size() {
-        let tmp = tempdir().unwrap();
+        let tmp = tempdir().expect("TODO: handle error");
 
-        fs::write(tmp.path().join("a.txt"), "12345").unwrap();
-        fs::write(tmp.path().join("b.txt"), "123").unwrap();
+        fs::write(tmp.path().join("a.txt"), "12345").expect("TODO: handle error");
+        fs::write(tmp.path().join("b.txt"), "123").expect("TODO: handle error");
 
-        let size = directory_size(tmp.path()).unwrap();
+        let size = directory_size(tmp.path()).expect("TODO: handle error");
         assert_eq!(size, 8);
     }
 }

@@ -249,7 +249,7 @@ pub fn is_valid_function_name(name: &str) -> bool {
         return false;
     }
     let mut chars = name.chars();
-    let first = chars.next().unwrap();
+    let first = chars.next().expect("TODO: handle error");
     if !first.is_alphabetic() && first != '_' {
         return false;
     }
@@ -268,7 +268,7 @@ mod tests {
     fn test_parse_posix_function_def() {
         let result = parse_function_def("greet() { echo hello; }");
         assert!(result.is_some());
-        let (name, body) = result.unwrap();
+        let (name, body) = result.expect("TODO: handle error");
         assert_eq!(name, "greet");
         assert_eq!(body, vec!["echo hello"]);
     }
@@ -277,7 +277,7 @@ mod tests {
     fn test_parse_posix_function_multi_commands() {
         let result = parse_function_def("setup() { mkdir src; touch src/main.rs; echo done; }");
         assert!(result.is_some());
-        let (name, body) = result.unwrap();
+        let (name, body) = result.expect("TODO: handle error");
         assert_eq!(name, "setup");
         assert_eq!(body, vec!["mkdir src", "touch src/main.rs", "echo done"]);
     }
@@ -286,7 +286,7 @@ mod tests {
     fn test_parse_bash_function_def() {
         let result = parse_function_def("function greet { echo hello; }");
         assert!(result.is_some());
-        let (name, body) = result.unwrap();
+        let (name, body) = result.expect("TODO: handle error");
         assert_eq!(name, "greet");
         assert_eq!(body, vec!["echo hello"]);
     }
@@ -295,7 +295,7 @@ mod tests {
     fn test_parse_bash_function_with_parens() {
         let result = parse_function_def("function greet() { echo hello; }");
         assert!(result.is_some());
-        let (name, body) = result.unwrap();
+        let (name, body) = result.expect("TODO: handle error");
         assert_eq!(name, "greet");
         assert_eq!(body, vec!["echo hello"]);
     }
@@ -379,7 +379,7 @@ mod tests {
                 line: 5,
             },
         });
-        let def = table.get("greet").unwrap();
+        let def = table.get("greet").expect("TODO: handle error");
         assert_eq!(def.body, vec!["echo goodbye"]);
     }
 
@@ -398,11 +398,11 @@ mod tests {
         table.push_frame(vec!["nested_arg".to_string()]);
         assert_eq!(table.call_depth(), 2);
 
-        let frame = table.pop_frame().unwrap();
+        let frame = table.pop_frame().expect("TODO: handle error");
         assert_eq!(frame.saved_params, vec!["nested_arg"]);
         assert_eq!(table.call_depth(), 1);
 
-        let frame = table.pop_frame().unwrap();
+        let frame = table.pop_frame().expect("TODO: handle error");
         assert_eq!(frame.saved_params, vec!["arg1", "arg2"]);
         assert_eq!(table.call_depth(), 0);
 
@@ -417,7 +417,7 @@ mod tests {
         table.declare_local("x", Some("old_value".to_string()));
         table.declare_local("y", None);
 
-        let frame = table.pop_frame().unwrap();
+        let frame = table.pop_frame().expect("TODO: handle error");
         assert_eq!(frame.local_vars, vec!["x", "y"]);
         assert_eq!(
             frame.saved_vars.get("x"),
@@ -436,7 +436,7 @@ mod tests {
         // Second declaration in same frame should NOT overwrite the saved value
         table.declare_local("x", Some("modified".to_string()));
 
-        let frame = table.pop_frame().unwrap();
+        let frame = table.pop_frame().expect("TODO: handle error");
         // The saved value should be "original", not "modified"
         assert_eq!(
             frame.saved_vars.get("x"),

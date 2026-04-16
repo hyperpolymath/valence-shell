@@ -407,14 +407,14 @@ mod tests {
 
     #[test]
     fn test_mkdir_preconditions() {
-        let tmp = tempdir().unwrap();
+        let tmp = tempdir().expect("TODO: handle error");
         let path = tmp.path().join("new_dir");
 
         // Should succeed - path doesn't exist, parent exists
         assert!(Preconditions::mkdir(&path).is_ok());
 
         // Create it
-        fs::create_dir(&path).unwrap();
+        fs::create_dir(&path).expect("TODO: handle error");
 
         // Should fail - path exists
         assert!(matches!(
@@ -425,7 +425,7 @@ mod tests {
 
     #[test]
     fn test_rmdir_preconditions() {
-        let tmp = tempdir().unwrap();
+        let tmp = tempdir().expect("TODO: handle error");
         let path = tmp.path().join("dir_to_remove");
 
         // Should fail - doesn't exist
@@ -435,13 +435,13 @@ mod tests {
         ));
 
         // Create empty directory
-        fs::create_dir(&path).unwrap();
+        fs::create_dir(&path).expect("TODO: handle error");
 
         // Should succeed
         assert!(Preconditions::rmdir(&path).is_ok());
 
         // Add a file
-        fs::write(path.join("file.txt"), "content").unwrap();
+        fs::write(path.join("file.txt"), "content").expect("TODO: handle error");
 
         // Should fail - not empty
         assert!(matches!(

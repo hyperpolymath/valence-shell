@@ -198,7 +198,7 @@ fn expand_braces_limited(pattern: &str, remaining: usize) -> Vec<String> {
             brace_depth -= 1;
             if brace_depth == 0 {
                 // Found matching close brace
-                let start = brace_start.unwrap();
+                let start = brace_start.expect("TODO: handle error");
                 let prefix = &pattern[..start];
                 let suffix = &pattern[i + 1..];
                 let content = &pattern[start + 1..i];

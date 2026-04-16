@@ -441,7 +441,7 @@ impl ExecutableCommand for Command {
 
                 // Check if the command is a shell function before external execution
                 if state.functions.is_defined(&expanded_program) {
-                    let func_def = state.functions.get(&expanded_program).unwrap().clone();
+                    let func_def = state.functions.get(&expanded_program).expect("TODO: handle error").clone();
                     // Expand arguments
                     let expanded_args: Vec<String> = args
                         .iter()

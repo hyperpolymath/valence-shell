@@ -241,14 +241,14 @@ mod tests {
 
     #[test]
     fn test_fifo_creation() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut state = ShellState::new(temp_dir.path().to_str().unwrap()).unwrap();
+        let temp_dir = TempDir::new().expect("TODO: handle error");
+        let mut state = ShellState::new(temp_dir.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
 
         let proc_sub = ProcessSubstitution::create(
             ProcessSubType::Input,
             "echo test".to_string(),
             &mut state,
-        ).unwrap();
+        ).expect("TODO: handle error");
 
         // FIFO should exist
         assert!(proc_sub.fifo_path.exists());
@@ -256,39 +256,39 @@ mod tests {
         // Should be a FIFO
         #[cfg(unix)]
         {
-            let metadata = std::fs::metadata(&proc_sub.fifo_path).unwrap();
+            let metadata = std::fs::metadata(&proc_sub.fifo_path).expect("TODO: handle error");
             use std::os::unix::fs::FileTypeExt;
             assert!(metadata.file_type().is_fifo());
         }
 
         // Cleanup should remove FIFO
         let fifo_path = proc_sub.fifo_path.clone();
-        proc_sub.cleanup().unwrap();
+        proc_sub.cleanup().expect("TODO: handle error");
         assert!(!fifo_path.exists());
     }
 
     #[test]
     fn test_fifo_path_unique() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut state = ShellState::new(temp_dir.path().to_str().unwrap()).unwrap();
+        let temp_dir = TempDir::new().expect("TODO: handle error");
+        let mut state = ShellState::new(temp_dir.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
 
         let proc_sub1 = ProcessSubstitution::create(
             ProcessSubType::Input,
             "echo a".to_string(),
             &mut state,
-        ).unwrap();
+        ).expect("TODO: handle error");
 
         let proc_sub2 = ProcessSubstitution::create(
             ProcessSubType::Input,
             "echo b".to_string(),
             &mut state,
-        ).unwrap();
+        ).expect("TODO: handle error");
 
         // FIFOs should have different paths
         assert_ne!(proc_sub1.fifo_path, proc_sub2.fifo_path);
 
         // Cleanup
-        proc_sub1.cleanup().unwrap();
-        proc_sub2.cleanup().unwrap();
+        proc_sub1.cleanup().expect("TODO: handle error");
+        proc_sub2.cleanup().expect("TODO: handle error");
     }
 }

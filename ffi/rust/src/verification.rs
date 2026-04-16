@@ -444,8 +444,8 @@ mod tests {
 
     #[test]
     fn test_verification_suite() {
-        let suite = VerificationSuite::new().unwrap();
-        let results = suite.run_all().unwrap();
+        let suite = VerificationSuite::new().expect("TODO: handle error");
+        let results = suite.run_all().expect("TODO: handle error");
 
         for result in &results {
             if !result.passed {
