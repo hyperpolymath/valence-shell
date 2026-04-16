@@ -39,7 +39,7 @@ libc = "0.2"
 zeroize = { version = "1.7", features = ["derive"] }
 
 # Random for secure overwrite patterns
-rand = "0.8"
+rand = "0.9"
 
 # SHA-256 for content verification
 sha2 = "0.10"
