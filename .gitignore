@@ -106,3 +106,4 @@ zig-out/
 
 # Crash recovery artifacts
 ai-cli-crash-capture/
+.cache/
