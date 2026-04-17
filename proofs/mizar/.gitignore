@@ -31,3 +31,14 @@
 *.wsx
 *.xml
 *.log
+target/
+node_modules/
+_build/
+deps/
+.elixir_ls/
+.cache/
+*.tmp
+.DS_Store
+Thumbs.db
+build/
+dist/
