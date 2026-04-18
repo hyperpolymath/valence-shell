@@ -341,7 +341,7 @@ ls .well-known/security.txt .well-known/ai.txt .well-known/humans.txt  # ✅ ALL
 - [x] .well-known/humans.txt (attribution)
 
 **Build System Checklist**:
-- [x] justfile with comprehensive recipes
+- [x] Justfile with comprehensive recipes
 - [x] flake.nix for Nix builds
 - [x] Containerfile for containerized builds
 - [x] .gitlab-ci.yml for CI/CD
