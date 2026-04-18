@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Justfile for Lean4 -> C -> OCaml extraction pipeline
+
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+lean_src := "../../proofs/lean4"
+lean_extraction := "Extraction"
+target := "liblean_vsh.so"
+
+default:
+    @just --list --unsorted
+
+build-lean:
+    @echo "Building Lean 4 extraction..."
+    cd {{lean_src}} && lake build {{lean_extraction}}
+
+build-c: build-lean
+    @lean_prefix="$$(lean --print-prefix)"
+    @lean_include="$$lean_prefix/include"
+    @lean_lib="$$lean_prefix/lib/lean"
+    gcc -shared -fPIC -o {{target}} \
+      lean_wrapper.c \
+      {{lean_src}}/.lake/build/ir/{{lean_extraction}}.c \
+      -I"$$lean_include" -L"$$lean_lib" -lleanshared -Wl,-rpath,"$$lean_lib"
+
+all: build-c
+
+test: all
+    @if [ -f {{target}} ]; then \
+      echo "{{target}} exists"; \
+      ldd {{target}} | grep lean || echo "Warning: Lean library not linked"; \
+    else \
+      echo "{{target}} not found"; \
+      exit 1; \
+    fi
+
+clean:
+    rm -f {{target}}
+    cd {{lean_src}} && lake clean
+
+install: all
+    sudo cp {{target}} /usr/local/lib/
+    sudo ldconfig

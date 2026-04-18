@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Justfile for Valence Shell Elixir NIF
+
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+default:
+    @just --list --unsorted
+
+all:
+    @erlang_path="$$(erl -eval 'io:format("~s", [lists:concat([code:root_dir(), "/erts-", erlang:system_info(version), "/include"])])' -s init stop -noshell)"
+    @erl_interface_include="$$(erl -eval 'io:format("~s", [code:lib_dir(erl_interface, include)])' -s init stop -noshell)"
+    @erl_interface_lib="$$(erl -eval 'io:format("~s", [code:lib_dir(erl_interface, lib)])' -s init stop -noshell)"
+    @mkdir -p priv
+    cd ../zig && zig build -Doptimize=ReleaseFast
+    ${CC:-gcc} -fPIC -O2 -Wall -Wextra -I"$$erlang_path" -I"$$erl_interface_include" -I../zig/src -shared -fPIC \
+      -o priv/valence_ffi.so c_src/valence_nif.c ../zig/zig-out/lib/libvalence_ffi.a -L"$$erl_interface_lib" -lei -lpthread
+
+zig-lib:
+    cd ../zig && zig build -Doptimize=ReleaseFast
+
+clean:
+    rm -rf priv
+    rm -f c_src/*.o
