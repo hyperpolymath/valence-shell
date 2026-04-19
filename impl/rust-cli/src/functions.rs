@@ -313,11 +313,13 @@ fn parse_function_body(body_str: &str) -> Vec<String> {
 /// Same rules as variable names: starts with letter or underscore,
 /// then alphanumeric or underscore.
 pub fn is_valid_function_name(name: &str) -> bool {
-    if name.is_empty() {
-        return false;
-    }
+    // `let-else` covers the empty-name case directly: chars.next() returns
+    // None on an empty &str, which is the same outcome as the previous
+    // explicit `if name.is_empty()` guard. One construct, no panic site.
     let mut chars = name.chars();
-    let first = chars.next().expect("TODO: handle error");
+    let Some(first) = chars.next() else {
+        return false;
+    };
     if !first.is_alphabetic() && first != '_' {
         return false;
     }
@@ -336,7 +338,7 @@ mod tests {
     fn test_parse_posix_function_def() {
         let result = parse_function_def("greet() { echo hello; }");
         assert!(result.is_some());
-        let (name, body, raw_body) = result.expect("TODO: handle error");
+        let (name, body, raw_body) = result.unwrap();
         assert_eq!(name, "greet");
         assert_eq!(body, vec!["echo hello"]);
         // raw_body preserves the trailing `;` — that's harmless.
@@ -347,7 +349,7 @@ mod tests {
     fn test_parse_posix_function_multi_commands() {
         let result = parse_function_def("setup() { mkdir src; touch src/main.rs; echo done; }");
         assert!(result.is_some());
-        let (name, body, raw_body) = result.expect("TODO: handle error");
+        let (name, body, raw_body) = result.unwrap();
         assert_eq!(name, "setup");
         assert_eq!(body, vec!["mkdir src", "touch src/main.rs", "echo done"]);
         assert_eq!(raw_body, "mkdir src; touch src/main.rs; echo done;");
@@ -357,7 +359,7 @@ mod tests {
     fn test_parse_bash_function_def() {
         let result = parse_function_def("function greet { echo hello; }");
         assert!(result.is_some());
-        let (name, body, raw_body) = result.expect("TODO: handle error");
+        let (name, body, raw_body) = result.unwrap();
         assert_eq!(name, "greet");
         assert_eq!(body, vec!["echo hello"]);
         assert_eq!(raw_body, "echo hello;");
@@ -367,7 +369,7 @@ mod tests {
     fn test_parse_bash_function_with_parens() {
         let result = parse_function_def("function greet() { echo hello; }");
         assert!(result.is_some());
-        let (name, body, raw_body) = result.expect("TODO: handle error");
+        let (name, body, raw_body) = result.unwrap();
         assert_eq!(name, "greet");
         assert_eq!(body, vec!["echo hello"]);
         assert_eq!(raw_body, "echo hello;");
@@ -379,7 +381,7 @@ mod tests {
         // execution can parse `if/fi`, `for/done`, etc. as single commands.
         let result = parse_function_def("ifunc() { if true; then mkdir d; fi; }");
         assert!(result.is_some());
-        let (name, _body, raw_body) = result.expect("TODO: handle error");
+        let (name, _body, raw_body) = result.unwrap();
         assert_eq!(name, "ifunc");
         assert_eq!(raw_body, "if true; then mkdir d; fi;");
     }
@@ -389,7 +391,7 @@ mod tests {
         // A `}` inside a quoted string must NOT be treated as the closing brace.
         let result = parse_function_def("lit() { echo '}'; }");
         assert!(result.is_some());
-        let (_name, _body, raw_body) = result.expect("TODO: handle error");
+        let (_name, _body, raw_body) = result.unwrap();
         assert_eq!(raw_body, "echo '}';");
     }
 
@@ -476,7 +478,7 @@ mod tests {
                 line: 5,
             },
         });
-        let def = table.get("greet").expect("TODO: handle error");
+        let def = table.get("greet").unwrap();
         assert_eq!(def.body, vec!["echo goodbye"]);
     }
 
@@ -495,11 +497,11 @@ mod tests {
         table.push_frame(vec!["nested_arg".to_string()]);
         assert_eq!(table.call_depth(), 2);
 
-        let frame = table.pop_frame().expect("TODO: handle error");
+        let frame = table.pop_frame().unwrap();
         assert_eq!(frame.saved_params, vec!["nested_arg"]);
         assert_eq!(table.call_depth(), 1);
 
-        let frame = table.pop_frame().expect("TODO: handle error");
+        let frame = table.pop_frame().unwrap();
         assert_eq!(frame.saved_params, vec!["arg1", "arg2"]);
         assert_eq!(table.call_depth(), 0);
 
@@ -514,7 +516,7 @@ mod tests {
         table.declare_local("x", Some("old_value".to_string()));
         table.declare_local("y", None);
 
-        let frame = table.pop_frame().expect("TODO: handle error");
+        let frame = table.pop_frame().unwrap();
         assert_eq!(frame.local_vars, vec!["x", "y"]);
         assert_eq!(
             frame.saved_vars.get("x"),
@@ -533,7 +535,7 @@ mod tests {
         // Second declaration in same frame should NOT overwrite the saved value
         table.declare_local("x", Some("modified".to_string()));
 
-        let frame = table.pop_frame().expect("TODO: handle error");
+        let frame = table.pop_frame().unwrap();
         // The saved value should be "original", not "modified"
         assert_eq!(
             frame.saved_vars.get("x"),
