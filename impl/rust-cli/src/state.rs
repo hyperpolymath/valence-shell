@@ -954,7 +954,7 @@ mod tests {
 
     #[test]
     fn test_state_new() {
-        let state = ShellState::new("/tmp/vsh_test").expect("TODO: handle error");
+        let state = ShellState::new("/tmp/vsh_test").unwrap();
         assert!(state.root.exists());
     }
 
@@ -964,7 +964,7 @@ mod tests {
 
     #[test]
     fn test_set_array() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_1").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_1").unwrap();
         let elements = vec!["one".to_string(), "two".to_string(), "three".to_string()];
         state.set_array("arr", elements);
 
@@ -974,7 +974,7 @@ mod tests {
 
     #[test]
     fn test_get_array_element() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_2").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_2").unwrap();
         state.set_array("arr", vec!["first".to_string(), "second".to_string()]);
 
         assert_eq!(state.get_array_element("arr", 0), Some("first"));
@@ -984,16 +984,16 @@ mod tests {
 
     #[test]
     fn test_get_array_all() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_3").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_3").unwrap();
         state.set_array("arr", vec!["a".to_string(), "b".to_string(), "c".to_string()]);
 
-        let all = state.get_array_all("arr").expect("TODO: handle error");
+        let all = state.get_array_all("arr").unwrap();
         assert_eq!(all, vec!["a", "b", "c"]);
     }
 
     #[test]
     fn test_set_array_element_new() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_4").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_4").unwrap();
         state.set_array_element("arr", 0, "first".to_string());
         state.set_array_element("arr", 1, "second".to_string());
 
@@ -1004,7 +1004,7 @@ mod tests {
 
     #[test]
     fn test_set_array_element_sparse() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_5").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_5").unwrap();
         state.set_array_element("arr", 0, "zero".to_string());
         state.set_array_element("arr", 100, "hundred".to_string());
 
@@ -1016,7 +1016,7 @@ mod tests {
 
     #[test]
     fn test_set_array_element_overwrite() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_6").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_6").unwrap();
         state.set_array("arr", vec!["old".to_string()]);
         state.set_array_element("arr", 0, "new".to_string());
 
@@ -1025,7 +1025,7 @@ mod tests {
 
     #[test]
     fn test_get_array_indices() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_7").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_7").unwrap();
         state.set_array_element("arr", 0, "a".to_string());
         state.set_array_element("arr", 2, "c".to_string());
         state.set_array_element("arr", 5, "f".to_string());
@@ -1036,7 +1036,7 @@ mod tests {
 
     #[test]
     fn test_append_to_array() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_8").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_8").unwrap();
         state.set_array("arr", vec!["one".to_string(), "two".to_string()]);
         state.append_to_array("arr", vec!["three".to_string(), "four".to_string()]);
 
@@ -1047,7 +1047,7 @@ mod tests {
 
     #[test]
     fn test_append_to_empty_array() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_9").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_9").unwrap();
         state.append_to_array("arr", vec!["first".to_string()]);
 
         assert_eq!(state.get_array_element("arr", 0), Some("first"));
@@ -1056,7 +1056,7 @@ mod tests {
 
     #[test]
     fn test_append_to_scalar_converts() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_10").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_10").unwrap();
         state.set_variable("var", "scalar");
         state.append_to_array("var", vec!["new".to_string()]);
 
@@ -1067,7 +1067,7 @@ mod tests {
 
     #[test]
     fn test_scalar_and_array_separation() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_11").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_11").unwrap();
         state.set_variable("scalar", "value");
         state.set_array("arr", vec!["elem".to_string()]);
 
@@ -1081,7 +1081,7 @@ mod tests {
 
     #[test]
     fn test_unset_array() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_12").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_12").unwrap();
         state.set_array("arr", vec!["elem".to_string()]);
         assert!(state.is_array("arr"));
 
@@ -1092,19 +1092,19 @@ mod tests {
 
     #[test]
     fn test_export_array() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_13").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_13").unwrap();
         state.set_array("arr", vec!["one".to_string(), "two".to_string(), "three".to_string()]);
         state.export_variable("arr");
 
         let exported = state.get_exported_env();
         let arr_export = exported.iter().find(|(k, _)| k == "arr");
         assert!(arr_export.is_some());
-        assert_eq!(arr_export.expect("TODO: handle error").1, "one two three");
+        assert_eq!(arr_export.unwrap().1, "one two three");
     }
 
     #[test]
     fn test_is_array() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_14").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_14").unwrap();
         state.set_variable("scalar", "value");
         state.set_array("arr", vec!["elem".to_string()]);
 
@@ -1115,7 +1115,7 @@ mod tests {
 
     #[test]
     fn test_get_array_length_scalar() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_15").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_15").unwrap();
         state.set_variable("scalar", "value");
 
         assert_eq!(state.get_array_length("scalar"), 0);
@@ -1124,31 +1124,31 @@ mod tests {
 
     #[test]
     fn test_get_array_all_nonexistent() {
-        let state = ShellState::new("/tmp/vsh_array_test_16").expect("TODO: handle error");
+        let state = ShellState::new("/tmp/vsh_array_test_16").unwrap();
         assert_eq!(state.get_array_all("nonexistent"), None);
     }
 
     #[test]
     fn test_get_array_all_scalar() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_17").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_17").unwrap();
         state.set_variable("scalar", "value");
         assert_eq!(state.get_array_all("scalar"), None);
     }
 
     #[test]
     fn test_empty_array() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_18").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_18").unwrap();
         state.set_array("arr", vec![]);
 
         assert!(state.is_array("arr"));
         assert_eq!(state.get_array_length("arr"), 0);
-        assert_eq!(state.get_array_all("arr").expect("TODO: handle error"), Vec::<&str>::new());
+        assert_eq!(state.get_array_all("arr").unwrap(), Vec::<&str>::new());
         assert_eq!(state.get_array_indices("arr"), Vec::<usize>::new());
     }
 
     #[test]
     fn test_array_with_empty_strings() {
-        let mut state = ShellState::new("/tmp/vsh_array_test_19").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_19").unwrap();
         state.set_array("arr", vec!["".to_string(), "nonempty".to_string(), "".to_string()]);
 
         assert_eq!(state.get_array_length("arr"), 3);
@@ -1182,7 +1182,7 @@ mod tests {
     #[test]
     fn test_backward_compatibility() {
         // Test that old scalar variable usage still works
-        let mut state = ShellState::new("/tmp/vsh_array_test_20").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_array_test_20").unwrap();
 
         // set_variable should create scalar
         state.set_variable("name", "value");
@@ -1199,20 +1199,20 @@ mod tests {
 
     #[test]
     fn test_set_variable_tracked_records_operation() {
-        let mut state = ShellState::new("/tmp/vsh_tracked_var_1").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_tracked_var_1").unwrap();
         state.set_variable_tracked("FOO", "bar");
 
         assert_eq!(state.get_variable("FOO"), Some("bar"));
         // Should have recorded a SetVariable operation
         assert!(!state.history.is_empty());
-        let last_op = state.history.last().expect("TODO: handle error");
+        let last_op = state.history.last().unwrap();
         assert_eq!(last_op.op_type, OperationType::SetVariable);
         assert_eq!(last_op.path, "FOO");
     }
 
     #[test]
     fn test_set_variable_tracked_captures_previous() {
-        let mut state = ShellState::new("/tmp/vsh_tracked_var_2").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_tracked_var_2").unwrap();
         // Set initial value
         state.set_variable("FOO", "old_value");
         // Now track-set a new value
@@ -1220,38 +1220,38 @@ mod tests {
 
         assert_eq!(state.get_variable("FOO"), Some("new_value"));
         // undo_data should contain the previous value
-        let last_op = state.history.last().expect("TODO: handle error");
+        let last_op = state.history.last().unwrap();
         let previous: Option<VariableValue> =
-            serde_json::from_slice(last_op.undo_data.as_ref().expect("TODO: handle error")).expect("TODO: handle error");
+            serde_json::from_slice(last_op.undo_data.as_ref().unwrap()).unwrap();
         assert_eq!(previous, Some(VariableValue::Scalar("old_value".to_string())));
     }
 
     #[test]
     fn test_set_variable_tracked_new_var_captures_none() {
-        let mut state = ShellState::new("/tmp/vsh_tracked_var_3").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_tracked_var_3").unwrap();
         state.set_variable_tracked("NEW_VAR", "value");
 
-        let last_op = state.history.last().expect("TODO: handle error");
+        let last_op = state.history.last().unwrap();
         let previous: Option<VariableValue> =
-            serde_json::from_slice(last_op.undo_data.as_ref().expect("TODO: handle error")).expect("TODO: handle error");
+            serde_json::from_slice(last_op.undo_data.as_ref().unwrap()).unwrap();
         assert_eq!(previous, None);
     }
 
     #[test]
     fn test_unset_variable_tracked_records_operation() {
-        let mut state = ShellState::new("/tmp/vsh_tracked_var_4").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_tracked_var_4").unwrap();
         state.set_variable("FOO", "bar");
         state.unset_variable_tracked("FOO");
 
         assert_eq!(state.get_variable("FOO"), None);
-        let last_op = state.history.last().expect("TODO: handle error");
+        let last_op = state.history.last().unwrap();
         assert_eq!(last_op.op_type, OperationType::UnsetVariable);
         assert_eq!(last_op.path, "FOO");
     }
 
     #[test]
     fn test_unset_variable_tracked_noop_for_nonexistent() {
-        let mut state = ShellState::new("/tmp/vsh_tracked_var_5").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_tracked_var_5").unwrap();
         let history_len = state.history.len();
         state.unset_variable_tracked("NONEXISTENT");
 
