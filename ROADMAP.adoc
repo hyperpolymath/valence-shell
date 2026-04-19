@@ -47,9 +47,16 @@ CI on `rust-cli.yml`, dogfood evidence, structural compliance.
   former `lust/`, already removed in commit `a48a1dc`), `adjust/`;
   relocate `k9` out of `contractiles/` per ADR-001 (k9 is svc, not a
   contractile).
-* [ ] Close `docs/reports/audit/audit-2026-04-04.md` residuals: re-author
-  47 spoofed git commits, wire Echidna CI, remove dead code
-  (`lean_ffi.rs`, `daemon_client.rs`).
+* [~] Close `docs/reports/audit/audit-2026-04-04.md` residuals:
+** [ ] Re-author 47 spoofed git commits (`Test <test@example.com>` →
+   canonical attribution). Requires history rewrite + force-push;
+   needs explicit human authorization before execution.
+** [ ] Wire Echidna CI integration for automated property-based
+   verification.
+** [x] Remove dead code (`lean_ffi.rs`, `daemon_client.rs`) — closed
+   2026-02-12 in commit `5802dc9` (predates the 2026-04-18 audit; the
+   audit's residual claim was stale). Phase 4C design docs under
+   `impl/rust-cli/docs/` carry archival banners noting the removal.
 
 == v0.10.x — POSIX Coverage
 
