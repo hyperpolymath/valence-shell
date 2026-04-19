@@ -40,10 +40,16 @@ impl ProcessSubstitution {
         cmd: String,
         state: &mut ShellState,
     ) -> Result<Self> {
-        // Generate unique FIFO path: /tmp/vsh-fifo-<pid>-<counter>
+        // Generate globally-unique FIFO path:
+        //   /tmp/vsh-fifo-<pid>-<counter>-<uuidv4>
+        // The pid + counter make collisions improbable in single-process use;
+        // the UUID v4 suffix prevents collisions when two ShellState
+        // instances share a pid (e.g., parallel cargo tests where each test
+        // creates a fresh state with counter starting at 0).
         let pid = std::process::id();
         let fifo_id = state.next_fifo_id();
-        let fifo_path = PathBuf::from(format!("/tmp/vsh-fifo-{}-{}", pid, fifo_id));
+        let unique = uuid::Uuid::new_v4().simple();
+        let fifo_path = PathBuf::from(format!("/tmp/vsh-fifo-{}-{}-{}", pid, fifo_id, unique));
 
         // Create FIFO using mkfifo(2) syscall
         #[cfg(unix)]
