@@ -245,6 +245,6 @@ mod tests {
         // Should not suggest very short commands for long typos
         let suggestion = suggest_correction("verylongcommandname");
         // Unlikely to match anything within distance 2 and length diff 3
-        assert!(suggestion.is_none() || suggestion.expect("TODO: handle error").len() >= 15);
+        assert!(suggestion.is_none() || suggestion.unwrap().len() >= 15);
     }
 }

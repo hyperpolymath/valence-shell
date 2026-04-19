@@ -373,7 +373,7 @@ mod tests {
         let registry = default_registry();
         let result = registry.verify_one("reversibility.mkdir_rmdir");
         assert!(result.is_some());
-        assert_eq!(result.expect("TODO: handle error").result, PropertyResult::Pass);
+        assert_eq!(result.unwrap().result, PropertyResult::Pass);
 
         let missing = registry.verify_one("nonexistent.property");
         assert!(missing.is_none());
