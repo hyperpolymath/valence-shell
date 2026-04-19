@@ -357,15 +357,15 @@ mod tests {
 
     #[test]
     fn test_secure_delete_file() {
-        let tmp = tempdir().expect("TODO: handle error");
+        let tmp = tempdir().unwrap();
         let file_path = tmp.path().join("test_file.txt");
 
         // Create test file
-        std::fs::write(&file_path, "sensitive data here").expect("TODO: handle error");
+        std::fs::write(&file_path, "sensitive data here").unwrap();
         assert!(file_path.exists());
 
         // Secure delete
-        secure_delete(&file_path, 3).expect("TODO: handle error");
+        secure_delete(&file_path, 3).unwrap();
 
         // File should be gone
         assert!(!file_path.exists());
@@ -373,15 +373,15 @@ mod tests {
 
     #[test]
     fn test_secure_delete_empty_file() {
-        let tmp = tempdir().expect("TODO: handle error");
+        let tmp = tempdir().unwrap();
         let file_path = tmp.path().join("empty.txt");
 
         // Create empty file
-        std::fs::write(&file_path, "").expect("TODO: handle error");
+        std::fs::write(&file_path, "").unwrap();
         assert!(file_path.exists());
 
         // Secure delete
-        secure_delete(&file_path, 3).expect("TODO: handle error");
+        secure_delete(&file_path, 3).unwrap();
 
         // File should be gone
         assert!(!file_path.exists());
