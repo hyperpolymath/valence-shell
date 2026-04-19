@@ -38,8 +38,11 @@ CI on `rust-cli.yml`, dogfood evidence, structural compliance.
 * [ ] Add 3+ ADRs to META.a2ml (six-system proof stack, Rust as primary
   implementation, property-testing as correspondence-gap mitigation) and
   populate `[development-practices]`.
-* [ ] Resolve `impl/rust-ffi/` ↔ `ffi/rust/` duplicate tree (~50
-  `.expect("TODO")` sites in each); decide which is canonical.
+* [x] Resolved 2026-04-19: `impl/rust-ffi/` deleted; `ffi/rust/` is
+  canonical (superset, includes `verification.rs`, matches CLAUDE.md
+  ABI/FFI standard `ffi/<lang>/`). 7 sibling files were byte-identical;
+  `lib.rs` differed only by the `pub mod verification;` export and
+  richer doc-comment proof references. No build consumers.
 * [ ] Complete contractile six-verb layout: create `intend/` (absorbs
   former `lust/`, already removed in commit `a48a1dc`), `adjust/`;
   relocate `k9` out of `contractiles/` per ADR-001 (k9 is svc, not a
