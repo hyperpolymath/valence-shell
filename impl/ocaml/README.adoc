@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= impl/ocaml/ — OCaml Extraction Target (design surface)
+
+OCaml is the extraction target for the Coq proofs in `../../proofs/coq/`
+(see `../../proofs/coq/extraction.v`). This tree is intentionally
+design-surface only: the Coq verifier emits OCaml that conceptually
+matches the in-tree files; nothing here is wired into a runnable binary
+in the repo.
+
+== Files
+
+[cols="2,4"]
+|===
+| File | Role
+
+| `valence_lean.ml`     | OCaml-side wrapper around Lean-extracted code.
+| `lean_wrapper.c`      | C wrapper bridging Lean 4 extracted C to OCaml.
+| `filesystem_ffi.ml`   | OCaml FFI surface for filesystem operations.
+| `Justfile`            | Project-local recipes (build / verify).
+|===
+
+== Build (design-only)
+
+```bash
+cd impl/ocaml
+just build       # via Justfile (recipe currently a stub for an
+                 # unbuilt target — see CLAUDE.md "What Does NOT Work")
+```
+
+The `lean_wrapper.c` companion would have linked extracted Lean 4 C
+into OCaml at runtime; the corresponding Rust endpoint
+(`impl/rust-cli/src/lean_ffi.rs`) was removed as dead code in commit
+`5802dc9` because the underlying extracted-C library was never produced.
+The OCaml side carries the same residual design.
+
+== See also
+
+* `../README.adoc` — implementation-layer overview
+* `../../proofs/coq/README.adoc` — extraction source (`extraction.v`)
+* `../rust-cli/docs/PHASE4C_LEAN_EXTRACTION.md` — archived Lean-extraction
+  pipeline design (notes the Rust endpoint removal; same context applies
+  to the OCaml endpoint here)

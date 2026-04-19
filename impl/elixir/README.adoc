@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= impl/elixir/ — Elixir Reference Implementation (NIF build broken)
+
+Elixir reference implementation of the valence-shell semantics, intended
+to demonstrate portability of the Lean 4 / Coq operational specs to a
+BEAM-target language with Rust NIF backing.
+
+Per `../../CLAUDE.md` "What Does NOT Work": the NIF build is currently
+broken (declared low priority); the planned BEAM daemon is not yet
+implemented. Treat this tree as design-surface, not as a runnable
+alternative to `../rust-cli/`.
+
+== Files
+
+[cols="2,4"]
+|===
+| Path | Role
+
+| `mix.exs` / `mix.lock` | Mix project manifest + locked deps.
+| `lib/vsh.ex`           | Top-level Elixir module (entry surface).
+| `lib/vsh/`             | Elixir submodule subtree.
+| `lib/mix/`             | Mix tasks (project-specific).
+| `c_src/valence_nif.c`  | C NIF source (the broken layer).
+| `native/vsh_nif/`      | Rustler-style native subdirectory.
+| `test/vsh_test.exs`    | ExUnit test entry.
+| `test/test_helper.exs` | Test helper bootstrap.
+| `Justfile`             | Project-local recipes.
+|===
+
+== Build (currently broken)
+
+```bash
+cd impl/elixir
+mix deps.get
+mix compile     # NIF link step is the failing point per CLAUDE.md
+mix test        # ExUnit suite, NIF-dependent
+```
+
+== Status + intent
+
+* **Current**: NIF build broken; not on the v0.9.x stabilisation track.
+* **Planned**: BEAM daemon (separate process) for long-running shell
+  sessions. Tracked in the repo `ROADMAP.adoc` v2.0 section.
+
+== See also
+
+* `../README.adoc` — implementation-layer overview
+* `../../CLAUDE.md` — honest status (declares this tree broken)
+* `../../proofs/lean4/README.adoc` — primary spec the implementation
+  targets

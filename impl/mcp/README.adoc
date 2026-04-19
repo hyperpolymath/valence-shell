@@ -1,0 +1,47 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= impl/mcp/ — MCP Server (Deno + ReScript)
+
+MCP (Model Context Protocol) server exposing valence-shell capabilities
+to AI agents. Implemented in ReScript on Deno per the hyperpolymath
+language policy in `../../CLAUDE.md` (no Node.js, no TypeScript, no
+package.json for runtime deps).
+
+== Files
+
+[cols="2,4"]
+|===
+| File | Role
+
+| `deno.json`         | Deno manifest; import map; tasks.
+| `deno.lock`         | Locked dependency tree.
+| `rescript.json`     | ReScript v11+ build config.
+| `src/Main.res`      | Server entry point.
+| `src/Server.res`    | MCP server protocol handler (request/response).
+| `src/State.res`     | Server-side state.
+| `src/bindings/`     | ReScript-to-JS FFI bindings (e.g. `Mcp.res`).
+|===
+
+== Build + run
+
+```bash
+cd impl/mcp
+deno task build     # ReScript → JS via rescript.json
+deno task start     # runs the MCP server (Deno runtime)
+```
+
+== Conventions
+
+* **Language policy compliance** (per CLAUDE.md): zero TypeScript, zero
+  Node.js, zero npm. Deno + ReScript only. The 2026-04-04 audit
+  explicitly cited this tree as the hyperpolymath-policy-clean MCP
+  reference.
+* `bindings/Mcp.res` is the protocol-glue layer. Per the 2026-04-04
+  audit all 24 prior `Obj.magic` uses were eliminated; one remains
+  documented for the MCP JSON cast.
+
+== See also
+
+* `../README.adoc` — implementation-layer overview
+* `../../CLAUDE.md` — language policy (Deno + ReScript, no Node)
+* `../../docs/governance/CRG-AUDIT-2026-04-18.adoc` — audit cites this
+  tree as banned-language-clean

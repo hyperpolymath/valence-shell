@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= src/abi/ — Idris2 ABI Declarations (formal interface contracts)
+
+Idris2 dependent-type-checked ABI declarations for the valence-shell
+foreign-function interface. Per the **CLAUDE.md ABI/FFI Universal
+Standard**:
+
+> Idris2 for ABI: Dependent types prove interface correctness at
+> compile-time; formal verification of memory layout; platform-specific
+> ABIs with compile-time selection; provable backward compatibility.
+
+This tree provides the formal contract that `../../ffi/zig/` (and any
+future per-language FFI binding) must satisfy.
+
+Per the 2026-04-18 audit (`../../docs/governance/CRG-AUDIT-2026-04-18.adoc`):
+"minimal stubs; primary proof work is in proofs/{coq,lean4,...} not in
+the Idris2 ABI layer". The three-file shape below is the
+template-required minimum; deeper proofs live in the `proofs/` tree.
+
+== Files
+
+[cols="2,4"]
+|===
+| File | Role
+
+| `Types.idr`     | Type-level encoding of the FFI value domain
+                    (file descriptors, paths, error codes, etc.).
+| `Layout.idr`    | Memory-layout proofs (alignment, size, padding) —
+                    the dependent-type guarantee that Zig structs match
+                    the Idris2 contract.
+| `Foreign.idr`   | `%foreign` declarations: the actual function
+                    signatures exposed across the ABI boundary.
+|===
+
+== Build / typecheck
+
+```bash
+cd src/abi
+idris2 --check Types.idr           # single module
+idris2 --check Foreign.idr         # transitive (imports Types + Layout)
+```
+
+== Generated headers
+
+C headers derived from these declarations would be emitted under
+`../generated/abi/` per the standard layout (currently absent — this
+tree is at the stub stage; the audit's "minimal stubs" finding stands).
+
+== See also
+
+* `../../ffi/zig/README.adoc` — Zig implementation that conforms to
+  these contracts
+* `../../ffi/rust/README.adoc` — Rust FFI library (separate; does not
+  currently consume these Idris2 declarations)
+* `../../CLAUDE.md` — global ABI/FFI Universal Standard
+* `../../alkahest-shell-transmuter/src/abi/` — sibling sub-project
+  carrying its own (also-stub) ABI tree
