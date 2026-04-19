@@ -197,8 +197,14 @@ fn expand_braces_limited(pattern: &str, remaining: usize) -> Vec<String> {
         } else if ch == '}' && brace_depth > 0 {
             brace_depth -= 1;
             if brace_depth == 0 {
-                // Found matching close brace
-                let start = brace_start.expect("TODO: handle error");
+                // Found matching close brace.
+                // Invariant: brace_start is Some whenever brace_depth >= 1.
+                // The only site that increments brace_depth (the `ch == '{'`
+                // arm above) sets brace_start = Some(i) when brace_depth was
+                // zero, and only the matched '}' decrements it back. So this
+                // expect documents an unreachable case rather than a TODO.
+                let start = brace_start
+                    .expect("brace_start invariant: Some whenever brace_depth >= 1");
                 let prefix = &pattern[..start];
                 let suffix = &pattern[i + 1..];
                 let content = &pattern[start + 1..i];
