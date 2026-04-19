@@ -1,0 +1,81 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= proofs/coq/ — Coq Filesystem Proofs (CIC Foundation)
+
+Coq (Calculus of Inductive Constructions) provides the CIC foundation
+for the valence-shell formal specs and serves as the OCaml extraction
+target. The primary source of truth is Lean 4 (`../lean4/`); Coq
+cross-validates and feeds extraction.
+
+== Files
+
+[cols="2,4"]
+|===
+| File | Role
+
+| `filesystem_model.v`
+| Core `Filesystem = Path -> option FSNode` model + structural lemmas.
+  Note: this finite-domain model is the source of the
+  `is_empty_dir_dec` axiom (justified per `STATE.a2ml
+  [coq-proof-status] axiom-detail`).
+
+| `filesystem_composition.v`
+| Composition theorems. Carries one declared `admit.` at line ~199
+  (`single_op_reversible` OpRmdir branch — pre-existing model gap;
+  see `STATE.a2ml [coq-proof-status] admitted-detail`).
+
+| `filesystem_equivalence.v`
+| State-equivalence relations.
+
+| `file_operations.v`        | Per-op specs for mkdir, rmdir, touch, rm.
+| `file_content_operations.v`| Read/write/append; size lemmas.
+| `copy_move_operations.v`   | `cp`/`mv` reversibility.
+| `permission_operations.v`  | chmod/chown bit-preservation.
+| `symlink_operations.v`     | Symlink creation + traversal.
+| `rmo_operations.v`         | Remove-Match-Obliterate (GDPR-relevant).
+| `posix_errors.v`           | POSIX error classification + 5/6
+                               constructively-proved decision procedures
+                               (was 3 Axiom; full rewrite 2026-04-12,
+                               commit `1ef841c`).
+
+| `extraction.v`
+| OCaml extraction declarations; targets `../../impl/ocaml/`.
+|===
+
+Manifests + build:
+
+* `_CoqProject` — uses `-R` recursive logical-path mapping (was `-Q`,
+  fixed 2026-04-12 to handle subdir imports correctly).
+* `Justfile` — Coq-specific recipes (preferred entry point).
+* `Makefile.conf` — auto-emitted by `coq_makefile`; standard for the
+  Coq toolchain. Per the 2026-04-18 audit this is acceptable under the
+  RSR R-020 root-Makefile rule (proof-system carve-out).
+
+Build artefacts (`.glob`, `.vo`, `.vos`, `.vok`) are present in the
+tree but should be `.gitignore`'d (gitignore added 2026-04-12; legacy
+commits seeded these files pre-ignore).
+
+== Build
+
+```bash
+cd proofs/coq
+just build                    # via Justfile (preferred)
+make all                      # via auto-emitted Makefile
+```
+
+== Proof-debt status
+
+* `admitted = 1` — `single_op_reversible` OpRmdir branch
+  (`filesystem_composition.v:199`).
+* `axioms-justified = 1` — `is_empty_dir_dec` (infinite-domain
+  decidability; migration path: switch to `FMaps.t FSNode`).
+* All other proofs constructively closed.
+
+Authoritative status in `../../.machine_readable/6a2/STATE.a2ml`
+under `[coq-proof-status]`.
+
+== See also
+
+* `../README.md` — overall proof-stack design
+* `../lean4/README.adoc` — primary source of truth
+* `../../docs/PROOF_HOLES_AUDIT.md` — full proof-debt history
+* `../../impl/ocaml/` — extraction target

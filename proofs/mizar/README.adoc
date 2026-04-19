@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= proofs/mizar/ — Mizar Filesystem Proofs (Tarski-Grothendieck Set Theory)
+
+Mizar grounds the valence-shell filesystem theorems in
+Tarski-Grothendieck set theory — a foundationally distinct lens from
+the type-theoretic systems (Lean 4 / Coq / Agda) and the higher-order
+logic system (Isabelle). Mizar's MML cross-checks the same composition
+identities under classical first-order logic.
+
+== Files
+
+[cols="2,4"]
+|===
+| Article | Role
+
+| `filesystem_model.miz`         | Core `Filesystem` model + structural lemmas.
+| `filesystem_composition.miz`   | Composition theorems.
+| `filesystem_equivalence.miz`   | State-equivalence relations.
+| `file_operations.miz`          | Per-op specs (mkdir, rmdir, touch, rm).
+| `file_content_operations.miz`  | Read/write/append + size lemmas.
+| `copy_move_operations.miz`     | `cp`/`mv` reversibility.
+| `permission_operations.miz`    | chmod/chown bit-preservation.
+| `symlink_operations.miz`       | Symlink creation + traversal.
+| `rmo_operations.miz`           | Remove-Match-Obliterate (GDPR-relevant).
+|===
+
+== Build
+
+Mizar verification typically runs against an installed MML (Mizar
+Mathematical Library). With the standard MML environment configured:
+
+```bash
+cd proofs/mizar
+mizf filesystem_model.miz                        # single article
+verifier filesystem_model.miz                    # core verifier
+```
+
+== Conventions
+
+* snake_case article names (Mizar convention).
+* Each `.miz` file is a self-contained article importing from the MML.
+* No build artefacts in tree.
+
+== Status
+
+Mizar's value here is foundation-diversity rather than driving the
+implementation. Tracked alongside the other systems in the unified
+proof-debt audit; per the 2026-04-12 sweep no Mizar-specific debts are
+outstanding.
+
+== See also
+
+* `../README.md` — overall proof-stack design + the 5-system
+  reversibility theorem
+* `../lean4/README.adoc` — primary source of truth
+* `../../docs/PROOF_HOLES_AUDIT.md` — proof-debt status across all
+  systems
