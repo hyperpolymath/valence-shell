@@ -160,28 +160,34 @@ pub fn execute_pipeline(
             // First stage: inherit from shell
             Stdio::inherit()
         } else {
-            // Middle/last stages: read from previous stdout
-            Stdio::from(prev_stdout.take().expect("TODO: handle error"))
+            // Middle/last stages: read from previous stdout.
+            // Invariant: when idx > 0, the previous iteration spawned a
+            // non-last child with Stdio::piped() stdout (line below) and
+            // stored child.stdout into prev_stdout after spawning. So the
+            // expect documents an unreachable branch rather than a TODO.
+            Stdio::from(prev_stdout.take().expect(
+                "prev_stdout invariant: previous non-last stage stored its piped stdout",
+            ))
         };
 
-        // Configure stdout
+        // Configure stdout. Pivot on redirect_setup directly: it is Some
+        // iff redirects is non-empty (constructed above), so matching the
+        // Option both removes a duplicated emptiness check and eliminates
+        // a previous panic site.
         let stdout_cfg = if is_last {
-            // Last stage: redirect to file or inherit
-            if !redirects.is_empty() {
-                stdio_config_from_redirects(redirects, redirect_setup.as_ref().expect("TODO: handle error"), state)?.1
-            } else {
-                Stdio::inherit()
+            match &redirect_setup {
+                Some(setup) => stdio_config_from_redirects(redirects, setup, state)?.1,
+                None => Stdio::inherit(),
             }
         } else {
             // First/middle stages: pipe to next
             Stdio::piped()
         };
 
-        // Configure stderr (inherit unless redirected in last stage)
-        let stderr_cfg = if is_last && !redirects.is_empty() {
-            stdio_config_from_redirects(redirects, redirect_setup.as_ref().expect("TODO: handle error"), state)?.2
-        } else {
-            Stdio::inherit()
+        // Configure stderr (inherit unless redirected in last stage).
+        let stderr_cfg = match (is_last, &redirect_setup) {
+            (true, Some(setup)) => stdio_config_from_redirects(redirects, setup, state)?.2,
+            _ => Stdio::inherit(),
         };
 
         // Spawn child
@@ -694,21 +700,21 @@ mod tests {
     #[test]
     fn test_external_command_success() {
         // Test successful command execution
-        let exit_code = execute_external("true", &[]).expect("TODO: handle error");
+        let exit_code = execute_external("true", &[]).unwrap();
         assert_eq!(exit_code, 0, "true command should return 0");
     }
 
     #[test]
     fn test_external_command_failure() {
         // Test failed command execution
-        let exit_code = execute_external("false", &[]).expect("TODO: handle error");
+        let exit_code = execute_external("false", &[]).unwrap();
         assert_eq!(exit_code, 1, "false command should return 1");
     }
 
     #[test]
     fn test_external_command_with_args() {
         // Test command with arguments
-        let exit_code = execute_external("echo", &["hello".to_string()]).expect("TODO: handle error");
+        let exit_code = execute_external("echo", &["hello".to_string()]).unwrap();
         assert_eq!(exit_code, 0, "echo should return 0");
     }
 
@@ -716,14 +722,14 @@ mod tests {
     fn test_pipeline_simple() {
         // Test simple 2-stage pipeline: true | true
         use tempfile::TempDir;
-        let temp = TempDir::new().expect("TODO: handle error");
-        let mut state = crate::state::ShellState::new(temp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
+        let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
         let stages = vec![
             ("true".to_string(), vec![]),
             ("true".to_string(), vec![]),
         ];
-        let exit_code = execute_pipeline(&stages, &[], &mut state).expect("TODO: handle error");
+        let exit_code = execute_pipeline(&stages, &[], &mut state).unwrap();
         assert_eq!(exit_code, 0, "true | true should return 0");
     }
 
@@ -731,14 +737,14 @@ mod tests {
     fn test_pipeline_exit_code() {
         // Test that pipeline returns exit code from last stage
         use tempfile::TempDir;
-        let temp = TempDir::new().expect("TODO: handle error");
-        let mut state = crate::state::ShellState::new(temp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
+        let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
         let stages = vec![
             ("true".to_string(), vec![]),
             ("false".to_string(), vec![]),
         ];
-        let exit_code = execute_pipeline(&stages, &[], &mut state).expect("TODO: handle error");
+        let exit_code = execute_pipeline(&stages, &[], &mut state).unwrap();
         assert_eq!(exit_code, 1, "true | false should return 1 (from false)");
     }
 
@@ -746,15 +752,15 @@ mod tests {
     fn test_pipeline_three_stages() {
         // Test 3-stage pipeline
         use tempfile::TempDir;
-        let temp = TempDir::new().expect("TODO: handle error");
-        let mut state = crate::state::ShellState::new(temp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
+        let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
         let stages = vec![
             ("echo".to_string(), vec!["hello".to_string()]),
             ("cat".to_string(), vec![]),
             ("cat".to_string(), vec![]),
         ];
-        let exit_code = execute_pipeline(&stages, &[], &mut state).expect("TODO: handle error");
+        let exit_code = execute_pipeline(&stages, &[], &mut state).unwrap();
         assert_eq!(exit_code, 0, "echo hello | cat | cat should return 0");
     }
 
@@ -763,8 +769,8 @@ mod tests {
         // Test pipeline with output redirection
         use tempfile::TempDir;
         use std::fs;
-        let temp = TempDir::new().expect("TODO: handle error");
-        let mut state = crate::state::ShellState::new(temp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
+        let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
         let stages = vec![
             ("echo".to_string(), vec!["test".to_string()]),
@@ -773,14 +779,14 @@ mod tests {
         let redirects = vec![crate::redirection::Redirection::Output {
             file: "output.txt".to_string(),
         }];
-        let exit_code = execute_pipeline(&stages, &redirects, &mut state).expect("TODO: handle error");
+        let exit_code = execute_pipeline(&stages, &redirects, &mut state).unwrap();
         assert_eq!(exit_code, 0, "Pipeline with redirect should return 0");
 
         // Verify file was created
         let output_file = temp.path().join("output.txt");
         assert!(output_file.exists(), "Output file should be created");
 
-        let content = fs::read_to_string(output_file).expect("TODO: handle error");
+        let content = fs::read_to_string(output_file).unwrap();
         assert_eq!(content.trim(), "test", "Output should be 'test'");
     }
 
@@ -788,8 +794,8 @@ mod tests {
     fn test_pipeline_error_empty_stages() {
         // Test that empty stages array returns error
         use tempfile::TempDir;
-        let temp = TempDir::new().expect("TODO: handle error");
-        let mut state = crate::state::ShellState::new(temp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
+        let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
         let stages: Vec<(String, Vec<String>)> = vec![];
         let result = execute_pipeline(&stages, &[], &mut state);
@@ -800,11 +806,11 @@ mod tests {
     fn test_pipeline_single_stage_delegates() {
         // Test that single-stage pipeline delegates to execute_external_with_redirects
         use tempfile::TempDir;
-        let temp = TempDir::new().expect("TODO: handle error");
-        let mut state = crate::state::ShellState::new(temp.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
+        let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
         let stages = vec![("true".to_string(), vec![])];
-        let exit_code = execute_pipeline(&stages, &[], &mut state).expect("TODO: handle error");
+        let exit_code = execute_pipeline(&stages, &[], &mut state).unwrap();
         assert_eq!(exit_code, 0, "Single-stage pipeline should work");
     }
 }

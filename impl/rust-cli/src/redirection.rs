@@ -662,7 +662,7 @@ mod tests {
     use tempfile::TempDir;
 
     fn test_state(root: &Path) -> ShellState {
-        ShellState::new(root.to_str().expect("TODO: handle error")).expect("TODO: handle error")
+        ShellState::new(root.to_str().unwrap()).unwrap()
     }
 
     #[test]
@@ -678,7 +678,7 @@ mod tests {
 
     #[test]
     fn test_validate_output_file_nonexistent_parent() {
-        let temp = TempDir::new().expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
         let state = test_state(temp.path());
 
         let result = validate_output_file("nonexistent/file.txt", &state);
@@ -691,7 +691,7 @@ mod tests {
 
     #[test]
     fn test_validate_input_file_not_exists() {
-        let temp = TempDir::new().expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
         let state = test_state(temp.path());
 
         let result = validate_input_file("nonexistent.txt", &state);
@@ -704,7 +704,7 @@ mod tests {
 
     #[test]
     fn test_validate_input_output_conflict() {
-        let temp = TempDir::new().expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
         let state = test_state(temp.path());
 
         let redirects = vec![
@@ -726,7 +726,7 @@ mod tests {
 
     #[test]
     fn test_validate_multiple_stdout_redirects() {
-        let temp = TempDir::new().expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
         let state = test_state(temp.path());
 
         let redirects = vec![
@@ -763,13 +763,13 @@ mod tests {
 
     #[test]
     fn test_setup_output_redirect_creates_file() {
-        let temp = TempDir::new().expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
         let state = test_state(temp.path());
         let mut setup = RedirectSetup::new();
 
         setup
             .setup_output_redirect("newfile.txt", &state, false)
-            .expect("TODO: handle error");
+            .unwrap();
 
         assert_eq!(setup.modifications.len(), 1);
         assert!(matches!(
@@ -781,17 +781,17 @@ mod tests {
 
     #[test]
     fn test_setup_output_redirect_truncates_existing() {
-        let temp = TempDir::new().expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
         let state = test_state(temp.path());
 
         // Create existing file
         let file_path = temp.path().join("existing.txt");
-        fs::write(&file_path, b"original content").expect("TODO: handle error");
+        fs::write(&file_path, b"original content").unwrap();
 
         let mut setup = RedirectSetup::new();
         setup
             .setup_output_redirect("existing.txt", &state, false)
-            .expect("TODO: handle error");
+            .unwrap();
 
         assert_eq!(setup.modifications.len(), 1);
         assert!(matches!(
@@ -806,17 +806,17 @@ mod tests {
 
     #[test]
     fn test_setup_append_redirect() {
-        let temp = TempDir::new().expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
         let state = test_state(temp.path());
 
         // Create existing file
         let file_path = temp.path().join("existing.txt");
-        fs::write(&file_path, b"original").expect("TODO: handle error");
+        fs::write(&file_path, b"original").unwrap();
 
         let mut setup = RedirectSetup::new();
         setup
             .setup_output_redirect("existing.txt", &state, true)
-            .expect("TODO: handle error");
+            .unwrap();
 
         assert_eq!(setup.modifications.len(), 1);
         assert!(matches!(
@@ -831,60 +831,60 @@ mod tests {
 
     #[test]
     fn test_file_modification_reverse_created() {
-        let temp = TempDir::new().expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
         let file_path = temp.path().join("created.txt");
 
         // Create file
-        fs::write(&file_path, b"test").expect("TODO: handle error");
+        fs::write(&file_path, b"test").unwrap();
         assert!(file_path.exists());
 
         // Reverse (delete)
         let modification = FileModification::Created {
             path: file_path.clone(),
         };
-        modification.reverse().expect("TODO: handle error");
+        modification.reverse().unwrap();
 
         assert!(!file_path.exists());
     }
 
     #[test]
     fn test_file_modification_reverse_truncated() {
-        let temp = TempDir::new().expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
         let file_path = temp.path().join("truncated.txt");
 
         // Create with original content
-        fs::write(&file_path, b"original").expect("TODO: handle error");
+        fs::write(&file_path, b"original").unwrap();
 
         // Simulate truncation
-        fs::write(&file_path, b"new").expect("TODO: handle error");
+        fs::write(&file_path, b"new").unwrap();
 
         // Reverse (restore original)
         let modification = FileModification::Truncated {
             path: file_path.clone(),
             original_content: b"original".to_vec(),
         };
-        modification.reverse().expect("TODO: handle error");
+        modification.reverse().unwrap();
 
-        let restored = fs::read(&file_path).expect("TODO: handle error");
+        let restored = fs::read(&file_path).unwrap();
         assert_eq!(restored, b"original");
     }
 
     #[test]
     fn test_file_modification_reverse_appended() {
-        let temp = TempDir::new().expect("TODO: handle error");
+        let temp = TempDir::new().unwrap();
         let file_path = temp.path().join("appended.txt");
 
         // Create original file
-        fs::write(&file_path, b"original").expect("TODO: handle error");
+        fs::write(&file_path, b"original").unwrap();
         let original_size = 8;
 
         // Simulate append
-        let mut file = OpenOptions::new().append(true).open(&file_path).expect("TODO: handle error");
-        file.write_all(b" appended").expect("TODO: handle error");
+        let mut file = OpenOptions::new().append(true).open(&file_path).unwrap();
+        file.write_all(b" appended").unwrap();
         drop(file);
 
         // Verify appended
-        let content = fs::read_to_string(&file_path).expect("TODO: handle error");
+        let content = fs::read_to_string(&file_path).unwrap();
         assert_eq!(content, "original appended");
 
         // Reverse (truncate to original size)
@@ -892,9 +892,9 @@ mod tests {
             path: file_path.clone(),
             original_size,
         };
-        modification.reverse().expect("TODO: handle error");
+        modification.reverse().unwrap();
 
-        let restored = fs::read_to_string(&file_path).expect("TODO: handle error");
+        let restored = fs::read_to_string(&file_path).unwrap();
         assert_eq!(restored, "original");
     }
 }

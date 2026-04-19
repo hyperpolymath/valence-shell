@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn test_single_quotes_literal() {
-        let segments = parse_quotes("'$HOME'").expect("TODO: handle error");
+        let segments = parse_quotes("'$HOME'").unwrap();
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].content, "$HOME");
         assert_eq!(segments[0].state, QuoteState::SingleQuoted);
@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn test_double_quotes() {
-        let segments = parse_quotes("\"$HOME\"").expect("TODO: handle error");
+        let segments = parse_quotes("\"$HOME\"").unwrap();
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].content, "$HOME");
         assert_eq!(segments[0].state, QuoteState::DoubleQuoted);
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn test_unquoted() {
-        let segments = parse_quotes("hello").expect("TODO: handle error");
+        let segments = parse_quotes("hello").unwrap();
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].content, "hello");
         assert_eq!(segments[0].state, QuoteState::Unquoted);
@@ -329,7 +329,7 @@ mod tests {
 
     #[test]
     fn test_adjacent_quotes() {
-        let segments = parse_quotes("'hello'\"world\"").expect("TODO: handle error");
+        let segments = parse_quotes("'hello'\"world\"").unwrap();
         assert_eq!(segments.len(), 2);
         assert_eq!(segments[0].content, "hello");
         assert_eq!(segments[0].state, QuoteState::SingleQuoted);
@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_mixed_quotes() {
-        let segments = parse_quotes("pre'quoted'post").expect("TODO: handle error");
+        let segments = parse_quotes("pre'quoted'post").unwrap();
         assert_eq!(segments.len(), 3);
         assert_eq!(segments[0].content, "pre");
         assert_eq!(segments[0].state, QuoteState::Unquoted);
@@ -351,7 +351,7 @@ mod tests {
 
     #[test]
     fn test_backslash_escape_unquoted() {
-        let segments = parse_quotes("hello\\ world").expect("TODO: handle error");
+        let segments = parse_quotes("hello\\ world").unwrap();
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].content, "hello world");
         assert_eq!(segments[0].state, QuoteState::Unquoted);
@@ -359,7 +359,7 @@ mod tests {
 
     #[test]
     fn test_backslash_in_single_quotes() {
-        let segments = parse_quotes("'back\\slash'").expect("TODO: handle error");
+        let segments = parse_quotes("'back\\slash'").unwrap();
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].content, "back\\slash");
         assert_eq!(segments[0].state, QuoteState::SingleQuoted);
@@ -367,24 +367,24 @@ mod tests {
 
     #[test]
     fn test_backslash_in_double_quotes() {
-        let segments = parse_quotes("\"\\$HOME\"").expect("TODO: handle error");
+        let segments = parse_quotes("\"\\$HOME\"").unwrap();
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].content, "$HOME");
         assert_eq!(segments[0].state, QuoteState::DoubleQuoted);
 
         // Backslash before non-special character stays
-        let segments = parse_quotes("\"\\a\"").expect("TODO: handle error");
+        let segments = parse_quotes("\"\\a\"").unwrap();
         assert_eq!(segments[0].content, "\\a");
     }
 
     #[test]
     fn test_empty_quotes() {
-        let segments = parse_quotes("''").expect("TODO: handle error");
+        let segments = parse_quotes("''").unwrap();
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].content, "");
         assert_eq!(segments[0].state, QuoteState::SingleQuoted);
 
-        let segments = parse_quotes("\"\"").expect("TODO: handle error");
+        let segments = parse_quotes("\"\"").unwrap();
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].content, "");
         assert_eq!(segments[0].state, QuoteState::DoubleQuoted);
@@ -407,74 +407,74 @@ mod tests {
     #[test]
     fn test_glob_no_expansion_in_quotes() {
         // Unquoted - should expand
-        let segments = parse_quotes("*.txt").expect("TODO: handle error");
+        let segments = parse_quotes("*.txt").unwrap();
         assert!(should_expand_glob(&segments));
 
         // Single quoted - no expansion
-        let segments = parse_quotes("'*.txt'").expect("TODO: handle error");
+        let segments = parse_quotes("'*.txt'").unwrap();
         assert!(!should_expand_glob(&segments));
 
         // Double quoted - no expansion
-        let segments = parse_quotes("\"*.txt\"").expect("TODO: handle error");
+        let segments = parse_quotes("\"*.txt\"").unwrap();
         assert!(!should_expand_glob(&segments));
     }
 
     #[test]
     fn test_reconstruct_string() {
-        let segments = parse_quotes("'hello'\" world\"").expect("TODO: handle error");
+        let segments = parse_quotes("'hello'\" world\"").unwrap();
         let result = reconstruct_string(&segments);
         assert_eq!(result, "hello world");
 
-        let segments = parse_quotes("one'two'three").expect("TODO: handle error");
+        let segments = parse_quotes("one'two'three").unwrap();
         let result = reconstruct_string(&segments);
         assert_eq!(result, "onetwothree");
     }
 
     #[test]
     fn test_allows_variable_expansion() {
-        let segments = parse_quotes("'$VAR'").expect("TODO: handle error");
+        let segments = parse_quotes("'$VAR'").unwrap();
         assert!(!segments[0].allows_variable_expansion());
 
-        let segments = parse_quotes("\"$VAR\"").expect("TODO: handle error");
+        let segments = parse_quotes("\"$VAR\"").unwrap();
         assert!(segments[0].allows_variable_expansion());
 
-        let segments = parse_quotes("$VAR").expect("TODO: handle error");
+        let segments = parse_quotes("$VAR").unwrap();
         assert!(segments[0].allows_variable_expansion());
     }
 
     #[test]
     fn test_allows_glob_expansion() {
-        let segments = parse_quotes("'*.txt'").expect("TODO: handle error");
+        let segments = parse_quotes("'*.txt'").unwrap();
         assert!(!segments[0].allows_glob_expansion());
 
-        let segments = parse_quotes("\"*.txt\"").expect("TODO: handle error");
+        let segments = parse_quotes("\"*.txt\"").unwrap();
         assert!(!segments[0].allows_glob_expansion());
 
-        let segments = parse_quotes("*.txt").expect("TODO: handle error");
+        let segments = parse_quotes("*.txt").unwrap();
         assert!(segments[0].allows_glob_expansion());
     }
 
     #[test]
     fn test_line_continuation() {
         // Backslash-newline in unquoted context
-        let segments = parse_quotes("hello\\\nworld").expect("TODO: handle error");
+        let segments = parse_quotes("hello\\\nworld").unwrap();
         assert_eq!(segments[0].content, "helloworld");
 
         // Backslash-newline in double quotes
-        let segments = parse_quotes("\"hello\\\nworld\"").expect("TODO: handle error");
+        let segments = parse_quotes("\"hello\\\nworld\"").unwrap();
         assert_eq!(segments[0].content, "helloworld");
 
         // Backslash-newline in single quotes (literal)
-        let segments = parse_quotes("'hello\\\nworld'").expect("TODO: handle error");
+        let segments = parse_quotes("'hello\\\nworld'").unwrap();
         assert_eq!(segments[0].content, "hello\\\nworld");
     }
 
     #[test]
     fn test_whitespace_preservation() {
-        let segments = parse_quotes("'hello  world'").expect("TODO: handle error");
+        let segments = parse_quotes("'hello  world'").unwrap();
         assert_eq!(segments[0].content, "hello  world");
 
-        let segments = parse_quotes("\"hello  world\"").expect("TODO: handle error");
+        let segments = parse_quotes("\"hello  world\"").unwrap();
         assert_eq!(segments[0].content, "hello  world");
     }
 }
