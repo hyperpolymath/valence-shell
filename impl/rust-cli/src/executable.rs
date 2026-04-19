@@ -714,13 +714,29 @@ impl ExecutableCommand for Command {
                 let content = std::fs::read_to_string(&path)
                     .map_err(|e| anyhow::anyhow!("source: {}: {}", path.display(), e))?;
 
+                // Strip whole-line comments first, then feed the entire
+                // content to the statement splitter so multi-line `if/fi`,
+                // `for/done`, etc. stay together.
+                let stripped: String = content
+                    .lines()
+                    .map(|line| {
+                        let trimmed = line.trim_start();
+                        if trimmed.starts_with('#') {
+                            ""
+                        } else {
+                            line
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
                 let mut last_result = ExecutionResult::Success;
-                for line in content.lines() {
-                    let line = line.trim();
-                    if line.is_empty() || line.starts_with('#') {
+                for segment in crate::parser::split_on_statement_separators(&stripped) {
+                    let segment = segment.trim();
+                    if segment.is_empty() || segment.starts_with('#') {
                         continue;
                     }
-                    let cmd = crate::parser::parse_command(line)?;
+                    let cmd = crate::parser::parse_command(segment)?;
                     last_result = cmd.execute(state)?;
                     // Propagate Exit (shell-wide) and Return (function-scope).
                     // A `return` inside a sourced file that was itself sourced

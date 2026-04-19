@@ -338,7 +338,7 @@ mod tests {
     fn test_parse_posix_function_def() {
         let result = parse_function_def("greet() { echo hello; }");
         assert!(result.is_some());
-        let (name, body, raw_body) = result.unwrap();
+        let (name, body, raw_body) = result.expect("TODO: handle error");
         assert_eq!(name, "greet");
         assert_eq!(body, vec!["echo hello"]);
         // raw_body preserves the trailing `;` — that's harmless.
@@ -349,7 +349,7 @@ mod tests {
     fn test_parse_posix_function_multi_commands() {
         let result = parse_function_def("setup() { mkdir src; touch src/main.rs; echo done; }");
         assert!(result.is_some());
-        let (name, body, raw_body) = result.unwrap();
+        let (name, body, raw_body) = result.expect("TODO: handle error");
         assert_eq!(name, "setup");
         assert_eq!(body, vec!["mkdir src", "touch src/main.rs", "echo done"]);
         assert_eq!(raw_body, "mkdir src; touch src/main.rs; echo done;");
@@ -359,7 +359,7 @@ mod tests {
     fn test_parse_bash_function_def() {
         let result = parse_function_def("function greet { echo hello; }");
         assert!(result.is_some());
-        let (name, body, raw_body) = result.unwrap();
+        let (name, body, raw_body) = result.expect("TODO: handle error");
         assert_eq!(name, "greet");
         assert_eq!(body, vec!["echo hello"]);
         assert_eq!(raw_body, "echo hello;");
@@ -369,7 +369,7 @@ mod tests {
     fn test_parse_bash_function_with_parens() {
         let result = parse_function_def("function greet() { echo hello; }");
         assert!(result.is_some());
-        let (name, body, raw_body) = result.unwrap();
+        let (name, body, raw_body) = result.expect("TODO: handle error");
         assert_eq!(name, "greet");
         assert_eq!(body, vec!["echo hello"]);
         assert_eq!(raw_body, "echo hello;");
@@ -381,7 +381,7 @@ mod tests {
         // execution can parse `if/fi`, `for/done`, etc. as single commands.
         let result = parse_function_def("ifunc() { if true; then mkdir d; fi; }");
         assert!(result.is_some());
-        let (name, _body, raw_body) = result.unwrap();
+        let (name, _body, raw_body) = result.expect("TODO: handle error");
         assert_eq!(name, "ifunc");
         assert_eq!(raw_body, "if true; then mkdir d; fi;");
     }
@@ -391,7 +391,7 @@ mod tests {
         // A `}` inside a quoted string must NOT be treated as the closing brace.
         let result = parse_function_def("lit() { echo '}'; }");
         assert!(result.is_some());
-        let (_name, _body, raw_body) = result.unwrap();
+        let (_name, _body, raw_body) = result.expect("TODO: handle error");
         assert_eq!(raw_body, "echo '}';");
     }
 
