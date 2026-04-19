@@ -91,8 +91,12 @@ The Rust CLI is a functional interactive shell with these features:
 ### High Priority
 
 1. **47/58 commits authored as `Test <test@example.com>`** (Sonnet damage)
-2. **Dead code**: `lean_ffi.rs` (library doesn't exist), `daemon_client.rs` (no daemon)
-3. **No Echidna integration** for automated verification
+2. **No Echidna integration** for automated verification
+
+_Note: the prior "Dead code" bullet (`lean_ffi.rs`, `daemon_client.rs`)
+is closed — both files were removed in commit `5802dc9` (2026-02-12
+deep-audit session). The corresponding Phase 4C design docs under
+`impl/rust-cli/docs/` carry archival banners pointing here._
 
 ### Medium Priority
 
