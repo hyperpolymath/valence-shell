@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: PMPL-1.0-or-later
 # STATE.a2ml — Project state checkpoint
-# Last updated: 2026-04-12 (P0 believe_me sweep + Coq proof debt closure)
+# Last updated: 2026-04-19 (CRG-AUDIT-2026-04-18 closure: items 1+2+4)
 
 [metadata]
 project = "valence-shell"
 version = "0.9.0"
-last-updated = "2026-04-12"
+last-updated = "2026-04-19"
 status = "active"
 
 [project-context]
@@ -14,33 +14,69 @@ completion-percentage = 74
 phase = "advanced-research-prototype"
 
 [recent-work]
-session = "2026-04-12 P0 believe_me sweep / Coq proof debt closure"
-focus = "Close estate-wide proof debt — valence-shell Coq layer"
+session = "2026-04-19 CRG-AUDIT-2026-04-18 closure pass (items 1+2+4)"
+focus = "Close .expect(\"TODO\") anti-pattern, declare Coq admit honestly, populate [dogfooding-status]"
 tasks-completed = [
-  "posix_errors.v: full rewrite — 5/6 decision procedures proved constructively (was Axiom)",
-  "posix_errors.v: fixed structural bug — negb(sumbool) type error in all safe_* defs",
-  "posix_errors.v: fixed forward-reference bug — axioms were declared after use",
-  "filesystem_model.v: fixed path_prefix return type (bool, not Prop) in is_empty_dir",
-  "filesystem_composition.v: proved well_formed_ancestor_exists (was Axiom, debt #1)",
-  "filesystem_composition.v: proved mkdir_preserves_well_formed (was Axiom, debt #2)",
-  "filesystem_composition.v: added 6 helper lemmas for path prefix / length reasoning",
-  "_CoqProject: -Q → -R (recursive logical path mapping, correct for subdir imports)",
-  "proofs/coq/.gitignore: added to exclude *.vo/*.vos/*.vok/*.glob/Makefile artifacts",
-  "Commit 1ef841c pushed to GitHub"
+  ".expect(\"TODO: handle error\") sweep CLOSED: ~512/~530 sites cleared across 17 files (8 batches + impl/rust-ffi/ deletion); commits 712e3a1, 962da88, f045ced, 6d4c211, c6b59b8, 1036832, d5f045d, f43cfb5, b5cc0cc",
+  "9 production-code restructures: executable.rs:450 (if-let-cloned), functions.rs:320 + parser.rs:1797 (let-else), glob.rs:201 (documented expect for brace_depth invariant), external.rs:164,168-185 (match &redirect_setup pivot), commands.rs fg/bg (clone job.command early), parser.rs ~12 peek/while-let-Some(&c) sites (use bound value)",
+  "impl/rust-ffi/ deleted as duplicate of ffi/rust/ (latter is canonical superset, matches CLAUDE.md ABI/FFI standard)",
+  "ANCHOR.a2ml version 1.0.0 → 0.9.0 (Sonnet-era drift)",
+  "alkahest-shell-transmuter/README.adoc author email placeholder → j.d.a.jewell@open.ac.uk",
+  "ROADMAP.adoc populated from CLAUDE.md (was 22-line rsr-template stub) — v0.9.x stabilisation track, v0.10.x POSIX, v1.0.0 production gate, v2.0 Idris2 extraction path",
+  "STATE.a2ml [coq-proof-status]: admitted = 0 → 1 (declare the pre-existing single_op_reversible OpRmdir admit honestly)",
+  "STATE.a2ml [dogfooding-status]: section added with honest disclosure (no daily-driver use claimed)"
 ]
 
 [coq-proof-status]
-admitted = 0
+admitted = 1
 axioms-justified = 1
+admitted-detail = "single_op_reversible OpRmdir branch (proofs/coq/filesystem_composition.v:199): mkdir restores with default_perms, but the original directory may have had different permissions, so mkdir(rmdir(fs)) ≠ fs in general. Full reversibility requires the undo stack to preserve original node data. Known limitation of the Filesystem = Path -> option FSNode model. Pre-existing model gap, flagged in CRG-AUDIT-2026-04-18; the in-source comment at line 195-198 acknowledges it. Declaring honestly here corrects the prior `admitted = 0` claim."
 axiom-detail = "is_empty_dir_dec: Filesystem = Path -> option FSNode is infinite-domain; universal quantification over all paths is not constructively decidable. Migration: switch to FMaps.t FSNode."
 proof-debt-items-closed = [1, 2]
-proof-debt-open = []
+proof-debt-open = [3]
+
+[dogfooding-status]
+# Section present per CRG v2.0 schema. Honest disclosure follows.
+#
+# valence-shell v0.9.0 is explicitly NOT a daily-driver bash/zsh
+# replacement (per CLAUDE.md "What Does NOT Work"). The author does
+# not run vsh as their interactive shell, no systemd units invoke it,
+# and no cross-project consumers shell out to vsh. Continuous
+# home-context use cannot be honestly claimed at this stage.
+#
+# Concrete development-time use does happen via `cargo run` (REPL
+# smoke), `cargo test` (correctness), and the in-tree `examples/`.
+# These are development verification, not user-facing dogfooding.
+test-verification-2026-04-19 = "cargo test (impl/rust-cli): 703 passed / 0 failed / 14 ignored, after the .expect(\"TODO\") sweep closure (commit b5cc0cc). cargo test (ffi/rust): 24 passed / 0 failed / 0 ignored."
+examples-on-disk = "examples/ directory present; not exercised in CI yet."
+external-consumers = "none known; valence-shell is not yet imported, scripted-against, or shelled-out-to by any other repo in the estate."
+note = "Promotion to C-grade dogfooding evidence requires real daily-driver use or cross-project shell-out. Sectional presence here is for schema completeness, not C-grade evidence."
 
 [session-history]
 # 2026-04-04: CRG-C blitz — 59 new tests, benchmarks, E2E, Zig, Elixir
-# 2026-04-12: P0 sweep — Coq layer: 0 Admitted, 1 justified Axiom (was 3 Axiom + structural bugs)
+# 2026-04-12: P0 sweep — Coq layer: 1 justified Axiom (was 3 Axiom + structural bugs); Admitted not yet declared
+# 2026-04-19: .expect("TODO") anti-pattern sweep CLOSED (~512 sites); admitted=0 claim corrected to admitted=1; [dogfooding-status] section added; impl/rust-ffi/ deleted as duplicate
 
 [crg]
 grade = "C"
 achieved = "2026-04-04"
-notes = "Coq proof completeness improved: was 3 Axiom (2 deferred + 1 justified), now 0 Admitted + 1 justified"
+audit = "docs/governance/CRG-AUDIT-2026-04-18.adoc"
+notes = """
+Audit-2026-04-18 demoted self-declared C → D on three blockers:
+  (a) 404 .expect(\"TODO: handle error\") sites making CI red,
+  (b) undeclared single_op_reversible admit (admitted=0 claim was wrong),
+  (c) per-directory README coverage 23% (5/22 subtrees).
+
+Status as of 2026-04-19:
+  (a) CLOSED — ~512 sites cleared in commits 712e3a1..b5cc0cc;
+      estate-wide grep returns zero source-code hits.
+  (b) CLOSED — admitted=0 corrected to admitted=1 with full
+      admitted-detail this commit.
+  (c) OPEN — README coverage still 23%.
+
+Plus open from audit: validation.yml verify-proofs gated, contractile
+six-verb completion, audit-2026-04-04 residuals (47 spoofed authors,
+Echidna CI wiring, dead code). Self-declared grade kept at C pending
+README sweep and verify-proofs enablement; reviewer may demote to D
+per audit until (c) closes.
+"""
