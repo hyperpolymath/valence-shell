@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= ffi/rust/ — Rust FFI Library (`vsh-ffi`)
+
+Standalone Rust crate (`vsh-ffi`, library `vsh_ffi`) that exposes
+verified POSIX operations with precondition checking. Bridges the
+Coq/Lean filesystem proofs in `../../proofs/` to real POSIX syscalls.
+
+This is the **canonical** Rust FFI tree. The previous `impl/rust-ffi/`
+duplicate was deleted on 2026-04-19 in commit `f43cfb5` after
+verification that 6 of 7 sibling files were byte-identical and that
+this tree is the superset (carries `verification.rs` plus richer
+doc-comments referencing the six-system proof stack). See the
+governance audit
+`../../docs/governance/CRG-AUDIT-2026-04-18.adoc` for the consolidation
+trail.
+
+== Files
+
+[cols="2,1,4"]
+|===
+| File | LOC | Role
+
+| `src/lib.rs`            | 443 | Crate root; re-exports + `FfiContext`
+                                 entry point for ABI consumers.
+| `src/operations.rs`     | 509 | Filesystem ops (`mkdir`, `rmdir`,
+                                 `create_file`, `delete_file`,
+                                 `atomic_write`, `directory_size`, ...).
+| `src/preconditions.rs`  | 452 | Per-op precondition checks aligned
+                                 with the Coq theorems.
+| `src/rmo.rs`            | 411 | Remove-Match-Obliterate primitives
+                                 (secure-delete with declared passes;
+                                 GDPR-relevant).
+| `src/audit.rs`          | 294 | Append-only audit log; integrity
+                                 check via SHA-256 chain.
+| `src/sandbox.rs`        | 273 | Sandbox-root resolution; clamps `..`
+                                 traversal.
+| `src/errors.rs`         | 206 | Typed error hierarchy via `thiserror`.
+| `src/verification.rs`   | 462 | Runtime verification suite tying
+                                 invocations to proof references.
+|===
+
+== Build + test
+
+```bash
+cd ffi/rust
+cargo build              # library build
+cargo test               # 24 tests (last verified post .expect sweep)
+cargo build --features paranoid   # extra security checks
+cargo build --features audit      # detailed audit logging
+```
+
+== Conventions
+
+* `#[cfg(test)]` modules at the bottom of each source file; mass
+  `.unwrap()` is conventional in test scaffolding.
+* No `Dockerfile` (use `Containerfile` per repo policy); no banned
+  languages.
+* SPDX header on every file; `PMPL-1.0-or-later`.
+* The crate is currently unconsumed by `impl/rust-cli/`; intended for
+  external linkage from non-Rust callers via the C ABI.
+
+== See also
+
+* `../../impl/rust-cli/` — the primary Rust shell (does NOT depend
+  on this crate; built separately)
+* `../../proofs/coq/` — Coq specs that the operations satisfy
+* `../../proofs/lean4/` — Lean 4 specs (cross-validated)

@@ -1,0 +1,55 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= impl/ — Implementation Layer
+
+Five concrete implementations of the valence-shell semantics, each
+serving a distinct role in the polyglot verification stack.
+
+== Subtrees
+
+[cols="1,4"]
+|===
+| Path | Role
+
+| `rust-cli/`
+| **PRIMARY** — the interactive Rust shell. Daily-driver development
+  target (v0.9.0; see `../CLAUDE.md` for honest status). The other four
+  trees are reference, extraction target, or known-broken.
+
+| `elixir/`
+| Reference implementation in Elixir. The NIF build is currently
+  broken (declared low-priority in `CLAUDE.md`); the planned BEAM
+  daemon is not yet built.
+
+| `ocaml/`
+| Extraction target for the Coq proofs in `../proofs/coq/`. Three
+  files (`valence_lean.ml`, `lean_wrapper.c`, `filesystem_ffi.ml`);
+  design-surface only, not wired into a binary.
+
+| `mcp/`
+| ReScript-based MCP (Model Context Protocol) bindings. Uses Deno
+  + ReScript per the hyperpolymath language policy in `CLAUDE.md`.
+  See `mcp/src/bindings/Mcp.res`.
+
+| `zig/`
+| Zig FFI implementation targeting ~5ms cold start. Builds cleanly
+  but is not yet integrated with the Rust CLI. See
+  `zig/README.adoc` (when present) or `zig/build.zig`.
+|===
+
+== Why multiple implementations
+
+Polyglot implementations cross-validate the formal Lean 4 / Coq specs
+in `../proofs/`: the Rust CLI is the "is" (running code), the OCaml
+extraction is one "ought" path (extracted from Coq), the Elixir / Zig
+variants test portability of the same operational semantics.
+
+The audit report `../docs/governance/CRG-AUDIT-2026-04-18.adoc` is the
+authoritative cross-implementation status snapshot.
+
+== See also
+
+* `../proofs/` — formal specs the implementations satisfy
+* `../ffi/rust/` — Rust FFI library (separate from the CLI; see
+  its own `README.adoc`)
+* `../CLAUDE.md` — honest status per implementation, with explicit
+  "What Does NOT Work" list

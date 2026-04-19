@@ -1,0 +1,106 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= impl/rust-cli/tests/ — Test Suite
+
+Cargo integration-test directory for the `vsh` Rust shell. Counts below
+are as-of the 2026-04-18 audit (`../../../docs/governance/CRG-AUDIT-2026-04-18.adoc`)
+and may have shifted slightly; current totals are visible from
+`cargo test`.
+
+== Files
+
+[cols="2,1,4"]
+|===
+| File | #[test] | Role
+
+| `correspondence_tests.rs`
+| 35
+| Validates the Lean 4 → Rust correspondence (declared 28 in CLAUDE.md;
+  35 found). Calls `vsh::commands::undo`/`redo` and walks operation
+  history.
+
+| `extended_test_tests.rs`
+| 55
+| Advanced feature coverage (heredocs, here strings, process sub,
+  `&&`/`||` short-circuit, etc.).
+
+| `integration_test.rs`
+| 35
+| End-to-end shell behaviour (glob expansion via `vsh::glob::expand_glob`,
+  multi-stage pipelines, redirection chains).
+
+| `integration_tests.rs`
+| 10
+| Edge-case integration scenarios.
+
+| `lean4_proptest_correspondence.rs`
+| 16
+| Property-based Lean validation (proptest-driven).
+
+| `parameter_expansion_tests.rs`
+| 67
+| `$VAR` / `${VAR:-default}` / `${VAR:?msg}` / `${#VAR}` /
+  `${VAR:offset:length}` expansion coverage.
+
+| `property_correspondence_tests.rs`
+| 19
+| Property-based Lean validation (declared 15; 19 found).
+
+| `property_tests.rs`
+| 28
+| General property tests (proptest crate).
+
+| `security_tests.rs`
+| 15
+| Injection prevention, path traversal, sandbox-clamp validation.
+
+| `stress_tests.rs`
+| 11 (ignored)
+| Run manually with `cargo test --test stress_tests -- --ignored`.
+
+| `function_and_script_tests.rs`
+| 24
+| `func() { ... }` definition + invocation.
+
+| `function_control_flow_tests.rs`
+| 8
+| Control flow inside functions.
+
+| `e2e_script_execution.rs`
+| 25
+| End-to-end `.sh`-style script execution.
+|===
+
+Plus:
+
+* `fixtures/` — fixture data referenced by integration tests.
+* `manual_redirect_test.sh`, `manual_sigint_test.sh` — interactive
+  manual scripts (not driven by `cargo test`; kept for human regression
+  checks of TTY-bound behaviour).
+
+== Running
+
+```bash
+cd impl/rust-cli
+cargo test                                      # full suite (lib + integration + doctests)
+cargo test --lib                                # library unit tests only (~310)
+cargo test --test integration_test              # one suite
+cargo test --test stress_tests -- --ignored     # manually-gated stress
+```
+
+Last full run captured this commit lineage: 703 passed / 0 failed /
+14 ignored (post-`.expect("TODO")` sweep, commits
+`712e3a1..b5cc0cc`).
+
+== API notes for adding tests
+
+`ShellState::new(...)` takes `&str`, not `&Path`. `undo`/`redo` are
+free functions in `vsh::commands`, not methods on state. `state.history`
+is a public field (not a method). For glob testing, call
+`vsh::glob::expand_glob(pattern, base_dir)` directly rather than
+shelling out to `ls`.
+
+== See also
+
+* `../src/README.adoc` — source-file map
+* `../../../docs/PROPERTY_TESTING.md` — proptest discipline
+* `../../../docs/LEAN4_RUST_CORRESPONDENCE.md` — correspondence design
