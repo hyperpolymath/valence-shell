@@ -445,10 +445,11 @@ impl ExecutableCommand for Command {
                 // Expand program name (no process substitutions in program name)
                 let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
 
-                // Check if the command is a shell function before external execution
-                if state.functions.is_defined(&expanded_program) {
-                    let func_def = state.functions.get(&expanded_program).expect("TODO: handle error").clone();
-                    // Expand arguments
+                // Check if the command is a shell function before external execution.
+                // `if let Some(...)` performs a single map lookup; the previous
+                // `is_defined()` + `.get(...).expect("TODO")` shape both panicked
+                // through a fake-debt marker and duplicated the lookup.
+                if let Some(func_def) = state.functions.get(&expanded_program).cloned() {
                     let expanded_args: Vec<String> = args
                         .iter()
                         .map(|a| crate::parser::expand_variables(a, state))

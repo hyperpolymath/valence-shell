@@ -313,11 +313,13 @@ fn parse_function_body(body_str: &str) -> Vec<String> {
 /// Same rules as variable names: starts with letter or underscore,
 /// then alphanumeric or underscore.
 pub fn is_valid_function_name(name: &str) -> bool {
-    if name.is_empty() {
-        return false;
-    }
+    // `let-else` covers the empty-name case directly: chars.next() returns
+    // None on an empty &str, which is the same outcome as the previous
+    // explicit `if name.is_empty()` guard. One construct, no panic site.
     let mut chars = name.chars();
-    let first = chars.next().expect("TODO: handle error");
+    let Some(first) = chars.next() else {
+        return false;
+    };
     if !first.is_alphabetic() && first != '_' {
         return false;
     }
@@ -476,7 +478,7 @@ mod tests {
                 line: 5,
             },
         });
-        let def = table.get("greet").expect("TODO: handle error");
+        let def = table.get("greet").unwrap();
         assert_eq!(def.body, vec!["echo goodbye"]);
     }
 
@@ -495,11 +497,11 @@ mod tests {
         table.push_frame(vec!["nested_arg".to_string()]);
         assert_eq!(table.call_depth(), 2);
 
-        let frame = table.pop_frame().expect("TODO: handle error");
+        let frame = table.pop_frame().unwrap();
         assert_eq!(frame.saved_params, vec!["nested_arg"]);
         assert_eq!(table.call_depth(), 1);
 
-        let frame = table.pop_frame().expect("TODO: handle error");
+        let frame = table.pop_frame().unwrap();
         assert_eq!(frame.saved_params, vec!["arg1", "arg2"]);
         assert_eq!(table.call_depth(), 0);
 
@@ -514,7 +516,7 @@ mod tests {
         table.declare_local("x", Some("old_value".to_string()));
         table.declare_local("y", None);
 
-        let frame = table.pop_frame().expect("TODO: handle error");
+        let frame = table.pop_frame().unwrap();
         assert_eq!(frame.local_vars, vec!["x", "y"]);
         assert_eq!(
             frame.saved_vars.get("x"),
@@ -533,7 +535,7 @@ mod tests {
         // Second declaration in same frame should NOT overwrite the saved value
         table.declare_local("x", Some("modified".to_string()));
 
-        let frame = table.pop_frame().expect("TODO: handle error");
+        let frame = table.pop_frame().unwrap();
         // The saved value should be "original", not "modified"
         assert_eq!(
             frame.saved_vars.get("x"),

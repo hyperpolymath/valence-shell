@@ -50,7 +50,7 @@ Valence Shell uses a graduated trust model with three contribution perimeters:
 - `impl/elixir/` - Elixir implementation
 - `scripts/` - Demonstration scripts
 - `docs/` - Technical documentation
-- Build system (justfile, Containerfile)
+- Build system (Justfile, Containerfile)
 - CI/CD pipelines
 
 **Requirements**:

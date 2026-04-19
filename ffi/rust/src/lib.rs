@@ -381,63 +381,63 @@ mod tests {
 
     #[test]
     fn test_mkdir_rmdir_reversible() {
-        let tmp = tempdir().expect("TODO: handle error");
+        let tmp = tempdir().unwrap();
         let config = FfiConfig {
             sandbox_root: tmp.path().to_path_buf(),
             ..Default::default()
         };
 
-        let mut ctx = FfiContext::new(config).expect("TODO: handle error");
+        let mut ctx = FfiContext::new(config).unwrap();
 
         // mkdir
-        ctx.mkdir("test_dir").expect("TODO: handle error");
+        ctx.mkdir("test_dir").unwrap();
         assert!(tmp.path().join("test_dir").exists());
 
         // rmdir (reverse)
-        ctx.rmdir("test_dir").expect("TODO: handle error");
+        ctx.rmdir("test_dir").unwrap();
         assert!(!tmp.path().join("test_dir").exists());
     }
 
     #[test]
     fn test_create_delete_file_reversible() {
-        let tmp = tempdir().expect("TODO: handle error");
+        let tmp = tempdir().unwrap();
         let config = FfiConfig {
             sandbox_root: tmp.path().to_path_buf(),
             ..Default::default()
         };
 
-        let mut ctx = FfiContext::new(config).expect("TODO: handle error");
+        let mut ctx = FfiContext::new(config).unwrap();
 
         // create_file
-        ctx.create_file("test.txt").expect("TODO: handle error");
+        ctx.create_file("test.txt").unwrap();
         assert!(tmp.path().join("test.txt").exists());
 
         // delete_file (reverse)
-        ctx.delete_file("test.txt").expect("TODO: handle error");
+        ctx.delete_file("test.txt").unwrap();
         assert!(!tmp.path().join("test.txt").exists());
     }
 
     #[test]
     fn test_write_file_reversible() {
-        let tmp = tempdir().expect("TODO: handle error");
+        let tmp = tempdir().unwrap();
         let config = FfiConfig {
             sandbox_root: tmp.path().to_path_buf(),
             ..Default::default()
         };
 
-        let mut ctx = FfiContext::new(config).expect("TODO: handle error");
+        let mut ctx = FfiContext::new(config).unwrap();
 
         // Create file first
-        ctx.create_file("test.txt").expect("TODO: handle error");
+        ctx.create_file("test.txt").unwrap();
 
         // Write new content, get old
-        let old = ctx.write_file("test.txt", b"new content").expect("TODO: handle error");
+        let old = ctx.write_file("test.txt", b"new content").unwrap();
         assert_eq!(old, b"");
 
         // Write old content back (reverse)
-        ctx.write_file("test.txt", &old).expect("TODO: handle error");
+        ctx.write_file("test.txt", &old).unwrap();
 
-        let content = ctx.read_file("test.txt").expect("TODO: handle error");
+        let content = ctx.read_file("test.txt").unwrap();
         assert_eq!(content, b"");
     }
 }

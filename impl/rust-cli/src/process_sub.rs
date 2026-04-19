@@ -40,10 +40,16 @@ impl ProcessSubstitution {
         cmd: String,
         state: &mut ShellState,
     ) -> Result<Self> {
-        // Generate unique FIFO path: /tmp/vsh-fifo-<pid>-<counter>
+        // Generate globally-unique FIFO path:
+        //   /tmp/vsh-fifo-<pid>-<counter>-<uuidv4>
+        // The pid + counter make collisions improbable in single-process use;
+        // the UUID v4 suffix prevents collisions when two ShellState
+        // instances share a pid (e.g., parallel cargo tests where each test
+        // creates a fresh state with counter starting at 0).
         let pid = std::process::id();
         let fifo_id = state.next_fifo_id();
-        let fifo_path = PathBuf::from(format!("/tmp/vsh-fifo-{}-{}", pid, fifo_id));
+        let unique = uuid::Uuid::new_v4().simple();
+        let fifo_path = PathBuf::from(format!("/tmp/vsh-fifo-{}-{}-{}", pid, fifo_id, unique));
 
         // Create FIFO using mkfifo(2) syscall
         #[cfg(unix)]
@@ -241,14 +247,14 @@ mod tests {
 
     #[test]
     fn test_fifo_creation() {
-        let temp_dir = TempDir::new().expect("TODO: handle error");
-        let mut state = ShellState::new(temp_dir.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
+        let temp_dir = TempDir::new().unwrap();
+        let mut state = ShellState::new(temp_dir.path().to_str().unwrap()).unwrap();
 
         let proc_sub = ProcessSubstitution::create(
             ProcessSubType::Input,
             "echo test".to_string(),
             &mut state,
-        ).expect("TODO: handle error");
+        ).unwrap();
 
         // FIFO should exist
         assert!(proc_sub.fifo_path.exists());
@@ -256,39 +262,39 @@ mod tests {
         // Should be a FIFO
         #[cfg(unix)]
         {
-            let metadata = std::fs::metadata(&proc_sub.fifo_path).expect("TODO: handle error");
+            let metadata = std::fs::metadata(&proc_sub.fifo_path).unwrap();
             use std::os::unix::fs::FileTypeExt;
             assert!(metadata.file_type().is_fifo());
         }
 
         // Cleanup should remove FIFO
         let fifo_path = proc_sub.fifo_path.clone();
-        proc_sub.cleanup().expect("TODO: handle error");
+        proc_sub.cleanup().unwrap();
         assert!(!fifo_path.exists());
     }
 
     #[test]
     fn test_fifo_path_unique() {
-        let temp_dir = TempDir::new().expect("TODO: handle error");
-        let mut state = ShellState::new(temp_dir.path().to_str().expect("TODO: handle error")).expect("TODO: handle error");
+        let temp_dir = TempDir::new().unwrap();
+        let mut state = ShellState::new(temp_dir.path().to_str().unwrap()).unwrap();
 
         let proc_sub1 = ProcessSubstitution::create(
             ProcessSubType::Input,
             "echo a".to_string(),
             &mut state,
-        ).expect("TODO: handle error");
+        ).unwrap();
 
         let proc_sub2 = ProcessSubstitution::create(
             ProcessSubType::Input,
             "echo b".to_string(),
             &mut state,
-        ).expect("TODO: handle error");
+        ).unwrap();
 
         // FIFOs should have different paths
         assert_ne!(proc_sub1.fifo_path, proc_sub2.fifo_path);
 
         // Cleanup
-        proc_sub1.cleanup().expect("TODO: handle error");
-        proc_sub2.cleanup().expect("TODO: handle error");
+        proc_sub1.cleanup().unwrap();
+        proc_sub2.cleanup().unwrap();
     }
 }

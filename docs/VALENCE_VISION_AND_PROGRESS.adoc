@@ -37,7 +37,7 @@
 *Status:* Complete
 
 * Repo structure, docs, governance, licensing
-* Build/test scaffolding (justfile, scripts)
+* Build/test scaffolding (Justfile, scripts)
 * Multi-prover baseline wiring
 
 === Phase 1 — Abstract Proofs

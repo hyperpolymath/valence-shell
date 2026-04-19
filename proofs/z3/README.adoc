@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= proofs/z3/ — Z3 SMT Filesystem Proofs (Automated Verification)
+
+Z3 (SMT-LIB v2 scripts) provides automated verification for the
+filesystem operation invariants. Unlike the interactive proof systems
+(Lean 4 / Coq / Agda / Isabelle) and the structural foundation (Mizar),
+Z3 discharges decidable fragments via SAT-modulo-theories solving.
+
+== Files
+
+[cols="2,4"]
+|===
+| Script | Role
+
+| `filesystem_operations.smt2`
+| Combined filesystem-model + composition + equivalence in one
+  SMT-LIB session (Z3 doesn't need the per-module split that the
+  type-theoretic systems use). Carries the core
+  reversibility-as-equality assertions.
+
+| `copy_move_operations.smt2`
+| `cp`/`mv` reversibility properties as SMT assertions.
+
+| `permission_operations.smt2`
+| chmod/chown bit-preservation properties.
+
+| `symlink_operations.smt2`
+| Symlink creation + traversal properties.
+
+| `rmo_operations.smt2`
+| Remove-Match-Obliterate properties (GDPR-relevant).
+|===
+
+== Build / verify
+
+```bash
+cd proofs/z3
+z3 filesystem_operations.smt2          # single script
+z3 -smt2 copy_move_operations.smt2     # explicit SMT-LIB v2 mode
+```
+
+A `(check-sat)` returning `unsat` for a negated property is the
+"theorem holds" outcome; `sat` indicates a counterexample (model
+extractable via `(get-model)`).
+
+== Conventions
+
+* SMT-LIB v2 syntax; one script per concern.
+* snake_case filenames matching the underlying-system naming.
+* Theorems quoted from the Lean 4 / Coq sources are referenced in
+  comments at the top of each script.
+
+== Status
+
+Z3's role is decidability of low-level fragments + counterexample
+generation. Tracked alongside the other systems in the unified
+proof-debt audit; no Z3-specific debts outstanding per the 2026-04-12
+sweep.
+
+== See also
+
+* `../README.md` — overall proof-stack design
+* `../lean4/README.adoc` — primary source of truth (interactive)
+* `../coq/README.adoc` — interactive CIC foundation
+* `../../docs/PROOF_HOLES_AUDIT.md` — proof-debt status

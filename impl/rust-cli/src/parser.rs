@@ -884,15 +884,18 @@ fn parse_variable(
 
         word.push_braced_variable(var_name);
     } else if let Some(&next_ch) = chars.peek() {
-        // Simple form: $VAR or special variables
+        // Simple form: $VAR or special variables. The peek above already
+        // bound next_ch by value; chars.next() is called purely to advance
+        // the iterator and the bound value is used directly. This removes
+        // three previous panic sites.
         if next_ch == '?' || next_ch == '$' || next_ch == '#' {
             // Single-character special variable
-            let var_name = chars.next().expect("TODO: handle error").to_string();
-            word.push_variable(var_name);
+            chars.next();
+            word.push_variable(next_ch.to_string());
         } else if next_ch.is_ascii_digit() {
             // Positional parameter: $0, $1, $2, etc.
-            let var_name = chars.next().expect("TODO: handle error").to_string();
-            word.push_variable(var_name);
+            chars.next();
+            word.push_variable(next_ch.to_string());
         } else if next_ch.is_alphabetic() || next_ch == '_' {
             // Variable name
             let mut var_name = String::new();
@@ -909,8 +912,8 @@ fn parse_variable(
             word.push_variable(var_name);
         } else if next_ch == '@' || next_ch == '*' {
             // Special positional parameters: $@ or $*
-            let var_name = chars.next().expect("TODO: handle error").to_string();
-            word.push_variable(var_name);
+            chars.next();
+            word.push_variable(next_ch.to_string());
         } else {
             // $ not followed by variable, treat as literal
             word.push_literal("$".to_string());
@@ -1831,12 +1834,13 @@ pub fn parse_command(input: &str) -> Result<Command> {
 /// Check if a string is a valid variable name
 /// Valid: starts with letter or underscore, then letters/digits/underscores
 fn is_valid_var_name(name: &str) -> bool {
-    if name.is_empty() {
-        return false;
-    }
-
+    // `let-else` covers the empty-name case directly: chars.next() returns
+    // None on an empty &str, the same outcome as the previous explicit
+    // `if name.is_empty()` guard. One construct, no panic site.
     let mut chars = name.chars();
-    let first = chars.next().expect("TODO: handle error");
+    let Some(first) = chars.next() else {
+        return false;
+    };
 
     // First char must be letter or underscore
     if !first.is_alphabetic() && first != '_' {
@@ -1879,8 +1883,11 @@ pub fn expand_with_command_sub(input: &str, state: &mut crate::state::ShellState
 
     while let Some(ch) = chars.next() {
         if ch == '\\' && chars.peek() == Some(&'$') {
-            // Escaped dollar from single quotes - skip backslash, keep literal $
-            result.push(chars.next().expect("TODO: handle error"));
+            // Escaped dollar from single quotes - skip backslash, keep
+            // literal $. peek above proved Some(&'$'); chars.next()
+            // advances the iterator, the literal char is pushed directly.
+            chars.next();
+            result.push('$');
         } else if ch == '<' && chars.peek() == Some(&'(') {
             // Input process substitution: <(cmd)
             chars.next(); // consume '('
@@ -1927,10 +1934,12 @@ pub fn expand_with_command_sub(input: &str, state: &mut crate::state::ShellState
                             }
                             Some(&'(') => {
                                 paren_depth += 1;
-                                expr_str.push(chars.next().expect("TODO: handle error"));
+                                chars.next();
+                                expr_str.push('(');
                             }
-                            Some(_) => {
-                                expr_str.push(chars.next().expect("TODO: handle error"));
+                            Some(&c) => {
+                                chars.next();
+                                expr_str.push(c);
                             }
                         }
                     }
@@ -1956,21 +1965,25 @@ pub fn expand_with_command_sub(input: &str, state: &mut crate::state::ShellState
                         chars.next(); // consume '}'
                         break;
                     }
-                    var_name.push(chars.next().expect("TODO: handle error"));
+                    chars.next();
+                    var_name.push(c);
                 }
 
                 // Expand the variable
                 result.push_str(&state.expand_variable(&var_name));
             } else if let Some(&next_ch) = chars.peek() {
-                // Simple form: $VAR or special variables like $?, $$
+                // Simple form: $VAR or special variables like $?, $$.
+                // The peek above already bound next_ch by value;
+                // chars.next() advances the iterator and the bound value
+                // is used directly. Removes three previous panic sites.
                 if next_ch == '?' || next_ch == '$' || next_ch == '#' || next_ch == '@' || next_ch == '*' {
                     // Single-character special variable
-                    let var_name = chars.next().expect("TODO: handle error").to_string();
-                    result.push_str(&state.expand_variable(&var_name));
+                    chars.next();
+                    result.push_str(&state.expand_variable(&next_ch.to_string()));
                 } else if next_ch.is_ascii_digit() {
                     // Positional parameter: $0, $1, etc.
-                    let var_name = chars.next().expect("TODO: handle error").to_string();
-                    result.push_str(&state.expand_variable(&var_name));
+                    chars.next();
+                    result.push_str(&state.expand_variable(&next_ch.to_string()));
                 } else if next_ch.is_alphabetic() || next_ch == '_' {
                     // Variable name: starts with letter or underscore
                     let mut var_name = String::new();
@@ -1978,7 +1991,8 @@ pub fn expand_with_command_sub(input: &str, state: &mut crate::state::ShellState
                     // Read variable name (alphanumeric + underscore)
                     while let Some(&c) = chars.peek() {
                         if c.is_alphanumeric() || c == '_' {
-                            var_name.push(chars.next().expect("TODO: handle error"));
+                            chars.next();
+                            var_name.push(c);
                         } else {
                             break;
                         }
@@ -2214,7 +2228,10 @@ fn apply_expansion(expansion: &ParameterExpansion, state: &crate::state::ShellSt
                 // Recursively expand the default value
                 expand_variables(value, state)
             } else {
-                var_value.expect("TODO: handle error").to_string()
+                // var_value is Some by construction here: the surrounding
+                // `if is_unset || ...` branch is the unset/null path; this
+                // else branch only fires when var_value is Some.
+                var_value.expect("var_value is Some when !is_unset (checked above)").to_string()
             }
         }
 
@@ -2228,7 +2245,10 @@ fn apply_expansion(expansion: &ParameterExpansion, state: &crate::state::ShellSt
                 // Requires signature change: &mut ShellState
                 default_expanded
             } else {
-                var_value.expect("TODO: handle error").to_string()
+                // var_value is Some by construction here: the surrounding
+                // `if is_unset || ...` branch is the unset/null path; this
+                // else branch only fires when var_value is Some.
+                var_value.expect("var_value is Some when !is_unset (checked above)").to_string()
             }
         }
 
@@ -2249,7 +2269,10 @@ fn apply_expansion(expansion: &ParameterExpansion, state: &crate::state::ShellSt
                 // Return empty string (bash exits non-interactively, but we continue)
                 String::new()
             } else {
-                var_value.expect("TODO: handle error").to_string()
+                // var_value is Some by construction here: the surrounding
+                // `if is_unset || ...` branch is the unset/null path; this
+                // else branch only fires when var_value is Some.
+                var_value.expect("var_value is Some when !is_unset (checked above)").to_string()
             }
         }
 
@@ -2296,8 +2319,11 @@ pub fn expand_variables(input: &str, state: &crate::state::ShellState) -> String
 
     while let Some(ch) = chars.next() {
         if ch == '\\' && chars.peek() == Some(&'$') {
-            // Escaped dollar from single quotes - skip backslash, keep literal $
-            result.push(chars.next().expect("TODO: handle error"));
+            // Escaped dollar from single quotes - skip backslash, keep
+            // literal $. peek above proved Some(&'$'); chars.next()
+            // advances the iterator, the literal char is pushed directly.
+            chars.next();
+            result.push('$');
         } else if ch == '$' {
             // Check for ${VAR} or $VAR
             if chars.peek() == Some(&'{') {
@@ -2317,7 +2343,8 @@ pub fn expand_variables(input: &str, state: &crate::state::ShellState) -> String
                     } else if c == '{' {
                         brace_depth += 1;
                     }
-                    var_expr.push(chars.next().expect("TODO: handle error"));
+                    chars.next();
+                    var_expr.push(c);
                 }
 
                 // Parse the parameter expansion
@@ -2335,17 +2362,20 @@ pub fn expand_variables(input: &str, state: &crate::state::ShellState) -> String
                     }
                 }
             } else if let Some(&next_ch) = chars.peek() {
-                // Simple form: $VAR or special variables like $?, $$, $#, $@, $*
+                // Simple form: $VAR or special variables like $?, $$, $#, $@, $*.
+                // The peek above already bound next_ch; chars.next() advances
+                // the iterator and the bound value is used directly. Removes
+                // three previous panic sites.
                 if next_ch == '?' || next_ch == '$' || next_ch == '#'
                     || next_ch == '@' || next_ch == '*'
                 {
                     // Single-character special variable
-                    let var_name = chars.next().expect("TODO: handle error").to_string();
-                    result.push_str(&state.expand_variable(&var_name));
+                    chars.next();
+                    result.push_str(&state.expand_variable(&next_ch.to_string()));
                 } else if next_ch.is_ascii_digit() {
                     // Positional parameter: $0, $1, $2, ...
-                    let var_name = chars.next().expect("TODO: handle error").to_string();
-                    result.push_str(&state.expand_variable(&var_name));
+                    chars.next();
+                    result.push_str(&state.expand_variable(&next_ch.to_string()));
                 } else if next_ch.is_alphabetic() || next_ch == '_' {
                     // Variable name: starts with letter or underscore
                     let mut var_name = String::new();
@@ -2353,7 +2383,8 @@ pub fn expand_variables(input: &str, state: &crate::state::ShellState) -> String
                     // Read variable name (alphanumeric + underscore)
                     while let Some(&c) = chars.peek() {
                         if c.is_alphanumeric() || c == '_' {
-                            var_name.push(chars.next().expect("TODO: handle error"));
+                            chars.next();
+                            var_name.push(c);
                         } else {
                             break;
                         }
@@ -2769,7 +2800,13 @@ fn parse_if_command(input: &str) -> Result<Command> {
                 state = "after_elif";
             }
             ("then", "after_elif") => {
-                let elif_cond = pending_condition.take().expect("TODO: handle error");
+                // State-machine invariant: state == "after_elif" iff the
+                // earlier ("elif", "after_then") arm set pending_condition
+                // to Some. The match is exhaustive over (keyword, state)
+                // shapes, so this take() is provably Some by construction.
+                let elif_cond = pending_condition
+                    .take()
+                    .expect("pending_condition: Some by state-machine invariant in after_elif");
                 let body_str = content.trim().trim_end_matches(';').trim();
                 let elif_body = if !body_str.is_empty() {
                     parse_command_block(body_str)?
@@ -3555,7 +3592,7 @@ mod tests {
 
     #[test]
     fn test_parse_mkdir() {
-        let cmd = parse_command("mkdir foo").expect("TODO: handle error");
+        let cmd = parse_command("mkdir foo").unwrap();
         assert_eq!(
             cmd,
             Command::Mkdir {
@@ -3567,7 +3604,7 @@ mod tests {
 
     #[test]
     fn test_parse_external() {
-        let cmd = parse_command("echo hello world").expect("TODO: handle error");
+        let cmd = parse_command("echo hello world").unwrap();
         match cmd {
             Command::Echo {
                 args,
@@ -3586,13 +3623,13 @@ mod tests {
 
     #[test]
     fn test_parse_undo() {
-        let cmd = parse_command("undo 3").expect("TODO: handle error");
+        let cmd = parse_command("undo 3").unwrap();
         assert_eq!(cmd, Command::Undo { count: 3 });
     }
 
     #[test]
     fn test_parse_history() {
-        let cmd = parse_command("history 20 --proofs").expect("TODO: handle error");
+        let cmd = parse_command("history 20 --proofs").unwrap();
         assert_eq!(cmd, Command::History {
             count: 20,
             show_proofs: true
@@ -3601,7 +3638,7 @@ mod tests {
 
     #[test]
     fn test_parse_begin() {
-        let cmd = parse_command("begin mytxn").expect("TODO: handle error");
+        let cmd = parse_command("begin mytxn").unwrap();
         assert_eq!(cmd, Command::Begin {
             name: "mytxn".to_string()
         });
@@ -3609,7 +3646,7 @@ mod tests {
 
     #[test]
     fn test_parse_ls() {
-        let cmd = parse_command("ls /tmp").expect("TODO: handle error");
+        let cmd = parse_command("ls /tmp").unwrap();
         match cmd {
             Command::Ls { path, redirects } => {
                 assert_eq!(path, Some("/tmp".to_string()));
@@ -3621,7 +3658,7 @@ mod tests {
 
     #[test]
     fn test_parse_cd() {
-        let cmd = parse_command("cd /home").expect("TODO: handle error");
+        let cmd = parse_command("cd /home").unwrap();
         match cmd {
             Command::Cd { path } => {
                 assert_eq!(path, Some("/home".to_string()));
@@ -3632,7 +3669,7 @@ mod tests {
 
     #[test]
     fn test_parse_cd_no_args() {
-        let cmd = parse_command("cd").expect("TODO: handle error");
+        let cmd = parse_command("cd").unwrap();
         match cmd {
             Command::Cd { path } => {
                 assert_eq!(path, None);
@@ -3643,7 +3680,7 @@ mod tests {
 
     #[test]
     fn test_parse_cd_dash() {
-        let cmd = parse_command("cd -").expect("TODO: handle error");
+        let cmd = parse_command("cd -").unwrap();
         match cmd {
             Command::Cd { path } => {
                 assert_eq!(path, Some("-".to_string()));
@@ -3655,7 +3692,7 @@ mod tests {
     // Redirection parsing tests
     #[test]
     fn test_parse_output_redirect() {
-        let cmd = parse_command("ls > output.txt").expect("TODO: handle error");
+        let cmd = parse_command("ls > output.txt").unwrap();
         match cmd {
             Command::Ls { redirects, .. } => {
                 assert_eq!(redirects.len(), 1);
@@ -3672,7 +3709,7 @@ mod tests {
 
     #[test]
     fn test_parse_append_redirect() {
-        let cmd = parse_command("echo test >> log.txt").expect("TODO: handle error");
+        let cmd = parse_command("echo test >> log.txt").unwrap();
         match cmd {
             Command::Echo { redirects, .. } => {
                 assert_eq!(redirects.len(), 1);
@@ -3689,7 +3726,7 @@ mod tests {
 
     #[test]
     fn test_parse_input_redirect() {
-        let cmd = parse_command("cat < input.txt").expect("TODO: handle error");
+        let cmd = parse_command("cat < input.txt").unwrap();
         match cmd {
             Command::External { redirects, .. } => {
                 assert_eq!(redirects.len(), 1);
@@ -3706,7 +3743,7 @@ mod tests {
 
     #[test]
     fn test_parse_error_redirect() {
-        let cmd = parse_command("make 2> errors.log").expect("TODO: handle error");
+        let cmd = parse_command("make 2> errors.log").unwrap();
         match cmd {
             Command::External { redirects, .. } => {
                 assert_eq!(redirects.len(), 1);
@@ -3723,7 +3760,7 @@ mod tests {
 
     #[test]
     fn test_parse_error_to_output() {
-        let cmd = parse_command("make 2>&1").expect("TODO: handle error");
+        let cmd = parse_command("make 2>&1").unwrap();
         match cmd {
             Command::External { redirects, .. } => {
                 assert_eq!(redirects.len(), 1);
@@ -3735,7 +3772,7 @@ mod tests {
 
     #[test]
     fn test_parse_multiple_redirects() {
-        let cmd = parse_command("cat < in.txt > out.txt 2> err.log").expect("TODO: handle error");
+        let cmd = parse_command("cat < in.txt > out.txt 2> err.log").unwrap();
         match cmd {
             Command::External { redirects, .. } => {
                 assert_eq!(redirects.len(), 3);
@@ -3764,7 +3801,7 @@ mod tests {
 
     #[test]
     fn test_parse_both_redirect() {
-        let cmd = parse_command("make &> output.log").expect("TODO: handle error");
+        let cmd = parse_command("make &> output.log").unwrap();
         match cmd {
             Command::External { redirects, .. } => {
                 assert_eq!(redirects.len(), 1);
@@ -3809,7 +3846,7 @@ mod tests {
 
     #[test]
     fn test_parse_simple_pipeline() {
-        let cmd = parse_command("ls | grep test").expect("TODO: handle error");
+        let cmd = parse_command("ls | grep test").unwrap();
         match cmd {
             Command::Pipeline { stages, redirects, background } => {
                 assert_eq!(stages.len(), 2);
@@ -3826,7 +3863,7 @@ mod tests {
 
     #[test]
     fn test_parse_multi_stage_pipeline() {
-        let cmd = parse_command("cat file.txt | grep foo | wc -l").expect("TODO: handle error");
+        let cmd = parse_command("cat file.txt | grep foo | wc -l").unwrap();
         match cmd {
             Command::Pipeline { stages, .. } => {
                 assert_eq!(stages.len(), 3);
@@ -3843,7 +3880,7 @@ mod tests {
 
     #[test]
     fn test_parse_pipeline_with_redirect() {
-        let cmd = parse_command("ls | grep test > output.txt").expect("TODO: handle error");
+        let cmd = parse_command("ls | grep test > output.txt").unwrap();
         match cmd {
             Command::Pipeline { stages, redirects, background } => {
                 assert_eq!(stages.len(), 2);
@@ -3867,14 +3904,14 @@ mod tests {
     #[test]
     fn test_parse_pipeline_single_stage_not_pipeline() {
         // Single command with no pipe should not create pipeline
-        let cmd = parse_command("ls").expect("TODO: handle error");
+        let cmd = parse_command("ls").unwrap();
         match cmd {
             Command::Ls { .. } => {}, // Built-in command
             _ => panic!("Single command should not create pipeline"),
         }
 
         // Builtin command without pipe should also not create pipeline
-        let cmd2 = parse_command("echo hello").expect("TODO: handle error");
+        let cmd2 = parse_command("echo hello").unwrap();
         match cmd2 {
             Command::Echo { .. } => {},
             _ => panic!("echo should parse as Echo builtin, not pipeline"),
@@ -3885,7 +3922,7 @@ mod tests {
     fn test_variable_expansion_simple() {
         use crate::state::ShellState;
 
-        let mut state = ShellState::new("/tmp/vsh_test").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_test").unwrap();
 
         // Test simple variable expansion
         state.set_variable("NAME", "Alice");
@@ -3904,7 +3941,7 @@ mod tests {
     fn test_variable_expansion_braced() {
         use crate::state::ShellState;
 
-        let mut state = ShellState::new("/tmp/vsh_test").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_test").unwrap();
 
         state.set_variable("VAR", "test");
 
@@ -3920,7 +3957,7 @@ mod tests {
     fn test_variable_expansion_special() {
         use crate::state::ShellState;
 
-        let mut state = ShellState::new("/tmp/vsh_test").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_test").unwrap();
 
         // Test $?
         state.last_exit_code = 42;
@@ -3936,7 +3973,7 @@ mod tests {
     fn test_variable_expansion_multiple() {
         use crate::state::ShellState;
 
-        let mut state = ShellState::new("/tmp/vsh_test").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_test").unwrap();
 
         state.set_variable("FIRST", "Hello");
         state.set_variable("SECOND", "World");
@@ -3956,7 +3993,7 @@ mod tests {
 
     #[test]
     fn test_variable_assignment() {
-        let cmd = parse_command("VAR=value").expect("TODO: handle error");
+        let cmd = parse_command("VAR=value").unwrap();
         match cmd {
             Command::Assignment { name, value } => {
                 assert_eq!(name, "VAR");
@@ -3968,7 +4005,7 @@ mod tests {
 
     #[test]
     fn test_export_simple() {
-        let cmd = parse_command("export VAR").expect("TODO: handle error");
+        let cmd = parse_command("export VAR").unwrap();
         match cmd {
             Command::Export { name, value } => {
                 assert_eq!(name, "VAR");
@@ -3980,7 +4017,7 @@ mod tests {
 
     #[test]
     fn test_export_with_value() {
-        let cmd = parse_command("export VAR=value").expect("TODO: handle error");
+        let cmd = parse_command("export VAR=value").unwrap();
         match cmd {
             Command::Export { name, value } => {
                 assert_eq!(name, "VAR");
@@ -3998,10 +4035,10 @@ mod tests {
     fn test_single_quotes_no_expansion() {
         use crate::state::ShellState;
 
-        let _state = ShellState::new("/tmp/vsh_test").expect("TODO: handle error");
+        let _state = ShellState::new("/tmp/vsh_test").unwrap();
 
         // Test that tokenize correctly preserves $ in single quotes
-        let tokens = tokenize("echo '$NAME'").expect("TODO: handle error");
+        let tokens = tokenize("echo '$NAME'").unwrap();
         assert_eq!(tokens.len(), 2);
 
         // Convert to string and verify $ is escaped
@@ -4015,11 +4052,11 @@ mod tests {
     fn test_double_quotes_with_expansion() {
         use crate::state::ShellState;
 
-        let mut state = ShellState::new("/tmp/vsh_test").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_test").unwrap();
         state.set_variable("NAME", "Alice");
 
         // Test external command with variable expansion
-        let cmd = parse_command("touch \"file_$NAME\"").expect("TODO: handle error");
+        let cmd = parse_command("touch \"file_$NAME\"").unwrap();
         match cmd {
             Command::External { program, args, .. } => {
                 assert_eq!(program, "touch");
@@ -4039,7 +4076,7 @@ mod tests {
     fn test_backslash_escaping_outside_quotes() {
         use crate::state::ShellState;
 
-        let mut state = ShellState::new("/tmp/vsh_test").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_test").unwrap();
         state.set_variable("NAME", "Alice");
 
         // Test that \$ prevents expansion
@@ -4051,7 +4088,7 @@ mod tests {
     fn test_backslash_in_double_quotes() {
         use crate::state::ShellState;
 
-        let mut state = ShellState::new("/tmp/vsh_test").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_test").unwrap();
         state.set_variable("NAME", "Alice");
 
         // Test that \$ in double quotes prevents expansion
@@ -4063,7 +4100,7 @@ mod tests {
     fn test_empty_quoted_strings() {
         let result = tokenize("echo '' \"\"");
         assert!(result.is_ok());
-        let tokens = result.expect("TODO: handle error");
+        let tokens = result.unwrap();
         // Should have at least echo token
         // Empty quoted strings may or may not create separate tokens
         assert!(tokens.len() >= 1);
@@ -4071,7 +4108,7 @@ mod tests {
 
     #[test]
     fn test_quotes_preserve_spaces() {
-        let tokens = tokenize("echo \"one   two   three\"").expect("TODO: handle error");
+        let tokens = tokenize("echo \"one   two   three\"").unwrap();
         assert_eq!(tokens.len(), 2);
 
         if let Token::Word(w) = &tokens[1] {
@@ -4083,7 +4120,7 @@ mod tests {
 
     #[test]
     fn test_mixed_quotes() {
-        let tokens = tokenize("echo 'Hello' \"World\"").expect("TODO: handle error");
+        let tokens = tokenize("echo 'Hello' \"World\"").unwrap();
         // Should have: echo, Hello, World (or combined)
         assert!(tokens.len() >= 2);
     }
@@ -4106,7 +4143,7 @@ mod tests {
     fn test_positional_param_expansion() {
         use crate::state::ShellState;
 
-        let mut state = ShellState::new("/tmp/vsh_test").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_test").unwrap();
         state.set_positional_params(vec!["arg1".to_string(), "arg2".to_string()]);
 
         // Test $1 expansion
@@ -4123,7 +4160,7 @@ mod tests {
     fn test_special_var_dollar_zero() {
         use crate::state::ShellState;
 
-        let state = ShellState::new("/tmp/vsh_test").expect("TODO: handle error");
+        let state = ShellState::new("/tmp/vsh_test").unwrap();
 
         // Test $0 expansion
         assert_eq!(state.expand_variable("0"), "vsh");
@@ -4133,11 +4170,11 @@ mod tests {
     fn test_positional_param_in_command() {
         use crate::state::ShellState;
 
-        let mut state = ShellState::new("/tmp/vsh_test").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp/vsh_test").unwrap();
         state.set_positional_params(vec!["myfile".to_string()]);
 
         // Test using $1 in a command
-        let cmd = parse_command("touch $1").expect("TODO: handle error");
+        let cmd = parse_command("touch $1").unwrap();
         match cmd {
             Command::External { args: _, .. } | Command::Touch { path: _, .. } => {
                 // After parsing, before execution, $1 should still be present
@@ -4165,7 +4202,7 @@ mod tests {
     #[test]
     fn test_command_sub_dollar_parse() {
         // Test $(cmd) parsing
-        let tokens = tokenize("echo $(pwd)").expect("TODO: handle error");
+        let tokens = tokenize("echo $(pwd)").unwrap();
         assert_eq!(tokens.len(), 2);
 
         if let Token::Word(w) = &tokens[1] {
@@ -4183,7 +4220,7 @@ mod tests {
     #[test]
     fn test_command_sub_backtick_parse() {
         // Test `cmd` parsing
-        let tokens = tokenize("echo `date`").expect("TODO: handle error");
+        let tokens = tokenize("echo `date`").unwrap();
         assert_eq!(tokens.len(), 2);
 
         if let Token::Word(w) = &tokens[1] {
@@ -4196,7 +4233,7 @@ mod tests {
     #[test]
     fn test_command_sub_in_double_quotes() {
         // Command substitution should work inside double quotes
-        let tokens = tokenize("echo \"Result: $(pwd)\"").expect("TODO: handle error");
+        let tokens = tokenize("echo \"Result: $(pwd)\"").unwrap();
         assert_eq!(tokens.len(), 2);
 
         if let Token::Word(w) = &tokens[1] {
@@ -4209,7 +4246,7 @@ mod tests {
     #[test]
     fn test_command_sub_in_single_quotes() {
         // Command substitution should NOT work inside single quotes (literal)
-        let tokens = tokenize("echo '$(pwd)'").expect("TODO: handle error");
+        let tokens = tokenize("echo '$(pwd)'").unwrap();
         assert_eq!(tokens.len(), 2);
 
         if let Token::Word(w) = &tokens[1] {
@@ -4224,7 +4261,7 @@ mod tests {
     #[test]
     fn test_command_sub_nested_dollar() {
         // Test nested $(outer $(inner))
-        let tokens = tokenize("echo $(echo $(echo nested))").expect("TODO: handle error");
+        let tokens = tokenize("echo $(echo $(echo nested))").unwrap();
         assert_eq!(tokens.len(), 2);
 
         if let Token::Word(w) = &tokens[1] {
@@ -4254,7 +4291,7 @@ mod tests {
     #[test]
     fn test_command_sub_empty() {
         // Empty command substitution should parse
-        let tokens = tokenize("echo $()").expect("TODO: handle error");
+        let tokens = tokenize("echo $()").unwrap();
         assert_eq!(tokens.len(), 2);
 
         if let Token::Word(w) = &tokens[1] {
@@ -4267,7 +4304,7 @@ mod tests {
     #[test]
     fn test_command_sub_with_args() {
         // Command with arguments
-        let tokens = tokenize("echo $(ls -la)").expect("TODO: handle error");
+        let tokens = tokenize("echo $(ls -la)").unwrap();
         assert_eq!(tokens.len(), 2);
 
         if let Token::Word(w) = &tokens[1] {
@@ -4280,7 +4317,7 @@ mod tests {
     #[test]
     fn test_command_sub_multiple() {
         // Multiple command substitutions in one line
-        let tokens = tokenize("echo $(pwd) $(date)").expect("TODO: handle error");
+        let tokens = tokenize("echo $(pwd) $(date)").unwrap();
         assert_eq!(tokens.len(), 3);
 
         // First command sub
@@ -4301,7 +4338,7 @@ mod tests {
     #[test]
     fn test_command_sub_mixed_with_variables() {
         // Mix of variables and command substitution
-        let tokens = tokenize("echo $VAR $(pwd)").expect("TODO: handle error");
+        let tokens = tokenize("echo $VAR $(pwd)").unwrap();
         assert_eq!(tokens.len(), 3);
 
         // Variable
@@ -4322,7 +4359,7 @@ mod tests {
     #[test]
     fn test_command_sub_backtick_escaped() {
         // Escaped backtick inside backtick command sub
-        let tokens = tokenize("echo `echo \\`test\\``").expect("TODO: handle error");
+        let tokens = tokenize("echo `echo \\`test\\``").unwrap();
         assert_eq!(tokens.len(), 2);
 
         if let Token::Word(w) = &tokens[1] {
@@ -4337,7 +4374,7 @@ mod tests {
     #[test]
     fn test_process_sub_input_parse() {
         // Input process substitution: <(cmd)
-        let tokens = tokenize("diff <(ls dir1) <(ls dir2)").expect("TODO: handle error");
+        let tokens = tokenize("diff <(ls dir1) <(ls dir2)").unwrap();
         assert_eq!(tokens.len(), 3);
 
         // First arg: <(ls dir1)
@@ -4370,7 +4407,7 @@ mod tests {
     #[test]
     fn test_process_sub_output_parse() {
         // Output process substitution: >(cmd)
-        let tokens = tokenize("tee >(wc -l) >(grep pattern)").expect("TODO: handle error");
+        let tokens = tokenize("tee >(wc -l) >(grep pattern)").unwrap();
         assert_eq!(tokens.len(), 3);
 
         // First arg: >(wc -l)
@@ -4390,7 +4427,7 @@ mod tests {
     #[test]
     fn test_process_sub_in_double_quotes() {
         // Process substitution in double quotes (should still parse)
-        let tokens = tokenize("echo \"<(ls)\"").expect("TODO: handle error");
+        let tokens = tokenize("echo \"<(ls)\"").unwrap();
         assert_eq!(tokens.len(), 2);
 
         if let Token::Word(w) = &tokens[1] {
@@ -4405,7 +4442,7 @@ mod tests {
     #[test]
     fn test_process_sub_in_single_quotes() {
         // Process substitution in single quotes should be literal
-        let tokens = tokenize("echo '<(ls)'").expect("TODO: handle error");
+        let tokens = tokenize("echo '<(ls)'").unwrap();
         assert_eq!(tokens.len(), 2);
 
         if let Token::Word(w) = &tokens[1] {
@@ -4440,7 +4477,7 @@ mod tests {
     #[test]
     fn test_process_sub_empty() {
         // Empty process substitution should parse
-        let tokens = tokenize("cat <()").expect("TODO: handle error");
+        let tokens = tokenize("cat <()").unwrap();
         assert_eq!(tokens.len(), 2);
 
         if let Token::Word(w) = &tokens[1] {
@@ -4453,7 +4490,7 @@ mod tests {
     #[test]
     fn test_process_sub_with_redirects() {
         // Process substitution with redirects inside
-        let tokens = tokenize("cat <(ls > /tmp/out)").expect("TODO: handle error");
+        let tokens = tokenize("cat <(ls > /tmp/out)").unwrap();
         assert_eq!(tokens.len(), 2);
 
         if let Token::Word(w) = &tokens[1] {
@@ -4466,7 +4503,7 @@ mod tests {
     #[test]
     fn test_process_sub_nested_parens() {
         // Nested parentheses should track depth
-        let tokens = tokenize("cat <(echo (test))").expect("TODO: handle error");
+        let tokens = tokenize("cat <(echo (test))").unwrap();
         assert_eq!(tokens.len(), 2);
 
         if let Token::Word(w) = &tokens[1] {
@@ -4479,12 +4516,12 @@ mod tests {
     #[test]
     fn test_process_sub_vs_redirect() {
         // < followed by non-( should be redirect, not process sub
-        let tokens = tokenize("cat < input.txt").expect("TODO: handle error");
+        let tokens = tokenize("cat < input.txt").unwrap();
         assert_eq!(tokens.len(), 3);
         assert!(matches!(tokens[1], Token::InputRedirect));
 
         // <( should be process sub
-        let tokens2 = tokenize("cat <(echo test)").expect("TODO: handle error");
+        let tokens2 = tokenize("cat <(echo test)").unwrap();
         assert_eq!(tokens2.len(), 2);
         if let Token::Word(w) = &tokens2[1] {
             assert!(matches!(w.parts[0], WordPart::ProcessSub(_, _)));
@@ -4497,7 +4534,7 @@ mod tests {
 
     #[test]
     fn test_parse_if_then_fi() {
-        let cmd = parse_command("if [ -f test.txt ]; then echo found; fi").expect("TODO: handle error");
+        let cmd = parse_command("if [ -f test.txt ]; then echo found; fi").unwrap();
         match cmd {
             Command::If { condition, then_body, elif_parts, else_body } => {
                 // Condition should be a bracket test
@@ -4512,14 +4549,14 @@ mod tests {
 
     #[test]
     fn test_parse_if_then_else_fi() {
-        let cmd = parse_command("if [ -d /tmp ]; then echo yes; else echo no; fi").expect("TODO: handle error");
+        let cmd = parse_command("if [ -d /tmp ]; then echo yes; else echo no; fi").unwrap();
         match cmd {
             Command::If { condition, then_body, elif_parts, else_body } => {
                 assert!(matches!(*condition, Command::Bracket { .. }));
                 assert_eq!(then_body.len(), 1);
                 assert!(elif_parts.is_empty());
                 assert!(else_body.is_some());
-                assert_eq!(else_body.expect("TODO: handle error").len(), 1);
+                assert_eq!(else_body.unwrap().len(), 1);
             }
             _ => panic!("Expected If command"),
         }
@@ -4529,7 +4566,7 @@ mod tests {
     fn test_parse_if_elif_else_fi() {
         let cmd = parse_command(
             "if [ $x -eq 1 ]; then echo one; elif [ $x -eq 2 ]; then echo two; else echo other; fi"
-        ).expect("TODO: handle error");
+        ).unwrap();
         match cmd {
             Command::If { then_body, elif_parts, else_body, .. } => {
                 assert_eq!(then_body.len(), 1);
@@ -4542,7 +4579,7 @@ mod tests {
 
     #[test]
     fn test_parse_while_do_done() {
-        let cmd = parse_command("while [ $i -lt 10 ]; do echo $i; done").expect("TODO: handle error");
+        let cmd = parse_command("while [ $i -lt 10 ]; do echo $i; done").unwrap();
         match cmd {
             Command::WhileLoop { condition, body } => {
                 assert!(matches!(*condition, Command::Bracket { .. }));
@@ -4554,7 +4591,7 @@ mod tests {
 
     #[test]
     fn test_parse_for_in_do_done() {
-        let cmd = parse_command("for x in a b c; do echo $x; done").expect("TODO: handle error");
+        let cmd = parse_command("for x in a b c; do echo $x; done").unwrap();
         match cmd {
             Command::ForLoop { var, words, body } => {
                 assert_eq!(var, "x");
@@ -4567,7 +4604,7 @@ mod tests {
 
     #[test]
     fn test_parse_case_esac() {
-        let cmd = parse_command("case $x in a) echo a;; b|c) echo bc;; *) echo default;; esac").expect("TODO: handle error");
+        let cmd = parse_command("case $x in a) echo a;; b|c) echo bc;; *) echo default;; esac").unwrap();
         match cmd {
             Command::CaseStatement { word, arms } => {
                 assert_eq!(word, "$x");
@@ -4715,65 +4752,65 @@ mod heredoc_tests {
 
     #[test]
     fn test_process_heredoc_literal() {
-        let mut state = crate::state::ShellState::new("/tmp").expect("TODO: handle error");
+        let mut state = crate::state::ShellState::new("/tmp").unwrap();
         let content = "Line 1\nLine 2\nLine 3";
 
-        let processed = process_heredoc_content(content, false, false, &mut state).expect("TODO: handle error");
+        let processed = process_heredoc_content(content, false, false, &mut state).unwrap();
         // Content without trailing newline adds newlines for each line
         assert_eq!(processed, "Line 1\nLine 2\nLine 3");
     }
 
     #[test]
     fn test_process_heredoc_with_expansion() {
-        let mut state = crate::state::ShellState::new("/tmp").expect("TODO: handle error");
+        let mut state = crate::state::ShellState::new("/tmp").unwrap();
         state.set_variable("name", "World");
 
         let content = "Hello $name\nResult: $((5 + 3))";
 
-        let processed = process_heredoc_content(content, false, true, &mut state).expect("TODO: handle error");
+        let processed = process_heredoc_content(content, false, true, &mut state).unwrap();
         assert_eq!(processed, "Hello World\nResult: 8");
     }
 
     #[test]
     fn test_process_heredoc_strip_tabs() {
-        let mut state = crate::state::ShellState::new("/tmp").expect("TODO: handle error");
+        let mut state = crate::state::ShellState::new("/tmp").unwrap();
         let content = "\tLine 1\n\t\tLine 2\n\t\t\tLine 3";
 
-        let processed = process_heredoc_content(content, true, false, &mut state).expect("TODO: handle error");
+        let processed = process_heredoc_content(content, true, false, &mut state).unwrap();
         // <<- strips ALL leading tabs from each line
         assert_eq!(processed, "Line 1\nLine 2\nLine 3");
     }
 
     #[test]
     fn test_tokenize_herestring() {
-        let tokens = tokenize("cat <<<word").expect("TODO: handle error");
+        let tokens = tokenize("cat <<<word").unwrap();
         assert_eq!(tokens.len(), 3);
         assert!(matches!(tokens[1], Token::HereString));
     }
 
     #[test]
     fn test_tokenize_heredoc() {
-        let tokens = tokenize("cat <<EOF").expect("TODO: handle error");
+        let tokens = tokenize("cat <<EOF").unwrap();
         assert_eq!(tokens.len(), 3);
         assert!(matches!(tokens[1], Token::HereDoc));
     }
 
     #[test]
     fn test_tokenize_heredoc_dash() {
-        let tokens = tokenize("cat <<-EOF").expect("TODO: handle error");
+        let tokens = tokenize("cat <<-EOF").unwrap();
         assert_eq!(tokens.len(), 3);
         assert!(matches!(tokens[1], Token::HereDocDash));
     }
 
     #[test]
     fn test_extract_heredoc_delimiters() {
-        let delimiters = extract_heredoc_delimiters("cat <<EOF").expect("TODO: handle error");
+        let delimiters = extract_heredoc_delimiters("cat <<EOF").unwrap();
         assert_eq!(delimiters, vec!["EOF"]);
 
-        let delimiters2 = extract_heredoc_delimiters("cat <<'EOF'").expect("TODO: handle error");
+        let delimiters2 = extract_heredoc_delimiters("cat <<'EOF'").unwrap();
         assert_eq!(delimiters2, vec!["EOF"]);
 
-        let delimiters3 = extract_heredoc_delimiters("cmd <<END1 arg <<END2").expect("TODO: handle error");
+        let delimiters3 = extract_heredoc_delimiters("cmd <<END1 arg <<END2").unwrap();
         assert_eq!(delimiters3, vec!["END1", "END2"]);
     }
 }
@@ -4784,14 +4821,14 @@ mod job_control_tests {
 
     #[test]
     fn test_tokenize_background() {
-        let tokens = tokenize("sleep 10 &").expect("TODO: handle error");
+        let tokens = tokenize("sleep 10 &").unwrap();
         assert_eq!(tokens.len(), 3);
         assert!(matches!(tokens[2], Token::Background));
     }
 
     #[test]
     fn test_parse_background_job() {
-        let cmd = parse_command("sleep 10 &").expect("TODO: handle error");
+        let cmd = parse_command("sleep 10 &").unwrap();
         match cmd {
             Command::External { program, args, background, .. } => {
                 assert_eq!(program, "sleep");
@@ -4804,7 +4841,7 @@ mod job_control_tests {
 
     #[test]
     fn test_parse_jobs_command() {
-        let cmd = parse_command("jobs").expect("TODO: handle error");
+        let cmd = parse_command("jobs").unwrap();
         match cmd {
             Command::Jobs { long } => {
                 assert!(!long);
@@ -4815,7 +4852,7 @@ mod job_control_tests {
 
     #[test]
     fn test_parse_jobs_long() {
-        let cmd = parse_command("jobs -l").expect("TODO: handle error");
+        let cmd = parse_command("jobs -l").unwrap();
         match cmd {
             Command::Jobs { long } => {
                 assert!(long);
@@ -4826,7 +4863,7 @@ mod job_control_tests {
 
     #[test]
     fn test_parse_fg_no_spec() {
-        let cmd = parse_command("fg").expect("TODO: handle error");
+        let cmd = parse_command("fg").unwrap();
         match cmd {
             Command::Fg { job_spec } => {
                 assert!(job_spec.is_none());
@@ -4837,7 +4874,7 @@ mod job_control_tests {
 
     #[test]
     fn test_parse_fg_with_spec() {
-        let cmd = parse_command("fg %1").expect("TODO: handle error");
+        let cmd = parse_command("fg %1").unwrap();
         match cmd {
             Command::Fg { job_spec } => {
                 assert_eq!(job_spec, Some("%1".to_string()));
@@ -4848,7 +4885,7 @@ mod job_control_tests {
 
     #[test]
     fn test_parse_bg_no_spec() {
-        let cmd = parse_command("bg").expect("TODO: handle error");
+        let cmd = parse_command("bg").unwrap();
         match cmd {
             Command::Bg { job_spec } => {
                 assert!(job_spec.is_none());
@@ -4859,7 +4896,7 @@ mod job_control_tests {
 
     #[test]
     fn test_parse_kill_default_signal() {
-        let cmd = parse_command("kill %1").expect("TODO: handle error");
+        let cmd = parse_command("kill %1").unwrap();
         match cmd {
             Command::Kill { signal, job_spec } => {
                 assert_eq!(job_spec, "%1");
@@ -4871,7 +4908,7 @@ mod job_control_tests {
 
     #[test]
     fn test_parse_kill_with_signal() {
-        let cmd = parse_command("kill -9 %1").expect("TODO: handle error");
+        let cmd = parse_command("kill -9 %1").unwrap();
         match cmd {
             Command::Kill { signal, job_spec } => {
                 assert_eq!(job_spec, "%1");
@@ -4883,7 +4920,7 @@ mod job_control_tests {
 
     #[test]
     fn test_parse_logical_and() {
-        let cmd = parse_command("mkdir foo && touch bar").expect("TODO: handle error");
+        let cmd = parse_command("mkdir foo && touch bar").unwrap();
         match cmd {
             Command::LogicalOp { operator, left, right } => {
                 assert_eq!(operator, LogicalOperator::And);
@@ -4896,7 +4933,7 @@ mod job_control_tests {
 
     #[test]
     fn test_parse_logical_or() {
-        let cmd = parse_command("test -f file.txt || touch file.txt").expect("TODO: handle error");
+        let cmd = parse_command("test -f file.txt || touch file.txt").unwrap();
         match cmd {
             Command::LogicalOp { operator, left, right } => {
                 assert_eq!(operator, LogicalOperator::Or);
@@ -4909,14 +4946,14 @@ mod job_control_tests {
 
     #[test]
     fn test_tokenize_and_operator() {
-        let tokens = tokenize("cmd1 && cmd2").expect("TODO: handle error");
+        let tokens = tokenize("cmd1 && cmd2").unwrap();
         assert_eq!(tokens.len(), 3);
         assert!(matches!(tokens[1], Token::And));
     }
 
     #[test]
     fn test_tokenize_or_operator() {
-        let tokens = tokenize("cmd1 || cmd2").expect("TODO: handle error");
+        let tokens = tokenize("cmd1 || cmd2").unwrap();
         assert_eq!(tokens.len(), 3);
         assert!(matches!(tokens[1], Token::Or));
     }

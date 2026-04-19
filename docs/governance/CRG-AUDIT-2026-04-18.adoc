@@ -1,0 +1,932 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+
+= valence-shell — CRG Audit (2026-04-18)
+Jonathan D.A. Jewell
+2026-04-18
+:toc:
+:sectnums:
+
+== Scope and Standard
+
+Evaluates the `developer-ecosystem/valence-shell` repository against
+*Component Readiness Grades v2.0 (STRICT)*, 2026-03-30 revision.
+
+Context for this re-triage: valence-shell was originally on the HYP-S005
+Bucket-A auto-demote list (the cheap self-consistency check on flat
+`crg-grade = "C"` vs low `completion-percentage`). It was *removed* from
+that set after its numbers passed the self-consistency canary —
+`version = "0.9.0"`, `completion-percentage = 74`, and its STATE.a2ml
+uses the *sectioned* `[crg] / grade = "C"` schema (not the flat key the
+HYP-S005 regex scans for, so the flat-schema detector would not fire on
+it regardless). This audit is therefore the full evidence check that the
+canary did not perform.
+
+- Standard: `standards/component-readiness-grades/COMPONENT-READINESS-GRADES.md`
+- Audit template: `rsr-template-repo/docs/governance/CRG-AUDIT-TEMPLATE.adoc`
+- Calibration siblings:
+  * `verification-ecosystem/session-sentinel/docs/governance/CRG-AUDIT-2026-04-18.adoc` (sectioned schema, C→D)
+  * `gossamer/docs/governance/CRG-AUDIT-2026-04-18.adoc` (sectioned schema, close-to-C)
+- Self-declared grade (prior art):
+  * `.machine_readable/6a2/STATE.a2ml` `[crg] grade = "C"`,
+    `achieved = "2026-04-04"`.
+  * `[metadata] version = "0.9.0"`, `last-updated = "2026-04-12"`.
+  * `[project-context] completion-percentage = 74`,
+    `phase = "advanced-research-prototype"`.
+  * `[coq-proof-status] admitted = 0`, `axioms-justified = 1`.
+- Prior in-tree audit: `docs/reports/audit/audit-2026-04-04.md` (M2 estate
+  audit) concluded "REPAIR THEN PUBLISH" with five required repairs open.
+- Audit date: 2026-04-18
+- Auditor: Jonathan D.A. Jewell
+
+Schema note: valence-shell uses the *sectioned* `[crg] / grade = "C"`
+form. HYP-S005's flat-schema regex will not fire on it. The grade stated
+in-repo is `"C"` regardless of which schema form the detector reads, and
+this audit grades the value the repo intends.
+
+The audit grades the repo *as-is today*, not aspirationally.
+
+== v2.0 Strictness Recap
+
+[cols="1,3,4"]
+|===
+| Grade | Release Stage | Hard Requirement (v2.0)
+
+| X | None             | Untested.
+| F | Reject           | Harmful, wasteful, or superseded.
+| E | Pre-alpha        | >=1 test, failures documented.
+| D | Alpha            | Test matrix + scope documented + *RSR compliance mandatory*.
+| C | Alpha-stable     | Dogfooded, CI green, *deep per-file + per-directory annotation*.
+| B | Beta             | 6+ *diverse* external targets, issues fed back.
+| A | Stable           | Real-world external feedback confirms value; no harm.
+|===
+
+Publication requires B+. Long alpha is discipline, not shame.
+
+== Evidence Inventory (verified 2026-04-18)
+
+=== Structural compliance (Grade D floor)
+
+[cols="2,1,3"]
+|===
+| Item | State | Source
+
+| RSR mandatory workflows (17+)
+| PRESENT (26 YAML files)
+| `.github/workflows/` — boj-build, casket-pages, cflite_batch, cflite_pr,
+  codeql, compilation_tests, dogfood-gate, echidna-validation,
+  generator-generic-ossf-slsa3-publish, guix-nix-policy, hypatia-scan,
+  instant-sync, lean-verification, mirror, npm-bun-blocker, quality,
+  rsr-antipattern, rust-cli, scorecard, scorecard-enforcer, secret-scanner,
+  security-policy, ts-blocker, validation, wellknown-enforcement,
+  workflow-linter.
+
+| `.machine_readable/6a2/` canonical A2ML
+| PRESENT (STATE, META, ECOSYSTEM, AGENTIC, NEUROSYM, PLAYBOOK — all 6)
+| STATE.a2ml is populated (48 lines); META.a2ml is a 9-line stub with
+  only `[metadata]` (no ADRs, no design-rationale, no
+  architecture-decisions block). ECOSYSTEM/AGENTIC/NEUROSYM/PLAYBOOK
+  are each short skeleton files.
+
+| `0-AI-MANIFEST.a2ml`
+| PRESENT (860 bytes)
+| Root
+
+| `README.adoc`, `EXPLAINME.adoc`, `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.adoc/md`, `ROADMAP.adoc`
+| PRESENT
+| Root
+
+| `docs/` orientation subtree
+| SUBSTANTIAL (50+ files)
+| `docs/` carries ARCHITECTURE.md, ARCHITECTURE_DIAGRAMS.md,
+  COMPREHENSIVE_EXAMPLES.md, ECHIDNA_INTEGRATION.md,
+  LEAN4_RUST_CORRESPONDENCE.md, POSIX_COMPLIANCE.md,
+  PROOF_HOLES_AUDIT.md (well-maintained), PROOF_OVERVIEW.md,
+  PROPERTY_TESTING.md, SEAM_ANALYSIS_AND_IDRIS2_PLAN.md,
+  VERIFICATION_STRATEGY_ANALYSIS.md, USER_GUIDE.md,
+  ZIG_LEAN_EXTRACTION.md, 10× `PHASE6_M*_DESIGN.md` documents, plus
+  session notes. No `docs/governance/` subtree until this audit lands.
+  No `docs/architecture/` / `docs/decisions/` / `docs/practice/`
+  subtree organisation — files are flat under `docs/`.
+
+| `LICENSE`, `LICENSES/`, SPDX headers
+| PRESENT
+| LICENSE (PMPL-1.0-or-later, 18 397 bytes — updated 2026-04-17), plus
+  `LICENSES/` dir and `NOTICE`. Source files sampled across
+  `impl/rust-cli/src/` + `proofs/coq/`: all carry SPDX.
+
+| `guix.scm` + `flake.nix`
+| PRESENT (both)
+| Root
+
+| `.well-known/` (security.txt, ai.txt, humans.txt)
+| PRESENT (all three)
+| `.well-known/`
+
+| `Containerfile` (not `Dockerfile`)
+| PRESENT; *zero* `Dockerfile` at any depth
+| Root `Containerfile` (2 260 bytes).
+
+| `Justfile` + `Mustfile` (no `Makefile` at root)
+| PRESENT Justfile (15 809 bytes) + `contractile.just` + root `Mustfile`
+  (267 bytes, legacy flat form — pre-contractile-subtree). *Makefiles do
+  exist* under `proofs/coq/Makefile.conf` and `impl/zig/` (Makefile.conf);
+  these are Coq-build artefacts (auto-generated by `coq_makefile`), not
+  root build policy, and are standard for the Coq toolchain. Acceptable
+  under R-020's proof-assistant carve-out.
+| RSR R-020: met at root. Proof-system Makefile artefacts are Coq-emitted
+  and not an R-020 breach.
+
+| Contractile trident
+| PRESENT (root `contractiles/{dust,k9,lust,must,trust}/` +
+  `.machine_readable/contractiles/{dust,trust}/`) plus root
+  `INTENT.contractile`, `MUST.contractile`, `TRUST.contractile`,
+  `ADJUST.contractile` (four of six verbs as first-class files).
+  `bust.contractile` absent; `adjust.contractile` present. `lust/`
+  vestigial of the 2026-04 `lust→intend` rename, carries `Intentfile`.
+| Trident present; six-verb layout partial; `lust→intend` rename not yet
+  applied.
+
+| Remote
+| `origin → git@github.com:hyperpolymath/valence-shell.git` (+ mirror
+  remotes configured)
+| Per GitHub-only mirroring rule, mirror pushes are downstream-populated.
+
+| Banned-language sweep: TypeScript / Python / Go / package.json / Dockerfile
+| *Zero hits* for `.ts` files, `.py` files, `.go` files, `package.json`,
+  or `Dockerfile` anywhere in the tree.
+| CLAUDE.md language policy cleanly met — unlike session-sentinel or
+  standards this session, valence-shell is entirely in allowed
+  languages (Rust, Coq/Lean4/Agda/Isabelle/Mizar/Z3, Zig, OCaml, Elixir,
+  ReScript in `impl/mcp/`). This is the strongest language-policy
+  compliance of any repo audited this session.
+
+| `.tool-versions`, `.editorconfig`, `.gitattributes`
+| PRESENT
+| Root
+|===
+
+*RSR compliance verdict*: **met — D-floor satisfied**. Structural shell
+is strong: 26 workflows, Containerfile discipline, zero banned
+languages, full `.well-known/`, guix+flake, contractile trident (partial
+on six-verb rename), both primary and sub-project carry a full
+`.machine_readable/6a2/` suite.
+
+=== Code and proofs
+
+[cols="2,1,3"]
+|===
+| Item | Count | Notes
+
+| Rust CLI source (`impl/rust-cli/src/`)
+| 32 files, *~20 700* LOC
+| Largest modules: `state.rs` (1 303), `test_command.rs` (753). Core
+  reversibility engine: `commands.rs`, `commands/`, `state.rs`,
+  `parser.rs`, `pipeline.rs`, `redirection.rs`, `glob.rs`, `arith.rs`,
+  `process_sub.rs`, `here_doc.rs`, `echidna_integration.rs`,
+  `audit_log.rs`, `proof_refs.rs`, `verification.rs`. SPDX-clean on
+  sampled files.
+
+| Coq proofs (`proofs/coq/*.v`)
+| 9 `.v` files
+| `filesystem_model.v`, `filesystem_composition.v`,
+  `filesystem_equivalence.v`, `file_operations.v`,
+  `file_content_operations.v`, `copy_move_operations.v`,
+  `permission_operations.v`, `symlink_operations.v`, `posix_errors.v`,
+  `rmo_operations.v`, `extraction.v`. Committed `.vo`/`.vos`/`.vok`/`.glob`
+  artefacts — stale build output shouldn't be in-tree (see
+  `proofs/coq/.gitignore` mentioned in STATE but artefacts pre-date).
+
+| Lean 4 proofs (`proofs/lean4/*.lean`)
+| 9 `.lean` files, *5 995* LOC total
+| `FilesystemModel`, `FilesystemComposition`, `FilesystemEquivalence`,
+  `FileOperations`, `FileContentOperations`, `CopyMoveOperations`,
+  `PermissionOperations`, `RMOOperations`, `SymlinkOperations` +
+  `Extraction.lean`. Largest: `FileContentOperations` (425),
+  `RMOOperations` (380).
+
+| Agda / Isabelle / Mizar / Z3 / Idris2 proofs
+| 5 additional directories
+| `proofs/agda/`, `proofs/isabelle/`, `proofs/mizar/`, `proofs/z3/`,
+  `proofs/idris2/` (with `valence-shell.ipkg`). Per
+  `docs/PROOF_HOLES_AUDIT.md` (2026-04-12): *3 total holes* across all
+  proof systems — 1 real gap (`obliterate_overwrites_all_blocks`),
+  1 justified axiom (`is_empty_dir_dec` — infinite-domain), 1 structural
+  (`funext` — standard). Down from 31 holes pre-2026-04 sweep. Disciplined.
+
+| Idris2 ABI (`src/abi/`, `alkahest-shell-transmuter/src/abi/`)
+| 3 + 3 files (Types.idr, Layout.idr, Foreign.idr in each)
+| Minimal stubs; primary proof work is in `proofs/{coq,lean4,...}` not in
+  the Idris2 ABI layer.
+
+| Zig FFI (`ffi/zig/`, `impl/zig/`, `alkahest-shell-transmuter/ffi/zig/`)
+| 3 Zig subtrees
+| `impl/zig/` carries a dedicated README targeting *~5ms cold start*;
+  `ffi/zig/` is ABI-FFI-standard scaffolding. Build machinery present.
+
+| Elixir NIF (`impl/elixir/`)
+| PRESENT but per CLAUDE.md "Elixir NIF build broken (low priority)"
+| Explicit known-broken reference implementation.
+
+| OCaml (`impl/ocaml/`), MCP (`impl/mcp/`), Rust FFI (`impl/rust-ffi/`)
+| PRESENT
+| `impl/mcp/src/bindings/Mcp.res` is ReScript — per audit-2026-04-04
+  all 24 `Obj.magic` uses were replaced; 1 remaining is documented for
+  MCP JSON cast.
+
+| *Coq `admit.` tactic sites*
+| **1 (undeclared)**
+| `proofs/coq/filesystem_composition.v:199` contains `simpl in *. admit.`
+  inside `single_op_reversible` for the `OpRmdir` branch, with a
+  comment "MODEL GAP (pre-existing)". This is a real admitted proof.
+  STATE.a2ml claims `[coq-proof-status] admitted = 0`. *The
+  `admit.` tactic evidence contradicts the state claim.* This is the
+  single most important correctness finding in the audit and
+  directly breaches both the `MUST.contractile` echidnabot policy
+  ("bans Admitted at severity critical") and the CRG v2.0
+  "dangerous-pattern scan" clause.
+
+| `believe_me`, `assert_total`, `sorry`, `unsafeCoerce`, `Obj.magic` scan
+| *81 grep hits across 26 files*, but **0 actual uses** on inspection
+| All hits are in docstrings, policy files, audit logs, and the
+  `MUST.contractile` block itself declaring these patterns banned. Per-
+  `PROOF_HOLES_AUDIT.md` and audit-2026-04-04: zero actual uses. Clean
+  on this axis.
+
+| `.expect("TODO: handle error")` pattern
+| **404 sites across 17 files in `impl/rust-cli/src/`**
+| `parser.rs` (112), commands/secure_deletion.rs (9), functions.rs (12),
+  quotes.rs (27), external.rs (24), executable.rs (1), glob.rs (1),
+  correction.rs (1), commands.rs (66), audit_log.rs (13),
+  echidna_integration.rs (1), arith.rs (55), redirection.rs (28),
+  process_sub.rs (11), job.rs (7), state.rs (35), pager.rs (1).
+  This is the **memory rule violation** `.unwrap() → .expect("TODO")
+  is an anti-pattern` (identical panic + fake debt marker). 404 hits
+  is the largest instance of this anti-pattern seen in the estate
+  this session. Existing `.unwrap()` count: 54 across 4 files —
+  suggests most `.unwrap()` was machine-swept to `.expect("TODO:
+  handle error")` in bulk, the exact pattern the memory rule flags
+  as "revert on sight".
+|===
+
+=== Test matrix — declared vs actual
+
+STATE.a2ml does not itself list test counts, but the CLAUDE.md test
+table and EXPLAINME.adoc both assert **602 passing, 0 failures** with
+this breakdown (2026-03-08):
+
+[cols="2,1,1,2"]
+|===
+| Category (declared) | Declared | Grep-verifiable | Notes
+
+| Unit (lib) | 277 | — (lib tests inside `src/`) | Not individually
+  counted in `#[test]` grep on `tests/` only.
+
+| Correspondence (Lean 4) | 28 | `correspondence_tests.rs` carries 35
+  `#[test]` | Declared 28 is close to found 35; difference may be
+  subtests vs top-level tests.
+
+| Extended | 55 | `extended_test_tests.rs` = 55 `#[test]` | Exact match.
+
+| Integration | 35 | `integration_test.rs` = 35 `#[test]` | Exact match.
+
+| Integration extra | 10 | `integration_tests.rs` = 10 `#[test]` |
+  Exact match.
+
+| Lean4 proptest | 16 | `lean4_proptest_correspondence.rs` = 16
+  `#[test]` | Exact match.
+
+| Parameter expansion | 67 | `parameter_expansion_tests.rs` = 67
+  `#[test]` | Exact match.
+
+| Property correspondence | 15 | `property_correspondence_tests.rs` =
+  19 `#[test]` | Minor overclaim (declared 15, found 19).
+
+| Property | 28 | `property_tests.rs` = 28 `#[test]` | Exact match.
+
+| Security | 15 | `security_tests.rs` = 15 `#[test]` | Exact match.
+
+| Doctests | 52 | Not grep-counted here | Rust doctest-annotation
+  inline.
+
+| Function/script | —  | `function_and_script_tests.rs` (24) +
+  `function_control_flow_tests.rs` (8) +
+  `e2e_script_execution.rs` (25) = 57 | *Not declared* in the 602
+  table — these are newer suites post-2026-03-08.
+
+| *Total (verifiable in `tests/`)* | — | 348 across 13 files | The 602
+  claim includes 277 lib unit + 52 doctests which grep on `tests/`
+  cannot see; the count is plausible. Worst case: minor 4-test
+  overclaim on property correspondence offset by undisclosed function/
+  script suites.
+|===
+
+Test-count honesty: *good* — claimed 602 is a reasonable summary of
+declared breakdown; per-suite counts match exactly for 6 of 8
+verifiable categories; one minor overclaim (property correspondence
+15→19, in *valence-shell's favour*); several newer suites
+(function_and_script, function_control_flow, e2e_script_execution)
+are in the tree but not in the 2026-03-08 table, so if anything the
+"602 passing" is stale downward, not upward.
+
+*CI coverage (the critical finding):*
+
+[cols="2,1,3"]
+|===
+| Workflow | Last 30 runs | Evidence
+
+| `rust-cli.yml` | *30 failure / 0 success* | `gh run list --workflow rust-cli.yml --limit 30`
+  returned 30 "failure" conclusions. The workflow that runs
+  `cargo test --lib`, `cargo test --test integration_test`,
+  `cargo test --test property_tests` has been *red every run* for
+  weeks.
+
+| `compilation_tests.yml` | 5/5 failure sampled | Same pattern.
+
+| `validation.yml` | 5/5 failure sampled | Same pattern.
+
+| Job-level evidence | `Test Rust CLI` on run 24565986753
+  (2026-04-17 14:33Z): **failure**. Job log shows `.expect("TODO:
+  handle error")` sites being flagged by the Rust compiler / clippy /
+  tests. The failure is causally linked to the 404-site anti-pattern
+  above.
+
+| `validation.yml` `verify-proofs` job | `if: false` | Line 50 of
+  `validation.yml`: `if: false  # Disabled until proof systems
+  installed in CI`. *Coq/Lean/Agda/Isabelle/Z3 verification is not
+  run in CI at all.* Echidna-validation workflow clones echidna and
+  runs a validation script (echidna-validation.yml), but the main
+  proof-verification pipeline is off.
+
+| `echidna-validation.yml` | not re-verified here | Workflow definition
+  exists and does clone Echidna + `list-provers` + run
+  `scripts/validate-with-echidna.sh`. Condition-gated on path filter.
+|===
+
+*The C clause "CI green" is not met.* The authoritative test workflow
+for the Rust CLI (`rust-cli.yml`) has been failing every run for at
+least a month, and proof verification (`verify-proofs` job) is gated
+off with `if: false`. The 602-test claim may be true locally, but
+locally-passing tests are not C evidence.
+
+=== Annotation depth
+
+v2.0 C requires **per-file and per-directory orientation**. Evidence:
+
+- **Root `docs/` tree**: *50+ markdown files* under a flat `docs/`
+  without subtree organisation. Substantial in volume — particularly
+  `PROOF_HOLES_AUDIT.md` (well-maintained, dated 2026-04-12),
+  `POSIX_COMPLIANCE.md`, `ARCHITECTURE.md`, 10 Phase 6 milestone
+  design docs, `LEAN4_RUST_CORRESPONDENCE.md`, and
+  `VERIFICATION_STRATEGY_ANALYSIS.md`. Thin on organisation: no
+  `docs/governance/`, `docs/architecture/`, `docs/decisions/`,
+  `docs/practice/`, `docs/wikis/` subtrees. This audit adds the first
+  `docs/governance/` file.
+
+- **Per-directory README coverage**: *5 of 22 non-hidden source/test
+  subtrees* carry a README. Coverage:
+
+[cols="1,1"]
+|===
+| README present | README absent
+| `proofs/`      | `impl/`
+| `proofs/idris2/`| `impl/rust-cli/src/`
+| `impl/zig/`   | `impl/rust-cli/tests/`
+| `contractiles/`| `impl/elixir/`
+| `contractiles/k9/` | `impl/ocaml/`
+|                | `impl/mcp/`
+|                | `impl/rust-ffi/`
+|                | `ffi/`
+|                | `ffi/rust/`
+|                | `ffi/zig/`
+|                | `docs/` (no README, just files)
+|                | `src/` + `src/abi/`
+|                | `tests/`
+|                | `proofs/coq/` / `lean4/` / `agda/` / `isabelle/` / `mizar/` / `z3/`
+|                | `scripts/`, `examples/`, `hooks/`, `benches/`
+|===
+
+  That is *~23% coverage* — materially worse than session-sentinel
+  (~100%) or gossamer (~36%). This is the single biggest C-blocker.
+
+- Per-module inline docs: sampled `impl/rust-cli/src/state.rs`,
+  `impl/rust-cli/src/arith.rs`, `proofs/coq/posix_errors.v`: all three
+  carry substantive module-header doc blocks. `posix_errors.v` is
+  particularly good — explicit justification of decidability status,
+  "✓ 6/6 decision procedures proved (0 Axioms, 0 Admitted)" header
+  comment. But see filesystem_composition.v contradiction below.
+
+- **EXPLAINME.adoc** (8 399 bytes): high honesty discipline —
+  explicit "Caveat" blocks after each claim, explicit downgrade from
+  "v1.0.0 production-ready" (Sonnet's prior claim) to "v0.9.0
+  research prototype". File Map cites 30+ paths — spot-check: all
+  cited impl/rust-cli source files exist, proofs directories exist,
+  `docs/PROOF_HOLES_AUDIT.md` and `docs/POSIX_COMPLIANCE.md` exist.
+  *No File Map fabrication detected* — strongest EXPLAINME honesty of
+  the session's C-candidates.
+
+- **Prior in-tree audit** `docs/reports/audit/audit-2026-04-04.md`:
+  independent estate audit lists 5 required repairs. Two weeks later
+  only partial progress (the 2026-04-12 Coq sweep closed 2 proof
+  debts). Republishing as C without closing the listed Critical-
+  priority gaps is premature.
+
+- **META.a2ml** is skeletal: 9 lines, only `[metadata]`. No
+  `[architecture-decisions]`, no `[development-practices]`, no
+  `[design-rationale]`. ECOSYSTEM/AGENTIC/NEUROSYM/PLAYBOOK are also
+  thin.
+
+- **ROADMAP.adoc** is a 22-line template stub (v0.1.0 / v1.0.0
+  placeholder milestones, unchecked). The repo ships at v0.9.0 so a
+  *populated* roadmap should exist. The real work is tracked in
+  CLAUDE.md, not ROADMAP.adoc.
+
+- **Anchor drift**: `.machine_readable/anchors/ANCHOR.a2ml` says
+  `version: "1.0.0"` while `[metadata]` STATE.a2ml says
+  `version = "0.9.0"`. Minor drift, but it's the canonical-authority
+  file — and the version discrepancy is exactly the pattern the
+  2026-02-12 Opus audit corrected in README/main.rs. The anchor was
+  not updated then.
+
+=== Dogfooding / home-stable evidence
+
+STATE.a2ml has *no* `[dogfooding-status]` section. grep for `dogfoo`
+under `.machine_readable/` returns zero hits (outside workflow-linter
+standards imported from rsr-template-repo).
+
+Indirect signals:
+
+- `.github/workflows/dogfood-gate.yml` — gate workflow, not a
+  dogfood log. Same pattern as session-sentinel and gossamer.
+- EXPLAINME "Dogfooded Across The Account" section claims three
+  cross-project dogfooding integrations:
+  * `absolute-zero` — sharing polyglot formal verification stack.
+    Plausible pattern — absolute-zero does use Coq+Lean4+Agda —
+    but this is *pattern-sharing*, not code-reuse; valence-shell
+    does not import absolute-zero code and vice versa.
+  * `proven-servers` — "Idris2 ABI". valence-shell has minimal
+    `src/abi/{Types,Layout,Foreign}.idr` stubs; proven-servers is
+    Idris2-heavy. This is aspirational, not operational.
+  * `burble` — "Telecom control plane (Lean 4 core)". Burble does
+    use Lean 4. Not a valence-shell consumer relationship.
+  None of these are *users of valence-shell* — they are co-members of
+  the hyperpolymath Lean 4 / Coq universe. Not dogfooding.
+
+- Estate-wide references to valence-shell: grep for `valence-shell`
+  across `/var/mnt/eclipse/repos` returns hits only in ENSAID_CONFIG
+  registries (seed listings, not consumers), standards spec templates,
+  and boj-server's panll cartridge manifest. Standard "catalogued"
+  signal, not *installed-and-used* signal.
+
+- The repo itself is not installed on the author's daily-driver shell
+  path (no `vsh` in PATH, not systemd-enabled, CLAUDE.md states
+  "NOT a replacement for bash/zsh in current state"). *The author's
+  own system does not dogfood the tool.*
+
+- Sub-project alkahest-shell-transmuter has
+  `completion-percentage = 20`, `maturity = "experimental"`, and
+  its own STATE.a2ml concedes "No milestones recorded / No blockers
+  recorded". Zero dogfood signal there either.
+
+v2.0 C requires *continuous* home-context use with no known failures.
+The evidence does not support this.
+
+=== External validation (Grade B / A)
+
+No `[external-targets]`. No `[issues-fed-back]`. No `[field-signal]`.
+No open external issues cited.
+
+External-adjacent signals:
+
+- arXiv preprint draft `arcvix-formally-verified-reversible-shell.tex`
+  (67 452 bytes) exists in-tree — publication preparation, not
+  external adoption.
+- GitHub stars / forks not counted in STATE.
+- Mirror remotes configured — presence, not usage.
+
+Per v2.0 B requires *6+ diverse external targets*. valence-shell is
+at *0*. Not a near-B repo.
+
+=== Self-knowing policy violations
+
+This section specifically addresses the "recurring patterns today"
+flagged in the audit brief.
+
+==== Pattern 1 — `.unwrap() → .expect("TODO")` anti-pattern (MAJOR)
+
+**404 sites across 17 files**. Memory rule states this is "identical
+panic + fake debt marker. Revert on sight." The sweep turned real
+panic sites into a panic site decorated with a fake TODO marker and
+is the *proximate cause of CI being red*. The anti-pattern is
+mechanical — the string is verbatim `"TODO: handle error"` at every
+site — suggesting a machine-applied bulk rewrite. This is the largest
+single instance of the anti-pattern seen in the estate this session.
+Must be reverted (either back to `.unwrap()` with proof-of-infallibility
+in comment, or forward to `?` + real error propagation).
+
+==== Pattern 2 — Undeclared Coq `admit.` (MAJOR)
+
+STATE.a2ml `[coq-proof-status] admitted = 0` contradicts on-disk
+`proofs/coq/filesystem_composition.v:199` which contains
+`simpl in *. admit.`. This is a real admitted proof inside the
+`single_op_reversible` theorem on the `OpRmdir` branch. The comment
+acknowledges a "MODEL GAP (pre-existing)" but the STATE claim
+`admitted = 0` then declares it absent. Policy gaming:
+`MUST.contractile` bans `Admitted` at severity "critical" and the
+CONTRIBUTING.md prohibits `admit`/`Admitted` on main; shipping an
+uncovered `admit.` in a proof while reporting `admitted = 0` is a
+self-knowing violation.
+
+==== Pattern 3 — CI green claim unsupported
+
+STATE.a2ml `[crg] achieved = "2026-04-04"` notes progression in Coq
+proof completeness. It does not claim CI green explicitly, but v2.0
+C *requires* CI green, and the prior audit-2026-04-04.md's CI Health
+section says "No obvious failures detected in workflow definitions.
+... COMPREHENSIVE, WELL-MAINTAINED." Actual evidence: 30/30 failures
+on rust-cli.yml in the most recent 30 runs. The prior audit read the
+workflow YAMLs but not the run history, so the CI Health assessment
+is wrong.
+
+==== Pattern 4 — Fabricated-EXPLAINME check: NEGATIVE
+
+Spot-checked 30+ File Map entries in EXPLAINME; all of them exist
+on disk. EXPLAINME carries explicit caveats, not suppressions, and
+correctly discloses the Lean→Rust correspondence gap. This is *not*
+a fabricated-EXPLAINME case — unlike 4 other repos flagged this
+session. Positive signal; banked against the C case.
+
+==== Pattern 5 — Gamed ts-blocker / npm-bun-blocker: NEGATIVE
+
+valence-shell has *zero* TypeScript and *zero* `package.json` in the
+tree (ReScript in `impl/mcp/` is allowed). Policy workflows are
+present and aren't gamed. Positive signal.
+
+==== Pattern 6 — Justfile stubs: PARTIAL
+
+Root Justfile (15 809 bytes) has real recipes: `build-all`, `verify-all`,
+`build-coq`, plus 70+ more (file is substantive). Not a stub. One
+policy-adjacent drift: `proofs/coq/Justfile` exists alongside
+`proofs/coq/Makefile.conf` — the Makefile.conf is Coq-emitted; the
+Justfile carries the hyperpolymath Just-preferred recipes. Acceptable.
+
+==== Pattern 7 — Version drift
+
+`.machine_readable/anchors/ANCHOR.a2ml: version = "1.0.0"` vs
+STATE.a2ml `version = "0.9.0"` vs arXiv preprint filename
+`arcvix-formally-verified-...` (distinct from repo name `valence-shell`).
+Minor drift in the anchor file (relic of the Sonnet v1.0.0 era that
+the 2026-02-12 Opus audit cleaned elsewhere).
+
+==== Pattern 8 — Roadmap boilerplate
+
+`ROADMAP.adoc` is 22 lines of unchecked rsr-template boilerplate
+(v0.1.0 "Foundation" / v1.0.0 "Stable" placeholders). For a v0.9.0
+project, a real roadmap belongs here. The real next-steps are
+tracked in CLAUDE.md and the 10× Phase 6 design docs under `docs/`;
+the authoritative roadmap file is the stub.
+
+==== Pattern 9 — `lust/` vestige
+
+`.machine_readable/contractiles/contractiles/lust/Intentfile` +
+`contractiles/lust/Intentfile` both exist; `lust → intend` rename
+not applied. Contractiles README still speaks of `lust/Intentfile` as
+"future intent". Same as session-sentinel; minor.
+
+=== Alkahest sub-project
+
+`alkahest-shell-transmuter/` is a nested component inside valence-shell,
+not a separate repo (no inner `.git` — verified). Its state:
+
+- Declared `version = "0.1.0-alpha"`, `completion-percentage = 20`,
+  `maturity = "experimental"`. README.adoc opens with ambitious
+  claims about "Ephapax Linear Types / Nickel IR / 17-shell
+  transmutation", but `src/abi/` contains only 3 Idris2 stub files
+  and `ffi/zig/` is a skeleton. This is an early-stage design with
+  no measurable implementation yet.
+- Authorship email in README.adoc: `hyperpolymath@example.com` —
+  placeholder; violates the author-attribution rule. Should be the
+  noreply or `j.d.a.jewell@open.ac.uk`.
+- `.machine_readable/6a2/` present with all 6 a2ml files; META.a2ml
+  is similarly sparse to the parent.
+- No separate test suite, no CI, no proofs.
+
+Treating as nested component per instruction. Its declared maturity
+("experimental", 20% complete) would place it at *E* on its own; it
+rides inside valence-shell's tree and does not degrade valence-shell's
+grade (it's not the subject of the C claim) but should not be
+conflated with the main shell implementation.
+
+== Grade x Evidence Matrix
+
+[cols="1,1,3,3"]
+|===
+| Grade | Met? | Evidence supporting | Evidence against / gaps
+
+| X
+| n/a
+| 348+ `#[test]` in tests/, plus lib unit tests and doctests — not X.
+| —
+
+| F
+| n/a
+| Not superseded; no harm signal; novel scope.
+| —
+
+| E
+| ✓
+| 602-claim backed by 348 `#[test]` in tests/; local `cargo test
+  --no-run` builds cleanly; declared categories match grep well.
+| —
+
+| D
+| ✓ *(earned)*
+| 26 RSR workflows, zero banned languages, Containerfile discipline,
+  `.well-known/` triplet, guix+flake, LICENSE policy met, SPDX on
+  sampled source, contractile trident partial-but-present, scope
+  documented in README/EXPLAINME/CLAUDE.md/docs/, test matrix declared
+  and close to matching, prior audit done (2026-04-04).
+| META.a2ml skeletal (no ADRs), ROADMAP.adoc is a template stub,
+  `lust/` vestige, ANCHOR version-drifted (1.0.0 vs 0.9.0). None of
+  these drops the D-floor.
+
+| C
+| *✗ (C is not earned)*
+| Strong: EXPLAINME honesty (no File Map fabrication); detailed inline
+  module docs in Coq/Rust; 602 test claim basically honest; PROOF_HOLES
+  audit well-maintained; zero banned languages; most C-pretenders
+  broken-by-TS/Python/Dockerfile are clean here.
+| **(1)** *CI not green*: `rust-cli.yml` 30/30 failures on last 30
+  runs; `validation.yml verify-proofs` gated off with `if: false`.
+  **(2)** *404-site `.expect("TODO: handle error")` anti-pattern* — the
+  explicit memory-rule violation, and the proximate cause of CI red.
+  **(3)** *1 undeclared `admit.` in `proofs/coq/filesystem_composition.v`*
+  contradicts STATE `[coq-proof-status] admitted = 0`. **(4)** Per-
+  directory README coverage *~23%* (5/22 non-hidden subtrees) — way
+  under the ~90% C bar. **(5)** No `[dogfooding-status]` section; the
+  tool is not on the author's system path; the "dogfooded across the
+  account" table lists *co-members of the Coq/Lean estate*, not
+  consumers of valence-shell. **(6)** `ROADMAP.adoc` is a stub;
+  authoritative roadmap lives in CLAUDE.md only. **(7)** Prior
+  audit-2026-04-04 listed 5 required repairs; only 2 closed (Coq sweep);
+  3 still open when C was declared.
+
+| B
+| ✗
+| —
+| Zero external targets. Zero issues-fed-back. Zero field signal.
+
+| A
+| ✗
+| —
+| No field confirmation.
+|===
+
+== Verdict
+
+*Current CRG grade: **D (Alpha)**. Demote one grade from self-declared C.*
+
+Self-declared: *C*. Audited: *D*. One-grade honesty delta — same as
+session-sentinel and gossamer this session. Valence-shell had the
+*strongest positive case* of the re-triage pool (v0.9.0, 74% complete,
+sectioned schema, passed the HYP-S005 canary, no EXPLAINME
+fabrication, no banned languages) but falls on three axes that v2.0 C
+treats as non-negotiable.
+
+Reasoning (one sentence): valence-shell has honest documentation, a
+disciplined proof-debt ledger, zero banned languages, and a rich
+test matrix, *but* (a) CI has been red 30/30 runs on `rust-cli.yml`
+owing to a 404-site `.expect("TODO: handle error")` anti-pattern
+bulk-applied to `.unwrap()` sites, (b) STATE declares
+`[coq-proof-status] admitted = 0` while
+`proofs/coq/filesystem_composition.v:199` contains an active
+`admit.`, and (c) per-directory README coverage is ~23% (5 of 22
+non-hidden subtrees) — each of which is a direct v2.0 C clause
+failure.
+
+The D grade is earned on four positive signals:
+
+1. *Language-policy purity*: zero TypeScript, zero Python, zero Go,
+   zero `package.json`, zero `Dockerfile`, zero `node_modules`. Clean
+   CLAUDE.md compliance — best in the session's C-candidate cohort.
+2. *EXPLAINME honesty*: no File Map fabrication; explicit caveats on
+   every major claim; explicit downgrade of version/production claims
+   against earlier Sonnet-era inflation.
+3. *Proof-debt discipline*: `docs/PROOF_HOLES_AUDIT.md` is active,
+   dated, and tracks the 31→3 hole reduction over 2026-04. Six proof
+   systems (Coq/Lean4/Agda/Isabelle/Mizar/Z3) plus Idris2 stubs; the
+   2026-04-12 Coq sweep closed 2 real debts.
+4. *Test-count honesty*: declared 602 breakdown matches grep on 6 of
+   8 verifiable suites; the only overclaim is in valence-shell's
+   favour (15 declared, 19 found on property correspondence);
+   undisclosed newer suites are a *stale downward* figure, not up.
+
+What blocks *immediate* promotion to C (do these first):
+
+. **Revert the 404-site `.expect("TODO: handle error")` anti-pattern.**
+  Every site either reverts to `.unwrap()` with a proof-of-infallibility
+  comment, or goes forward to `?` + a real error type. Memory rule
+  is explicit: "revert on sight". Once reverted, CI can turn green.
+. **Fix the undeclared `admit.` in
+  `proofs/coq/filesystem_composition.v:199`** or update
+  `[coq-proof-status]` to reflect reality (`admitted = 1`,
+  axiom-detail added, proof-debt-open = [3]). Policy gaming via
+  understatement is worse than the gap itself.
+. **Turn `rust-cli.yml` green.** After the `.expect("TODO")` sweep,
+  debug remaining CI failures (Lean4 runtime checks, clippy denies,
+  rustfmt). Without a green CI workflow backing the test evidence,
+  the C claim has no CI leg.
+. **Add `[dogfooding-status]` to STATE.a2ml** with concrete done-
+  entries. Candidates: author's `vsh` alpha usage in an isolated
+  `tmux` pane for 2 weeks; absolute-zero test-run transitioning
+  through `vsh`; one scripted session via `examples/`. Without it,
+  v2.0 C's "home-stable" clause is not met.
+. **Raise per-directory README coverage from ~23% to ~90%.** Targets:
+  `impl/`, `impl/rust-cli/src/`, `impl/rust-cli/tests/`,
+  `impl/elixir/`, `impl/ocaml/`, `impl/mcp/`, `impl/rust-ffi/`,
+  `ffi/rust/`, `ffi/zig/`, `src/`, `src/abi/`, `tests/`,
+  `proofs/coq/`, `proofs/lean4/`, `proofs/agda/`, `proofs/isabelle/`,
+  `proofs/mizar/`, `proofs/z3/`, `scripts/`, `examples/`, `hooks/`,
+  `benches/`. Two sentences each is enough.
+. **Enable `validation.yml verify-proofs` job.** The `if: false` gate
+  stops CI from running Coq/Lean/Agda/Isabelle/Z3. Start with one
+  (Lean 4 via `lake build` is the least CI-disruptive) and phase in
+  the others.
+. **Populate ROADMAP.adoc.** Port the v0.9.0→v1.0 plan from CLAUDE.md
+  into the authoritative roadmap file. Unchecked template milestones
+  for a 74%-complete project is a drift finding.
+. **Populate META.a2ml** with at least 3 ADRs (e.g., "Six-system proof
+  stack for cross-validation", "Rust as primary implementation",
+  "Property-testing as correspondence-gap mitigation") and a
+  `[development-practices]` block.
+. **Close the 3 outstanding repairs from audit-2026-04-04**: fix
+  author-metadata on 47 spoofed commits, implement Echidna CI
+  integration, remove remaining dead code (`lean_ffi.rs`,
+  `daemon_client.rs`).
+. **Update `.machine_readable/anchors/ANCHOR.a2ml` `version: "1.0.0"
+  → "0.9.0"`** to match STATE.a2ml. Minor but anchor is canonical
+  authority — it should not have legacy Sonnet-era figures.
+. **Rename `.machine_readable/contractiles/lust/ → intend/`** and
+  `Intentfile → Intendfile`. Also root `contractiles/lust/`.
+. **Fix alkahest sub-project README author email**
+  (`hyperpolymath@example.com` → correct attribution).
+
+What blocks promotion to B (after C):
+
+. Zero external targets. For a shell with formal-reversibility claims,
+  the natural diverse-6 are: a researcher running it for a formal-
+  methods class (academic), a second author using it for daily shell
+  work (consumer), a CI pipeline that shells out to `vsh` for
+  reversibility (build-system), an echidna-estate proof-regression
+  harness (peer-project), an IDApTIK training panel (internal
+  consumer demonstrating vs. bash), and one non-hyperpolymath user
+  found via the arXiv preprint. Currently zero of these.
+. No issues-fed-back pipeline. Even one GitHub issue from a second
+  human reporting an `rmdir(mkdir())` edge-case would seed this.
+. The arXiv preprint needs to ship (or not) — publication without
+  users is not B evidence, but does seed discoverability for B.
+
+== Notes on Non-Negotiables Respected by this Audit
+
+- `MPL-2.0` legal-fallback form in `LICENSE` is accepted per Rule 2 of
+  the license policy; SPDX headers on source uniformly assert
+  `PMPL-1.0-or-later` intent.
+- The 1 justified Coq axiom (`is_empty_dir_dec` — infinite-domain,
+  documented migration path to `FMaps.t`) is accepted as a standard
+  axiomatic primitive, not proof debt.
+- Elixir NIF-broken status is declared and accepted as "low priority";
+  not a grading factor.
+- The co-located `alkahest-shell-transmuter/` sub-project is treated
+  as a nested component, not a separate audit subject. Its
+  `experimental`/20%-complete maturity is declared honestly and does
+  not distort the parent grade either way.
+- The `Makefile.conf` under `proofs/coq/` and the Zig build
+  scaffolding are toolchain-emitted artefacts, not a root R-020
+  breach.
+- Proof systems (Coq/Lean4/Agda/Isabelle/Mizar/Z3/Idris2) are
+  pedagogically distinct and cross-validating; their presence is
+  treated as annotation breadth, not as a test matrix.
+
+== STATE.a2ml update recommendation
+
+Recommended (do NOT execute as part of this audit) — edit
+`.machine_readable/6a2/STATE.a2ml`:
+
+[source,toml]
+----
+[metadata]
+project = "valence-shell"
+version = "0.9.0"
+last-updated = "2026-04-18"
+status = "active"
+
+[project-context]
+name = "valence-shell"
+completion-percentage = 60        # was 74 — demote on CI+README evidence
+phase = "advanced-research-prototype"
+
+[crg]
+grade = "D"                       # was "C"
+grade-previous = "C"              # audit trail
+grade-claimed = "2026-04-04"
+grade-demoted = "2026-04-18"
+audit = "docs/governance/CRG-AUDIT-2026-04-18.adoc"
+next-target = "C"
+notes = """
+C demoted to D on three non-negotiable clauses: (1) rust-cli.yml CI
+has been red 30/30 runs due to a 404-site .expect("TODO: handle
+error") anti-pattern bulk-applied to .unwrap() sites (memory rule:
+revert on sight); (2) proofs/coq/filesystem_composition.v:199
+contains an active admit. while [coq-proof-status] admitted = 0;
+(3) per-directory README coverage 5/22 (~23%), well under the ~90%
+C bar. The 602-test claim and EXPLAINME honesty are preserved in
+evidence — the demotion is about CI green + dogfooding + README
+coverage, not about test volume or annotation quality.
+"""
+
+[coq-proof-status]
+admitted = 1                      # was 0 — filesystem_composition.v:199
+axioms-justified = 1
+admitted-detail = "single_op_reversible OpRmdir branch: mkdir restores with default_perms; original directory permissions not preserved by Filesystem = Path -> option FSNode model. Pre-existing model gap; flagged in 2026-04-18 audit."
+axiom-detail = "is_empty_dir_dec: Filesystem = Path -> option FSNode is infinite-domain; universal quantification over all paths is not constructively decidable. Migration: switch to FMaps.t FSNode."
+proof-debt-items-closed = [1, 2]
+proof-debt-open = [3]             # was []
+
+[blockers-and-issues]
+issues = [
+  "CRITICAL: 404-site .expect(\"TODO: handle error\") anti-pattern across 17 files in impl/rust-cli/src/ — memory rule violation, proximate cause of CI red.",
+  "CRITICAL: rust-cli.yml 30/30 failures on last 30 runs; CI green unsupported.",
+  "CRITICAL: proofs/coq/filesystem_composition.v:199 contains admit. tactic not declared in [coq-proof-status].",
+  "validation.yml verify-proofs job gated with if: false — Coq/Lean/Agda/Isabelle/Z3 not verified in CI.",
+  "Per-directory README coverage 5/22 (~23%); 17 subtrees need orientation READMEs.",
+  "No [dogfooding-status] section; author does not run vsh as daily shell.",
+  "ROADMAP.adoc is 22-line rsr-template stub; real roadmap lives only in CLAUDE.md.",
+  "META.a2ml has no [architecture-decisions] / [development-practices].",
+  ".machine_readable/anchors/ANCHOR.a2ml still carries version: \"1.0.0\" (Sonnet-era drift).",
+  "contractiles/lust/ vestige of lust→intend 2026-04 rename.",
+  "alkahest-shell-transmuter/README.adoc author email is hyperpolymath@example.com placeholder.",
+  "3 of 5 repairs from audit-2026-04-04 still open: 47 spoofed git authors, Echidna CI wiring, dead code removal.",
+]
+
+[critical-next-actions]
+actions = [
+  "Revert .expect(\"TODO: handle error\") sweep across impl/rust-cli/src/ (404 sites, 17 files) — to .unwrap() + justification comment, or forward to ? + real error type.",
+  "Fix or declare the Coq admit. — either close it or bump [coq-proof-status] admitted to 1 with full justification.",
+  "Turn rust-cli.yml green after the .expect sweep revert.",
+  "Add [dogfooding-status] with concrete daily-use entries.",
+  "Add 17 per-directory READMEs to raise coverage from ~23% to ~90%.",
+  "Enable validation.yml verify-proofs job (start with Lean 4 via lake build).",
+  "Populate ROADMAP.adoc from CLAUDE.md.",
+  "Add 3+ ADRs to META.a2ml.",
+  "Fix .machine_readable/anchors/ANCHOR.a2ml version to 0.9.0.",
+  "Rename lust/ → intend/; Intentfile → Intendfile.",
+  "Fix alkahest sub-project author email placeholder.",
+  "Close audit-2026-04-04.md residuals: author-metadata re-signing, Echidna CI, dead-code removal.",
+]
+
+[maintenance-status]
+last-run-utc = "2026-04-18T00:00:00Z"
+last-result = "fail"               # was unset — CI is red, proof admits undeclared
+open-warnings = 12                 # open audit findings
+open-failures = 3                  # CI red + admit. + coverage
+----
+
+Demote target: *D*. Route-to-C is the twelve-action fix list above.
+The single highest-leverage action is item 1 (revert the
+`.expect("TODO")` sweep) because it directly unblocks CI green and
+removes the single largest memory-rule violation in the estate.
+
+== Related Files
+
+- `.machine_readable/6a2/STATE.a2ml` — authoritative self-declared
+  state; recommend demote C→D with `[crg]` section updated,
+  `[coq-proof-status] admitted` corrected, and the full audit trail
+  added.
+- `.machine_readable/anchors/ANCHOR.a2ml` — carries stale `version:
+  "1.0.0"`; update to `"0.9.0"`.
+- `EXPLAINME.adoc` — honest; no File Map fabrication; preserve.
+- `ROADMAP.adoc` — template stub; repopulate from CLAUDE.md
+  v0.9.0→v1.0 plan.
+- `impl/rust-cli/src/*.rs` — 404 `.expect("TODO: handle error")` sites
+  to revert/fix.
+- `proofs/coq/filesystem_composition.v:199` — active `admit.` to close
+  or declare.
+- `.github/workflows/rust-cli.yml` / `validation.yml` /
+  `compilation_tests.yml` — red across last 30 runs.
+- `.github/workflows/validation.yml:50` — `verify-proofs if: false`
+  gate; enable incrementally.
+- `docs/PROOF_HOLES_AUDIT.md` — good discipline; keep on the same
+  update cadence.
+- `docs/reports/audit/audit-2026-04-04.md` — prior audit; 3 repairs
+  still open.
+- `.machine_readable/contractiles/lust/` and `contractiles/lust/` —
+  rename to `intend/`.
+- `alkahest-shell-transmuter/README.adoc` — fix author email.
+- `verification-ecosystem/session-sentinel/docs/governance/CRG-AUDIT-2026-04-18.adoc`
+  — calibration sibling (identical C→D delta, different defect
+  profile: session-sentinel has annotation but no build; valence-shell
+  has build but anti-pattern-broken CI).
+- `gossamer/docs/governance/CRG-AUDIT-2026-04-18.adoc` — calibration
+  sibling (close-to-C outcome).
+
+_End of audit._

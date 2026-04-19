@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= ffi/zig/ — Zig FFI (ABI/FFI Universal Standard scaffolding)
+
+Zig FFI implementation matching the **CLAUDE.md ABI/FFI Universal
+Standard** layout: Idris2 ABI declarations live in `../../src/abi/`,
+the Zig-side concrete implementation lives here, and C-compatible
+headers consume the bridge.
+
+Per the 2026-04-18 audit (`../../docs/governance/CRG-AUDIT-2026-04-18.adoc`):
+"`ffi/zig/` is ABI-FFI-standard scaffolding". Builds cleanly; not yet
+integrated with `../../impl/rust-cli/` (separate, more mature
+implementation lives at `../../impl/zig/` targeting ~5ms cold start).
+
+== Files
+
+[cols="2,4"]
+|===
+| File | Role
+
+| `build.zig`                  | Zig build manifest.
+| `src/main.zig`               | FFI surface entry; ABI-conformant exports.
+| `test/integration_test.zig`  | Integration test for the FFI surface.
+|===
+
+== Build + test
+
+```bash
+cd ffi/zig
+zig build              # library build
+zig build test         # run integration tests
+```
+
+== Relationship to `../../impl/zig/`
+
+Two Zig trees serve distinct roles:
+
+* `ffi/zig/` (this tree) — minimal ABI/FFI scaffolding matching the
+  hyperpolymath universal standard. Use when wiring the formal
+  Idris2 ABI (`../../src/abi/`) to C-callable Zig.
+
+* `../../impl/zig/` — daily-driver Zig implementation; carries its own
+  README, targets ~5ms cold start; richer feature surface.
+
+The audit treated these as cooperating, not duplicating; each has a
+distinct contract.
+
+== See also
+
+* `../../src/abi/README.adoc` (this batch) — Idris2 ABI declarations
+  this implementation conforms to
+* `../rust/README.adoc` — sibling Rust FFI tree
+* `../../impl/zig/` — parallel daily-driver Zig implementation
+* `../../CLAUDE.md` — global ABI/FFI Universal Standard layout

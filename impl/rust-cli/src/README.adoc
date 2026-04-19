@@ -1,0 +1,127 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= impl/rust-cli/src/ — Primary Rust Shell Source
+
+Source tree for the Rust valence-shell binary `vsh` (v0.9.0). Roughly
+32 source files; entry points, REPL machinery, parser, executor, state
+machine, and verification glue.
+
+Tests live in `../tests/`; the FFI library lives in `../../../ffi/rust/`
+(separate crate, not linked from here).
+
+== Files by concern
+
+=== Entry points
+
+[cols="1,3"]
+|===
+| File | Purpose
+| `main.rs`     | Binary entry; argument handling; spawns the REPL.
+| `lib.rs`      | Library root; module declarations + public API.
+|===
+
+=== Parsing
+
+[cols="1,3"]
+|===
+| File | Purpose
+| `parser.rs`        | Tokeniser + command parser; variable expansion;
+                       parameter expansion (`${VAR:-...}`, etc.); heredoc
+                       extraction; control-flow recognition.
+| `quotes.rs`        | Quote-aware segmentation (single, double,
+                       backslash); feeds the parser.
+| `glob.rs`          | POSIX glob expansion (literal-leading-dot
+                       discipline) + brace expansion.
+| `arith.rs`         | `$((expr))` arithmetic parser + evaluator;
+                       precedence, bitwise, comparison, logical.
+| `quotes.rs`        | Quote-aware tokenisation.
+|===
+
+=== Execution
+
+[cols="1,3"]
+|===
+| File | Purpose
+| `commands.rs`        | Built-in command dispatch (mkdir, rmdir, undo,
+                         redo, checkpoint, restore, fg/bg, kill, etc.).
+| `commands/`          | Module subtree for larger built-ins
+                         (`secure_deletion.rs`, ...).
+| `executable.rs`      | External-command launch; PATH lookup; shell
+                         function dispatch.
+| `external.rs`        | External-command pipeline construction;
+                         stdio + redirect wiring.
+| `functions.rs`       | Shell function table + frame stack.
+| `redirection.rs`     | I/O redirection setup (`>`, `>>`, `<`, `2>`,
+                         `&>`, `2>&1`).
+| `process_sub.rs`     | Process substitution `<(cmd)` / `>(cmd)` via
+                         FIFO.
+| `posix_builtins.rs`  | POSIX-defined builtins (echo, read, source,
+                         eval, set, unset, true, false, ...).
+| `test_command.rs`    | `test` / `[` / `[[ ]]` conditionals.
+|===
+
+=== State + reversibility
+
+[cols="1,3"]
+|===
+| File | Purpose
+| `state.rs`           | `ShellState`; operation history; undo/redo
+                         stacks; tracked variables.
+| `history.rs`         | Command-history persistence (interactive
+                         REPL).
+| `audit_log.rs`       | Append-only audit log for filesystem ops
+                         (JSON-line format, integrity check).
+| `secure_erase.rs`    | RMO (Remove-Match-Obliterate) primitives;
+                         currently stubs per `CLAUDE.md`.
+|===
+
+=== REPL + UX
+
+[cols="1,3"]
+|===
+| File | Purpose
+| `repl.rs`            | Interactive REPL loop.
+| `enhanced_repl.rs`   | reedline-backed REPL with history search.
+| `highlighter.rs`     | Syntax highlighting for the REPL.
+| `pager.rs`           | Output pagination (height-threshold gated).
+| `help.rs`            | `help` builtin; per-command documentation.
+| `correction.rs`      | zsh-style "Did you mean?" Levenshtein
+                         suggestions.
+| `friendly_errors.rs` | Human-readable error formatting.
+| `confirmation.rs`    | Y/N prompts for destructive ops.
+| `signals.rs`         | Signal handling (SIGINT, SIGCHLD).
+|===
+
+=== Verification + correspondence
+
+[cols="1,3"]
+|===
+| File | Purpose
+| `proof_refs.rs`           | References from runtime ops to formal
+                              proof artefacts in `../../proofs/`.
+| `verification.rs`         | Runtime precondition checks.
+| `echidna_integration.rs`  | Property-test registry feeding the
+                              Echidna validator (workflow gated).
+|===
+
+=== Job control
+
+[cols="1,3"]
+|===
+| File | Purpose
+| `job.rs` | `JobTable`; bash-style %N / %+ / %- / %prefix specs.
+|===
+
+== Conventions used here
+
+* `--safe` Rust: every public function is panic-free at the contract
+  layer. The `.expect("TODO: handle error")` anti-pattern was swept
+  out in commits `712e3a1..b5cc0cc` (2026-04-19); `cargo audit` and
+  `cargo clippy` should remain clean post-sweep.
+* SPDX header on every source file (`PMPL-1.0-or-later`).
+* Tests live in `../tests/`; doctests inline.
+
+== See also
+
+* `../tests/README.adoc` — test-suite breakdown
+* `../../../proofs/` — formal specs
+* `../../../docs/PROOF_HOLES_AUDIT.md` — proof-debt status

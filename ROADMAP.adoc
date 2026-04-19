@@ -1,22 +1,110 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
 = Valence Shell Roadmap
+:toc:
 
 == Current Status
 
-Initial development phase.
+v0.9.0 (advanced research prototype, ~74% complete per
+`.machine_readable/6a2/STATE.a2ml`).
 
-== Milestones
+The Rust CLI in `impl/rust-cli/` is a functional interactive shell with
+reversible filesystem operations, transaction grouping, and
+proof-annotated dry runs. It is NOT production-ready and NOT a drop-in
+replacement for bash/zsh.
 
-=== v0.1.0 - Foundation
-* [ ] Core functionality
-* [ ] Basic documentation
-* [ ] CI/CD pipeline
+For the full honest status see `CLAUDE.md`; for caveats per claim see
+`EXPLAINME.adoc`; for proof-debt see `docs/PROOF_HOLES_AUDIT.md`.
 
-=== v1.0.0 - Stable Release
-* [ ] Full feature set
-* [ ] Comprehensive tests
-* [ ] Production ready
+== v0.9.x — Stabilisation (D → C per CRG v2.0)
 
-== Future Directions
+Tracked against `docs/governance/CRG-AUDIT-2026-04-18.adoc`. Goal: green
+CI on `rust-cli.yml`, dogfood evidence, structural compliance.
 
-_To be determined based on community feedback._
+* [ ] Revert the remaining `.expect("TODO: handle error")` sites in
+  `impl/rust-cli/src/`. Batches 1-3 cleared 136 of ~530 (commits
+  `712e3a1`, `962da88`, `f045ced`). Remaining concentrated in
+  `parser.rs` (116), `commands.rs` (66), `arith.rs` (55), `state.rs`
+  (35) — each warrants its own session.
+* [ ] Close the Coq `admit.` in `proofs/coq/filesystem_composition.v:199`
+  (`single_op_reversible` `OpRmdir` branch) or update
+  `[coq-proof-status] admitted = 1` with full justification.
+* [ ] Turn `rust-cli.yml` green after the `.expect` sweep completes.
+* [ ] Enable `validation.yml verify-proofs` job (currently `if: false`);
+  start with Lean 4 via `lake build`, then phase in Coq/Agda/Isabelle/Z3.
+* [ ] Per-directory README coverage 23% → ~90% (17 subtrees missing,
+  enumerated in the audit).
+* [ ] Add `[dogfooding-status]` to STATE.a2ml with concrete daily-use
+  entries.
+* [ ] Add 3+ ADRs to META.a2ml (six-system proof stack, Rust as primary
+  implementation, property-testing as correspondence-gap mitigation) and
+  populate `[development-practices]`.
+* [x] Resolved 2026-04-19: `impl/rust-ffi/` deleted; `ffi/rust/` is
+  canonical (superset, includes `verification.rs`, matches CLAUDE.md
+  ABI/FFI standard `ffi/<lang>/`). 7 sibling files were byte-identical;
+  `lib.rs` differed only by the `pub mod verification;` export and
+  richer doc-comment proof references. No build consumers.
+* [ ] Complete contractile six-verb layout: create `intend/` (absorbs
+  former `lust/`, already removed in commit `a48a1dc`), `adjust/`;
+  relocate `k9` out of `contractiles/` per ADR-001 (k9 is svc, not a
+  contractile).
+* [~] Close `docs/reports/audit/audit-2026-04-04.md` residuals:
+** [ ] Re-author 47 spoofed git commits (`Test <test@example.com>` →
+   canonical attribution). Requires history rewrite + force-push;
+   needs explicit human authorization before execution.
+** [ ] Wire Echidna CI integration for automated property-based
+   verification.
+** [x] Remove dead code (`lean_ffi.rs`, `daemon_client.rs`) — closed
+   2026-02-12 in commit `5802dc9` (predates the 2026-04-18 audit; the
+   audit's residual claim was stale). Phase 4C design docs under
+   `impl/rust-cli/docs/` carry archival banners noting the removal.
+
+== v0.10.x — POSIX Coverage
+
+Most critical missing POSIX features, ranked by impact (per CLAUDE.md
+and `docs/POSIX_COMPLIANCE.md`):
+
+. Shell functions (`func() { ... }` syntax) — blocks modular scripts.
+. Shell script execution (`.sh` files, shebang handling).
+. Word splitting (`$IFS`) — unquoted variable expansions are not split.
+. Tilde expansion beyond `~/` in `cd`.
+. `trap` — cannot handle signals in scripts.
+. `alias` — no command aliases.
+. SIGCHLD / Ctrl+Z — job control incomplete.
+
+`docs/POSIX_COMPLIANCE.md` carries the full M1-M11 milestone tracker;
+M1-M9 complete, M10-M11 partial.
+
+== v1.0.0 — Production Readiness Gate
+
+Hard requirements before any v1.0 claim:
+
+* [ ] Mechanized Lean → Rust correspondence (currently property testing
+  only, ~85% confidence).
+* [ ] Close all real gaps in `docs/PROOF_HOLES_AUDIT.md` (post-2026-04
+  sweep: 1 real gap, 1 justified axiom, 1 structural).
+* [ ] CRG v2.0 grade B: 6+ diverse external targets, issues fed back.
+  See audit `=== External validation` section for the proposed diverse-6
+  shape.
+* [ ] Complete RMO (Remove-Match-Obliterate) implementation for GDPR
+  compliance — currently stubs only.
+* [ ] Echidna integration for automated property-based verification.
+
+== v2.0 — Idris2 Extraction Path
+
+Begin the Idris2 extraction path (per CLAUDE.md "This Month" plan).
+
+* [ ] Populate `src/abi/` Idris2 ABI definitions beyond the current
+  3-file stubs (`Types.idr`, `Layout.idr`, `Foreign.idr`).
+* [ ] Wire Zig FFI: `ffi/zig/` builds but is not integrated with the
+  Rust CLI; `impl/zig/` targets ~5ms cold start.
+* [ ] BEAM daemon implementation (planned, not built; Elixir NIF build
+  currently broken, low priority).
+
+== Operating Notes
+
+* This roadmap supersedes the prior rsr-template stub. Authoritative
+  next-step detail lives here; CLAUDE.md retains the honest-status
+  narrative.
+* All milestone items are grep-verifiable against on-disk artefacts.
+* Cadence: edit ends with an Agda/Coq/Lean compile or `cargo build` +
+  `cargo test`; outcomes captured in commit messages.

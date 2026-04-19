@@ -219,7 +219,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Infrastructure**
   - Containerfile for reproducible builds
-  - Complete justfile with 25+ recipes
+  - Complete Justfile with 25+ recipes
   - scripts/verify-proofs.sh multi-prover orchestration
 
 === Fixed
@@ -301,7 +301,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - proofs/README.md
 
 === Infrastructure
-- justfile build automation
+- Justfile build automation
 - scripts/demo_verified_operations.sh
 - Nix flake for reproducible builds
 - GitLab CI/CD configuration

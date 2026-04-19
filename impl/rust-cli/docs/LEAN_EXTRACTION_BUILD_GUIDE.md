@@ -1,8 +1,15 @@
 # Lean 4 Extraction Pipeline - Build Guide
 
+> **⚠️ ARCHIVED 2026-04-19** — companion to `PHASE4C_LEAN_EXTRACTION.md`,
+> which describes the Lean→C→Rust pipeline whose Rust endpoint
+> (`impl/rust-cli/src/lean_ffi.rs`) was removed as dead code in commit
+> `5802dc9` (2026-02-12). The build steps below remain accurate as a
+> Lean-extraction reference but no longer terminate at a live Rust
+> consumer in this repo.
+
 **Version**: 0.15.0
 **Date**: 2026-01-29
-**Status**: Ready for compilation and testing
+**Status**: Ready for compilation and testing _(archived 2026-04-19)_
 
 ---
 

@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= scripts/ — Utility Scripts
+
+POSIX-shell helper scripts driven by the project's CI workflows and
+local development recipes. All shell-only; no banned-language scripts
+per the `../CLAUDE.md` language policy.
+
+== Files
+
+[cols="2,4"]
+|===
+| Script | Purpose
+
+| `validate-correspondence.sh`
+| Drives the Lean → Rust correspondence validation. Invoked by
+  `../.github/workflows/validation.yml validate-correspondence` job.
+
+| `validate-with-echidna.sh`
+| Echidna validator entry point. Invoked by
+  `../.github/workflows/echidna-validation.yml`. Wiring is partial —
+  audit item 10b tracks full Echidna CI integration.
+
+| `verify-proofs.sh`
+| Proof-system verification helper (Coq / Lean / etc.).
+  `verify-proofs` job in `validation.yml` is currently gated
+  (`if: false`) per audit item 6.
+
+| `generate-verification-report.sh`
+| Emits a `validation-report.md` artefact uploaded by the
+  validate-correspondence job.
+
+| `security-audit.sh`
+| Local security-audit helper; not currently CI-automated (audit
+  finding under "Low Priority").
+
+| `demo_verified_operations.sh`
+| End-to-end demo: runs through the verified filesystem operation
+  suite as a smoke check.
+|===
+
+== Run conventions
+
+```bash
+bash scripts/<script>.sh                    # from repo root
+just <recipe>                               # if a Justfile recipe wraps it
+```
+
+== See also
+
+* `../.github/workflows/` — CI workflows that invoke these scripts
+* `../Justfile` — top-level recipe orchestration
+* `../docs/governance/CRG-AUDIT-2026-04-18.adoc` — audit list of
+  CI / verification gaps (items 6 + 10b)

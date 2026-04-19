@@ -1,0 +1,87 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= proofs/lean4/ — Lean 4 Filesystem Proofs (Primary Source of Truth)
+
+Lean 4 (dependent type theory) is the **primary source of truth** for
+the valence-shell formal specs (per `../../CLAUDE.md` "Technology
+Stack"). The other proof systems (Coq, Agda, Isabelle, Mizar, Z3 SMT)
+cross-validate; the parent `../README.md` discusses why polyglot.
+
+== Files
+
+[cols="2,4"]
+|===
+| File | Role
+
+| `FilesystemModel.lean`
+| Core `Filesystem` model (`Path -> Option FSNode`); structural lemmas.
+
+| `FilesystemComposition.lean`
+| Composition theorems (e.g. reversing a sequence of reversible ops
+  returns to the original state). Key tie-in to absolute-zero CNO theory.
+
+| `FilesystemEquivalence.lean`
+| State-equivalence relations between filesystems.
+
+| `FileOperations.lean`
+| Per-op specifications for mkdir, rmdir, touch, rm.
+
+| `FileContentOperations.lean`
+| Read/write/append content operations; size-preservation lemmas
+  (largest module by LOC at the time of the 2026-04-18 audit).
+
+| `CopyMoveOperations.lean`
+| `cp`/`mv` reversibility; argmin/optimality residue-style theorems
+  for source preservation.
+
+| `PermissionOperations.lean`
+| Permission-bit preservation; chmod / chown lemmas.
+
+| `RMOOperations.lean`
+| Remove-Match-Obliterate proofs (secure-delete; GDPR-relevant). Second
+  largest module by LOC.
+
+| `SymlinkOperations.lean`
+| Symbolic link creation + traversal proofs.
+
+| `Extraction.lean`
+| Lean → C extraction declarations (Phase 4C design; see archived
+  `../../impl/rust-cli/docs/PHASE4C_LEAN_EXTRACTION.md` for the design
+  history; the Rust endpoint was removed in commit `5802dc9`).
+|===
+
+Plus:
+
+* `lakefile.lean` — Lake build manifest.
+* `lake-manifest.json` — pinned dependency manifest.
+* `lean-toolchain` — pinned Lean 4 toolchain version.
+
+== Build
+
+```bash
+cd proofs/lean4
+lake build                       # full proof check
+lake build FilesystemModel       # single module
+```
+
+NOTE: The `validation.yml verify-proofs` CI job is currently gated
+(`if: false`); enabling the Lean step is item 6 in the
+`docs/governance/CRG-AUDIT-2026-04-18.adoc` closure list. Local
+verification via `lake build` is unaffected.
+
+== Proof-debt status
+
+Per `../../docs/PROOF_HOLES_AUDIT.md` (last sweep 2026-04-12): 1 real
+gap, 1 justified axiom, 1 structural item across the full
+six-proof-system stack — the Lean layer specifically is clean.
+`../../STATE.a2ml` carries the canonical machine-readable status under
+`[coq-proof-status]`.
+
+== See also
+
+* `../README.md` — overall proof-stack design + the 5-system
+  reversibility theorem
+* `../coq/`, `../agda/`, `../isabelle/`, `../mizar/`, `../z3/` —
+  cross-validating proof systems (no per-subdir READMEs yet; tracked as
+  audit item 3)
+* `../../docs/LEAN4_RUST_CORRESPONDENCE.md` — Lean → Rust
+  correspondence design

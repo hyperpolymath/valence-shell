@@ -1,8 +1,15 @@
 # Phase 4C: Lean Extraction Pipeline
 
+> **⚠️ ARCHIVED 2026-04-19** — describes the Phase 4C design where
+> `impl/rust-cli/src/lean_ffi.rs` (170 LOC) bridged extracted Lean 4 C
+> code into the Rust shell. `lean_ffi.rs` was removed as dead code in
+> commit `5802dc9` (2026-02-12 deep-audit session) because the underlying
+> extracted-C library was never produced. This document is retained for
+> design history; do NOT treat its "Status: ✅ COMPLETE" as current.
+
 **Version**: 0.15.0
 **Date**: 2026-01-29
-**Status**: ✅ COMPLETE
+**Status**: ✅ COMPLETE _(at the time; archived as dead-feature 2026-04-19)_
 **Integration**: Optional runtime verification via feature flag
 
 ---

@@ -693,126 +693,126 @@ mod tests {
 
     #[test]
     fn test_arith_literals() {
-        let expr = parse_arithmetic("42").expect("TODO: handle error");
+        let expr = parse_arithmetic("42").unwrap();
         assert_eq!(expr, ArithExpr::Literal(42));
 
-        let state = ShellState::new("/tmp").expect("TODO: handle error");
-        assert_eq!(eval_arith(&expr, &state).expect("TODO: handle error"), 42);
+        let state = ShellState::new("/tmp").unwrap();
+        assert_eq!(eval_arith(&expr, &state).unwrap(), 42);
     }
 
     #[test]
     fn test_arith_basic_ops() {
-        let state = ShellState::new("/tmp").expect("TODO: handle error");
+        let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("5 + 3").expect("TODO: handle error"), &state).expect("TODO: handle error"), 8);
-        assert_eq!(eval_arith(&parse_arithmetic("10 - 4").expect("TODO: handle error"), &state).expect("TODO: handle error"), 6);
-        assert_eq!(eval_arith(&parse_arithmetic("6 * 7").expect("TODO: handle error"), &state).expect("TODO: handle error"), 42);
-        assert_eq!(eval_arith(&parse_arithmetic("20 / 4").expect("TODO: handle error"), &state).expect("TODO: handle error"), 5);
-        assert_eq!(eval_arith(&parse_arithmetic("17 % 5").expect("TODO: handle error"), &state).expect("TODO: handle error"), 2);
+        assert_eq!(eval_arith(&parse_arithmetic("5 + 3").unwrap(), &state).unwrap(), 8);
+        assert_eq!(eval_arith(&parse_arithmetic("10 - 4").unwrap(), &state).unwrap(), 6);
+        assert_eq!(eval_arith(&parse_arithmetic("6 * 7").unwrap(), &state).unwrap(), 42);
+        assert_eq!(eval_arith(&parse_arithmetic("20 / 4").unwrap(), &state).unwrap(), 5);
+        assert_eq!(eval_arith(&parse_arithmetic("17 % 5").unwrap(), &state).unwrap(), 2);
     }
 
     #[test]
     fn test_arith_precedence() {
-        let state = ShellState::new("/tmp").expect("TODO: handle error");
+        let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("2 + 3 * 4").expect("TODO: handle error"), &state).expect("TODO: handle error"), 14);
-        assert_eq!(eval_arith(&parse_arithmetic("(2 + 3) * 4").expect("TODO: handle error"), &state).expect("TODO: handle error"), 20);
-        assert_eq!(eval_arith(&parse_arithmetic("2 ** 3 + 1").expect("TODO: handle error"), &state).expect("TODO: handle error"), 9);
-        assert_eq!(eval_arith(&parse_arithmetic("2 ** (3 + 1)").expect("TODO: handle error"), &state).expect("TODO: handle error"), 16);
+        assert_eq!(eval_arith(&parse_arithmetic("2 + 3 * 4").unwrap(), &state).unwrap(), 14);
+        assert_eq!(eval_arith(&parse_arithmetic("(2 + 3) * 4").unwrap(), &state).unwrap(), 20);
+        assert_eq!(eval_arith(&parse_arithmetic("2 ** 3 + 1").unwrap(), &state).unwrap(), 9);
+        assert_eq!(eval_arith(&parse_arithmetic("2 ** (3 + 1)").unwrap(), &state).unwrap(), 16);
     }
 
     #[test]
     fn test_arith_power_right_associative() {
-        let state = ShellState::new("/tmp").expect("TODO: handle error");
+        let state = ShellState::new("/tmp").unwrap();
 
         // 2 ** 3 ** 2 = 2 ** (3 ** 2) = 2 ** 9 = 512
-        assert_eq!(eval_arith(&parse_arithmetic("2 ** 3 ** 2").expect("TODO: handle error"), &state).expect("TODO: handle error"), 512);
+        assert_eq!(eval_arith(&parse_arithmetic("2 ** 3 ** 2").unwrap(), &state).unwrap(), 512);
     }
 
     #[test]
     fn test_arith_comparison() {
-        let state = ShellState::new("/tmp").expect("TODO: handle error");
+        let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("5 > 3").expect("TODO: handle error"), &state).expect("TODO: handle error"), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("5 < 3").expect("TODO: handle error"), &state).expect("TODO: handle error"), 0);
-        assert_eq!(eval_arith(&parse_arithmetic("5 == 5").expect("TODO: handle error"), &state).expect("TODO: handle error"), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("5 != 3").expect("TODO: handle error"), &state).expect("TODO: handle error"), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("5 >= 5").expect("TODO: handle error"), &state).expect("TODO: handle error"), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("5 <= 4").expect("TODO: handle error"), &state).expect("TODO: handle error"), 0);
+        assert_eq!(eval_arith(&parse_arithmetic("5 > 3").unwrap(), &state).unwrap(), 1);
+        assert_eq!(eval_arith(&parse_arithmetic("5 < 3").unwrap(), &state).unwrap(), 0);
+        assert_eq!(eval_arith(&parse_arithmetic("5 == 5").unwrap(), &state).unwrap(), 1);
+        assert_eq!(eval_arith(&parse_arithmetic("5 != 3").unwrap(), &state).unwrap(), 1);
+        assert_eq!(eval_arith(&parse_arithmetic("5 >= 5").unwrap(), &state).unwrap(), 1);
+        assert_eq!(eval_arith(&parse_arithmetic("5 <= 4").unwrap(), &state).unwrap(), 0);
     }
 
     #[test]
     fn test_arith_logical() {
-        let state = ShellState::new("/tmp").expect("TODO: handle error");
+        let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("1 && 1").expect("TODO: handle error"), &state).expect("TODO: handle error"), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("1 && 0").expect("TODO: handle error"), &state).expect("TODO: handle error"), 0);
-        assert_eq!(eval_arith(&parse_arithmetic("1 || 0").expect("TODO: handle error"), &state).expect("TODO: handle error"), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("0 || 0").expect("TODO: handle error"), &state).expect("TODO: handle error"), 0);
-        assert_eq!(eval_arith(&parse_arithmetic("!0").expect("TODO: handle error"), &state).expect("TODO: handle error"), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("!5").expect("TODO: handle error"), &state).expect("TODO: handle error"), 0);
+        assert_eq!(eval_arith(&parse_arithmetic("1 && 1").unwrap(), &state).unwrap(), 1);
+        assert_eq!(eval_arith(&parse_arithmetic("1 && 0").unwrap(), &state).unwrap(), 0);
+        assert_eq!(eval_arith(&parse_arithmetic("1 || 0").unwrap(), &state).unwrap(), 1);
+        assert_eq!(eval_arith(&parse_arithmetic("0 || 0").unwrap(), &state).unwrap(), 0);
+        assert_eq!(eval_arith(&parse_arithmetic("!0").unwrap(), &state).unwrap(), 1);
+        assert_eq!(eval_arith(&parse_arithmetic("!5").unwrap(), &state).unwrap(), 0);
     }
 
     #[test]
     fn test_arith_bitwise() {
-        let state = ShellState::new("/tmp").expect("TODO: handle error");
+        let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("5 & 3").expect("TODO: handle error"), &state).expect("TODO: handle error"), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("5 | 3").expect("TODO: handle error"), &state).expect("TODO: handle error"), 7);
-        assert_eq!(eval_arith(&parse_arithmetic("5 ^ 3").expect("TODO: handle error"), &state).expect("TODO: handle error"), 6);
-        assert_eq!(eval_arith(&parse_arithmetic("~5").expect("TODO: handle error"), &state).expect("TODO: handle error"), -6);
-        assert_eq!(eval_arith(&parse_arithmetic("8 << 2").expect("TODO: handle error"), &state).expect("TODO: handle error"), 32);
-        assert_eq!(eval_arith(&parse_arithmetic("8 >> 2").expect("TODO: handle error"), &state).expect("TODO: handle error"), 2);
+        assert_eq!(eval_arith(&parse_arithmetic("5 & 3").unwrap(), &state).unwrap(), 1);
+        assert_eq!(eval_arith(&parse_arithmetic("5 | 3").unwrap(), &state).unwrap(), 7);
+        assert_eq!(eval_arith(&parse_arithmetic("5 ^ 3").unwrap(), &state).unwrap(), 6);
+        assert_eq!(eval_arith(&parse_arithmetic("~5").unwrap(), &state).unwrap(), -6);
+        assert_eq!(eval_arith(&parse_arithmetic("8 << 2").unwrap(), &state).unwrap(), 32);
+        assert_eq!(eval_arith(&parse_arithmetic("8 >> 2").unwrap(), &state).unwrap(), 2);
     }
 
     #[test]
     fn test_arith_variables() {
-        let mut state = ShellState::new("/tmp").expect("TODO: handle error");
+        let mut state = ShellState::new("/tmp").unwrap();
         state.set_variable("x", "5");
         state.set_variable("y", "10");
 
-        assert_eq!(eval_arith(&parse_arithmetic("x + y").expect("TODO: handle error"), &state).expect("TODO: handle error"), 15);
-        assert_eq!(eval_arith(&parse_arithmetic("x * 2 + y").expect("TODO: handle error"), &state).expect("TODO: handle error"), 20);
+        assert_eq!(eval_arith(&parse_arithmetic("x + y").unwrap(), &state).unwrap(), 15);
+        assert_eq!(eval_arith(&parse_arithmetic("x * 2 + y").unwrap(), &state).unwrap(), 20);
     }
 
     #[test]
     fn test_arith_undefined_variable() {
-        let state = ShellState::new("/tmp").expect("TODO: handle error");
+        let state = ShellState::new("/tmp").unwrap();
 
         // Undefined variables should be treated as 0
-        assert_eq!(eval_arith(&parse_arithmetic("undefined_var + 5").expect("TODO: handle error"), &state).expect("TODO: handle error"), 5);
+        assert_eq!(eval_arith(&parse_arithmetic("undefined_var + 5").unwrap(), &state).unwrap(), 5);
     }
 
     #[test]
     fn test_arith_division_by_zero() {
-        let state = ShellState::new("/tmp").expect("TODO: handle error");
+        let state = ShellState::new("/tmp").unwrap();
 
-        assert!(eval_arith(&parse_arithmetic("5 / 0").expect("TODO: handle error"), &state).is_err());
-        assert!(eval_arith(&parse_arithmetic("5 % 0").expect("TODO: handle error"), &state).is_err());
+        assert!(eval_arith(&parse_arithmetic("5 / 0").unwrap(), &state).is_err());
+        assert!(eval_arith(&parse_arithmetic("5 % 0").unwrap(), &state).is_err());
     }
 
     #[test]
     fn test_arith_nested() {
-        let state = ShellState::new("/tmp").expect("TODO: handle error");
+        let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("((5 + 3) * 2) + 1").expect("TODO: handle error"), &state).expect("TODO: handle error"), 17);
-        assert_eq!(eval_arith(&parse_arithmetic("2 ** (3 ** 2)").expect("TODO: handle error"), &state).expect("TODO: handle error"), 512);
+        assert_eq!(eval_arith(&parse_arithmetic("((5 + 3) * 2) + 1").unwrap(), &state).unwrap(), 17);
+        assert_eq!(eval_arith(&parse_arithmetic("2 ** (3 ** 2)").unwrap(), &state).unwrap(), 512);
     }
 
     #[test]
     fn test_arith_unary_minus() {
-        let state = ShellState::new("/tmp").expect("TODO: handle error");
+        let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("-5").expect("TODO: handle error"), &state).expect("TODO: handle error"), -5);
-        assert_eq!(eval_arith(&parse_arithmetic("-(5 + 3)").expect("TODO: handle error"), &state).expect("TODO: handle error"), -8);
-        assert_eq!(eval_arith(&parse_arithmetic("10 + -5").expect("TODO: handle error"), &state).expect("TODO: handle error"), 5);
+        assert_eq!(eval_arith(&parse_arithmetic("-5").unwrap(), &state).unwrap(), -5);
+        assert_eq!(eval_arith(&parse_arithmetic("-(5 + 3)").unwrap(), &state).unwrap(), -8);
+        assert_eq!(eval_arith(&parse_arithmetic("10 + -5").unwrap(), &state).unwrap(), 5);
     }
 
     #[test]
     fn test_arith_whitespace() {
-        let state = ShellState::new("/tmp").expect("TODO: handle error");
+        let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("  5  +  3  ").expect("TODO: handle error"), &state).expect("TODO: handle error"), 8);
-        assert_eq!(eval_arith(&parse_arithmetic("( ( 5 + 3 ) * 2 )").expect("TODO: handle error"), &state).expect("TODO: handle error"), 16);
+        assert_eq!(eval_arith(&parse_arithmetic("  5  +  3  ").unwrap(), &state).unwrap(), 8);
+        assert_eq!(eval_arith(&parse_arithmetic("( ( 5 + 3 ) * 2 )").unwrap(), &state).unwrap(), 16);
     }
 }

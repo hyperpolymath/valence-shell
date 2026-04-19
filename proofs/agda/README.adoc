@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= proofs/agda/ — Agda Filesystem Proofs (Intensional Type Theory)
+
+Agda (intensional dependent type theory) cross-validates the
+filesystem reversibility theorems against the primary Lean 4 source
+of truth (`../lean4/`). Agda's intensional treatment of equality
+provides a different lens than Lean's HoTT-flavoured framework.
+
+== Files
+
+[cols="2,4"]
+|===
+| File | Role
+
+| `FilesystemModel.agda`        | Core `Filesystem` model + structural lemmas.
+| `FilesystemComposition.agda`  | Composition theorems.
+| `FilesystemEquivalence.agda`  | State-equivalence relations.
+| `FileOperations.agda`         | Per-op specs (mkdir, rmdir, touch, rm).
+| `FileContentOperations.agda`  | Read/write/append + size lemmas.
+| `CopyMoveOperations.agda`     | `cp`/`mv` reversibility.
+| `PermissionOperations.agda`   | chmod/chown bit-preservation.
+| `SymlinkOperations.agda`      | Symlink creation + traversal.
+| `RMOOperations.agda`          | Remove-Match-Obliterate (GDPR-relevant).
+|===
+
+Manifest:
+
+* `valence-shell.agda-lib` — Agda library file declaring this
+  directory as the `valence-shell` library.
+
+== Build
+
+```bash
+cd proofs/agda
+agda --safe --without-K FilesystemModel.agda           # single module
+agda --safe --without-K -i . CopyMoveOperations.agda   # transitive
+```
+
+== Conventions
+
+* `--safe --without-K` discipline (no axiom K, no postulates) — same
+  flags as the `echo-types` proof suite the author maintains in the
+  hyperpolymath repo.
+* PascalCase module names; one module per file.
+* No `.agdai` interface artefacts in tree (cached locally, not
+  committed).
+
+== See also
+
+* `../README.md` — overall proof-stack design
+* `../lean4/README.adoc` — primary source of truth
+* `../../docs/PROOF_HOLES_AUDIT.md` — proof-debt status across all
+  systems
