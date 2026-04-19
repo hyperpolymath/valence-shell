@@ -1,0 +1,99 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= docs/ — Project Documentation
+
+Project-level documentation tree. ~49 entries (subdirs + files);
+historically flat-organised — the 2026-04-18 audit flagged the lack of
+`docs/architecture/`, `docs/decisions/`, `docs/practice/`, `docs/wikis/`
+subtrees as a coverage gap, but the existing files are themselves
+well-maintained.
+
+This README provides orientation; individual files are self-describing.
+
+== Subdirectories
+
+[cols="2,4"]
+|===
+| Path | Role
+
+| `governance/`
+| Authoritative governance artefacts. Currently
+  `CRG-AUDIT-2026-04-18.adoc` (the active audit driving the v0.9.x
+  closure list); future audits land here.
+
+| `reports/audit/`
+| Historical audit snapshots; currently `audit-2026-04-04.md` (M2
+  estate audit, "REPAIR THEN PUBLISH" verdict).
+|===
+
+== Top-level files (selection)
+
+[cols="2,4"]
+|===
+| File | Purpose
+
+| `ARCHITECTURE.md` + `ARCHITECTURE_DIAGRAMS.md`
+| System-level architecture overview.
+
+| `LEAN4_RUST_CORRESPONDENCE.md`
+| Design of the Lean → Rust correspondence (currently
+  property-tested, not mechanised; ~85% confidence per CLAUDE.md).
+
+| `PROOF_HOLES_AUDIT.md`
+| Active proof-debt ledger across the 6-system stack
+  (Coq/Lean4/Agda/Isabelle/Mizar/Z3 + Idris2 ABI). Source of truth for
+  the `[coq-proof-status]` block in `../.machine_readable/6a2/STATE.a2ml`.
+
+| `POSIX_COMPLIANCE.md`
+| Per-feature POSIX compliance tracker (M1-M11 milestones; M1-M9
+  complete, M10-M11 partial).
+
+| `PROOF_OVERVIEW.md` + `PROPERTY_TESTING.md` + `VERIFICATION_STRATEGY_ANALYSIS.md`
+| Verification approach + property-testing discipline.
+
+| `SEAM_ANALYSIS_AND_IDRIS2_PLAN.md` + `ZIG_LEAN_EXTRACTION.md`
+| Future-direction designs (Idris2 extraction; Zig-Lean integration).
+
+| `ECHIDNA_INTEGRATION.md`
+| Echidna validator integration spec (audit item 10b — wiring still
+  TODO; spec is the design source).
+
+| `PHASE2_REPORT.md` / `PHASE3_INITIAL_REPORT.md` / `PHASE6_M*_DESIGN.md` (10 docs)
+| Per-phase milestone designs and reports. The PHASE6_M*_DESIGN docs
+  enumerate Phase 6 milestones M1-M13.
+
+| `USER_GUIDE.md`
+| End-user documentation for the `vsh` shell.
+
+| `CITATIONS.adoc`
+| Academic citations + references.
+
+| `CONTRIBUTOR_GUIDE_TIER1.md`
+| Tier-1 contribution guide.
+
+| `OCAML_EXTRACTION.md`
+| OCaml extraction design (companion to `../impl/ocaml/README.adoc`).
+
+| `INTEGRATION.md`
+| Cross-system integration notes.
+
+| `CONSOLIDATION_ANALYSIS.md` / `CONTINUATION_REPORT.md` /
+  `SIMPLIFICATION_OPPORTUNITIES.md`
+| Audit-style review documents.
+
+| `COMPREHENSIVE_EXAMPLES.md` / `DEMO_EXTERNAL_COMMANDS.md`
+| Worked examples + REPL demos.
+|===
+
+== Conventions
+
+* Mixed `.md` (legacy) and `.adoc` (current preferred per RSR
+  conventions). New documents should use `.adoc`.
+* Each file is self-describing; no central index file beyond this README.
+* Per-domain subtrees (`governance/`, `reports/`) collect related artefacts.
+
+== See also
+
+* `../README.md` / `../EXPLAINME.adoc` — repo entry points
+* `../CLAUDE.md` — AI-assistant honest-status document
+* `../ROADMAP.adoc` — release track + audit closure list
+* `../.machine_readable/6a2/STATE.a2ml` — machine-readable state

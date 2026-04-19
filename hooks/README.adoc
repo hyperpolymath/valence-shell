@@ -1,0 +1,47 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= hooks/ — Repository Validation Hooks
+
+POSIX-shell validation hooks invoked by Git pre-commit / pre-push
+flows and the `../.github/workflows/quality.yml` CI job. Each hook
+enforces one project-wide policy from the hyperpolymath standard
+(`../CLAUDE.md`).
+
+== Files
+
+[cols="2,4"]
+|===
+| Hook | Enforces
+
+| `validate-spdx.sh`
+| Every source file carries an SPDX `License-Identifier` header
+  (typically `PMPL-1.0-or-later`; third-party files preserve their
+  original).
+
+| `validate-permissions.sh`
+| GitHub Actions workflows declare a `permissions:` block (workflow-
+  or job-level) — never default-write.
+
+| `validate-sha-pins.sh`
+| Third-party Action references in workflows are SHA-pinned per the
+  CLAUDE.md "Common GitHub Actions SHA Pins" table — not floating
+  `@v6`-style refs.
+
+| `validate-codeql.sh`
+| CodeQL workflow's language matrix matches the actual file extensions
+  present in the repo.
+|===
+
+== Run conventions
+
+These run from CI by default. To execute locally:
+
+```bash
+bash hooks/validate-spdx.sh                  # individual hook
+just lint                                    # if Justfile wraps them
+```
+
+== See also
+
+* `../CLAUDE.md` — project-wide policy these hooks enforce
+* `../.github/workflows/quality.yml` — CI workflow that drives them
+* `../Mustfile` — mandatory-checks declaration (lints / tests / fmt)

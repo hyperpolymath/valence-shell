@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= examples/ — Example Code (sparse)
+
+Example artefacts. Currently only two files; mainly placeholder for a
+future shell-script example library.
+
+== Files
+
+[cols="2,4"]
+|===
+| File | Role
+
+| `SafeDOMExample.res`
+| ReScript example demonstrating the safe-DOM pattern. Reference
+  artefact, not a vsh example.
+
+| `web-project-deno.json`
+| Deno project manifest companion to the ReScript example.
+|===
+
+== Status
+
+These two files are reference material from a related ReScript pattern
+demo, not shell-scripting examples for `vsh` itself. Real `vsh`
+examples (control-flow, transactions, redirection) currently live in
+the documentation under `../docs/COMPREHENSIVE_EXAMPLES.md` and
+`../docs/DEMO_EXTERNAL_COMMANDS.md`.
+
+A proper `examples/shell/` subtree of vsh-runnable scripts is on the
+roadmap but not yet populated.
+
+== See also
+
+* `../docs/COMPREHENSIVE_EXAMPLES.md` — worked vsh examples
+* `../docs/DEMO_EXTERNAL_COMMANDS.md` — REPL demo scripts
+* `../impl/rust-cli/tests/manual_redirect_test.sh` /
+  `../impl/rust-cli/tests/manual_sigint_test.sh` — interactive
+  manual scripts that double as small examples
