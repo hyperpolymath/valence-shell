@@ -1422,6 +1422,21 @@ fn is_block_close_keyword(word: &str) -> bool {
 }
 
 pub fn split_on_semicolons(input: &str) -> Vec<&str> {
+    split_on_top_level(input, false)
+}
+
+/// Like `split_on_semicolons`, but also treats top-level newlines as statement
+/// separators (outside quotes and outside control-structure blocks).
+///
+/// Use this when feeding a multi-line script fragment into the parser: it
+/// lets `if/then/fi`, `while/do/done`, `for/do/done`, and `case/esac` span
+/// multiple lines — exactly like a POSIX shell — while still producing one
+/// segment per top-level statement.
+pub fn split_on_statement_separators(input: &str) -> Vec<&str> {
+    split_on_top_level(input, true)
+}
+
+fn split_on_top_level(input: &str, split_on_newline: bool) -> Vec<&str> {
     let mut segments = Vec::new();
     let mut start = 0;
     let mut in_single_quote = false;
@@ -1429,6 +1444,12 @@ pub fn split_on_semicolons(input: &str) -> Vec<&str> {
     let mut escaped = false;
     let mut paren_depth: i32 = 0;
     let mut block_depth: i32 = 0;
+    // Brace depth is tracked only in statement-separator mode (i.e. when
+    // we're splitting a whole script). It prevents a `;` inside a function
+    // body or brace group — `foo() { cmd; }` — from being treated as a
+    // statement boundary. Normal `${VAR}` expansions balance themselves
+    // and cancel back out to zero.
+    let mut brace_depth: i32 = 0;
 
     // Pre-scan to detect control structure keywords and track nesting
     // We need to identify word boundaries for keyword detection
@@ -1467,8 +1488,29 @@ pub fn split_on_semicolons(input: &str) -> Vec<&str> {
                 }
                 i += 1;
             }
+            '{' if split_on_newline && !in_single_quote && !in_double_quote => {
+                brace_depth += 1;
+                i += 1;
+            }
+            '}' if split_on_newline && !in_single_quote && !in_double_quote => {
+                if brace_depth > 0 {
+                    brace_depth -= 1;
+                }
+                i += 1;
+            }
             ';' if !in_single_quote && !in_double_quote && paren_depth == 0 => {
-                if block_depth == 0 {
+                if block_depth == 0 && brace_depth == 0 {
+                    segments.push(&input[start..i]);
+                    start = i + 1;
+                }
+                i += 1;
+            }
+            '\n' if split_on_newline
+                && !in_single_quote
+                && !in_double_quote
+                && paren_depth == 0 =>
+            {
+                if block_depth == 0 && brace_depth == 0 {
                     segments.push(&input[start..i]);
                     start = i + 1;
                 }
@@ -2580,7 +2622,9 @@ pub fn expand_quoted_word_with_state(word: &QuotedWord, state: &mut crate::state
 /// Parse a block of commands from a string (semicolon or newline separated)
 fn parse_command_block(block: &str) -> Result<Vec<Command>> {
     let mut commands = Vec::new();
-    for segment in split_on_semicolons(block) {
+    // Control-structure bodies may span multiple lines, so treat `;` AND
+    // top-level `\n` as statement separators.
+    for segment in split_on_statement_separators(block) {
         let segment = segment.trim();
         if segment.is_empty() || segment.starts_with('#') {
             continue;

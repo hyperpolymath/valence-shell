@@ -889,9 +889,21 @@ impl ShellState {
         self.positional_params.len()
     }
 
-    /// Get next unique FIFO ID for process substitution
+    /// Get next unique FIFO ID for process substitution.
+    ///
+    /// Uses a process-wide atomic so that FIFO paths are unique across all
+    /// `ShellState` instances in the same process (e.g. parallel test threads
+    /// that share a PID). A per-state counter would collide under
+    /// `cargo test`, since each test creates a fresh state whose counter
+    /// starts at 0 while they all share the same PID in the FIFO path
+    /// template `/tmp/vsh-fifo-<pid>-<id>`.
     pub fn next_fifo_id(&self) -> usize {
-        self.fifo_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static GLOBAL_FIFO_COUNTER: AtomicUsize = AtomicUsize::new(0);
+        // Keep the per-state counter too so its semantics (monotonic per
+        // state) are preserved for any caller that reads it directly.
+        let _ = self.fifo_counter.fetch_add(1, Ordering::SeqCst);
+        GLOBAL_FIFO_COUNTER.fetch_add(1, Ordering::SeqCst)
     }
 
     /// Get special variable value ($$, $?, $HOME, etc.)
