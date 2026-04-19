@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= proofs/isabelle/ — Isabelle/HOL Filesystem Proofs
+
+Isabelle/HOL (higher-order logic) cross-validates the filesystem
+reversibility theorems against the primary Lean 4 source of truth
+(`../lean4/`). Isabelle's classical HOL setting and Sledgehammer
+automation provide an independent verification path.
+
+== Files
+
+[cols="2,4"]
+|===
+| Theory | Role
+
+| `FilesystemModel.thy`         | Core `Filesystem` model + structural lemmas.
+| `FilesystemComposition.thy`   | Composition theorems.
+| `FilesystemEquivalence.thy`   | State-equivalence relations.
+| `FileOperations.thy`          | Per-op specs (mkdir, rmdir, touch, rm).
+| `FileContentOperations.thy`   | Read/write/append + size lemmas.
+| `CopyMoveOperations.thy`      | `cp`/`mv` reversibility.
+| `PermissionOperations.thy`    | chmod/chown bit-preservation.
+| `SymlinkOperations.thy`       | Symlink creation + traversal.
+| `RMO_Operations.thy`          | Remove-Match-Obliterate (GDPR-relevant).
+                                  Note underscore vs other systems'
+                                  RMOOperations — Isabelle convention.
+|===
+
+Manifest:
+
+* `ROOT` — Isabelle session declaration; lists theories + base session.
+
+== Build
+
+```bash
+cd proofs/isabelle
+isabelle build -d . valence-shell                 # full session
+isabelle jedit -d . FilesystemModel.thy           # interactive
+```
+
+== Conventions
+
+* PascalCase theory names matching the file basename.
+* Classical HOL; uses Sledgehammer for proof discovery where helpful.
+* No build artefacts in tree (Isabelle keeps caches under `~/.isabelle/`).
+
+== See also
+
+* `../README.md` — overall proof-stack design
+* `../lean4/README.adoc` — primary source of truth
+* `../../docs/PROOF_HOLES_AUDIT.md` — proof-debt status
