@@ -240,39 +240,51 @@ fn main() -> Result<()> {
 }
 
 /// Execute script content (string of commands, one per line or semicolon-separated)
+///
+/// We split the *entire* content on top-level statement separators (both `;`
+/// and `\n`, respecting quotes and control-structure depth), so multi-line
+/// `if/fi`, `for/done`, `while/done`, and `case/esac` work exactly as they
+/// do in a POSIX shell.
 fn execute_script_content(content: &str, state: &mut state::ShellState) -> Result<()> {
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
+    // Strip full-line comments before splitting. (A `#` inside a statement
+    // may be part of a quoted string or a parameter expansion, so we only
+    // trim whole-line comments here.)
+    let stripped: String = content
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with('#') {
+                ""
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    for segment in vsh::parser::split_on_statement_separators(&stripped) {
+        let segment = segment.trim();
+        if segment.is_empty() || segment.starts_with('#') {
             continue;
         }
 
-        // Split on semicolons
-        let segments = vsh::parser::split_on_semicolons(line);
-        for segment in segments {
-            let segment = segment.trim();
-            if segment.is_empty() || segment.starts_with('#') {
-                continue;
-            }
-
-            match vsh::parser::parse_command(segment) {
-                Ok(cmd) => {
-                    let result = cmd.execute(state)?;
-                    match result {
-                        ExecutionResult::Exit => return Ok(()),
-                        ExecutionResult::ExternalCommand { exit_code }
-                        | ExecutionResult::Return { exit_code } => {
-                            state.last_exit_code = exit_code;
-                        }
-                        ExecutionResult::Success => {
-                            state.last_exit_code = 0;
-                        }
+        match vsh::parser::parse_command(segment) {
+            Ok(cmd) => {
+                let result = cmd.execute(state)?;
+                match result {
+                    ExecutionResult::Exit => return Ok(()),
+                    ExecutionResult::ExternalCommand { exit_code }
+                    | ExecutionResult::Return { exit_code } => {
+                        state.last_exit_code = exit_code;
+                    }
+                    ExecutionResult::Success => {
+                        state.last_exit_code = 0;
                     }
                 }
-                Err(e) => {
-                    eprintln!("vsh: {}", e);
-                    state.last_exit_code = 1;
-                }
+            }
+            Err(e) => {
+                eprintln!("vsh: {}", e);
+                state.last_exit_code = 1;
             }
         }
     }
