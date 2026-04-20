@@ -1575,3 +1575,32 @@ fn glob_match_inner(pattern: &[char], text: &[char], pi: usize, ti: usize) -> bo
         }
     }
 }
+
+/// Check for pending signal traps and fire them.
+///
+/// Call this from the REPL loop after each command completes. If SIGINT
+/// was received and the user has set `trap '...' INT`, the trap handler
+/// is executed. If no trap is set, the interrupt is silently cleared
+/// (the current behaviour — just cancel the current line).
+///
+/// Returns `true` if an EXIT result was produced by the trap handler
+/// (i.e. the shell should quit).
+pub fn run_pending_traps(state: &mut ShellState) -> bool {
+    use crate::posix_builtins::TrapSignal;
+
+    if crate::signals::is_interrupt_requested() {
+        crate::signals::clear_interrupt();
+
+        if let Some(handler) = state.traps.get(TrapSignal::Int).map(|s| s.to_string()) {
+            if let Ok(cmd) = crate::parser::parse_command(&handler) {
+                if let Ok(result) = cmd.execute(state) {
+                    if matches!(result, ExecutionResult::Exit) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    false
+}
