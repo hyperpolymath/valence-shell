@@ -10,7 +10,7 @@ use anyhow::Result;
 use colored::Colorize;
 use std::io::{self, BufRead, Write};
 
-use crate::executable::{ExecutableCommand, ExecutionResult};
+use crate::executable::{self, ExecutableCommand, ExecutionResult};
 use crate::parser;
 use crate::signals;
 use crate::state::ShellState;
@@ -91,6 +91,12 @@ pub fn run(state: &mut ShellState) -> Result<()> {
                 }
             }
         }
+
+        // Fire any pending signal traps (e.g. trap 'handler' INT).
+        if executable::run_pending_traps(state) {
+            break;
+        }
+
         if should_break {
             break;
         }

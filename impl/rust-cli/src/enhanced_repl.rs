@@ -19,7 +19,7 @@ use reedline::{
 use std::borrow::Cow;
 use std::path::PathBuf;
 
-use crate::executable::{ExecutableCommand, ExecutionResult};
+use crate::executable::{self, ExecutableCommand, ExecutionResult};
 use crate::highlighter::VshHighlighter;
 use crate::parser;
 use crate::signals;
@@ -312,6 +312,17 @@ pub fn run(state: &mut ShellState) -> Result<()> {
                     accumulated_input.clear();
                     // Cancel multi-line input
                 }
+                // Fire INT trap if registered (e.g. trap 'echo caught' INT).
+                // Reedline handles Ctrl-C itself (returns Signal::CtrlC) so
+                // we fire the trap synchronously here rather than relying on
+                // the SIGINT flag.
+                if let Some(handler) = state.traps.get(crate::posix_builtins::TrapSignal::Int).map(|s| s.to_string()) {
+                    if let Ok(cmd) = parser::parse_command(&handler) {
+                        if let Ok(ExecutionResult::Exit) = cmd.execute(state) {
+                            break;
+                        }
+                    }
+                }
                 continue;
             }
             Err(err) => {
@@ -341,6 +352,10 @@ fn execute_segments(state: &mut ShellState, input: &str) -> Result<bool> {
                 // POSIX: continue executing remaining commands after error
             }
         }
+    }
+    // Fire any pending signal traps (e.g. trap 'handler' INT).
+    if executable::run_pending_traps(state) {
+        return Ok(true);
     }
     Ok(false)
 }

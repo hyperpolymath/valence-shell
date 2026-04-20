@@ -675,9 +675,7 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::ExternalCommand { exit_code: 1 })
             }
 
-            Command::Read { var_name, prompt, redirects: _ } => {
-                let expanded_var = crate::parser::expand_variables(var_name, state);
-
+            Command::Read { var_names, prompt, redirects: _ } => {
                 if let Some(p) = prompt {
                     let expanded_prompt = crate::parser::expand_variables(p, state);
                     eprint!("{}", expanded_prompt);
@@ -692,7 +690,41 @@ impl ExecutableCommand for Command {
                     }
                     Ok(_) => {
                         let value = input.trim_end_matches('\n').trim_end_matches('\r');
-                        state.set_variable(expanded_var, value.to_string());
+
+                        // POSIX §2.21: split by IFS, assign fields to vars.
+                        // The last variable gets the remainder (including
+                        // any fields beyond the variable count).
+                        let ifs = state
+                            .get_variable("IFS")
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| {
+                                crate::posix_builtins::DEFAULT_IFS.to_string()
+                            });
+
+                        let fields = crate::posix_builtins::ifs_split(value, &ifs);
+
+                        for (i, var_name) in var_names.iter().enumerate() {
+                            let expanded_var =
+                                crate::parser::expand_variables(var_name, state);
+                            if i == var_names.len() - 1 {
+                                // Last variable gets the remainder.
+                                // Rejoin un-consumed fields with a single
+                                // space (POSIX behaviour).
+                                let remainder = if i < fields.len() {
+                                    fields[i..].join(" ")
+                                } else {
+                                    String::new()
+                                };
+                                state.set_variable(expanded_var, remainder);
+                            } else {
+                                let field = fields
+                                    .get(i)
+                                    .cloned()
+                                    .unwrap_or_default();
+                                state.set_variable(expanded_var, field);
+                            }
+                        }
+
                         Ok(ExecutionResult::Success)
                     }
                     Err(e) => Err(anyhow::anyhow!("read: {}", e)),
@@ -892,11 +924,24 @@ impl ExecutableCommand for Command {
             Command::ForLoop { var, words, body } => {
                 let mut last_result = ExecutionResult::Success;
 
-                for word in words {
-                    // Expand variables in the word
-                    let expanded = crate::parser::expand_variables(word, state);
+                // POSIX §2.6.5: expand each word, then apply IFS splitting
+                // to produce the actual iteration list.
+                let ifs = state
+                    .get_variable("IFS")
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| crate::posix_builtins::DEFAULT_IFS.to_string());
+
+                let expanded_words: Vec<String> = words
+                    .iter()
+                    .flat_map(|word| {
+                        let expanded = crate::parser::expand_variables(word, state);
+                        crate::posix_builtins::ifs_split(&expanded, &ifs)
+                    })
+                    .collect();
+
+                for word in &expanded_words {
                     // Set loop variable
-                    state.set_variable(var.clone(), expanded);
+                    state.set_variable(var.clone(), word.clone());
 
                     // Execute body
                     last_result = execute_block(body, state)?;
@@ -1283,7 +1328,7 @@ impl ExecutableCommand for Command {
             Command::Echo { args, .. } => format!("echo {}", args.join(" ")),
             Command::True => "true".to_string(),
             Command::False => "false".to_string(),
-            Command::Read { var_name, .. } => format!("read {}", var_name),
+            Command::Read { var_names, .. } => format!("read {}", var_names.join(" ")),
             Command::Source { file } => format!("source {}", file),
             Command::Set { args } => format!("set {}", args.join(" ")),
             Command::Unset { name } => format!("unset {}", name),
@@ -1530,4 +1575,33 @@ fn glob_match_inner(pattern: &[char], text: &[char], pi: usize, ti: usize) -> bo
             }
         }
     }
+}
+
+/// Check for pending signal traps and fire them.
+///
+/// Call this from the REPL loop after each command completes. If SIGINT
+/// was received and the user has set `trap '...' INT`, the trap handler
+/// is executed. If no trap is set, the interrupt is silently cleared
+/// (the current behaviour — just cancel the current line).
+///
+/// Returns `true` if an EXIT result was produced by the trap handler
+/// (i.e. the shell should quit).
+pub fn run_pending_traps(state: &mut ShellState) -> bool {
+    use crate::posix_builtins::TrapSignal;
+
+    if crate::signals::is_interrupt_requested() {
+        crate::signals::clear_interrupt();
+
+        if let Some(handler) = state.traps.get(TrapSignal::Int).map(|s| s.to_string()) {
+            if let Ok(cmd) = crate::parser::parse_command(&handler) {
+                if let Ok(result) = cmd.execute(state) {
+                    if matches!(result, ExecutionResult::Exit) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    false
 }
