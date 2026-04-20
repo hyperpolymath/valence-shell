@@ -333,13 +333,10 @@ impl ExecutableCommand for Command {
                             }
                         }
                     } else if p.starts_with('/') {
-                        // Absolute path
+                        // Absolute path (also handles expanded ~/... since
+                        // tilde expansion in expand_variables already turned
+                        // ~/path into /home/user/path)
                         PathBuf::from(p)
-                    } else if p.starts_with("~/") {
-                        // Home-relative path
-                        let home = dirs::home_dir()
-                            .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
-                        home.join(&p[2..])
                     } else {
                         // Relative to current directory
                         state.root.join(p)

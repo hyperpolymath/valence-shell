@@ -2313,7 +2313,59 @@ fn apply_substring(value: &str, offset: i32, length: Option<usize>) -> String {
     }
 }
 
+/// POSIX §2.6.1 tilde expansion.
+///
+/// Expands an unquoted leading `~` in a word:
+///
+/// - `~` or `~/path`  → `$HOME` / `$HOME/path`
+/// - `~+` or `~+/...` → `$PWD` / `$PWD/...`
+/// - `~-` or `~-/...` → `$OLDPWD` / `$OLDPWD/...`
+///
+/// `~user` is not yet supported (requires getpwnam). An escaped `\~`
+/// (produced by `quoted_word_to_string` for quoted `~`) stays literal.
+fn expand_tilde(input: &str) -> String {
+    // An escaped tilde `\~` means the tilde was inside quotes — leave it.
+    if input.starts_with("\\~") {
+        let mut s = String::with_capacity(input.len());
+        s.push('~');
+        s.push_str(&input[2..]);
+        return s;
+    }
+
+    if !input.starts_with('~') {
+        return input.to_string();
+    }
+
+    // After the `~`, the "prefix" extends until the first `/` or end-of-string.
+    let rest = &input[1..];
+    let (prefix, suffix) = match rest.find('/') {
+        Some(pos) => (&rest[..pos], &rest[pos..]),
+        None => (rest, ""),
+    };
+
+    let replacement = match prefix {
+        "" => std::env::var("HOME").ok(),
+        "+" => std::env::var("PWD").ok(),
+        "-" => std::env::var("OLDPWD").ok(),
+        _ => {
+            // ~user — not implemented yet; leave the tilde literal.
+            return input.to_string();
+        }
+    };
+
+    match replacement {
+        Some(home) => format!("{}{}", home, suffix),
+        None => input.to_string(),
+    }
+}
+
 pub fn expand_variables(input: &str, state: &crate::state::ShellState) -> String {
+    // Tilde expansion (POSIX §2.6.1) happens before variable expansion
+    // and only at the start of a word (the word has already been split by
+    // the tokeniser). An escaped `\~` (produced by quoted_word_to_string
+    // for `'~'` or `"~"`) is left literal.
+    let input = expand_tilde(input);
+
     let mut result = String::new();
     let mut chars = input.chars().peekable();
 
@@ -2431,9 +2483,10 @@ fn quoted_word_to_string(word: &QuotedWord) -> String {
                 if word.quote_type != QuoteType::None {
                     // Escape $ in single quotes so expand_variables() doesn't expand
                     // Escape glob metacharacters (* ? [ {) in all quotes
+                    // Escape ~ in all quotes so tilde expansion stays literal
                     for ch in s.chars() {
                         if (word.quote_type == QuoteType::Single && ch == '$')
-                            || matches!(ch, '*' | '?' | '[' | '{')
+                            || matches!(ch, '*' | '?' | '[' | '{' | '~')
                         {
                             result.push('\\');
                         }
