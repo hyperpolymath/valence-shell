@@ -366,8 +366,11 @@ fn execute_line(state: &mut ShellState, input: &str) -> Result<bool> {
         return Ok(true);
     }
 
+    // POSIX §2.3.1: Expand user-defined aliases before parsing.
+    let input_aliased = state.aliases.expand(input);
+
     // Parse command
-    let cmd = parser::parse_command(input)?;
+    let cmd = parser::parse_command(&input_aliased)?;
 
     // Execute command
     let result = cmd.execute(state)?;

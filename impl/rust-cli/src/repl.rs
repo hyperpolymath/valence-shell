@@ -169,8 +169,11 @@ fn execute_line(state: &mut ShellState, input: &str) -> Result<bool> {
         _ => trimmed.to_string(),
     };
 
+    // POSIX §2.3.1: Expand user-defined aliases on the input before parsing.
+    let input_aliased = state.aliases.expand(&input_normalized);
+
     // Parse command using the parser
-    let cmd = parser::parse_command(&input_normalized)?;
+    let cmd = parser::parse_command(&input_aliased)?;
 
     // Execute command using trait (Seam 1↔2)
     let result = cmd.execute(state)?;

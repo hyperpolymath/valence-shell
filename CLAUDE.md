@@ -46,21 +46,19 @@ The Rust CLI is a functional interactive shell with these features:
 
 ### What Does NOT Work
 
-- NOT a full POSIX shell (functions, word splitting/$IFS, tilde expansion, script execution still missing)
+- NOT a full POSIX shell (word splitting in external command args, $IFS in all contexts, full function nesting still incomplete)
 - NOT formally verified end-to-end (Lean -> Rust is ~95% confidence via property testing, not proven)
 - NOT a replacement for bash/zsh in current state
 - No GDPR compliance (RMO/secure deletion are stubs)
 - No mechanized correspondence proof (property testing only)
-- No shell functions (`func() { ... }` syntax)
-- No shell script execution (`.sh` files)
 - Elixir NIF build broken (low priority)
 - BEAM daemon not implemented (planned, not built)
 
-### Test Results (2026-03-08, ALL PASSING — updated counts 2026-03-08)
+### Test Results (2026-04-20, ALL PASSING)
 
 | Suite | Count | Notes |
 |-------|-------|-------|
-| Unit tests (lib) | 277 | Core logic + control structures + tracked variables |
+| Unit tests (lib) | 310 | Core logic + control structures + tracked variables |
 | Correspondence | 28 | Lean 4 theorem validation |
 | Extended | 55 | Advanced features |
 | Integration | 35 | End-to-end |
@@ -69,14 +67,20 @@ The Rust CLI is a functional interactive shell with these features:
 | Parameter expansion | 67 | Variable/parameter tests |
 | Property correspondence | 15 | Property-based Lean validation |
 | Property | 28 | General property tests |
-| Security | 15 | Injection, traversal, validation |
-| Doctests | 52 | Inline examples |
-| **Total passing** | **602** | **0 failures** |
+| Security | 15 | Injection, traversal, validation (skips on root) |
+| Function/script | 24 | Function defs, scripts, trap/alias |
+| Function control flow | 8 | Control structures in function bodies |
+| IFS splitting | 8 | Word splitting in for-loops |
+| Multi-line scripts | 9 | Sourced scripts with multi-line control structures |
+| Tilde expansion | 9 | ~, ~/path, ~+, ~- |
+| Trap firing | 7 | Signal handler execution |
+| Doctests | 56 | Inline examples |
+| **Total passing** | **736** | **0 failures** |
 | Ignored (stress+1) | 14 | Run manually with `--ignored` |
 
 ### Codebase Metrics
 
-- 15,720 lines of Rust across 30 source files
+- ~21,000 lines of Rust across 33 source files
 - ~200+ formal theorems across 6 proof systems
 - 10 proof holes across 8 proof files (4 gaps, 4 axioms, 2 structural) — see `docs/PROOF_HOLES_AUDIT.md`
 
@@ -233,10 +237,10 @@ vsh::parser::expand_variables(&input, &state);
 
 ### Immediate Priorities
 
-1. **Shell functions** (`func() { ... }` syntax)
-2. **Shell script execution** (`.sh` files, shebang handling)
+1. **Word splitting in external command arguments** (requires quote-context threading)
+2. **Alias expansion in pipe segments** (currently only first command in a pipeline)
 3. **Echidna integration** for automated property-based verification
-4. **Fix git author** on future commits (currently `Test <test@example.com>`)
+4. **`~user` tilde expansion** (requires getpwnam/NSS lookup)
 
 ### This Week
 
@@ -303,18 +307,16 @@ PMPL-1.0-or-later (Palimpsest License)
 `docs/POSIX_COMPLIANCE.md` is now up-to-date. Milestones 1-9 complete, M10-11 partial.
 
 **Most critical missing POSIX features** (ranked by impact):
-1. Functions — no `func() { ... }` syntax — blocks modular scripts
-2. Shell script execution — no `.sh` file running
-3. Word splitting (`$IFS`) — unquoted variable expansions not split
-4. Tilde expansion — only works for `~/` in `cd` command
-5. `trap` — cannot handle signals in scripts
-6. `alias` — no command aliases
-7. SIGCHLD/Ctrl+Z — job control incomplete
+1. Word splitting in external command args — `cmd $var` doesn't split (requires quote-context)
+2. `~user` — only `~`, `~/`, `~+`, `~-` work (no getpwnam)
+3. SIGCHLD/Ctrl+Z — job control incomplete
+4. Here-string quoting edge cases
+5. Subshell `(...)` syntax — not implemented
 
 ---
 
-**Last Updated**: 2026-03-08 (P0-P9: SPDX, cp/mv/ln, controls, builtins, RSR, proofs, chmod/chown, docs, wow-factor, security audit)
+**Last Updated**: 2026-04-20 (function control-flow, multi-line scripts, tilde, IFS, trap, alias)
 **Version**: 0.9.0
 **Status**: Advanced research prototype — NOT production-ready
-**Tests**: 602 passing, 0 failures, 14 ignored
-**Completion**: ~72% (up from 65% at 2026-02-12 audit)
+**Tests**: 736 passing, 0 failures, 14 ignored
+**Completion**: ~78% (up from 72% at 2026-03-08)
