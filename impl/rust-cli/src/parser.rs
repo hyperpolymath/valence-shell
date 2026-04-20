@@ -294,9 +294,9 @@ pub enum Command {
     True,
     /// false: always returns exit code 1
     False,
-    /// read: read a line from stdin into a variable
+    /// read: read a line from stdin, split by IFS, assign to variables
     Read {
-        var_name: String,
+        var_names: Vec<String>,
         prompt: Option<String>,
         redirects: Vec<Redirection>,
     },
@@ -3446,8 +3446,8 @@ fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>,
         ":" => Ok(Command::True), // POSIX no-op, same as true
 
         "read" => {
-            // read [-p prompt] var_name
-            let mut var_name = String::new();
+            // read [-p prompt] var1 [var2 ...]
+            let mut var_names: Vec<String> = Vec::new();
             let mut prompt = None;
             let mut i = 0;
             while i < args.len() {
@@ -3455,14 +3455,14 @@ fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>,
                     prompt = Some(args[i + 1].clone());
                     i += 2;
                 } else {
-                    var_name = args[i].clone();
+                    var_names.push(args[i].clone());
                     i += 1;
                 }
             }
-            if var_name.is_empty() {
-                var_name = "REPLY".to_string();
+            if var_names.is_empty() {
+                var_names.push("REPLY".to_string());
             }
-            Ok(Command::Read { var_name, prompt, redirects })
+            Ok(Command::Read { var_names, prompt, redirects })
         }
 
         "source" | "." => {
