@@ -99,6 +99,16 @@ Audit closure scoreboard (8 of 10 closed in the 2026-04-19 pass):
                                          ⏳ Item 10a: 47 spoofed authors (auth-gated)
                                          ⏳ Item 10b: Echidna CI wiring
 
+Grade C confirmed 2026-04-27 (Jonathan Jewell):
+  GitHub Actions billing resolved. CI inspected — remaining failures
+  are estate-wide infrastructure (CodeQL SHA pin 6624720a57... not
+  resolving; OSSF Scorecard runner error; Hypatia/ClusterFuzzLite
+  infra), NOT valence-shell code quality regressions. The (a)
+  CI-confirmation caveat is discharged: the anti-pattern that caused
+  the prior 30/30 failures is confirmed cleared; the current red runs
+  are unrelated infra. Grade C stands without further code changes
+  required.
+
 Promotion to B requires external dogfooding evidence (6+ diverse
 external targets, issues fed back) which is fundamentally outside
 this session's reach.
