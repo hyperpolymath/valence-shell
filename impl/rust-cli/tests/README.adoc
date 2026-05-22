@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = impl/rust-cli/tests/ — Test Suite
 
 Cargo integration-test directory for the `vsh` Rust shell. Counts below

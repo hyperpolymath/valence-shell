@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Benchmarks for core filesystem operations
 //!
 //! Measures the performance of mkdir, rmdir, touch, rm, and operation sequences.

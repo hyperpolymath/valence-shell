@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 
 = valence-shell — CRG Audit (2026-04-18)
@@ -111,7 +111,7 @@ Publication requires B+. Long alpha is discipline, not shame.
 
 | `LICENSE`, `LICENSES/`, SPDX headers
 | PRESENT
-| LICENSE (PMPL-1.0-or-later, 18 397 bytes — updated 2026-04-17), plus
+| LICENSE (MPL-2.0, 18 397 bytes — updated 2026-04-17), plus
   `LICENSES/` dir and `NOTICE`. Source files sampled across
   `impl/rust-cli/src/` + `proofs/coq/`: all carry SPDX.
 
@@ -790,7 +790,7 @@ What blocks promotion to B (after C):
 
 - `MPL-2.0` legal-fallback form in `LICENSE` is accepted per Rule 2 of
   the license policy; SPDX headers on source uniformly assert
-  `PMPL-1.0-or-later` intent.
+  `MPL-2.0` intent.
 - The 1 justified Coq axiom (`is_empty_dir_dec` — infinite-domain,
   documented migration path to `FMaps.t`) is accepted as a standard
   axiomatic primitive, not proof debt.

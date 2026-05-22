@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! External Command Execution
 //!
 //! Executes external programs via execve(), handles PATH lookup,

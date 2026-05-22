@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Tests for IFS word splitting in for-loops and related contexts.
 //!
 //! POSIX §2.6.5 says that after parameter expansion, the result of

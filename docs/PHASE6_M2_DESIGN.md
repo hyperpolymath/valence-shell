@@ -3,7 +3,7 @@
 **Version**: 0.8.0 (Target)
 **Date**: 2026-01-28
 **Author**: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-**License**: PMPL-1.0-or-later
+**License**: MPL-2.0
 **Prerequisites**: Phase 6 M1 (External Commands) ✅ Complete
 
 ---

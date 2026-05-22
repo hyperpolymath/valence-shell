@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Quote Processing (Phase 6 M13)
 //!
 //! Implements POSIX-compliant quote processing for shell arguments:

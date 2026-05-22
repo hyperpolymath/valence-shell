@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Proof References
 //!
 //! Maps operations to their corresponding Coq/Lean4/Agda/Isabelle theorems.

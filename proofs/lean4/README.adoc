@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = proofs/lean4/ — Lean 4 Filesystem Proofs (Primary Source of Truth)
 
 Lean 4 (dependent type theory) is the **primary source of truth** for

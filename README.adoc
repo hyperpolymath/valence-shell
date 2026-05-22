@@ -1,7 +1,7 @@
 = Valence Shell (vsh)
 
 image:https://[License: PMPL-1.0,link="https://github.com/hyperpolymath/palimpsest-license"]
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // SPDX-FileCopyrightText: 2025 Jonathan D.A. Jewell
 
 
@@ -449,7 +449,7 @@ See link:CONTRIBUTING.md[CONTRIBUTING.md] for details.
 
 == Licensing
 
-**License**: Palimpsest-MPL 1.0 or later (SPDX: `PMPL-1.0-or-later`)
+**License**: Palimpsest-MPL 1.0 or later (SPDX: `MPL-2.0`)
 
 See link:LICENSE[LICENSE] for full text and usage rights.
 Third-party notices: link:THIRD_PARTY_NOTICES.md[THIRD_PARTY_NOTICES.md].
@@ -493,7 +493,7 @@ Different logical foundations increase confidence. If all 6 systems prove the sa
 
 **For research/education**: Yes! +
 **For production**: Not yet (wait for v1.0.0) +
-**License**: Palimpsest-MPL 1.0 or later (`PMPL-1.0-or-later`)
+**License**: Palimpsest-MPL 1.0 or later (`MPL-2.0`)
 
 === How do I verify the proofs?
 
@@ -556,7 +556,7 @@ See link:.well-known/humans.txt[humans.txt] for complete attribution.
 
 Copyright (c) 2025 Valence Shell Contributors
 
-Licensed under **Palimpsest-MPL 1.0 or later** (SPDX: `PMPL-1.0-or-later`).
+Licensed under **Palimpsest-MPL 1.0 or later** (SPDX: `MPL-2.0`).
 See link:LICENSE[LICENSE] for full text.
 
 ---

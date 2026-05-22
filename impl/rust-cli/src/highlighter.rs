@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Syntax Highlighting for VSH
 //!
 //! Provides real-time syntax highlighting in the REPL using nu-ansi-term colors.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = proofs/z3/ — Z3 SMT Filesystem Proofs (Automated Verification)
 
 Z3 (SMT-LIB v2 scripts) provides automated verification for the

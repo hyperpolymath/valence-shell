@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Arithmetic Expression Evaluation
 //!
 //! Implements POSIX arithmetic expansion for `$((expression))` syntax.

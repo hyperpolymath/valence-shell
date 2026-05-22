@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Extended Test [[ ]] Tests (v1.1.0)
 //!
 //! Tests bash-style [[ ]] extended test syntax:

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Test Command Implementation (POSIX test/[ built-in)
 //!
 //! Implements the POSIX test command for conditionals in shell scripts.

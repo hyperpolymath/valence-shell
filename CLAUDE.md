@@ -6,7 +6,7 @@
 
 **Current Version**: 0.9.0 (advanced research prototype, ~72% complete)
 **Primary Implementation**: `impl/rust-cli/` (Rust)
-**License**: PMPL-1.0-or-later
+**License**: MPL-2.0
 
 ## HONEST STATUS (2026-02-12)
 
@@ -298,7 +298,7 @@ cargo run
 
 ## License
 
-PMPL-1.0-or-later (Palimpsest License)
+MPL-2.0 (Palimpsest License)
 
 ---
 

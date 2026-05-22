@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = proofs/isabelle/ — Isabelle/HOL Filesystem Proofs
 
 Isabelle/HOL (higher-order logic) cross-validates the filesystem

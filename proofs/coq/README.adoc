@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = proofs/coq/ — Coq Filesystem Proofs (CIC Foundation)
 
 Coq (Calculus of Inductive Constructions) provides the CIC foundation

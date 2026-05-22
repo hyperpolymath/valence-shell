@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! POSIX Builtins — trap, alias/unalias, IFS word splitting
 //!
 //! Implements high-priority missing POSIX features:

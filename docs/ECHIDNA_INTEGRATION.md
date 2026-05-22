@@ -94,7 +94,7 @@ echidna-prover-api = { git = "https://github.com/hyperpolymath/echidna", branch 
 **File**: `valence-shell/scripts/validate-with-echidna.sh`
 ```bash
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # Validate valence-shell build with ECHIDNA
 
 set -euo pipefail
@@ -142,7 +142,7 @@ echo "=== Validation Complete ==="
 
 **File**: `.github/workflows/echidna-validation.yml`
 ```yaml
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 name: ECHIDNA Validation
 
 on:
@@ -429,4 +429,4 @@ jobs:
 
 **Last Updated**: 2026-01-28
 **Author**: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-**License**: PMPL-1.0-or-later
+**License**: MPL-2.0

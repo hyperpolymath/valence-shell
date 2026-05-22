@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // MCP SDK bindings for ReScript - Valence Shell
 
 // toolHandler type matches what the MCP SDK expects at the JS runtime boundary.

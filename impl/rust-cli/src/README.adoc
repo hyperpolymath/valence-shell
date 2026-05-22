@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = impl/rust-cli/src/ — Primary Rust Shell Source
 
 Source tree for the Rust valence-shell binary `vsh` (v0.9.0). Roughly
@@ -117,7 +117,7 @@ Tests live in `../tests/`; the FFI library lives in `../../../ffi/rust/`
   layer. The `.expect("TODO: handle error")` anti-pattern was swept
   out in commits `712e3a1..b5cc0cc` (2026-04-19); `cargo audit` and
   `cargo clippy` should remain clean post-sweep.
-* SPDX header on every source file (`PMPL-1.0-or-later`).
+* SPDX header on every source file (`MPL-2.0`).
 * Tests live in `../tests/`; doctests inline.
 
 == See also

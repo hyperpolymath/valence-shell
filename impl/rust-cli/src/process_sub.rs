@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Process Substitution Implementation
 //!
 //! Implements POSIX-style process substitution for treating command output as files.

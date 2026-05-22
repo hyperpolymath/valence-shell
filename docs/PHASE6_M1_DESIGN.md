@@ -121,7 +121,7 @@ pub fn parse_command(input: &str) -> Result<Command> {
 **File**: `impl/rust-cli/src/external.rs` (NEW)
 
 ```rust
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! External Command Execution
 //!
 //! Executes external programs via execve(), handles PATH lookup,
@@ -564,4 +564,4 @@ vsh> echo "Hello $NAME"
 
 **Last Updated**: 2026-01-28
 **Author**: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-**License**: PMPL-1.0-or-later
+**License**: MPL-2.0

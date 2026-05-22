@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Tests for POSIX §2.6.1 tilde expansion.
 //!
 //! Tilde expansion was previously hard-coded only inside the `cd` command.

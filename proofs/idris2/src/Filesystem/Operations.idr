@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: PMPL-1.0-or-later
+-- SPDX-License-Identifier: MPL-2.0
 -- Filesystem Operations - mkdir, rmdir, touch, rm
 --
 -- All operations are total (guaranteed to terminate) and proven

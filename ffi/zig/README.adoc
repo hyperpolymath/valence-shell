@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = ffi/zig/ — Zig FFI (ABI/FFI Universal Standard scaffolding)
 
 Zig FFI implementation matching the **CLAUDE.md ABI/FFI Universal

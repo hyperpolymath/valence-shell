@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Command Correction (zsh-style "Did you mean?")
 //!
 //! Suggests corrections for misspelled commands using Levenshtein distance.

@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: PMPL-1.0-or-later
+-- SPDX-License-Identifier: MPL-2.0
 /- Valence Shell - OCaml Extraction via Lean 4 → C → OCaml FFI
 
    Lean 4 compiles to C, which we can call from OCaml via FFI.

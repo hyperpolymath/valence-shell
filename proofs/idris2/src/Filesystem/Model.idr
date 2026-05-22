@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: PMPL-1.0-or-later
+-- SPDX-License-Identifier: MPL-2.0
 -- Filesystem Model - Core Types and Definitions
 --
 -- This module defines the abstract filesystem model used throughout

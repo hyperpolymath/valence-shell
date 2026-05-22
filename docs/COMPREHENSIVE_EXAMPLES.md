@@ -3,7 +3,7 @@
 **Version**: 0.7.1 (Phase 0 Sealing)
 **Date**: 2026-01-28
 **Author**: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-**License**: PMPL-1.0-or-later
+**License**: MPL-2.0
 
 ---
 
@@ -1099,5 +1099,5 @@ Error: No operations to redo
 ---
 
 **Version**: 0.7.1 (Phase 0 Sealing)
-**License**: PMPL-1.0-or-later
+**License**: MPL-2.0
 **Verified**: 256+ theorems across 6 proof systems

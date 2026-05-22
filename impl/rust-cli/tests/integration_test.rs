@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Integration Tests for Valence Shell
 //!
 //! These tests verify that the formally proven properties hold at runtime.

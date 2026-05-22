@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Friendly Error Messages (fish-style)
 //!
 //! Transforms technical error messages into user-friendly explanations

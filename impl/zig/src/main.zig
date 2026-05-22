@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Valence Shell - Zig Fast Path
 //!
 //! Fast startup path for simple operations (~5ms cold start).
@@ -359,7 +359,7 @@ fn printVersion() !void {
         \\
         \\Formally verified shell operations.
         \\Proofs: ~256 theorems across 6 verification systems
-        \\License: PMPL-1.0-or-later
+        \\License: MPL-2.0
         \\
     ;
     try std.io.getStdOut().writeAll(version);

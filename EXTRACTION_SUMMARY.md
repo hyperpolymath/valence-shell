@@ -419,7 +419,7 @@ LOW TRUST
 **Design & Implementation**: Claude Code (Anthropic) + Human collaboration
 **Proof Systems**: Lean 4, Coq, Agda, Isabelle, Mizar, Z3
 **Languages**: OCaml, Zig, C
-**License**: PMPL-1.0-or-later
+**License**: MPL-2.0
 
 ---
 

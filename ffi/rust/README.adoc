@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = ffi/rust/ — Rust FFI Library (`vsh-ffi`)
 
 Standalone Rust crate (`vsh-ffi`, library `vsh_ffi`) that exposes
@@ -55,7 +55,7 @@ cargo build --features audit      # detailed audit logging
   `.unwrap()` is conventional in test scaffolding.
 * No `Dockerfile` (use `Containerfile` per repo policy); no banned
   languages.
-* SPDX header on every file; `PMPL-1.0-or-later`.
+* SPDX header on every file; `MPL-2.0`.
 * The crate is currently unconsumed by `impl/rust-cli/`; intended for
   external linkage from non-Rust callers via the C ABI.
 

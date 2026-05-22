@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Regression tests for multi-line script and sourced-file execution.
 //!
 //! The previous `execute_script_content` and `Command::Source` iterated

@@ -149,13 +149,13 @@ just clean           # Clean build artifacts
 | **Open Source License** | ✅ COMPLETE | Palimpsest-MPL 1.0 or later |
 | **License File** | ✅ COMPLETE | `LICENSE` |
 | **Dual Licensing** | ✅ N/A | Single-license (Palimpsest-MPL 1.0 or later) |
-| **SPDX Identifiers** | ✅ COMPLETE | `PMPL-1.0-or-later` |
+| **SPDX Identifiers** | ✅ COMPLETE | `MPL-2.0` |
 | **Copyright Notices** | ✅ COMPLETE | In LICENSE and file headers |
 | **Attribution** | ✅ EXCEEDS | Palimpsest License mandates attribution + history |
 
 **Score**: 10/10 (Exceeds - clear single license with strong attribution and provenance requirements)
 
-**Palimpsest-MPL 1.0 or later (PMPL-1.0-or-later)**:
+**Palimpsest-MPL 1.0 or later (MPL-2.0)**:
 - Requires preservation of authorship
 - Mandates modification history (palimpsest record)
 - Supports reproducibility and attribution

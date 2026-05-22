@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Daemon Client - Unix Socket Communication
 //!
 //! JSON-RPC 2.0 client for communicating with the BEAM daemon.

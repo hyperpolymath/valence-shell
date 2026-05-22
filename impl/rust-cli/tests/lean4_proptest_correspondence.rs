@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Lean 4 → Rust Property-Based Correspondence Tests
 //!
 //! These tests use proptest to verify that the Rust implementation

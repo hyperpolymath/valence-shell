@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0
 # POSIX Compliance Status - Valence Shell (v0.9.0)
 
 **Goal**: Full POSIX shell compliance with formal verification at each increment

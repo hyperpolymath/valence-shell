@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 //! Tests for shell functions (TASK 1) and script execution (TASK 2)
 //!
 //! Covers:

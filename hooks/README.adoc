@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 = hooks/ — Repository Validation Hooks
 
 POSIX-shell validation hooks invoked by Git pre-commit / pre-push
@@ -14,7 +14,7 @@ enforces one project-wide policy from the hyperpolymath standard
 
 | `validate-spdx.sh`
 | Every source file carries an SPDX `License-Identifier` header
-  (typically `PMPL-1.0-or-later`; third-party files preserve their
+  (typically `MPL-2.0`; third-party files preserve their
   original).
 
 | `validate-permissions.sh`
