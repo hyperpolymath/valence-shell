@@ -1,0 +1,63 @@
+;; SPDX-License-Identifier: MPL-2.0
+;; Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+;;
+;; Assail Classifications — valence-shell
+;; See panic-attack/.claude/CLAUDE.md § "User-Classification Registry".
+
+(assail-classifications
+  (metadata
+    (version "1.0.0")
+    (project "valence-shell")
+    (last-updated "2026-05-26")
+    (entries 8)
+    (status "active"))
+
+  (classification
+    (file "impl/rust-cli/src/process_sub.rs")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "valence-shell is a Unix shell. impl/rust-cli is the Rust shell front-end calling libc::{chown,getpwnam,getgrnam,getpgrp,kill,pipe,WIFSTOPPED} + File::from_raw_fd — required POSIX job-control + permission syscalls. impl/zig is the Zig daemon-client FFI; ffi/rust contains the Rust FFI shim to the Lean-verified core via lean_wrapper.zig."))
+  (classification
+    (file "impl/rust-cli/src/external.rs")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "valence-shell is a Unix shell. impl/rust-cli is the Rust shell front-end calling libc::{chown,getpwnam,getgrnam,getpgrp,kill,pipe,WIFSTOPPED} + File::from_raw_fd — required POSIX job-control + permission syscalls. impl/zig is the Zig daemon-client FFI; ffi/rust contains the Rust FFI shim to the Lean-verified core via lean_wrapper.zig."))
+  (classification
+    (file "impl/rust-cli/src/commands.rs")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "valence-shell is a Unix shell. impl/rust-cli is the Rust shell front-end calling libc::{chown,getpwnam,getgrnam,getpgrp,kill,pipe,WIFSTOPPED} + File::from_raw_fd — required POSIX job-control + permission syscalls. impl/zig is the Zig daemon-client FFI; ffi/rust contains the Rust FFI shim to the Lean-verified core via lean_wrapper.zig."))
+  (classification
+    (file "impl/zig/src/daemon_client.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "valence-shell is a Unix shell. impl/rust-cli is the Rust shell front-end calling libc::{chown,getpwnam,getgrnam,getpgrp,kill,pipe,WIFSTOPPED} + File::from_raw_fd — required POSIX job-control + permission syscalls. impl/zig is the Zig daemon-client FFI; ffi/rust contains the Rust FFI shim to the Lean-verified core via lean_wrapper.zig."))
+  (classification
+    (file "impl/zig/src/lib.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "valence-shell is a Unix shell. impl/rust-cli is the Rust shell front-end calling libc::{chown,getpwnam,getgrnam,getpgrp,kill,pipe,WIFSTOPPED} + File::from_raw_fd — required POSIX job-control + permission syscalls. impl/zig is the Zig daemon-client FFI; ffi/rust contains the Rust FFI shim to the Lean-verified core via lean_wrapper.zig."))
+  (classification
+    (file "impl/zig/lean_wrapper.zig")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "valence-shell is a Unix shell. impl/rust-cli is the Rust shell front-end calling libc::{chown,getpwnam,getgrnam,getpgrp,kill,pipe,WIFSTOPPED} + File::from_raw_fd — required POSIX job-control + permission syscalls. impl/zig is the Zig daemon-client FFI; ffi/rust contains the Rust FFI shim to the Lean-verified core via lean_wrapper.zig."))
+  (classification
+    (file "ffi/rust/src/operations.rs")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "valence-shell is a Unix shell. impl/rust-cli is the Rust shell front-end calling libc::{chown,getpwnam,getgrnam,getpgrp,kill,pipe,WIFSTOPPED} + File::from_raw_fd — required POSIX job-control + permission syscalls. impl/zig is the Zig daemon-client FFI; ffi/rust contains the Rust FFI shim to the Lean-verified core via lean_wrapper.zig."))
+  (classification
+    (file "ffi/rust/src/audit.rs")
+    (category "UnsafeCode")
+    (classification "legitimate-ffi")
+    (audit "audits/audit-ffi-2026-05-26.md")
+    (rationale "valence-shell is a Unix shell. impl/rust-cli is the Rust shell front-end calling libc::{chown,getpwnam,getgrnam,getpgrp,kill,pipe,WIFSTOPPED} + File::from_raw_fd — required POSIX job-control + permission syscalls. impl/zig is the Zig daemon-client FFI; ffi/rust contains the Rust FFI shim to the Lean-verified core via lean_wrapper.zig."))
+)
