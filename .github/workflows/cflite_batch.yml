@@ -45,7 +45,7 @@ jobs:
 
       - name: Upload SARIF (if crashes found)
         if: always() && steps.run.outputs.sarif-output != ''
-        uses: github/codeql-action/upload-sarif@a4784f2dad6682d68cce8299ef20b1ca931bbdfb # v4
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4
         with:
           sarif_file: ${{ steps.run.outputs.sarif-output }}
           category: clusterfuzzlite-batch-${{ matrix.sanitizer }}
