@@ -8,7 +8,7 @@ default:
     @just --list
 
 # Build all proofs across all systems
-build-all: build-coq build-lean4 build-agda build-isabelle build-mizar
+build-all: build-coq build-lean4 build-agda build-isabelle build-mizar build-idris2
     @echo "✓ All proofs built"
 
 # Verify all proofs
@@ -49,6 +49,22 @@ build-mizar:
     @echo "Building Mizar proofs..."
     cd proofs/mizar && mizf filesystem_model.miz || echo "⚠ Mizar not configured"
     cd proofs/mizar && mizf file_operations.miz || echo "⚠ Mizar not configured"
+
+# Requires Idris2 0.8.0. Install via:
+#   nix-shell -p idris2     # recommended for reproducibility
+#   asdf install idris2 latest
+#   or build from source at https://github.com/idris-lang/Idris2
+# Build Idris2 proofs (oracle — see .github/workflows/idris-verification.yml)
+build-idris2:
+    @echo "Building Idris2 proofs..."
+    cd proofs/idris2 && idris2 --build valence-shell.ipkg
+    @echo "✓ Idris2 proofs type-checked"
+
+# Verify Idris2: build then count remaining ?holes (regression signal).
+verify-idris2: build-idris2
+    @echo "Counting Idris2 holes..."
+    @holes=$$(grep -rohE "\\?[a-zA-Z_][a-zA-Z0-9_']*" proofs/idris2/src/ 2>/dev/null | sort -u | wc -l); \
+        echo "  Distinct holes: $$holes"
 
 # Extract Coq to OCaml
 extract:
@@ -374,6 +390,8 @@ help:
     @echo "  just build-agda       - Build Agda proofs"
     @echo "  just build-isabelle   - Build Isabelle proofs"
     @echo "  just build-mizar      - Build Mizar proofs"
+    @echo "  just build-idris2     - Build Idris2 proofs"
+    @echo "  just verify-idris2    - Build + hole-count Idris2 proofs"
     @echo ""
     @echo "Testing:"
     @echo "  just test-ffi-zig     - Test Zig FFI"
