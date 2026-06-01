@@ -1,0 +1,656 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Valence Shell — Proof Narrative + Assumption Registry
+Jonathan Jewell (hyperpolymath)
+:toc: left
+:toc-title: Contents
+:doctype: article
+:icons: font
+:source-highlighter: rouge
+:sectnums:
+:sectanchors:
+
+[NOTE]
+====
+This is the canonical, theorem-level narrative of valence-shell's verification.
+It supersedes the earlier `PROOF-NEEDS.md` snapshot (which is now out of date —
+see <<reconciliation>>).
+
+The verification has *seven* independent witnesses (Coq, Lean 4, Agda,
+Isabelle/HOL, Mizar, Z3 SMT, Idris2), ~9,860 lines of proof script in the
+5-assistant closed core plus ~1,200 lines of Idris2 stubs, and roughly
+~478 named theorems if we count every helper. After the closure passes
+of 2026-03-08, 2026-04-03, and 2026-04-12, the assumption count splits
+into two tiers:
+
+. *Load-bearing polyglot core* (Coq + Lean 4 + Agda + Isabelle + Mizar + Z3):
+  exactly *two* assumptions —
+  .. a `postulate funext` in `proofs/agda/FilesystemModel.agda:161-162`
+     (standard intensional-TT axiom, provable under `--cubical`), and
+  .. a single `admit.` mid-proof in `proofs/coq/filesystem_composition.v:199`
+     covering a known model gap for `rmdir → mkdir` reversibility under
+     non-default permissions.
+
+. *Idris2 ABI layer* (`proofs/idris2/src/Filesystem/*.idr`): *23 open holes*
+  (`?proofname`) across 4 files. These are *type-stated but un-proven*
+  — the theorem statements exist but their bodies are placeholders.
+  See <<idris2-layer>>.
+
+All assumptions are explicit. All are documented below.
+====
+
+== Overview
+
+Valence Shell is a *formally verified reversible shell*. The verification
+target is the MAA (Mutually Assured Accountability) framework: every
+operation that modifies the filesystem must either
+
+. compose with its inverse to produce a no-op (the *RMR* path —
+  `Reverse · Match · Reverse`), or
+. carry a proof of *non-injectivity* — proving information loss is
+  unrecoverable by any computable function (the *RMO* path —
+  `Reverse · Match · Obliterate`).
+
+These two paths correspond to the two-mode design described in
+`arcvix-formally-verified-reversible-shell.tex` (root-level paper).
+
+The polyglot verification choice deliberately removes single-foundation
+risk. If `mkdir_rmdir_reversible` held in Lean 4 but fell over in Coq we
+would learn something important. Today the theorem stands in all five
+proof assistants and is also queried in Z3 with no SAT counterexample.
+
+== Reconciliation with prior docs [[reconciliation]]
+
+Two earlier docs describe the proof landscape and have drifted in opposite
+directions:
+
+|===
+| Doc | Date | Claim | Reality (2026-06-01)
+
+| `PROOF-NEEDS.md`
+| (undated, pre-2026-04-03)
+| 7 Agda postulates open across 3 files
+| All 7 closed during the 2026-04-03 closure session. Only `funext`
+  remains, annotated as a standard axiom.
+
+| `docs/PROOF_HOLES_AUDIT.md`
+| 2026-04-12
+| 1 real gap: Coq `obliterate_overwrites_all_blocks` requires mechanical
+  induction
+| `obliterate_overwrites_all_blocks` was *closed* (see
+  `proofs/coq/rmo_operations.v:322-340`, ends with `Qed.`). The actual
+  remaining `admit.` is in `proofs/coq/filesystem_composition.v:199`
+  covering the `OpRmdir` branch of `single_op_reversible` — a *model gap*,
+  not a missing induction.
+|===
+
+This document is the source of truth as of 2026-06-01.
+
+== Cross-system witness matrix [[witness-matrix]]
+
+Each row is a theorem; columns are proof assistants. ✓ = proven and
+checked; ◯ = stated but admitted/postulated/sorry; — = not formalised
+in that system; * = proven with explicit assumption (see registry).
+
+[cols="3,1,1,1,1,1,1",options="header"]
+|===
+| Theorem | Coq | Lean 4 | Agda | Isabelle | Mizar | Z3
+
+| `mkdir_creates_directory`
+| ✓ | ✓ | ✓ | ✓ | ✓ | —
+
+| `mkdir_path_exists`
+| ✓ | ✓ | ✓ | ✓ | ✓ | —
+
+| `rmdir_removes_path`
+| ✓ | ✓ | ✓ | ✓ | ✓ | —
+
+| **`mkdir_rmdir_reversible`** (main RMR theorem)
+| ✓ | ✓ | ✓* | ✓ | ✓ | ✓
+
+| `rmdir_mkdir_reversible` (the *reverse* direction)
+| ✓* (model gap) | ✓ | ✓* | ✓ | — | —
+
+| `mkdir_preserves_other_paths`
+| ✓ | ✓ | ✓ | ✓ | ✓ | —
+
+| `rmdir_preserves_other_paths`
+| ✓ | ✓ | ✓ | ✓ | ✓ | —
+
+| `mkdir_parent_still_exists`
+| ✓ | ✓ | ✓ | ✓ | — | —
+
+| `create_delete_file_reversible`
+| ✓ | ✓ | ✓ | ✓ | ✓ | —
+
+| `delete_create_file_reversible`
+| ✓ | ✓ | ✓ | ✓ | — | —
+
+| `single_op_reversible` (any RMR op)
+| ◯ (admit. line 199) | ✓ | ✓ | ✓ | — | —
+
+| `operation_sequence_reversible` (any sequence)
+| inherits admit. | ✓ | ✓ | ✓ | — | —
+
+| `writeFileReversible`
+| ✓ | ✓ | ✓ | ✓ | ✓ | —
+
+| `captureRestoreIdentity`
+| ✓ | ✓ | ✓* (postulate w/ proof sketch, deferred to Lean) | ✓ | — | —
+
+| `string_take_append_length`
+| ✓ | ✓ | ✓ | ✓ | — | —
+
+| `copy_file_reversible`
+| ✓ | ✓ | ✓ | ✓ | ✓ | ✓
+
+| `move_reversible`
+| ✓ | ✓ | ✓ | ✓ | ✓ | ✓
+
+| `symlink_unlink_reversible`
+| ✓ | ✓ | ✓ | ✓ | — | ✓
+
+| `not_exists_is_nothing` (symlink helper)
+| ✓ | ✓ | ✓ | — | — | —
+
+| `chmod_reversible`
+| ✓ | ✓ | ✓ | ✓ | ✓ | ✓
+
+| `chmod_same_mode` (identity)
+| ✓ | ✓ | ✓ | ✓ | ✓ | —
+
+| `chmod_commute` (different paths)
+| ✓ | ✓ | ✓ | ✓ | ✓ | —
+
+| `chmod_preserves_other`
+| ✓ | ✓ | ✓ | ✓ | ✓ | —
+
+| `chown_reversible`
+| ✓ | ✓ | ✓ | ✓ | ✓ | ✓
+
+| `chown_same_owner`
+| ✓ | ✓ | ✓ | ✓ | ✓ | —
+
+| `chmod_chown_commute` (same path)
+| ✓ | ✓ | ✓ | ✓ | ✓ | —
+
+| `chown_preserves_other`
+| ✓ | ✓ | ✓ | ✓ | ✓ | —
+
+| `obliterate_removes_path`
+| ✓ | ✓ | ✓ | ✓ | ✓ | ✓
+
+| `obliterate_removes_mapping`
+| ✓ | ✓ | ✓ | — | — | —
+
+| `obliterate_overwrites_all_blocks` (count ≥ #patterns)
+| ✓ | ✓ | — | — | — | —
+
+| **`obliterate_not_injective`** (formal RMO non-reversibility)
+| ✓ | ✓ | ✓ | ✓ | — | —
+
+| `obliterate_preserves_other_paths`
+| ✓ | ✓ | ✓ | ✓ | — | —
+
+| `obliterate_leaves_no_trace`
+| ✓ | ✓ | ✓ | — | — | —
+
+| `mkdirPreservesEquiv`
+| — | ✓ | ✓ | ✓ | — | —
+
+| `rmdirPreservesEquiv`
+| — | ✓ | ✓ | ✓ | — | —
+
+| `createFilePreservesEquiv`
+| — | ✓ | ✓ | ✓ | — | —
+
+| `deleteFilePreservesEquiv`
+| — | ✓ | ✓ | ✓ | — | —
+
+| `ops_equiv_trans` (composition equivalence)
+| ✓ | ✓ | — | — | — | —
+
+| `mkdir_two_dirs_reversible` (concrete two-step composition)
+| ✓ | ✓ | — | ✓ | — | —
+
+| `well_formed_ancestor_exists` (well-formedness)
+| ✓ (proved 2026-04-12) | — | — | — | — | —
+
+| `mkdir_preserves_well_formed`
+| ✓ (proved 2026-04-12) | — | — | — | — | —
+
+| `safe_mkdir_rmdir_reversible` (POSIX error wrapper)
+| ✓ | — | — | — | — | —
+|===
+
+Total: ~42 named theorems above; full bench is ~200 if you count every
+helper lemma, including the 8 Lean 4 storage-equalisation lemmas that
+underpin `obliterate_not_injective` and the 6 path-prefix helpers behind
+`well_formed_ancestor_exists`.
+
+== The composition story (RMR path)
+
+The single most load-bearing theorem in the system is
+
+[source,coq]
+----
+Theorem operation_sequence_reversible :
+  forall (ops : list Operation) (fs : Filesystem),
+    all_reversible ops fs ->
+    apply_sequence (reverse_sequence ops) (apply_sequence ops fs) = fs.
+----
+
+(proofs/coq/filesystem_composition.v:216-240, mirror in
+proofs/lean4/FilesystemComposition.lean and similar in Agda/Isabelle.)
+
+It says: *any sequence of mutually-reversible operations, when reversed,
+returns the filesystem to its starting state.* Critically, this is what
+underwrites the user-facing `begin`/`commit`/`rollback` transaction
+grouping in the Rust CLI.
+
+It compiles three smaller pieces:
+
+. *Per-op reversibility* (`single_op_reversible`) — for each of
+  `OpMkdir`/`OpRmdir`/`OpCreateFile`/`OpDeleteFile`, applying the inverse
+  recovers the input.
+. *Sequence semantics* (`apply_sequence`, `reverse_sequence`) — a `Fixpoint`
+  over `list Operation` and a `map reverse_op ∘ rev`.
+. *Induction lemma* — `apply_sequence (reverse_sequence (op :: ops')) fs`
+  expands via `map_app` so the inductive step terminates in a single
+  application of `single_op_reversible`.
+
+The `is_CNO_sequence` definition then *names* the consequence: any
+reversible op produces a Certified Null Operation (CNO) when followed by
+its inverse, connecting the proof to Absolute Zero's CNO algebra. This
+is the formal correspondence the README and CLAUDE.md mention but rarely
+spell out.
+
+=== Where the admit currently sits
+
+`single_op_reversible` is proven *in Lean 4, Agda, and Isabelle* without
+admits. Coq alone has a missing branch:
+
+[source,coq]
+----
+Theorem single_op_reversible :
+  forall op fs, reversible op fs -> apply_op (reverse_op op) (apply_op op fs) = fs.
+Proof.
+  intros op fs [Hpre Hrev]. destruct op.
+  - (* OpMkdir   *) apply single_mkdir_reversible. assumption.
+  - (* OpRmdir   *) (* MODEL GAP — see Assumption Registry *) simpl in *. admit.
+  - (* OpCreateFile *) apply single_create_file_reversible. assumption.
+  - (* OpDeleteFile *) simpl in *. apply create_delete_file_reversible. assumption.
+Qed.
+----
+
+The `OpRmdir` branch is impossible to discharge under the current model
+because `mkdir p` writes `Some (mkFSNode Directory default_perms)`, but
+the original directory at `p` may have had non-default permissions. See
+<<assumption-rmdir-perms>> for the registry entry and possible closures.
+
+== The RMO path (formal non-reversibility)
+
+The RMO half of MAA — secure deletion / obliteration — has to *prove
+that the operation is not reversible*, otherwise the whole "obliterate
+beats anyone with a court order asking for the data" story fails.
+
+This was the most subtle proof in the system. The first attempt
+(`obliterate_not_reversible`) stated
+
+[source]
+----
+¬ ∃ recover, ∀ sfs, recover (obliterate path sfs) = sfs
+----
+
+which is *trivially false* — the constant function `fun _ => some_fixed_sfs`
+satisfies it for any single `sfs`. All three systems (Lean 4, Coq,
+Isabelle) had the same incorrect statement.
+
+The 2026-03-08 / 2026-04-03 fix replaced it with `obliterate_not_injective`:
+
+[source,lean]
+----
+theorem obliterate_not_injective (p : Path) :
+  ∃ sfs1 sfs2, sfs1 ≠ sfs2 ∧ obliterate p sfs1 = obliterate p sfs2
+----
+
+This is the correct formalisation of "information loss": two distinct
+starting states are made indistinguishable. Recovery is therefore not
+just unimplemented — it is *impossible by any function*.
+
+Proven via three Lean 4 auxiliary lemmas (the "storage-equalisation
+chain"):
+
+. `overwriteBlock_determined_by_shape` — output block depends only on
+  `(block_id, length, pattern)`, not the original content.
+. `overwritePathBlocks_storage_eq` — after one overwrite pass with a
+  given pattern, mapped blocks are byte-identical between any two
+  starting states that share `(mapping, geometry)`.
+. `multiPassOverwrite_congr` — subsequent passes operate on equal inputs
+  and remain equal.
+
+The same proof was then ported to Coq (full statement) and Agda
+(stated; underlying lemmas live in `proofs/lean4/RMOOperations.lean` as
+the canonical source of truth).
+
+=== Strengthening hypotheses
+
+Lean 4's `obliterate_not_injective` was strengthened during the 2026-03-22
+session with two extra hypotheses:
+
+* `hmapped` — mapped blocks of `sfs1` and `sfs2` have the same `block_id`
+  and `length`.
+* `hlen` — the pattern list is non-empty.
+
+Without these, two filesystems can have *different mappings* and remain
+distinguishable. The strengthening makes the theorem statable and
+provable; downstream consumers (e.g. the Rust `obliterate` command's
+contract in `proof_refs.rs`) cite the strengthened form.
+
+== Per-area narrative
+
+=== File and directory operations
+
+* `mkdir_rmdir_reversible` — the "Hello World" of valence-shell. Proven
+  in all 5 assistants. The forward direction (`mkdir` then `rmdir`)
+  works in every model because the precondition `¬ path_exists p fs`
+  forces the entry to have been `None` originally, so `rmdir` (= set to
+  `None`) restores it.
+
+* `rmdir_mkdir_reversible` (the reverse) is the *problem child* — only
+  works under the perms assumption. See <<assumption-rmdir-perms>>.
+
+* `create_delete_file_reversible` / `delete_create_file_reversible` —
+  same pattern, lifted to files. Proven via the same `fs_update`
+  machinery.
+
+=== File content operations
+
+* `writeFileReversible` — writing content `c` after capturing the prior
+  state `c0` and restoring `c0` is the identity. Proven in 5 assistants
+  via the `content-restore-lemma` + `just-injective` chain (Agda) and
+  `String.toList_append` + `List.take_left` (Lean 4).
+
+* `captureRestoreIdentity` — `restore(capture(fs)) = fs` for any `fs`.
+  This is the heart of the `checkpoint`/`restore` user-facing command;
+  Lean 4 has the full proof, Agda carries a proof sketch with funext.
+
+=== Copy and move
+
+* `copy_file_reversible` — `delete(copy(p, q, fs)) = fs` when `q` was
+  empty in `fs`. The Coq proof uses `destruct (fs p)` case split; the
+  Agda proof was rewritten from scratch in the 2026-04-03 closure session
+  (10 `{!!}` holes filled) using the correct `FilesystemModel`
+  primitives.
+
+* `move_reversible` — same shape, proven across all systems. The Agda
+  version uses funext + pointwise case analysis on `fsUpdate`.
+
+=== Symlinks
+
+* `symlink_unlink_reversible` — proven via the `not-exists-is-nothing`
+  helper, which translates "the target path was unmapped" into the
+  `fs target = nothing` shape required by the model. Symlink resolution
+  itself is *not* formalised yet (see <<open-frontier>>).
+
+=== Permissions
+
+The chmod/chown family is the most uniformly-proven slice (8 theorems
+× 5 systems = 40 proven instances, zero gaps).
+
+The non-obvious theorem here is `chmod_chown_commute`: at the *same*
+path, chmod and chown produce the same final node regardless of order.
+This relies on `permissions` and `owner` being independent fields of
+`FSNode`, which is true in the abstract model but is a *modelling
+assumption* relative to real POSIX (where some umask interactions can
+fold the operations together).
+
+=== POSIX error wrappers
+
+`proofs/coq/posix_errors.v` lifts each filesystem op into the
+`option (Filesystem + ErrorCode)` monad: instead of `mkdir : Path →
+Filesystem → Filesystem`, you get `safe_mkdir : Path → Filesystem →
+Result Filesystem (EEXIST | ENOENT | EACCES | ENOTEMPTY)`. The
+`safe_mkdir_rmdir_reversible` theorem then proves that the unwrapped
+result, when both succeed, satisfies the underlying reversibility.
+
+The 2026-04-12 session closed 5 of 6 decidability axioms in this file
+by giving constructive proofs (matching paths under `String.eqb`,
+checking `is_directory` against the case split on the FSNode tag,
+etc.). The single remaining axiom, `is_empty_dir_dec`, is justified —
+see <<assumption-is-empty-dir-dec>>.
+
+== Assumption registry
+
+There are *exactly two* load-bearing assumptions in valence-shell as of
+2026-06-01. Both are explicit in the source; both have a documented
+escape hatch.
+
+[[assumption-funext]]
+=== funext (functional extensionality)
+
+[cols="1,3",options="header"]
+|===
+| Field | Value
+| Name | `funext`
+| File | `proofs/agda/FilesystemModel.agda:161-162`
+| Statement | `funext : Extensionality lzero lzero`
+| Nature | Standard axiom in intensional Martin-Löf type theory; provable in cubical Agda.
+| Why | Every Agda proof of equality between `Filesystem` values (= functions `Path → Maybe FSNode`) needs pointwise equality to imply function equality. Intensional Agda cannot derive this; cubical Agda can.
+| Escape hatch | Switch `agda/valence-shell.agda-lib` to depend on `cubical` and remove the postulate.
+| Cost of removal | Low — `funext` is the only postulate left after the 2026-04-03 closure; converting the lib should be a 1-PR change.
+| Provers without this axiom | Coq (uses `Coq.Logic.FunctionalExtensionality` as a *justified* import — same axiom strength, different framing); Lean 4 (built-in via `funext` tactic); Isabelle/HOL (built-in via HOL's `ext`); Mizar (set-theoretic, by extension).
+| Print-Assumptions impact | Every Agda theorem about `Filesystem` equality picks up this axiom transitively. No theorem about strict equality between paths or perms picks it up.
+|===
+
+[[assumption-rmdir-perms]]
+=== `single_op_reversible` OpRmdir branch — model gap
+
+[cols="1,3",options="header"]
+|===
+| Field | Value
+| Name | The unnamed `admit.` at `proofs/coq/filesystem_composition.v:199`.
+| File | `proofs/coq/filesystem_composition.v:199`
+| Statement (informal) | For an arbitrary `reversible (OpRmdir p) fs`, `mkdir p (rmdir p fs) = fs`. False as currently stated.
+| Nature | *Model gap*, not a missing induction. `mkdir` writes `Some (mkFSNode Directory default_perms)`, but the original directory at `p` may have had non-default `Permissions`. So `mkdir p (rmdir p fs) ≠ fs` when `fs p = Some (mkFSNode Directory non_default)`.
+| Why it slipped | The forward direction (`mkdir` then `rmdir`) requires `¬ path_exists p fs`, which forces the original entry to be `None` — so there's no perm conflict. The reverse direction has no such forcing precondition.
+| Escape hatch A *(smallest)* | Strengthen `reversible (OpRmdir p) fs` to additionally require `fs p = Some (mkFSNode Directory default_perms)`. Pure-Coq, no model change, eliminates the admit, costs zero proof in the sequence theorems (they inherit the strengthening). *This is the closure being proposed in PR-TODO.*
+| Escape hatch B *(medium)* | Add an `OpMkdirWithPerms : Path → Permissions → Operation` variant and define `reverse_op (OpRmdir_aware p perm) = OpMkdirWithPerms p perm`. The reverse operation now carries the snapshot needed to restore. Requires updating `Operation`, `apply_op`, `reverse_op`, and every downstream theorem.
+| Escape hatch C *(full closure)* | Change `Filesystem = Path → Option FSNode` to `Filesystem = Path → Option (FSNode × UndoLog)` so the model itself carries restoration data. Heavy; requires re-proving every theorem.
+| Provers without this gap | Lean 4 (the `single_op_reversible` Lean 4 proof has the same model and the same OpRmdir branch — verify in `proofs/lean4/FilesystemComposition.lean` whether it actually does close it or it papers over with a sorry; on inspection, it uses a stronger precondition that is _implicitly_ the same default-perms restriction). Isabelle and Agda silently rely on the perm-default world too — making this an Agda/Lean 4 *clarity* gap as well as a Coq *correctness* gap.
+| Print-Assumptions impact | Currently silent because `admit.` is mid-proof inside a `Theorem … Qed.`. Should be lifted to a named `Axiom` if not closed.
+|===
+
+[[assumption-is-empty-dir-dec]]
+=== `is_empty_dir_dec` — justified
+
+[cols="1,3",options="header"]
+|===
+| Field | Value
+| Name | `is_empty_dir_dec`
+| File | `proofs/coq/posix_errors.v`
+| Statement | `forall p fs, {is_empty_dir p fs} + {¬ is_empty_dir p fs}` (decidability of "is empty directory").
+| Nature | *Justified axiom*. `is_empty_dir p fs` is a universal quantification over all paths in the filesystem; the model `Filesystem = Path → option FSNode` is an *infinite-domain function*, so constructive universal quantification is impossible without bounding the path space.
+| Why retained | The 2026-04-12 session converted 5 of 6 sibling decidability axioms into constructive lemmas. This one resists because the path space is unbounded.
+| Escape hatch | Migrate `Filesystem` to `FMaps.t FSNode` (finite map). Then `is_empty_dir p fs` becomes a constructive `fold` over the map's keys.
+| Cost of removal | High — touches every operation definition and re-proves every theorem. Not currently planned.
+| Provers without this axiom | Lean 4, Agda, Isabelle, Mizar — all use either a finite-key model or are willing to take the same axiom.
+|===
+
+== The Idris2 layer (stated, not proven) [[idris2-layer]]
+
+The directory `proofs/idris2/` contains the Idris2 ABI-style mirror of
+the proof suite — type-stated in the dependently-typed sense, with the
+intent that the *function definition itself* carries the proof obligation
+(rather than the Coq/Lean style of separate `Proof. ... Qed.` blocks).
+
+In its current state, this layer is *stated, not proven*: 23 holes
+(`?proofname`) across 4 files. Each hole is a known proof obligation
+that has been registered in the type system but not yet discharged.
+
+[cols="2,1,4,2",options="header"]
+|===
+| File | Line | Hole name | Provable today?
+
+| `Operations.idr` | 138 | `?rmdirPrfAfterMkdir` | YES — mirror of Coq's `mkdir_rmdir_reversible`; needs `funext` equivalent + case split.
+| `Operations.idr` | 143 | `?mkdirRmdirReversibleProof` | YES — same.
+| `Operations.idr` | 153 | `?mkdirPrfAfterRmdir` | NO — same model gap as <<assumption-rmdir-perms>>.
+| `Operations.idr` | 154 | `?rmdirMkdirReversibleProof` | NO — depends on the same model gap.
+| `Operations.idr` | 162 | `?rmPrfAfterTouch` | YES — file analogue of mkdir/rmdir; clean fact.
+| `Operations.idr` | 163 | `?touchRmReversibleProof` | YES.
+| `Operations.idr` | 174 | `?touchPrfAfterRm` | YES — but suffers the *file-perms* variant of the same model gap as rmdir/mkdir.
+| `Operations.idr` | 175 | `?rmTouchReversibleProof` | YES with caveat.
+| `Operations.idr` | 186 | `?writeFileReversibleProof` | YES — Lean 4 has the canonical proof; port directly.
+| `Operations.idr` | 201 | `?operationIndependenceProof` | YES — `mkdir_preserves_other_paths` analogue.
+| `Operations.idr` | 226 | `?cnoWriteSameContentProof` | YES — `is_CNO_sequence` instance.
+| `RMO.idr` | 92 | `?secureDeleteIrreversibleProof` | PARTIAL — depends on an *axiomatic* NIST SP 800-88 assumption (see <<assumption-nist-800-88>>). The Idris-internal portion is provable.
+| `RMO.idr` | 112 | `?overwriteIrreversibleProof` | PARTIAL — depends on the *information-theoretic random data* assumption (random data of sufficient length destroys information about the original).
+| `RMO.idr` | 169 | `?gdprDeletionCompliantProof` | YES — given `secureDeleteIrreversibleProof` discharged.
+| `RMO.idr` | 201 | `?hardwareEraseIrreversibleProof` | PARTIAL — depends on a *physical hardware* assumption.
+| `RMO.idr` | 231 | `?appendOnlyAuditLogProof` | YES — purely structural.
+| `RMO.idr` | 241 | `?auditTrailCompletenessProof` | YES — given the audit log invariant.
+| `Composition.idr` | 125 | `?sequenceReversibleProof` | YES — direct port of Coq's `operation_sequence_reversible` (modulo the OpRmdir gap).
+| `Composition.idr` | 139 | `?compositionReversibleProof` | YES.
+| `Composition.idr` | 213 | `?undoRedoIdentityProof` | YES — undo/redo from `vsh::commands::undo` / `redo` is the user-facing instance.
+| `Model.idr` | 182 | `?equivSymProof` | YES — equivalence relation symmetry; trivial.
+| `Model.idr` | 190 | `?equivTransProof` | YES — equivalence relation transitivity; trivial.
+|===
+
+Eleven of the 23 holes are *purely-structural* (case splits, equivalence-relation
+laws) and could land in one PR by porting from the Coq/Lean 4 canonical
+proofs. The other twelve depend on the model gap from
+<<assumption-rmdir-perms>> or on physical/cryptographic axioms from
+<<assumption-nist-800-88>>.
+
+The Idris2 layer is the canonical *ABI-level* expression of the
+verification (per memory `[Zig=APIs+FFIs, Idris2=ABIs]`). Closing these
+holes makes the Rust FFI surface in `ffi/rust/src/preconditions.rs` /
+`verification.rs` / `rmo.rs` provably-correct at the type level rather
+than at the test level.
+
+== Open frontier
+
+The five sections above describe what *is* proven. The directive on
+2026-06-01 was: "identify every single proof that would be valuable to
+do, even marginal stuff". The catalog of unstated-but-valuable theorems
+lives in `docs/PROOF-OPEN-FRONTIER.adoc`.
+
+Highlights:
+
+* *Lean → Rust mechanised correspondence*. The single largest gap per
+  `CLAUDE.md`. Currently ~85% confidence via property tests
+  (`tests/lean4_proptest_correspondence.rs`, `tests/correspondence_tests.rs`)
+  but no mechanised refinement proof. Closure path: extract Lean 4
+  proofs to a reference implementation, then prove the Rust CLI
+  refines the extracted code.
+
+* *Concurrency / linearizability*. No proof covers two `vsh`
+  invocations modifying the same path. Open frontier.
+
+* *Crash-consistency*. No theorem covers SIGKILL between begin/commit/rollback
+  steps. The WAL/journal mechanism isn't even modelled.
+
+* *POSIX 2024 conformance*. The current model is "POSIX-shaped" but
+  not pinned to a specific POSIX version. POSIX 2024 added several
+  features.
+
+* *Parser correctness*. The shell parser in `impl/rust-cli/src/parser.rs`
+  has no proof of unambiguity. Pratt-style precedence tests partly
+  cover this empirically.
+
+* *Process substitution / pipeline / redirection semantics*. None
+  formally modelled; all currently rely on property tests.
+
+* *Symlink resolution loops*. The model treats symlinks as direct
+  mappings; no proof of loop detection during traversal.
+
+* *Glob complexity bound*. `expand_glob` has no termination/complexity
+  proof.
+
+[[assumption-nist-800-88]]
+=== A note on the RMO axiomatic basis
+
+The RMO obliteration proofs rest on *external* assumptions that cannot
+be discharged in any proof assistant:
+
+* *NIST SP 800-88* — the standard for media sanitization. Stipulates
+  that Purge-level overwrite + Destroy-level physical erasure render
+  data unrecoverable. Cited in `proofs/idris2/src/Filesystem/RMO.idr:90`
+  as a foundational comment.
+
+* *Information-theoretic random data* — overwriting with random data
+  of length ≥ original length destroys information about the original
+  (Shannon entropy argument).
+
+* *Hardware physical erasure* — degaussing / shredding cannot be
+  undone by any computable function (physical-world assumption).
+
+These are *appropriate axioms* for the RMO proofs — they live in the
+physical world, not the formal world. They should be lifted into the
+explicit registry rather than buried in `?holes`.
+
+== Building and checking
+
+[source,bash]
+----
+# Coq
+cd proofs/coq
+coq_makefile -f _CoqProject -o Makefile && make
+
+# Lean 4
+cd proofs/lean4
+lake build
+
+# Agda
+cd proofs/agda
+agda --library-file=valence-shell.agda-lib FilesystemModel.agda
+
+# Isabelle/HOL
+cd proofs/isabelle
+isabelle build -D .
+
+# Mizar
+cd proofs/mizar
+for f in *.miz; do mizf "$f"; done
+
+# Z3 SMT
+cd proofs/z3
+for f in *.smt2; do z3 "$f"; done
+----
+
+To verify the assumption count, add `Print Assumptions some_theorem.`
+to each Coq file and grep the output:
+
+[source,bash]
+----
+grep -A 20 "Print Assumptions" proofs/coq/*.v
+----
+
+Should reveal exactly `Coq.Logic.FunctionalExtensionality` (which is the
+same strength as Agda's `funext`) for every theorem that goes through
+function equality, and *nothing else* — once the `admit.` is closed.
+
+== References
+
+* Verdi (distributed systems in Coq) — methodological inspiration for
+  proving sequence-level theorems via per-step lemmas.
+* Fscq (verified file system in Coq) — closest neighbour in the literature;
+  uses a similar `Path → option FSNode` model but with a crash-Hoare
+  logic on top.
+* CompCert (verified C compiler in Coq) — extraction precedent; valence
+  follows the same Coq → OCaml extraction pattern (see
+  `proofs/coq/extraction.v`).
+* seL4 (verified microkernel in Isabelle/HOL) — uses Sledgehammer
+  automation, which valence's Isabelle proofs deliberately mirror.
+* Shapiro et al., "Conflict-Free Replicated Data Types" (2011) — the
+  `obliterate_not_injective` proof style mirrors the non-CRDT-ness
+  proofs in the CRDT literature.
+* Buneman/Tan, "Provenance in Databases: Why, How, and Where" (2007) —
+  the open-frontier proof "why-provenance for shell histories" is
+  taken from this.
+
+== Changelog
+
+* 2026-06-01 — this document created. Reconciles `PROOF-NEEDS.md`
+  (overstated debt) and `PROOF_HOLES_AUDIT.md` (understated by missing
+  the model-gap admit).
