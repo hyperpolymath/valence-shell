@@ -180,7 +180,44 @@ Proof.
   assumption.
 Qed.
 
-(** Generic single operation reversibility *)
+(** Generic single operation reversibility.
+
+    PROOF STATUS: Admitted — see [docs/PROOF-NARRATIVE.adoc] § Assumption
+    Registry. The OpRmdir and OpDeleteFile branches both depend on the
+    same model gap: [mkdir] / [create_file] write [default_perms], but
+    the original entry may have had non-default permissions, so
+    [mkdir(rmdir(fs))] ≠ [fs] and [create_file(delete_file(fs))] ≠ [fs]
+    when the original perms were not default.
+
+    Three closure paths on file: (A) strengthen [reversible (OpRmdir p) fs]
+    and [reversible (OpDeleteFile p) fs] to additionally require
+    [fs p = Some (mkFSNode _ default_perms)]; (B) add [OpMkdirWithPerms]
+    and [OpCreateFileWithPerms] variants whose [reverse_op] carries the
+    original perm snapshot; (C) move to a [Filesystem × UndoLog] model
+    where the inverse operation reads the snapshot from the log.
+
+    Two pre-existing bugs were uncovered while writing this docstring:
+
+    (1) The original form ended [Qed.] after a mid-proof [admit.] in
+        the OpRmdir branch. Modern Coq treats this as an incomplete
+        proof and refuses — meaning the file did not previously
+        compile under [coqc] (CI status: verify-proofs job is disabled
+        per [_CoqProject]). Switching to [Admitted.] registers the
+        missing branches as Axiom-equivalents.
+
+    (2) The original OpDeleteFile branch invoked
+        [apply create_delete_file_reversible. assumption.], which
+        proves [delete_file p (create_file p fs) = fs] — the *forward*
+        direction. The OpDeleteFile branch of [single_op_reversible]
+        needs the *reverse* direction
+        [create_file p (delete_file p fs) = fs], which is unprovable
+        under the same model gap. Now also explicitly [admit].
+
+    Downstream theorems ([operation_sequence_reversible],
+    [two_op_sequence_reversible], [three_op_sequence_reversible],
+    [reversible_creates_CNO]) keep their proof scripts; they now show
+    [single_op_reversible] in their [Print Assumptions] output, which
+    is the correct behaviour for an unproven leaf. *)
 Theorem single_op_reversible :
   forall op fs,
     reversible op fs ->
@@ -191,20 +228,14 @@ Proof.
   - (* OpMkdir *)
     apply single_mkdir_reversible.
     assumption.
-  - (* OpRmdir *)
-    (* MODEL GAP (pre-existing): mkdir restores with default_perms, but the original
-       directory may have had different permissions, so mkdir(rmdir(fs)) ≠ fs in general.
-       Full reversibility requires the undo stack to preserve original node data.
-       This is a known limitation of the current Filesystem = Path -> option FSNode model. *)
-    simpl in *. admit.
+  - (* OpRmdir — model gap, see header docstring *)
+    admit.
   - (* OpCreateFile *)
     apply single_create_file_reversible.
     assumption.
-  - (* OpDeleteFile *)
-    simpl in *.
-    apply create_delete_file_reversible.
-    assumption.
-Qed.
+  - (* OpDeleteFile — model gap, see header docstring *)
+    admit.
+Admitted.
 
 (** * Composition Theorems *)
 
