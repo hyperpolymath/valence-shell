@@ -48,6 +48,10 @@ Definition copy_file (src dst : Path) (fs : Filesystem) : Filesystem :=
 
 (** * Move Operation *)
 
+(** Helper: check if path is prefix of another *)
+Definition is_prefix (p1 p2 : Path) : Prop :=
+  exists suffix, p2 = p1 ++ suffix.
+
 (** Precondition for move/rename *)
 Definition move_precondition (src dst : Path) (fs : Filesystem) : Prop :=
   (* Source must exist *)
@@ -64,10 +68,6 @@ Definition move_precondition (src dst : Path) (fs : Filesystem) : Prop :=
   has_write_permission (parent_path src) fs /\
   (* Must have write permission on destination parent *)
   has_write_permission (parent_path dst) fs.
-
-(** Helper: check if path is prefix of another *)
-Definition is_prefix (p1 p2 : Path) : Prop :=
-  exists suffix, p2 = p1 ++ suffix.
 
 (** Move operation *)
 Definition move (src dst : Path) (fs : Filesystem) : Filesystem :=

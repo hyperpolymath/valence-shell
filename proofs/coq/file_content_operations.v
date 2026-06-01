@@ -130,16 +130,11 @@ Proof.
     unfold read_file in Hold.
     destruct (fs p) as [n|] eqn:Hfs; [|discriminate].
     destruct (node_type n) eqn:Hntype; [|discriminate].
-    rewrite Hntype in Hold. simpl in Hold.
+    simpl in Hold.
     destruct (node_content n) as [c|] eqn:Hcontent; [|discriminate].
     injection Hold as Heq. subst c.
-    (* Both (list_eq_dec p p) branches are trivially left/right *)
-    destruct (list_eq_dec String.string_dec p p) as [_|Hcontra]; [|exact (Hcontra eq_refl)].
-    rewrite Hfs. rewrite Hntype.
-    (* After inner write: result is Some {|...; node_content := Some new_content|} *)
-    destruct (list_eq_dec String.string_dec p p) as [_|Hcontra]; [|exact (Hcontra eq_refl)].
-    rewrite Hfs. rewrite Hntype. simpl.
-    (* node_type of the intermediate node is File, so outer write applies old_content *)
+    destruct (list_eq_dec String.string_dec p p) as [_|Hcontra]; [|destruct (Hcontra eq_refl)].
+    destruct (list_eq_dec String.string_dec p p) as [_|Hcontra]; [|destruct (Hcontra eq_refl)].
     destruct n as [nt perms cont]; simpl in *.
     subst nt. subst cont.
     reflexivity.
@@ -180,7 +175,7 @@ Proof.
     unfold write_file.
     destruct (list_eq_dec String.string_dec p p) as [_|Hcontra].
     + destruct (fs p) as [node|] eqn:Hfs.
-      * simpl. destruct (node_type node); reflexivity.
+      * destruct (node_type node) eqn:Hnt; cbn; try rewrite Hnt; reflexivity.
       * simpl. reflexivity.
     + contradiction.
   - reflexivity.
@@ -271,15 +266,12 @@ Proof.
       subst p'.
       unfold read_file in Hread.
       destruct Hpre as [node [Hnode [Htype [perms [Hperms Hwrite]]]]].
-      rewrite Hnode in Hread.
-      rewrite Htype in Hread.
-      simpl in Hread.
-      injection Hread as Heq.
+      assert (Hc : node_content node = Some content).
+      { rewrite Hnode in Hread. cbn in Hread.
+        rewrite Htype in Hread. exact Hread. }
       rewrite Hnode.
-      rewrite Htype.
-      destruct node; simpl in *.
-      subst node_type0.
-      subst node_content0.
+      destruct node as [nt nperms ncont]; simpl in *.
+      subst nt. subst ncont.
       reflexivity.
     + (* p <> p' *)
       reflexivity.
