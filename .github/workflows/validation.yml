@@ -62,6 +62,8 @@ jobs:
       - name: Build Coq proofs (oracle)
         working-directory: proofs/coq
         run: |
+          # extraction.v writes to extracted/filesystem.ml; the dir is gitignored, so create it.
+          mkdir -p extracted
           coq_makefile -f _CoqProject -o Makefile
           make -j1
 
