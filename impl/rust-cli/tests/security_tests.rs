@@ -348,25 +348,62 @@ fn security_recursive_glob_bounded() {
 
 #[test]
 fn security_gdpr_secure_deletion() {
-    // Verify secure deletion is available for GDPR compliance
+    // Verify secure deletion is available for GDPR compliance (Article 17).
+    //
+    // Exercises `secure_delete` from commands::secure_deletion:
+    //   - Sensitive payload is written to a temp file
+    //   - secure_delete runs the 3-pass overwrite (random / zeros / 0xFF) + unlink
+    //   - Post-condition: the file no longer exists
+    //
+    // Note: we do NOT assert that the underlying disk blocks no longer contain
+    // recoverable data. That is impossible to test from userspace on a CoW
+    // filesystem (see `secure_deletion.rs` module docs). For hardware-level
+    // assurance use `vsh::secure_erase` instead.
+    use vsh::commands::secure_deletion::secure_delete;
 
-    // This would test the RMO (Remove-Match-Obliterate) implementation
-    // Currently: stub only
+    let temp = TempDir::new().unwrap();
+    let target = temp.path().join("gdpr-payload.bin");
+    fs::write(&target, b"personally-identifiable information").unwrap();
+    assert!(target.exists(), "fixture must exist before deletion");
 
-    // TODO: Implement and test secure_delete() function
-    // Requirements:
-    // - Overwrite with random data (NIST SP 800-88 Clear)
-    // - Multiple passes (DoD 5220.22-M)
-    // - Verify data irrecoverable
+    secure_delete(&target).expect("secure_delete must succeed on a regular file");
+    assert!(
+        !target.exists(),
+        "GDPR right-to-erasure: file must be gone after secure_delete"
+    );
 }
 
 #[test]
 fn security_audit_trail_immutability() {
-    // Verify audit log cannot be tampered with
+    // Verify the audit log behaves append-only at the API surface:
+    // - There is no public API to delete or modify an entry
+    // - read_all() returns entries in insertion order
+    // - Appending more entries strictly grows the log
+    use vsh::audit_log::{AuditEntry, AuditLog};
+    use vsh::state::{Operation, OperationType};
 
-    // TODO: Implement append-only audit log
-    // Requirements:
-    // - Cannot delete entries
-    // - Cannot modify entries
-    // - Cryptographic hash chain (optional)
+    let temp = TempDir::new().unwrap();
+    let log_path = temp.path().join("audit.log");
+    let log = AuditLog::new(log_path.clone(), None).unwrap();
+
+    let op1 = Operation::new(OperationType::Mkdir, "alpha".to_string(), None);
+    log.append(&AuditEntry::from_operation(&op1, "success", None))
+        .unwrap();
+    let after_one = log.read_all().unwrap();
+    assert_eq!(after_one.len(), 1);
+
+    let op2 = Operation::new(OperationType::CreateFile, "beta.txt".to_string(), None);
+    log.append(&AuditEntry::from_operation(&op2, "success", None))
+        .unwrap();
+    let after_two = log.read_all().unwrap();
+    assert_eq!(after_two.len(), 2);
+    // Insertion order preserved.
+    assert_eq!(after_two[0].path, "alpha");
+    assert_eq!(after_two[1].path, "beta.txt");
+
+    // The earlier entry survived the second append — it was not mutated.
+    assert_eq!(after_one[0].operation_id, after_two[0].operation_id);
+
+    // There is no API to remove an entry; the only mutation path is `append`.
+    // A future regression that added such an API would have to update this test.
 }

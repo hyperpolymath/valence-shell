@@ -7,6 +7,7 @@
 use anyhow::{Context, Result};
 use colored::Colorize;
 use std::fs;
+use thiserror::Error;
 
 use crate::proof_refs;
 use crate::state::{Operation, OperationType, ShellState};
@@ -14,6 +15,39 @@ use crate::verification;
 
 // Secure deletion (RMO - Remove-Match-Obliterate)
 pub mod secure_deletion;
+
+/// Typed errors raised by the command layer.
+///
+/// Previously several branches in the inverse/undo dispatch reached
+/// `unreachable!()` after upstream filters were supposed to exclude them.
+/// Those panics have been replaced with typed `CommandError::Internal*`
+/// variants so that any future regression in the filtering logic surfaces
+/// as a *recoverable* error rather than aborting the shell.
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum CommandError {
+    /// An `OperationType` whose inverse is dispatched by an earlier match arm
+    /// (e.g. `FileTruncated` → `WriteFile`, `CopyFile` → `DeleteFile`) reached
+    /// a branch that should have been pre-handled.
+    ///
+    /// Encountering this in the wild indicates a bug in
+    /// [`OperationType::inverse`](crate::state::OperationType::inverse)
+    /// or in the surrounding match dispatch.
+    #[error("internal invariant violated: inverse-type arm reached for {op_type:?} which should have been handled by an earlier branch (expected WriteFile / DeleteFile)")]
+    InternalUnreachableInverseArm { op_type: OperationType },
+
+    /// An irreversible operation (`Obliterate`, `HardwareErase`) reached the
+    /// inverse dispatch despite `inverse()` returning `None` for these types.
+    /// The filter at the top of `undo`/`rollback` is supposed to skip them.
+    #[error("internal invariant violated: irreversible operation {op_type:?} reached inverse dispatch — `OperationType::inverse` should have returned None and the caller should have filtered")]
+    InternalUnreachableIrreversible { op_type: OperationType },
+
+    /// `explain_command` extracted the path-bearing arm of a pattern that
+    /// only contains `Chmod` or `Chown`, but the inner re-match observed a
+    /// different variant.
+    #[error("internal invariant violated: explain_command path-extraction reached a non-{{Chmod,Chown}} arm")]
+    InternalUnreachableExplainPathArm,
+}
 
 /// Create a directory at the specified path.
 ///
@@ -949,12 +983,18 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
             OperationType::FileTruncated | OperationType::CopyFile => {
                 // FileTruncated inverse is WriteFile, CopyFile inverse is DeleteFile
-                // Both handled by earlier arms
-                unreachable!("Inverse type should be WriteFile or DeleteFile, handled above");
+                // Both handled by earlier arms — surface as typed error if reached.
+                return Err(CommandError::InternalUnreachableInverseArm {
+                    op_type: inverse_type,
+                }
+                .into());
             }
             OperationType::HardwareErase | OperationType::Obliterate => {
-                // These have no inverse (inverse() returns None), so we never get here
-                unreachable!("Irreversible operations filtered out above");
+                // These have no inverse (inverse() returns None), so we never get here.
+                return Err(CommandError::InternalUnreachableIrreversible {
+                    op_type: inverse_type,
+                }
+                .into());
             }
         }
 
@@ -1435,12 +1475,18 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                 }
                 OperationType::FileTruncated | OperationType::CopyFile => {
                     // FileTruncated inverse is WriteFile, CopyFile inverse is DeleteFile
-                    // Both handled by earlier arms
-                    unreachable!("Inverse type should be WriteFile or DeleteFile, handled above");
+                    // Both handled by earlier arms — return typed error instead of panicking.
+                    Err(CommandError::InternalUnreachableInverseArm {
+                        op_type: inverse_type,
+                    }
+                    .into())
                 }
                 OperationType::HardwareErase | OperationType::Obliterate => {
-                    // This should never happen - these have no inverse (inverse() returns None)
-                    unreachable!("Irreversible operations should not reach here");
+                    // These have no inverse (inverse() returns None), so we never get here.
+                    Err(CommandError::InternalUnreachableIrreversible {
+                        op_type: inverse_type,
+                    }
+                    .into())
                 }
             };
 
@@ -1952,7 +1998,15 @@ pub fn hardware_erase(
             println!("{}", "✓ Device securely erased".bright_green().bold());
         }
 
-        _ => unreachable!(),
+        other => {
+            // The earlier `match (drive_type, method)` block can only emit one of
+            // "ata-secure-erase" / "nvme-format" / "nvme-sanitize"; reaching this
+            // arm means that block grew a new method without updating us.
+            anyhow::bail!(
+                "internal invariant violated: erase_method dispatch received unrecognised value '{}'",
+                other
+            );
+        }
     }
 
     // Record operation (NOT reversible)
@@ -2074,10 +2128,13 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
             );
         }
         crate::parser::Command::Chmod { path, .. } | crate::parser::Command::Chown { path, .. } => {
+            // Outer arm guarantees we are in {Chmod, Chown}; the inner match
+            // exists only to extract the `path` field uniformly. Any other
+            // variant here is a structural bug, surfaced as typed error.
             let p = match cmd {
                 crate::parser::Command::Chmod { path, .. } => path,
                 crate::parser::Command::Chown { path, .. } => path,
-                _ => unreachable!(),
+                _ => return Err(CommandError::InternalUnreachableExplainPathArm.into()),
             };
             let expanded = crate::parser::expand_variables(p, state);
             let resolved = state.resolve_path(&expanded);
