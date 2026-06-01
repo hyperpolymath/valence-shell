@@ -52,9 +52,9 @@ Holes are placeholders for proofs that need to be completed:
 12. `compositionReversibleProof` - Composition of operations
 13. `undoRedoIdentityProof` - Undo/redo identity
 14. `undoRedoCompositionProof` - Multiple undo/redo
-15. `secureDeleteIrreversibleProof` - Secure deletion has no inverse
+15. `secureDeleteNotInjective` - Secure deletion is not injective (closed; was `secureDeleteIrreversibleProof`, redesigned per #60)
 16. `overwriteIrreversibleProof` - Overwrite destroys original
-17. `gdprDeletionCompliantProof` - GDPR compliance
+17. `gdprDeletionCompliant` - GDPR Article 17 compliance witness (closed; was `gdprDeletionCompliantProof`, redesigned per #61)
 18. `hardwareEraseIrreversibleProof` - Hardware erase absolute
 19. `appendOnlyAuditLogProof` - Audit log append-only
 20. `auditTrailCompletenessProof` - Audit trail completeness
@@ -196,20 +196,23 @@ sequenceReversible :
 **Status**: Hole - needs proof by induction
 **Approach**: Induction on `ops`, use individual reversibility
 
-### 3. Irreversibility
+### 3. Non-Injectivity (Irreversibility)
 
 ```idris
-secureDeleteIrreversible :
+secureDeleteNotInjective :
   (p : Path) ->
-  (fs : Filesystem) ->
-  (prf : ObliterationProof p) ->
-  (recovery : Filesystem -> Filesystem) ->
-  recovery fs = fs ->
-  Void
+  (fs1, fs2 : Filesystem) ->
+  (prf1 : ObliterationProof p) ->
+  (prf2 : ObliterationProof p) ->
+  filter (keepIfNotP p) (entries fs1)
+    = filter (keepIfNotP p) (entries fs2) ->
+  removeEntry p fs1 = removeEntry p fs2
 ```
 
-**Status**: Hole - needs proof
-**Approach**: Show contradiction - if recovery exists, violates NIST SP 800-88
+**Status**: Closed (issues #60/#61). Mirrors Coq's `obliterate_not_injective`.
+**Approach**: Direct congruence via `removeEntryDeterminedByFilter` in `Filesystem.Model`.
+
+The previous signature `recovery fs = fs -> Void` was a non-theorem (refuted by `recovery = id`); the redesigned signature captures the correct information-theoretic content of irreversibility — non-injectivity of the deletion map, hence no left-inverse exists.
 
 ---
 

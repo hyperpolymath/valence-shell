@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Coq: `single_op_reversible` Qed-closed via `OpMkdirWithPerms` + `OpCreateFileWithPerms` constructor-variant approach; zero new axioms (PR #67)
 - Lean 4: `crash_atomic_within_op_mkdir` keystone theorem + 280-line `docs/THEORY-CRASH-CONSISTENCY.adoc` design doc (PR #62, closes #45 keystone)
 - Idris2: `Filesystem/Model.idr` typecheck fixed via `Data.Maybe` import + `Eq Path` + `Eq FSEntry` instances (PR #69)
+- Idris2: RMO theorem-shape redesigns closing #60 + #61. `secureDeleteIrreversible` (non-theorem: `recovery fs = fs -> Void` refuted by `recovery = id`) → `secureDeleteNotInjective` mirroring Coq's `obliterate_not_injective`; `gdprDeletionCompliant` (non-theorem: `recovery = id` refuted by `recovery = const empty`) → structural witness mirroring Coq's `obliterate_leaves_no_trace`. New `removeEntryDeterminedByFilter` + `keepIfNotP` helpers in `Filesystem.Model`. Drive-by Model.idr fixes (DecEq Path impossible-pattern + equivRefl hole) unblock the Idris2 build past Model.
 - Cross-system witness matrix + open-frontier docs (PRs #47/#62)
 
 ==== Implementation

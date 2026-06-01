@@ -41,8 +41,8 @@ pathToString (Cons comp rest) =
 export
 DecEq Path where
   decEq Root Root = Yes Refl
-  decEq Root (Cons _ _) = No absurd
-  decEq (Cons _ _) Root = No absurd
+  decEq Root (Cons _ _) = No (\case Refl impossible)
+  decEq (Cons _ _) Root = No (\case Refl impossible)
   decEq (Cons x xs) (Cons y ys) with (decEq x y)
     decEq (Cons x xs) (Cons x ys) | Yes Refl with (decEq xs ys)
       decEq (Cons x xs) (Cons x xs) | Yes Refl | Yes Refl = Yes Refl
@@ -161,11 +161,35 @@ addEntry : Path -> FSEntry -> Filesystem -> Filesystem
 addEntry p entry (MkFS entries) =
   MkFS ((p, entry) :: entries)
 
+||| Predicate: keep entries at paths other than `p`. Named (rather than
+||| inlined as a lambda) so that proofs about `removeEntry` can refer to
+||| the *same* predicate as the implementation — anonymous lambdas at
+||| separate call sites don't unify in Idris2 0.8.0.
+public export
+keepIfNotP : Path -> (Path, FSEntry) -> Bool
+keepIfNotP p (q, _) = p /= q
+
 ||| Remove an entry from filesystem
 export
 removeEntry : Path -> Filesystem -> Filesystem
 removeEntry p (MkFS entries) =
-  MkFS (filter (\(q, _) => p /= q) entries)
+  MkFS (filter (keepIfNotP p) entries)
+
+||| `removeEntry p` depends only on the `keepIfNotP p` projection of the
+||| entries list. If two filesystems agree on this projection, they are
+||| observationally identical after `removeEntry p`. This is the
+||| structural lemma underlying RMO's non-injectivity (see
+||| `Filesystem.RMO.secureDeleteNotInjective`, which mirrors Coq's
+||| `obliterate_not_injective`).
+public export
+removeEntryDeterminedByFilter :
+  (p : Path) ->
+  (fs1, fs2 : Filesystem) ->
+  filter (keepIfNotP p) (entries fs1)
+    = filter (keepIfNotP p) (entries fs2) ->
+  removeEntry p fs1 = removeEntry p fs2
+removeEntryDeterminedByFilter p (MkFS e1) (MkFS e2) agreeOff =
+  cong MkFS agreeOff
 
 ||| Update entry at path
 export
@@ -188,7 +212,7 @@ equiv (MkFS entries1) (MkFS entries2) =
 ||| Reflexivity of equivalence
 export
 equivRefl : (fs : Filesystem) -> equiv fs fs = True
-equivRefl (MkFS entries) = Refl
+equivRefl (MkFS entries) = ?equivReflProof
 
 ||| Symmetry of equivalence
 export
