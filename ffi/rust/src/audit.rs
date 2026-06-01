@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! MAA-Compliant Audit Logging
 //!
 //! This module provides audit logging for the MAA (Mutually Assured Accountability)

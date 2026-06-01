@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Proof References
 //!
 //! Maps operations to their corresponding Coq/Lean4/Agda/Isabelle theorems.

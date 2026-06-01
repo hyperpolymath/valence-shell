@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Command Correction (zsh-style "Did you mean?")
 //!
 //! Suggests corrections for misspelled commands using Levenshtein distance.

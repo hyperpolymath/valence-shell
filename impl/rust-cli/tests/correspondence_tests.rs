@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Correspondence Tests - Verify Rust implementation matches Lean 4 theorems
 //!
 //! These tests verify that the Rust implementation correctly implements
