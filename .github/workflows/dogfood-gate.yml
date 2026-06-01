@@ -256,31 +256,47 @@ jobs:
 
           echo "has_manifest=true" >> "$GITHUB_OUTPUT"
 
-          # Validate TOML structure using Python 3.11+ tomllib
-          python3 -c "
-import tomllib, sys
-with open('eclexiaiser.toml', 'rb') as f:
-    data = tomllib.load(f)
-project = data.get('project', {})
-if not project.get('name', '').strip():
-    print('ERROR: project.name is required', file=sys.stderr)
-    sys.exit(1)
-functions = data.get('functions', [])
-if not functions:
-    print('ERROR: at least one [[functions]] entry is required', file=sys.stderr)
-    sys.exit(1)
-for fn in functions:
-    if not fn.get('name', '').strip():
-        print('ERROR: function name cannot be empty', file=sys.stderr)
-        sys.exit(1)
-    if not fn.get('source', '').strip():
-        print(f'ERROR: function {fn[\"name\"]} has no source path', file=sys.stderr)
-        sys.exit(1)
-print(f'Valid: {project[\"name\"]} ({len(functions)} function(s))')
-" || {
-            echo "::error file=eclexiaiser.toml::Invalid eclexiaiser.toml — see step output for details"
+          # Validate TOML structure with shell + grep (estate Python ban —
+          # see feedback_python_saltstack_absolute_no_questions).
+          # We require: [project] name = "..."   and at least one [[functions]]
+          # entry with name + source.
+          errors=0
+          if ! grep -qE '^\[project\]' eclexiaiser.toml; then
+            echo "ERROR: missing [project] table" >&2
+            errors=$((errors + 1))
+          fi
+          if ! grep -qE '^[[:space:]]*name[[:space:]]*=[[:space:]]*"[^"]+"' eclexiaiser.toml; then
+            echo "ERROR: project.name is required (non-empty)" >&2
+            errors=$((errors + 1))
+          fi
+          if ! grep -qE '^\[\[functions\]\]' eclexiaiser.toml; then
+            echo "ERROR: at least one [[functions]] entry is required" >&2
+            errors=$((errors + 1))
+          fi
+          # Count [[functions]] blocks and check each has name + source. We
+          # split on [[functions]] markers and verify each chunk has both
+          # keys. awk avoids the python ban while still validating structure.
+          awk '
+            /^\[\[functions\]\]/ { in_fn=1; have_name=0; have_source=0; next }
+            in_fn && /^[[:space:]]*name[[:space:]]*=[[:space:]]*"[^"]+"/ { have_name=1 }
+            in_fn && /^[[:space:]]*source[[:space:]]*=[[:space:]]*"[^"]+"/ { have_source=1 }
+            in_fn && /^\[/ {
+              if (!have_name)   { print "ERROR: function block missing name"   > "/dev/stderr"; exit 1 }
+              if (!have_source) { print "ERROR: function block missing source" > "/dev/stderr"; exit 1 }
+              in_fn=0
+            }
+            END {
+              if (in_fn) {
+                if (!have_name)   { print "ERROR: final function block missing name"   > "/dev/stderr"; exit 1 }
+                if (!have_source) { print "ERROR: final function block missing source" > "/dev/stderr"; exit 1 }
+              }
+            }
+          ' eclexiaiser.toml || errors=$((errors + 1))
+          if [ "$errors" -gt 0 ]; then
+            echo "::error file=eclexiaiser.toml::Invalid eclexiaiser.toml — $errors error(s)"
             exit 1
-          }
+          fi
+          echo "Valid: eclexiaiser.toml structure OK"
 
       - name: Write summary
         run: |

@@ -25,13 +25,15 @@
 | Agda | `postulate funext` | `proofs/agda/FilesystemModel.agda:161-162` | Standard intensional-TT axiom; provable under `--cubical` |
 | Coq | `admit.` mid-`single_op_reversible`, OpRmdir branch | `proofs/coq/filesystem_composition.v:199` | Model gap — `mkdir` writes `default_perms`, original may have had non-default |
 | Coq | `Axiom is_empty_dir_dec` (justified) | `proofs/coq/posix_errors.v` | Infinite-domain universal quantification |
-| Idris2 | 23 `?holes` across 4 files | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged |
+| Idris2 | 23 `?holes` + 8 `partial` annotations across 4 files | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged; `partial` is the Idris2 totality escape hatch |
 
-Idris2 holes by file:
-- `Operations.idr`: 11 holes (mkdir/rmdir, touch/rm, write, op-independence, CNO)
-- `RMO.idr`: 6 holes (secureDelete, overwrite, GDPR, hardwareErase, audit log)
-- `Composition.idr`: 4 holes (sequence + composition + undo/redo)
-- `Model.idr`: 2 holes (equivalence sym + trans)
+Idris2 holes + `partial` markers by file:
+- `proofs/idris2/src/Filesystem/Operations.idr`: 11 holes (mkdir/rmdir, touch/rm, write, op-independence, CNO)
+- `proofs/idris2/src/Filesystem/RMO.idr`: 6 holes + 1 `partial` at line 138 (secureDelete, overwrite, GDPR, hardwareErase, audit log)
+- `proofs/idris2/src/Filesystem/Composition.idr`: 4 holes + 7 `partial` annotations at lines 84, 94, 109, 185, 192, 200, 208, 217 (sequence + composition + undo/redo; preconditions checked externally pending precondition lemmas)
+- `proofs/idris2/src/Filesystem/Model.idr`: 2 holes (equivalence sym + trans)
+
+The `partial` annotations above are recognised by `standards/scripts/check-trusted-base.sh` as Idris2 totality escape hatches. They are enumerated here (full paths) so the trusted-base check finds them documented per estate policy (`docs/TRUSTED-BASE-REDUCTION-POLICY.adoc`). Closure path: discharge the corresponding `?hole` with the precondition lemma, then drop the `partial` annotation.
 
 ### Foundational Closure (history)
 

@@ -304,5 +304,5 @@ A manual security audit (P9) was performed across the Rust CLI codebase. Finding
 ---
 
 **Last Updated**: 2026-03-08
-**Version**: 0.9.0
+**Version**: see `CHANGELOG.md` (release history) and `impl/rust-cli/Cargo.toml` `[package].version` (semver pin)
 **Policy Version**: 1.1

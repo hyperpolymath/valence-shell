@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# .hypatia-ignore — per-file CI exemptions for valence-shell
+#
+# Format (one entry per line):
+#   <rule_module>/<rule_type>:<file-path>
+#
+# Lines starting with `#` and blank lines are ignored.
+# Used by `standards/scripts/check-banned-language-files.sh` and friends.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ReScript files in impl/mcp/ — MCP server implementation, deliberately
+# kept on ReScript pending the estate-wide ReScript→AffineScript migration
+# (STEP 8 of standards#252). Tracked as part of the broader estate longtail;
+# valence-shell's MCP server is a leaf in that campaign. Once AffineScript's
+# user-module ESM codegen gap closes (see standards#252 / affinescript#508),
+# these files will be ported. Until then they are intentional, audited code,
+# not an oversight.
+# ─────────────────────────────────────────────────────────────────────────────
+cicd_rules/banned_language_file:impl/mcp/src/Main.res
+cicd_rules/banned_language_file:impl/mcp/src/Server.res
+cicd_rules/banned_language_file:impl/mcp/src/State.res
+cicd_rules/banned_language_file:impl/mcp/src/bindings/Mcp.res
+cicd_rules/banned_language_file:impl/mcp/src/bindings/Deno.res
+cicd_rules/banned_language_file:impl/mcp/src/bindings/Http.res
