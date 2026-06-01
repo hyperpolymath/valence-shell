@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Benchmarks for core filesystem operations
 //!
 //! Measures the performance of mkdir, rmdir, touch, rm, and operation sequences.

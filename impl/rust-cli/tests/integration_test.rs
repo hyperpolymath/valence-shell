@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Integration Tests for Valence Shell
 //!
 //! These tests verify that the formally proven properties hold at runtime.

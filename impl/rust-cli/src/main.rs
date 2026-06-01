@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Valence Shell (vsh) - A Formally Verified Reversible Shell
 //!
 //! This is the user-facing CLI for Valence Shell. It provides:

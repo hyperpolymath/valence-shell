@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! I/O Redirection Support
 //!
 //! Implements POSIX-compliant redirections for both built-in and external commands.

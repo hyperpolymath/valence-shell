@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Property-Based Correspondence Tests
 //!
 //! Uses proptest to generate random test cases and verify that Rust operations

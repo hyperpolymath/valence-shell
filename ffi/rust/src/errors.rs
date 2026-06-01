@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Error types matching Coq POSIX error definitions
 //!
 //! These error types correspond exactly to the POSIX errors modeled in:

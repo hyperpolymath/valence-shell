@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Tests for POSIX §2.6.1 tilde expansion.
 //!
 //! Tilde expansion was previously hard-coded only inside the `cd` command.

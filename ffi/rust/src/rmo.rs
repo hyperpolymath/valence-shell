@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! RMO (Remove-Match-Obliterate) Secure Deletion
 //!
 //! This module implements secure file deletion for GDPR "right to be forgotten"

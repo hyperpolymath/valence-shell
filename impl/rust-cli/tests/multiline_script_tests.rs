@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Regression tests for multi-line script and sourced-file execution.
 //!
 //! The previous `execute_script_content` and `Command::Source` iterated

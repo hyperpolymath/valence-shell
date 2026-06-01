@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Parameter Expansion Tests (v1.1.0)
 //!
 //! Tests bash-style ${VAR...} parameter expansion syntax:
