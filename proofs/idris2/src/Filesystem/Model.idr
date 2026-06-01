@@ -8,6 +8,7 @@
 module Filesystem.Model
 
 import Data.List
+import Data.Maybe
 import Data.String
 import Decidable.Equality
 
@@ -49,6 +50,13 @@ DecEq Path where
     decEq (Cons x xs) (Cons y ys) | No contra =
       No (\Refl => contra Refl)
 
+||| Boolean equality on paths (required by Data.List.lookup / elem)
+public export
+Eq Path where
+  Root         == Root         = True
+  (Cons x xs)  == (Cons y ys)  = x == y && xs == ys
+  _            == _            = False
+
 ||| Parent of a path
 export
 parent : Path -> Maybe Path
@@ -77,6 +85,13 @@ data FSEntry : Type where
   Dir : FSEntry
   ||| File entry with content
   File : FileContent -> FSEntry
+
+||| Boolean equality on filesystem entries
+public export
+Eq FSEntry where
+  Dir          == Dir          = True
+  (File c1)    == (File c2)    = c1 == c2
+  _            == _            = False
 
 ||| Filesystem state mapping paths to entries
 public export
