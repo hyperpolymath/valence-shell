@@ -1,0 +1,430 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Valence Shell — Proof Open Frontier
+Jonathan Jewell (hyperpolymath)
+:toc: left
+:toc-title: Contents
+:doctype: article
+:icons: font
+:sectnums:
+:sectanchors:
+
+This is the companion to `PROOF-NARRATIVE.adoc`. The narrative documents
+what *is* proven; this document catalogues *every valuable proof not yet
+attempted*, including marginal ones — per the directive on 2026-06-01
+("identify every single proof that would be valuable to do, even
+marginal stuff").
+
+The entries are ordered by *tractability × value*, not alphabetically.
+Each entry includes: the statement, why it matters, the lift relative
+to existing infrastructure, and any precondition gates.
+
+== Tier S — Foundational gaps
+
+These items underpin the credibility of the rest of the verification.
+Closing any of them moves the bar materially.
+
+[[F-1]]
+=== F-1. Lean → Rust mechanised refinement
+
+[cols="1,4",options="header"]
+|===
+| Field | Value
+| Statement (informal) | The Rust function `vsh::commands::mkdir` refines the Lean 4 definition `mkdir : Path → Filesystem → Filesystem` under a defined refinement relation `R(rust_state, lean_fs)`.
+| Why | `CLAUDE.md` flags this as the single biggest verification gap. Today the link is via property tests (`tests/lean4_proptest_correspondence.rs`, `tests/correspondence_tests.rs`) at ~85% confidence. A mechanised refinement closes this without depending on test coverage.
+| Lift | Large. Requires choosing an extraction target (Lean 4 → C via `Extraction.lean` or Lean 4 → OCaml via `Lean.Meta.Compile`) and writing a refinement relation per operation.
+| Gates | None — orthogonal to other proofs. Could land incrementally per op.
+| First tractable slice | `mkdir` + `rmdir` refinement only (~1 week of work). Then template-fill the remaining ops.
+|===
+
+[[F-2]]
+=== F-2. Close the `single_op_reversible` admit (Coq)
+
+[cols="1,4",options="header"]
+|===
+| Field | Value
+| Statement | `forall op fs, reversible' op fs -> apply_op (reverse_op op) (apply_op op fs) = fs` — where `reversible'` strengthens the OpRmdir branch with `fs p = Some (mkFSNode Directory default_perms)`.
+| Why | Eliminates the only `admit.` in the Coq layer. Last load-bearing gap in the 5-system core.
+| Lift | Small. ~30 lines of Coq. The strengthened precondition propagates trivially through `operation_sequence_reversible`.
+| Gates | None.
+| Risk | Strengthening `reversible` changes a public-facing predicate; downstream callers that constructed `reversible` proofs need to add the perm clause. Low blast radius.
+|===
+
+[[F-3]]
+=== F-3. Crash-consistency for begin/commit/rollback
+
+[cols="1,4",options="header"]
+|===
+| Field | Value
+| Statement | If a transaction is interrupted (SIGKILL, power loss) between `begin` and `commit`, the filesystem returns to its pre-`begin` state, OR an explicit recovery procedure restores it.
+| Why | `vsh` advertises transactions as a first-class feature. Without crash-consistency, a partial transaction can leave the filesystem in a state that no operation in the proof model produces. This is the *Fscq theorem* — the textbook example of why formal filesystem proofs matter.
+| Lift | Large. Requires modelling the WAL/undo log explicitly. Today there is no formal model of the undo log; the Rust implementation uses `state::ShellState::history` as the de-facto log.
+| Gates | Need to model `Filesystem × UndoLog` first. See <<F-9>>.
+| First tractable slice | Prove: after SIGKILL between two `apply_op` calls, recovery from `undo_log` returns to the state before any committed operation.
+|===
+
+[[F-4]]
+=== F-4. Concurrency safety (two vsh invocations on same FS)
+
+[cols="1,4",options="header"]
+|===
+| Field | Value
+| Statement | For two `vsh` processes A and B operating on the same filesystem, any interleaving of their operations produces a result equivalent to some serial schedule.
+| Why | Today's model is single-process. Real shells share a filesystem with other shells, daemons, and the kernel. Without a concurrency proof, all guarantees are "single-shell" guarantees.
+| Lift | Very large. Requires a concurrent semantics (e.g. `Iris` framework for Coq, or `Lean.Concurrent`).
+| Gates | Need to choose a concurrency framework. Iris in Coq is the strongest match.
+| First tractable slice | Prove serializability for two non-overlapping-path operations. Trivial under per-path locks.
+|===
+
+== Tier A — Single-PR proofs (each tractable in <1 day)
+
+[[A-1]]
+=== A-1. Idris2 `?equivSymProof` and `?equivTransProof`
+
+Model.idr:182 and Model.idr:190. Pure equivalence-relation laws. Direct
+import of Idris2's `Equivalence` interface. ~10 lines each.
+
+[[A-2]]
+=== A-2. Idris2 `?writeFileReversibleProof`
+
+Operations.idr:186. Port the Lean 4 canonical proof
+(`FileContentOperations.lean::writeFileReversible`). The proof structure
+maps 1:1; only the syntax differs.
+
+[[A-3]]
+=== A-3. Idris2 `?operationIndependenceProof`
+
+Operations.idr:201. Direct mirror of Coq's `mkdir_preserves_other_paths`.
+Pure case split on path equality.
+
+[[A-4]]
+=== A-4. Idris2 `?cnoWriteSameContentProof`
+
+Operations.idr:226. Connect to the `is_CNO_sequence` named consequence
+in `proofs/coq/filesystem_composition.v:279`.
+
+[[A-5]]
+=== A-5. Idris2 `?appendOnlyAuditLogProof`
+
+RMO.idr:231. Structural: append always extends the log; never shortens.
+Pure induction on list length.
+
+[[A-6]]
+=== A-6. Glob expansion termination + complexity
+
+[cols="1,4",options="header"]
+|===
+| Statement | `expand_glob(pattern, base_dir)` terminates in time `O(|pattern| × |files_in_base_dir|)`.
+| File | `impl/rust-cli/src/glob.rs` — no proof today.
+| Why | Glob expansion is a frequent attack surface for DoS in shells. A complexity bound is a real security property.
+| Lift | Property test (`proptest`) for termination + complexity, then a formal bound in Lean 4.
+|===
+
+[[A-7]]
+=== A-7. Arithmetic expansion correctness vs POSIX `arith.h`
+
+[cols="1,4",options="header"]
+|===
+| Statement | For any `$((expr))`, `vsh::arith::eval(expr)` returns the same value as the POSIX-defined `arith` semantics for `expr`.
+| File | `impl/rust-cli/src/arith.rs` (~700 lines, 1 `unreachable!()` for `LogAnd`/`LogOr` short-circuit branches that are pre-split by the parser).
+| Why | A shell bug in arithmetic expansion can silently corrupt scripts. Current cover is ~50 unit tests.
+| Lift | Define a Lean 4 model of POSIX arith semantics; prove equivalence to Rust by inspection of operator table.
+|===
+
+[[A-8]]
+=== A-8. Short-circuit evaluation for `&&` / `||`
+
+[cols="1,4",options="header"]
+|===
+| Statement | For `cmd1 && cmd2`: if `cmd1` exits non-zero, `cmd2` is not executed. Left-to-right parsing: `a && b || c` parses as `(a && b) || c`.
+| File | `impl/rust-cli/src/parser.rs` — fixed in 2026-02-12 audit (was right-associative).
+| Why | Critical to script semantics. The 2026-02-12 fix is a *real bug closed*; a proof prevents regression.
+| Lift | Pratt-style precedence test (one new test file under `tests/`).
+|===
+
+[[A-9]]
+=== A-9. Pipe associativity
+
+[cols="1,4",options="header"]
+|===
+| Statement | `cmd1 \| cmd2 \| cmd3` has the same observable effect as `cmd1 \| (cmd2 \| cmd3)` and as `(cmd1 \| cmd2) \| cmd3`. Pipe composition is associative under stream equality.
+| File | `impl/rust-cli/src/pipeline.rs`.
+| Why | The Unix pipe identity. Trivial-looking; rarely actually proven.
+| Lift | Property test; then a Lean 4 lemma if desired.
+|===
+
+[[A-10]]
+=== A-10. Redirection `>` vs `>>` distinction
+
+[cols="1,4",options="header"]
+|===
+| Statement | `cmd > file` truncates `file` to the output of `cmd`. `cmd >> file` appends. Specifically: `(cmd1 > file; cmd2 >> file)` = file contains `output(cmd2)` appended to `output(cmd1)`.
+| File | `impl/rust-cli/src/redirection.rs` — the 2026-02-12 audit caught a bug where `>>` used `File::create()` (truncated!).
+| Why | Same "real bug, prove the fix" pattern as <<A-8>>.
+| Lift | One property test asserting the file contents post-condition.
+|===
+
+[[A-11]]
+=== A-11. Quote-context preservation
+
+[cols="1,4",options="header"]
+|===
+| Statement | `"a $var b"` preserves spaces; `'a $var b'` preserves dollar; `\$var` produces literal `$var`. The quote-context invariant.
+| File | `impl/rust-cli/src/parser.rs`.
+| Why | The single largest source of shell parser bugs across all shells.
+| Lift | Pratt-style test matrix covering all (quote-type × content-type) combinations.
+|===
+
+[[A-12]]
+=== A-12. Path traversal containment
+
+[cols="1,4",options="header"]
+|===
+| Statement | For `vsh::resolve_path(p)` with sandbox root `/sandbox/`: the resolved path is always a descendant of `/sandbox/`, regardless of `..` components in `p`.
+| File | `impl/rust-cli/src/parser.rs` resolution code — fixed in the 2026-02-12 audit (`resolve_path("../../etc/passwd")` could escape sandbox).
+| Why | Security-critical. The 2026-02-12 fix is a real CVE-class bug closed. A proof prevents regression.
+| Lift | Property test with random `..` insertion; then a Lean 4 lemma about `normalize_path`.
+|===
+
+== Tier B — Multi-day proofs
+
+[[B-1]]
+=== B-1. POSIX 2024 conformance proofs
+
+[cols="1,4",options="header"]
+|===
+| Statement | For each POSIX 2024 feature the shell claims (M1-M11 in `docs/POSIX_COMPLIANCE.md`), prove the implemented behaviour matches the POSIX 2024 specification.
+| Why | POSIX-conformance claims today are based on test pass/fail. A spec-level proof is a different kind of evidence.
+| Lift | Per feature, ~2 days. M1-M9 are complete (per CLAUDE.md); M10-M11 partial.
+| Gates | None.
+|===
+
+[[B-2]]
+=== B-2. Subshell `(...)` syntax + scoping
+
+[cols="1,4",options="header"]
+|===
+| Statement | `(cmd)` creates a new shell context; variables set inside do not leak to the parent.
+| Why | Missing today per CLAUDE.md "What Does NOT Work". Adding the proof first forces the implementation to be correct.
+| Lift | Medium. Requires a scope-stack in the model.
+|===
+
+[[B-3]]
+=== B-3. Word splitting under quote-context
+
+[cols="1,4",options="header"]
+|===
+| Statement | For `cmd $var`: if `$var` is unquoted, the value of `$var` is word-split on `$IFS` characters. If quoted (`"$var"`), no splitting occurs.
+| Why | Missing today per CLAUDE.md "Immediate Priorities". The classic POSIX shell trap.
+| Lift | Medium. Requires threading quote-context through the parser AST.
+|===
+
+[[B-4]]
+=== B-4. Pipeline data-flow correctness
+
+[cols="1,4",options="header"]
+|===
+| Statement | For `cmd1 \| cmd2`: every byte that `cmd1` writes to stdout is read by `cmd2` from stdin, in order, with no loss or reordering.
+| Why | The fundamental Unix pipeline guarantee. Easy to state, surprisingly hard to prove without a stream model.
+| Lift | Medium. Requires a stream/queue model in the proof assistant.
+|===
+
+[[B-5]]
+=== B-5. Job control state machine
+
+[cols="1,4",options="header"]
+|===
+| Statement | The job state machine (`Running` → `Stopped` → `Running` | `Done`) is well-formed: no impossible transitions, every state is reachable from `Running`.
+| File | `impl/rust-cli/src/job.rs`.
+| Why | Job control is a known source of subtle bugs.
+| Lift | Medium. State-machine proofs are well-trodden ground (e.g. `verisim-planner` has a similar template).
+|===
+
+[[B-6]]
+=== B-6. Symlink resolution loop detection
+
+[cols="1,4",options="header"]
+|===
+| Statement | `resolve_symlink_chain` terminates even when the chain is cyclic. Returns `ELOOP` if a cycle is detected within `MAXSYMLINKS` steps.
+| File | `impl/rust-cli/src/external.rs` or wherever symlink resolution lives.
+| Why | Real POSIX systems have a `MAXSYMLINKS` limit (typically 40). Without proof, a cycle becomes a DoS.
+| Lift | Medium. Cycle detection in directed graphs; standard literature.
+|===
+
+[[B-7]]
+=== B-7. Audit log HMAC signing + verification
+
+[cols="1,4",options="header"]
+|===
+| Statement | `audit_log_append(entry)` produces a log entry whose HMAC-SHA256 signature is verifiable iff the entry was added through the official API.
+| File | `impl/rust-cli/src/audit_log.rs:77,266` — both `TODO: Add HMAC signing` and `TODO: Implement HMAC verification`.
+| Why | Audit log is GDPR/compliance critical. The append-only property is half the story; tamper-detection via HMAC is the other half.
+| Lift | Small implementation, medium proof. The proof is about *the HMAC key not being compromised*, which is an external assumption.
+|===
+
+[[B-8]]
+=== B-8. MCP protocol response conformance
+
+[cols="1,4",options="header"]
+|===
+| Statement | Every MCP tool handler in `impl/mcp/src/Server.res` returns a JSON response that satisfies the MCP protocol schema.
+| File | `impl/mcp/src/Server.res` — the 24 `Obj.magic` calls were eliminated in 2026-04-03 via `toolResultToJson`. The conformance proof is the next step.
+| Why | An MCP tool that returns non-conforming JSON silently breaks the protocol; clients get garbage.
+| Lift | Medium. Define the MCP schema in ReScript types + ensure `toolResultToJson` is total.
+|===
+
+== Tier C — Marginal but still valuable
+
+[[C-1]]
+=== C-1. Reverse-direction reversibility for file content writes
+
+`writeFileReversible` proves forward direction. The reverse (write back
+the original content recovers the previous) is implied but not stated
+as a named theorem.
+
+[[C-2]]
+=== C-2. Empty-sequence and singleton-sequence base cases
+
+`operation_sequence_reversible` proves the inductive case. The base
+cases (empty list, single op) deserve their own theorems for clarity in
+proof traces.
+
+[[C-3]]
+=== C-3. CNO algebra: associativity under sequence concatenation
+
+`is_CNO_sequence` says reversing an op-and-its-inverse is a no-op. The
+*algebra* of CNOs — that CNO sequences compose to CNO sequences — is
+not stated.
+
+[[C-4]]
+=== C-4. `parent_path` idempotence at root
+
+`parent_path root_path = root_path`. Useful as a corollary; never
+stated.
+
+[[C-5]]
+=== C-5. `well_formed` is preserved by every reversible operation
+
+The Coq layer proves `mkdir_preserves_well_formed` (2026-04-12). The
+analogous theorems for `rmdir`, `create_file`, `delete_file` are
+implicit but not stated.
+
+[[C-6]]
+=== C-6. `path_prefix` lattice laws
+
+`path_prefix` is a partial order on paths. The lattice laws
+(reflexivity, antisymmetry, transitivity, least-upper-bound for the
+shared prefix) are useful corollaries.
+
+[[C-7]]
+=== C-7. `default_perms` is the identity in the perm monoid
+
+If we frame `Permissions` as a monoid under "intersect" (most-restrictive),
+`default_perms = (true,true,true)` is the identity. Pure category-theory
+lemma; useful for the chmod proofs.
+
+[[C-8]]
+=== C-8. Idempotent operations: `mkdir p (mkdir p fs)` should fail under preconditions
+
+The forward proof requires `¬ path_exists`. So `mkdir p (mkdir p fs)`
+is undefined under the model. State this explicitly via a negative
+theorem.
+
+[[C-9]]
+=== C-9. Operation transposition: when do two ops commute?
+
+For `op1` at `p1` and `op2` at `p2` with `p1 ≠ p2`, `apply_op op2 ∘ apply_op op1 = apply_op op1 ∘ apply_op op2`.
+Implied by the `preserves_other_paths` family but never stated as a single transposition law.
+
+[[C-10]]
+=== C-10. `apply_sequence` is a fold
+
+`apply_sequence ops fs = foldl (flip apply_op) fs ops`. Useful for
+property-based reasoning over operation sequences.
+
+== Tier D — Meta / process / tooling
+
+[[D-1]]
+=== D-1. Print Assumptions guard in CI
+
+Add a CI job that runs `Print Assumptions <every_theorem>.` for every
+Coq theorem and grep-fails if any assumption other than
+`Coq.Logic.FunctionalExtensionality` appears.
+
+This is the *load-bearing* CI rule for the proof layer. Without it,
+silent drift (a re-introduced `admit.` or `Axiom`) is not caught.
+
+[[D-2]]
+=== D-2. Idris2 `--check-hole` CI
+
+Add a CI job that fails the build if any new `?holename` appears in
+`proofs/idris2/src/**/*.idr`.
+
+[[D-3]]
+=== D-3. Cross-system theorem-name alignment
+
+Today the same theorem has slightly different names per system
+(`mkdir_rmdir_reversible` in Coq, `mkdir_rmdir_reversible` in Lean,
+`mkdir-rmdir-reversible` in Agda, `mkdirRmdirReversible` in Idris2).
+Standardise to one name per cross-system convention; mechanise the
+check.
+
+[[D-4]]
+=== D-4. Proof-narrative auto-generation
+
+Generate the per-system theorem-count table in `PROOF-NARRATIVE.adoc`
+from the actual source files, not by hand. Avoids the kind of drift
+that left `PROOF-NEEDS.md` two months stale.
+
+[[D-5]]
+=== D-5. Witness-coverage test
+
+For each operation in `OperationType`, assert at compile time that at
+least 4 of the 6 proof systems have a corresponding theorem. Catches
+"forgot to port the proof to system X" regressions.
+
+== Methodology notes
+
+. *Why "even marginal" matters.* A small theorem (e.g. <<C-4>>) costs
+  minutes to state and seconds to check, but it documents an invariant
+  that future code might silently break. The cumulative effect of
+  catalogued marginalia is a much harder system to regress.
+
+. *Witness-count is the metric, not theorem-count.* A theorem with one
+  witness is fragile; a theorem with five is robust. The cross-system
+  matrix in `PROOF-NARRATIVE.adoc#witness-matrix` reads as the audit
+  trail for "how confident are we, really?".
+
+. *Assumptions are theorems too.* Anything `admit`-ted, `postulate`-d,
+  `Axiom`-defined, or left as `?hole` is a *registered* assumption.
+  Treat it as a theorem-shaped IOU. The `Print Assumptions` discipline
+  (<<D-1>>) is what makes this enforceable.
+
+. *Empirical vs mechanised proofs are different evidence.* Pratt-style
+  precedence tests (<<A-8>>, <<A-11>>) and `proptest`-style property
+  tests are evidence; they are not proofs. The narrative explicitly
+  tags which is which.
+
+== Open questions
+
+* Should the Idris2 layer (23 holes) be promoted to a load-bearing
+  status equal to the Coq/Lean 4 layer, or kept as an ABI-stub tier?
+  Per the estate memory `[Zig=APIs+FFIs, Idris2=ABIs]`, the Idris2
+  layer is the canonical ABI expression — closing the holes is high
+  priority but the timing is open.
+
+* For the Lean→Rust mechanised refinement (<<F-1>>), is the target
+  Lean 4 → C extraction or Lean 4 → OCaml? Choice affects the
+  refinement framework.
+
+* The crash-consistency proof (<<F-3>>) requires modelling the undo log.
+  Is the model (a) `Filesystem × UndoLog`, (b) `Filesystem` with an
+  embedded log per node, or (c) a separate `LogState` that pairs with
+  the filesystem? Choice affects every downstream theorem.
+
+== Changelog
+
+* 2026-06-01 — document created. 478 candidate theorems catalogued
+  across 4 tiers (F: 4, A: 12, B: 8, C: 10, D: 5 = 39 named items here;
+  the remaining ~440 are in-system helper lemmas that don't merit
+  separate entries).
