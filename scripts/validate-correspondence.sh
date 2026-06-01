@@ -37,32 +37,32 @@ check_file_reference() {
     # Check Lean file exists
     if [ ! -f "$lean_file" ]; then
         echo -e "${RED}FAIL${NC} - Lean file not found: $lean_file"
-        ((fail_count++))
+        fail_count=$((fail_count + 1))
         return 1
     fi
 
     # Check Rust file exists
     if [ ! -f "$rust_file" ]; then
         echo -e "${RED}FAIL${NC} - Rust file not found: $rust_file"
-        ((fail_count++))
+        fail_count=$((fail_count + 1))
         return 1
     fi
 
     # Check correspondence doc mentions both
     if ! grep -q "$(basename "$lean_file")" "$CORRESPONDENCE_DOC" 2>/dev/null; then
         echo -e "${YELLOW}WARN${NC} - Lean file not documented in correspondence"
-        ((warn_count++))
+        warn_count=$((warn_count + 1))
         return 0
     fi
 
     if ! grep -q "$(basename "$rust_file")" "$CORRESPONDENCE_DOC" 2>/dev/null; then
         echo -e "${YELLOW}WARN${NC} - Rust file not documented in correspondence"
-        ((warn_count++))
+        warn_count=$((warn_count + 1))
         return 0
     fi
 
     echo -e "${GREEN}PASS${NC}"
-    ((pass_count++))
+    pass_count=$((pass_count + 1))
 }
 
 # Function to check property test coverage
@@ -74,15 +74,15 @@ check_property_test_coverage() {
 
     if grep -q "$test_pattern" "$IMPL_DIR/tests/property_tests.rs" 2>/dev/null; then
         echo -e "${GREEN}PASS${NC}"
-        ((pass_count++))
+        pass_count=$((pass_count + 1))
         return 0
     elif grep -q "$test_pattern" "$IMPL_DIR/tests/property_correspondence_tests.rs" 2>/dev/null; then
         echo -e "${GREEN}PASS${NC}"
-        ((pass_count++))
+        pass_count=$((pass_count + 1))
         return 0
     else
         echo -e "${YELLOW}WARN${NC} - No property test found"
-        ((warn_count++))
+        warn_count=$((warn_count + 1))
         return 0
     fi
 }
@@ -111,12 +111,12 @@ echo
 echo "4. Conditional Operations (Phase 6 M14)"
 if [ -f "$IMPL_DIR/src/test_command.rs" ]; then
     echo -e "  test/[ implementation... ${GREEN}PASS${NC}"
-    ((pass_count++))
+    pass_count=$((pass_count + 1))
     check_property_test_coverage "test -f" "prop_test_f_file_detection"
     check_property_test_coverage "test -d" "prop_test_d_directory_detection"
 else
     echo -e "  test/[ implementation... ${RED}FAIL${NC}"
-    ((fail_count++))
+    fail_count=$((fail_count + 1))
 fi
 echo
 
@@ -124,12 +124,12 @@ echo
 echo "5. Logical Operators (Phase 6 M14)"
 if grep -q "LogicalOp" "$IMPL_DIR/src/parser.rs" 2>/dev/null; then
     echo -e "  &&/|| implementation... ${GREEN}PASS${NC}"
-    ((pass_count++))
+    pass_count=$((pass_count + 1))
     check_property_test_coverage "logical AND" "prop_logical_and_short_circuit"
     check_property_test_coverage "logical OR" "prop_logical_or_short_circuit"
 else
     echo -e "  &&/|| implementation... ${RED}FAIL${NC}"
-    ((fail_count++))
+    fail_count=$((fail_count + 1))
 fi
 echo
 
@@ -137,11 +137,11 @@ echo
 echo "6. Quote Processing (Phase 6 M13)"
 if [ -f "$IMPL_DIR/src/quotes.rs" ]; then
     echo -e "  Quote module... ${GREEN}PASS${NC}"
-    ((pass_count++))
+    pass_count=$((pass_count + 1))
     check_property_test_coverage "quote processing" "prop_quote_prevents_glob"
 else
     echo -e "  Quote module... ${RED}FAIL${NC}"
-    ((fail_count++))
+    fail_count=$((fail_count + 1))
 fi
 echo
 
@@ -149,11 +149,11 @@ echo
 echo "7. Glob Expansion (Phase 6 M12)"
 if [ -f "$IMPL_DIR/src/glob.rs" ]; then
     echo -e "  Glob module... ${GREEN}PASS${NC}"
-    ((pass_count++))
+    pass_count=$((pass_count + 1))
     check_property_test_coverage "glob expansion" "prop_glob_deterministic"
 else
     echo -e "  Glob module... ${RED}FAIL${NC}"
-    ((fail_count++))
+    fail_count=$((fail_count + 1))
 fi
 echo
 
