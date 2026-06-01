@@ -1,0 +1,280 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Valence Shell — Crash-Consistency Theory
+Jonathan Jewell (hyperpolymath)
+:toc: left
+:toc-title: Contents
+:doctype: article
+:icons: font
+:sectnums:
+:sectanchors:
+
+This document is the *theory companion* to the Lean 4 keystone proof
+`proofs/lean4/CrashConsistency.lean`.  It states the gap, the assumption
+the keystone makes explicit, the theorem it proves, and the four
+remaining frontiers that are deferred to separate Tier-S issues.
+
+It closes the keystone slice of `valence-shell#45`
+("Filesystem-theory + practice gap analysis").  It does *not* claim to
+solve crash-consistency in general — it solidifies one foundational
+assumption so that the larger story can be told without hand-waving.
+
+See also: `docs/PROOF-OPEN-FRONTIER.adoc` (Tier S/A/B/C catalogue),
+`docs/PROOF-NARRATIVE.adoc` (what is proven today),
+`docs/POSIX-2024-NOTES.md` (POSIX edges that interact with §5.b).
+
+== The gap
+
+The Lean 4, Coq, Agda, Idris 2 and Isabelle models that valence-shell
+ships today share a single common shape: a `Filesystem` is a *pure
+function* from `Path` to `Option FSNode`, and an operation
+(`mkdir`, `rmdir`, …) is a *pure function* from `Filesystem` to
+`Filesystem`.  This is a perfectly normal small-step / big-step
+operational semantics — it is the same model used by FSCQ, Yggdrasil
+and the Coq side of COGENT.
+
+The problem is that *real* state-mutating systems can be interrupted
+*during* an operation.  Power can fail, a SIGKILL can land, a
+container runtime can pull the rug.  The pure model assumes that every
+operation is atomic — that the world only ever observes the pre-state
+or the post-state.  Nothing in the current proof tree *justifies*
+that assumption.
+
+This is the textbook *Fscq theorem* setup (Chen et al. 2015): the
+theorems you can prove against a pure model are only as strong as the
+atomicity-within-op assumption you make.  Without an explicit
+statement, every higher-level theorem (reversibility, MAA, GDPR
+irreversibility) implicitly depends on it.
+
+== The atomicity-within-op assumption
+
+The keystone makes the assumption *explicit and minimal*:
+
+[quote]
+____
+For each modelled `FilesystemOp`, an external observer (the next
+process to look at the filesystem after an interruption) sees *either*
+the pre-operation state *or* the post-operation state — never a third
+"partial" state.
+____
+
+This is **not** the claim "no real filesystem ever exposes torn
+state".  It is the claim "*for the operations valence-shell models at
+the proof layer*, the underlying filesystem's atomicity guarantee is
+strong enough that the two-point model is faithful".  The justification
+varies by backing filesystem:
+
+.How the assumption is discharged by real filesystems
+[cols="1,3",options="header"]
+|===
+| Backing filesystem | How atomicity-within-op is achieved
+| **ext4 `data=journal`** mode
+| Both metadata *and* data are journalled.  A `mkdir(2)` is replayed
+or rolled back as a single journal transaction — the post-crash
+observer sees one of the two endpoints.  Faithful to the model.
+
+| **ZFS** (and Btrfs in equivalent COW mode)
+| Copy-on-write at the block layer.  An interrupted `mkdir` leaves the
+old uberblock pointing at the pre-state tree; the new tree is only
+linked in atomically at commit.  Faithful to the model.
+
+| **ext4 default** (`data=ordered`)
+| *Metadata-only* journal.  A `mkdir(2)` is still atomic at the
+directory-entry level — the entry either appears or doesn't.  The
+keystone is faithful for `mkdir` and `rmdir`; it is *not* faithful for
+operations that mutate file *contents* (those need a separate slice).
+
+| **APFS / NTFS / arbitrary network FS**
+| Vendor-dependent.  Where vendor documentation does not guarantee
+single-op atomicity for the operation in question, the model is not
+faithful and the higher-level theorem is correspondingly weakened.
+|===
+
+The keystone is therefore *conditional*: every theorem that derives
+from it inherits the precondition "the backing filesystem provides
+single-op atomicity for this op".  Naming the assumption explicitly
+lets downstream proofs cite it instead of silently assuming it.
+
+== Keystone theorem
+
+Stated informally:
+
+[quote]
+____
+*`crash_atomic_within_op_mkdir`* — for any pre-state filesystem `fs`,
+any path `p`, and any crash point `cp` observable to an external
+process, the filesystem the external process sees is either equal to
+`fs` (pre-state) or equal to `mkdir p fs` (post-state).  No third state
+is observable.
+____
+
+The Lean 4 mechanisation lives in
+`proofs/lean4/CrashConsistency.lean`.  The proof is trivial by case
+analysis on the `CrashPoint` inductive — the value is in the modelling,
+not in the proof labour.  The keystone introduces *zero new axioms*
+(verified via `#print axioms`).
+
+A corollary, `crash_state_no_third_value`, states the same fact
+contrapositively: if a filesystem `g` is distinct from both the pre-
+and post-states, then no crash point of an `Op.mkdir p` produces `g`.
+
+The same shape extends to the other operations valence-shell models
+(`rmdir`, file ops, RMOs, …) by extending the `Op` inductive.  The
+keystone deliberately covers only `mkdir` so that the modelling story
+can be reviewed independently of the operational coverage story.
+
+== Frontiers (deferred)
+
+The four remaining frontiers are the parts of crash-consistency *not*
+covered by the keystone.  Each warrants its own Tier-S issue.
+
+=== Frontier A — Concurrency / linearizability under multi-process
+
+The keystone says nothing about *two* concurrent vsh processes, or vsh
+plus an external editor, or vsh inside a container with sibling
+processes on the same mount.  The Lean 4 model is purely sequential.
+
+**Proposed approach.** Use a Herlihy-Wing-style linearizability
+specification.  Each `FilesystemOp` is given a linearization point
+(usually the journal-commit moment on ext4, the COW commit on ZFS).
+The proof obligation is: for every interleaving of two processes'
+operations, there exists a sequential schedule that produces the same
+observable history.  In Lean 4 this is most natural over an explicit
+operation log + per-inode locks; the first tractable slice is
+"non-overlapping-path operations linearize trivially under per-path
+locks", which is the same first slice already identified in
+`PROOF-OPEN-FRONTIER.adoc#F-4`.
+
+The frontier interacts with the keystone: a concurrent crash is a
+crash *plus* a non-trivial schedule; the linearizability story has to
+be layered *on top of* the atomicity-within-op story, not in place of
+it.
+
+=== Frontier B — POSIX 2024 edges (sub-second mtime, file-clone, copy_file_range)
+
+POSIX 2024 (IEEE Std 1003.1-2024) introduces three classes of operation
+that the current valence-shell model does not cover, each with its own
+crash-consistency wrinkle:
+
+1. **Sub-second mtime** (`struct timespec` in `stat`).  A crash between
+   the mtime write and the data write can leave the mtime *ahead* of
+   the data.  The keystone model has no notion of time, so the
+   atomicity-within-op assumption needs to be stated against a
+   `(Filesystem, Clock)` pair.
+
+2. **`copy_file_range(2)`** as a single syscall.  Linux implements it
+   as either a reflink (atomic) or a fallback loop (non-atomic).  The
+   keystone is faithful in the reflink branch and faithful only at the
+   *chunk* boundary in the fallback branch — the modelling needs to
+   expose that distinction.
+
+3. **`ioctl(FICLONE)` / `FICLONERANGE`**.  Reflink semantics — a crash
+   leaves either the pre-state or the post-state of the *destination*,
+   while the source is unaffected.  This is a clean fit for the
+   keystone shape but needs to be modelled as a *two-filesystem*
+   transition (source + destination), not a single one.
+
+**Proposed approach.** Extend the `Op` inductive with `clone`,
+`copy_range`, and `touch_mtime` constructors, and extend `Filesystem`
+to a record `{ tree : Path → Option FSNode, clock : Time }`.  Re-prove
+the keystone for each new constructor; the case-analysis structure
+carries over.  See `docs/POSIX-2024-NOTES.md` for the practical-side
+notes on these calls.
+
+=== Frontier C — Idris 2 via typed-WASM crash boundary
+
+valence-shell's Idris 2 proof tree is intended to be extractable to
+typed-WASM (see `docs/SEAM_ANALYSIS_AND_IDRIS2_PLAN.md` and the
+typed-wasm sibling repo).  The crash story at the WASM boundary is
+*different* from the crash story at the syscall boundary:
+
+- The WASM host can terminate the module mid-instruction; the host
+  observes the linear memory at the termination point.
+- The WASM module has no syscall-level atomicity guarantee; whatever
+  atomicity exists has to come from the host's import-function
+  contracts.
+
+**Proposed approach.** Define a `WasmCrashPoint` inductive parallel to
+`CrashPoint` but indexed by WASM instruction boundaries.  Prove that
+for each `FilesystemOp` *as compiled to typed-WASM*, the only
+host-observable crash points coincide with the host's import-function
+boundaries — and that the import-function contracts then provide the
+atomicity story.  This is a two-level proof: the Lean / Idris layer
+proves the source-level keystone (this document), and the
+typed-WASM-layer proof shows the compilation preserves it.  Gates on
+typed-wasm proposal 0003 (cross-module L13).
+
+=== Frontier D — Hardware-level (power loss, drive cache, write barriers)
+
+Below the filesystem there is the *block device*.  A `mkdir(2)` that
+the kernel reports as committed may still be sitting in the drive's
+volatile write cache when power fails.  The keystone assumption
+*presupposes* that write barriers (`fsync`, `fdatasync`, `FUA`) have
+done their job; if they haven't, the post-state observable to the next
+boot is neither pre- nor post- of the keystone — it is a hardware-level
+torn state.
+
+**Proposed approach.** This frontier is *not* a proof obligation in
+the same sense as A–C — it is a *modelling boundary*.  The
+recommendation is:
+
+1. Document the assumption explicitly: "every modelled `FilesystemOp`
+   is followed by a barrier sufficient to make its effects durable
+   before any subsequent op is started".
+2. Annotate the operations in `proofs/lean4/FilesystemModel.lean` with
+   the barrier each one assumes (most are `fsync`-on-the-parent-dir for
+   directory ops; file ops need `fsync`-on-the-file *and* on the
+   parent).
+3. Cross-check against the Rust implementation: `impl/rust/` should
+   issue those barriers, and an audit ticket should track any gap.
+
+The modelling boundary is intentional: a proof system cannot promise
+what the firmware will do.  Stating the boundary explicitly is the
+honest move.
+
+== L4 (dyadic-resource) cross-link
+
+Crash-consistency is *fundamentally* an L4 (dyadic-resource) shape: a
+power-loss event is the canonical interruption of a linear resource.
+The pre-state is the resource before consumption; the post-state is
+the resource after consumption; the keystone's claim that no third
+state is observable is exactly the linear-resource discipline applied
+to an externally-observable filesystem.
+
+Intended future cross-link: `echo-types::EchoOFSUnivF5` or whichever
+dyadic-layer construct ends up canonical there.  The `Op` inductive in
+the keystone can be re-stated as a dyadic resource (consumed at
+linearization, produced at commit) without changing the proof
+structure.  This is recorded in `PROOF-NEEDS.md` as
+RECORD-AS-NOT-RELEVANT for this slice and as future-link for the L4
+slice.
+
+== Bibliography (informal)
+
+- Chen, H., Ziegler, D., Chajed, T., Chlipala, A., Kaashoek, M.F.,
+  Zeldovich, N. (2015). *Using Crash Hoare Logic for Certifying the
+  FSCQ File System.*  SOSP '15.  — the FSCQ paper; the textbook
+  example of why pure-model atomicity-within-op assumptions need to be
+  named.
+- Pillai, T.S., Chidambaram, V., Alagappan, R., Al-Kiswany, S.,
+  Arpaci-Dusseau, A.C., Arpaci-Dusseau, R.H. (2014). *All File Systems
+  Are Not Created Equal: On the Complexity of Crafting
+  Crash-Consistent Applications.*  OSDI '14.  — ALICE-style
+  crash-state enumeration, motivates Frontier A.
+- Sigurbjarnarson, H., Bornholt, J., Torlak, E., Wang, X. (2016).
+  *Push-Button Verification of File Systems via Crash Refinement.*
+  OSDI '16.  — Yggdrasil; pure-model crash refinement, closest in
+  spirit to the keystone shape used here.
+- O'Connor, L., Chen, Z., Susarla, S., Klein, G., Keller, G., Murray,
+  T., Heiser, G. (2016).  *Refinement through Restraint: Bringing Down
+  the Cost of Verification.*  ICFP '16.  — COGENT; linear-types story
+  that motivates the L4 cross-link in §6.
+
+== Status
+
+- **Keystone (this document + Lean 4 proof)**: shipped, zero axiom
+  dependencies, `lake build` green on Lean 4 v4.12.0.
+- **Frontiers A–D**: deferred to separate Tier-S issues, filed at
+  closure of `valence-shell#45`.
+- **Cross-link to echo-types L4**: future-link recorded in
+  `PROOF-NEEDS.md`; no implementation work here.
