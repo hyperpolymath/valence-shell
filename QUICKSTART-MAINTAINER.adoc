@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MPL-2.0
-// Template: QUICKSTART-MAINTAINER.adoc — packaging, deploying, and maintaining
-// Replace valence-shell, {{PACKAGE_NAME}}, {{DEPS}} with actuals
 = valence-shell — Quick Start for Platform Maintainers
 :toc:
 :toclevels: 2
@@ -12,7 +10,15 @@ distribution on your platform.
 
 == Runtime Dependencies
 
-{{DEPS}}
+* `glibc` >= 2.34 (or `musl` >= 1.2 for static builds)
+* Optional: `libleanshared.so` (Lean 4 runtime; required only when the Lean-extraction FFI feature is enabled — see `impl/rust-cli/docs/LEAN_EXTRACTION_BUILD_GUIDE.md`)
+* Optional: Erlang/OTP >= 26 (required only for the Elixir NIF daemon + MCP server features)
+
+Build-time dependencies (not required at runtime):
+
+* Rust >= 1.75 (CLI build)
+* Zig >= 0.13 (FFI library build)
+* Coq 8.18, Lean 4, Agda 2.6, Isabelle 2024, Mizar (proof verification; not required for release packaging if proofs are pre-verified in CI)
 
 == Build from Source
 
@@ -23,7 +29,11 @@ cd valence-shell
 just build-release
 ----
 
-Output: `{{BUILD_OUTPUT_PATH}}`
+Output:
+
+* `impl/rust-cli/target/release/vsh` — the `vsh` CLI binary
+* `ffi/zig/zig-out/lib/libvalence_shell.{so,a}` — shared and static FFI libraries
+* `ffi/zig/zig-out/include/valence_shell.h` — generated C header
 
 == Packaging
 
@@ -65,10 +75,10 @@ Files installed:
 | `$PREFIX/bin/`
 | Executables
 
-| `$PREFIX/share/{{PACKAGE_NAME}}/`
+| `$PREFIX/share/valence-shell/`
 | Data files, assets
 
-| `$PREFIX/share/doc/{{PACKAGE_NAME}}/`
+| `$PREFIX/share/doc/valence-shell/`
 | Documentation
 
 | `$PREFIX/share/applications/`
@@ -80,9 +90,9 @@ Files installed:
 
 == Configuration
 
-Default config location: `$XDG_CONFIG_HOME/{{PACKAGE_NAME}}/config.toml`
+Default config location: `$XDG_CONFIG_HOME/valence-shell/config.toml`
 
-Fallback: `$HOME/.config/{{PACKAGE_NAME}}/config.toml`
+Fallback: `$HOME/.config/valence-shell/config.toml`
 
 == Health Checks
 
@@ -102,7 +112,7 @@ just build-release
 just install --prefix=/usr/local
 ----
 
-Or via OPSM: `opsm update {{PACKAGE_NAME}}`
+Or via OPSM: `opsm update valence-shell`
 
 == Security Notes
 
@@ -117,8 +127,8 @@ For deploying multiple instances (e.g., different users or tenants):
 
 [source,bash]
 ----
-just install --prefix=/opt/{{PACKAGE_NAME}}-instance1 --config=/etc/{{PACKAGE_NAME}}/instance1.toml
-just install --prefix=/opt/{{PACKAGE_NAME}}-instance2 --config=/etc/{{PACKAGE_NAME}}/instance2.toml
+just install --prefix=/opt/valence-shell-instance1 --config=/etc/valence-shell/instance1.toml
+just install --prefix=/opt/valence-shell-instance2 --config=/etc/valence-shell/instance2.toml
 ----
 
 Each instance has isolated config, data, and logs.
