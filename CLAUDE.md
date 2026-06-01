@@ -80,16 +80,18 @@ The Rust CLI is a functional interactive shell with these features:
 
 ### Codebase Metrics
 
-- ~21,000 lines of Rust across 33 source files
-- ~200+ formal theorems across 6 proof systems
-- 10 proof holes across 8 proof files (4 gaps, 4 axioms, 2 structural) — see `docs/PROOF_HOLES_AUDIT.md`
+- 21,331 lines of Rust across 32 source files (`find impl/rust-cli/src -name '*.rs' | wc -l`; `wc -l` aggregate, measured 2026-06-01)
+- ~478 theorem candidates across 6 proof systems + Idris2 ABI layer (per issue #42 deep-audit inventory, 2026-06-01)
+- 3 proof holes remaining: 1 real gap (Coq `obliterate_overwrites_all_blocks`), 1 justified axiom (Coq `is_empty_dir_dec` — infinite-domain decidability), 1 structural axiom (Agda `funext` — standard in intensional TT) — see `docs/PROOF_HOLES_AUDIT.md`
+- Idris2 ABI layer: ~22 theorems + 2 holes + 10 partial markers (per issue #42)
+- 7 fuzz targets in `impl/rust-cli/fuzz/fuzz_targets/` (parser, arith, job-spec, signal-parse, path-ops, glob-expansion, state-machine)
 
 ## Critical Issues
 
 ### Critical Priority
 
 1. **No mechanized Lean -> Rust correspondence** — testing only, ~85% confidence
-2. **4 real proof gaps** across 4 files (plus 4 axioms, 2 structural — see `docs/PROOF_HOLES_AUDIT.md`)
+2. **1 real proof gap** remaining (Coq `obliterate_overwrites_all_blocks` — mechanical induction over overwrite passes), plus 2 documented axioms (1 justified decidability + 1 structural funext) — see `docs/PROOF_HOLES_AUDIT.md`
 3. **NOT production-ready** — research prototype only
 
 ### High Priority
@@ -175,21 +177,26 @@ deep-audit session). The corresponding Phase 4C design docs under
 valence-shell/
   impl/
     rust-cli/           # PRIMARY - Rust CLI (v0.9.0)
-      src/              # 30 source files, 15,720 lines
-      tests/            # 602 tests passing
+      src/              # 32 source files, 21,331 lines (measured 2026-06-01)
+      tests/            # 736 tests passing (0 failures, 14 ignored)
+      fuzz/             # 7 fuzz targets
       Cargo.toml
-    elixir/             # Reference impl (stale)
+    elixir/             # Reference impl (stale, NIF build broken)
     ocaml/              # Extraction target (design only)
+    zig/                # Zig FFI scaffolding
+    mcp/                # MCP server bindings
   proofs/
-    lean4/              # Primary proof source
-    coq/                # CIC proofs + extraction
-    agda/               # Type theory proofs
-    isabelle/           # HOL proofs
-    mizar/              # Set theory proofs
-    z3/                 # SMT proofs
-  ffi/zig/              # Zig FFI (builds, not integrated)
-  docs/                 # Design docs, roadmaps
-  .machine_readable/    # STATE.scm, ECOSYSTEM.scm, META.scm
+    lean4/              # Primary proof source (101 theorems)
+    coq/                # CIC proofs + extraction (131 theorems, 3 admits in extraction.v)
+    agda/               # Type theory proofs (85 theorems, 3 postulates including funext)
+    isabelle/           # HOL proofs (76 theorems)
+    mizar/              # Set theory proofs (63 theorems)
+    z3/                 # SMT proofs (125 asserts)
+    idris2/             # ABI carrier (~22 theorems, 2 holes, 10 partials)
+  docs/                 # Design docs, roadmaps, PROOF_HOLES_AUDIT.md
+    audits/             # Deep-audit log (per estate standards)
+  .machine_readable/    # INTENT/MUST/TRUST/ADJUST contractiles + a2ml agent state
+  .well-known/          # ai.txt, humans.txt, security.txt (RFC 9116)
 ```
 
 ### Key Rust Source Files
@@ -315,7 +322,7 @@ MPL-2.0 (Palimpsest License)
 
 ---
 
-**Last Updated**: 2026-04-20 (function control-flow, multi-line scripts, tilde, IFS, trap, alias)
+**Last Updated**: 2026-06-01 (drift reconcile: 32 src files / 21,331 LoC, 3 proof holes per audit, 478 theorem candidates, 7 fuzz targets)
 **Version**: see `CHANGELOG.md` (release history) and `impl/rust-cli/Cargo.toml` `[package].version` (semver pin)
 **Status**: Advanced research prototype — NOT production-ready
 **Tests**: 736 passing, 0 failures, 14 ignored

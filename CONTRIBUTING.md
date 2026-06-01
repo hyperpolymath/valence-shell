@@ -366,7 +366,7 @@ Must pass before merge.
 - **README files**: Directory-level overviews
 - **docs/**: Design documents, reports
 - **CLAUDE.md**: Keep updated for AI context
-- **CHANGELOG.md**: User-facing changes
+- **CHANGELOG.adoc**: User-facing changes
 
 ## Licensing
 
@@ -380,7 +380,7 @@ See [LICENSE](LICENSE) for full text.
 ## Recognition
 
 Contributors are recognized in:
-- `MAINTAINERS.md` (for sustained contributions)
+- `MAINTAINERS.adoc` (for sustained contributions)
 - Git commit history (always preserved)
 - Release notes
 - Academic papers (if research contribution)
@@ -393,7 +393,7 @@ Contributors are recognized in:
 - **GitHub Issues**: Feature requests, bug reports
 - **GitLab Issues**: Alternative (main dev repo)
 - **Discussions**: General questions (TBD)
-- **Email**: For sensitive matters (see MAINTAINERS.md)
+- **Email**: For sensitive matters (see MAINTAINERS.adoc)
 
 ### Response Times
 
@@ -465,7 +465,7 @@ Maintainers may not:
 - Ignore Code of Conduct violations
 - Make breaking changes without discussion
 
-See [MAINTAINERS.md](MAINTAINERS.md) for current maintainers.
+See [MAINTAINERS.adoc](MAINTAINERS.adoc) for current maintainers.
 
 ## RSR Compliance
 
@@ -501,4 +501,4 @@ Questions? Open an issue or check [CLAUDE.md](CLAUDE.md) for project context.
 
 **Last Updated**: 2025-11-22
 **Version**: 1.0
-**Maintainer**: See [MAINTAINERS.md](MAINTAINERS.md)
+**Maintainer**: See [MAINTAINERS.adoc](MAINTAINERS.adoc)

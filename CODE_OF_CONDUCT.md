@@ -141,7 +141,7 @@ that are not aligned with this Code of Conduct, and will communicate reasons for
 If you experience or witness unacceptable behavior, or have any other concerns, please report it by:
 
 1. **Email**: [To be added - maintainer contact]
-2. **Private message**: To any maintainer (see MAINTAINERS.md)
+2. **Private message**: To any maintainer (see MAINTAINERS.adoc)
 3. **GitHub**: Private vulnerability report (for serious issues)
 
 ### What to Include
@@ -304,6 +304,6 @@ We will NOT:
 **Last Updated**: 2025-11-22
 **Version**: 1.0
 **Based on**: Contributor Covenant 2.1 + CCCP Manifesto + Rust CoC
-**Contact**: See [MAINTAINERS.md](MAINTAINERS.md)
+**Contact**: See [MAINTAINERS.adoc](MAINTAINERS.adoc)
 
 **Summary**: Be kind. Be professional. Assume good intent. Focus on ideas, not people. Mistakes are reversible. We're all learning together.

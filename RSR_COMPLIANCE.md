@@ -47,8 +47,8 @@ Valence Shell achieves **Bronze-level RSR compliance** with several **Silver-lev
 | **SECURITY.md** | ✅ COMPLETE | `SECURITY.md` (comprehensive, RFC 9116 aligned) |
 | **CONTRIBUTING.md** | ✅ COMPLETE | `CONTRIBUTING.md` (with TPCF framework) |
 | **CODE_OF_CONDUCT.md** | ✅ COMPLETE | `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1 + CCCP) |
-| **MAINTAINERS.md** | ✅ COMPLETE | `MAINTAINERS.md` (perimeter-based governance) |
-| **CHANGELOG.md** | ✅ COMPLETE | `CHANGELOG.md` (Keep a Changelog 1.0.0) |
+| **MAINTAINERS.adoc** | ✅ COMPLETE | `MAINTAINERS.adoc` (perimeter-based governance) |
+| **CHANGELOG.adoc** | ✅ COMPLETE | `CHANGELOG.adoc` (Keep a Changelog 1.0.0) |
 
 **Additional Documentation**:
 - `CLAUDE.md` - Comprehensive AI assistant context
@@ -220,7 +220,7 @@ just clean           # Clean build artifacts
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| **Maintainer List** | ✅ COMPLETE | `MAINTAINERS.md` |
+| **Maintainer List** | ✅ COMPLETE | `MAINTAINERS.adoc` |
 | **Decision Process** | ✅ COMPLETE | Documented in CONTRIBUTING.md (perimeter-based) |
 | **Contribution Workflow** | ✅ COMPLETE | `CONTRIBUTING.md` (detailed) |
 | **Code Review Requirements** | ✅ COMPLETE | Per-perimeter requirements documented |
@@ -332,8 +332,8 @@ ls .well-known/security.txt .well-known/ai.txt .well-known/humans.txt  # ✅ ALL
 - [x] SECURITY.md exists and is comprehensive
 - [x] CONTRIBUTING.md exists with TPCF documentation
 - [x] CODE_OF_CONDUCT.md exists (Contributor Covenant 2.1)
-- [x] MAINTAINERS.md exists with perimeter roles
-- [x] CHANGELOG.md exists (Keep a Changelog format)
+- [x] MAINTAINERS.adoc exists with perimeter roles
+- [x] CHANGELOG.adoc exists (Keep a Changelog format)
 
 **Well-Known Checklist**:
 - [x] .well-known/security.txt (RFC 9116 compliant)
@@ -374,7 +374,7 @@ ls .well-known/security.txt .well-known/ai.txt .well-known/humans.txt  # ✅ ALL
 ### Long-Term
 
 1. **Maintain documentation** as project evolves
-2. **Update CHANGELOG.md** for each release
+2. **Update CHANGELOG.adoc** for each release
 3. **Annual security.txt refresh** (expires 2026-11-22)
 4. **Grow contributor base** (Perimeter 2 and 3)
 
