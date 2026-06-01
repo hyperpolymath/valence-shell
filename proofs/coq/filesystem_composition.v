@@ -10,6 +10,7 @@ Require Import String.
 Require Import List.
 Require Import Bool.
 Require Import Arith.
+Require Import Lia.
 Import ListNotations.
 
 Require Import filesystem_model.
@@ -154,6 +155,18 @@ Proof.
   reflexivity.
 Qed.
 
+(** apply_sequence distributes over append *)
+Lemma apply_sequence_app :
+  forall ops1 ops2 fs,
+    apply_sequence (ops1 ++ ops2) fs =
+    apply_sequence ops2 (apply_sequence ops1 fs).
+Proof.
+  intros ops1.
+  induction ops1 as [| op ops1' IH].
+  - intros ops2 fs. simpl. reflexivity.
+  - intros ops2 fs. simpl. apply IH.
+Qed.
+
 (** * Single Operation Reversibility *)
 
 (** Single mkdir/rmdir is reversible *)
@@ -257,14 +270,22 @@ Proof.
     reflexivity.
   - (* Inductive case: op :: ops' *)
     intros fs [Hrev_op Hrev_rest].
-    simpl in *.
+    simpl.
+    (* Goal: apply_sequence (reverse_sequence (op :: ops')) (apply_sequence ops' (apply_op op fs)) = fs *)
     unfold reverse_sequence.
     simpl.
     rewrite map_app.
     simpl.
-    (* Apply reverse_op first, then reverse_sequence ops' *)
-    rewrite <- (IH (apply_op op fs) Hrev_rest).
-    (* Now apply reverse_op to get back to fs *)
+    (* Goal: apply_sequence (map reverse_op (rev ops') ++ [reverse_op op])
+              (apply_sequence ops' (apply_op op fs)) = fs *)
+    rewrite apply_sequence_app.
+    (* Goal: apply_sequence [reverse_op op]
+              (apply_sequence (map reverse_op (rev ops'))
+                              (apply_sequence ops' (apply_op op fs))) = fs *)
+    (* The inner apply_sequence (map reverse_op (rev ops')) = apply_sequence (reverse_sequence ops') (definitional) *)
+    fold (reverse_sequence ops').
+    rewrite (IH (apply_op op fs) Hrev_rest).
+    (* Goal: apply_sequence [reverse_op op] (apply_op op fs) = fs *)
     simpl.
     apply single_op_reversible.
     assumption.
@@ -319,7 +340,7 @@ Proof.
   intros op fs [Hrev _].
   unfold reverse_sequence.
   simpl.
-  rewrite app_nil_r.
+  (* Goal after simpl: apply_op (reverse_op op) (apply_op op fs) = fs *)
   apply single_op_reversible.
   assumption.
 Qed.
@@ -397,11 +418,13 @@ Proof.
   unfold parent_path. rewrite rev_app_distr. simpl. rewrite rev_involutive.
   apply path_prefix_app_invert with ch.
   - exact Hpre.
-  - apply path_prefix_length in Hpre. rewrite app_length in Hpre. simpl in Hpre.
-    destruct (Nat.le_gt_cases (length p) (length ct)) as [Hle | Hgt].
+  - assert (Hpre_path := Hpre).
+    apply path_prefix_length in Hpre. rewrite app_length in Hpre. simpl in Hpre.
+    destruct (Nat.le_gt_cases (Datatypes.length p) (Datatypes.length ct)) as [Hle | Hgt].
     + exact Hle.
     + exfalso. apply Hneq.
-      apply path_prefix_eq_of_same_length; [exact Hpre|].
+      symmetry.
+      apply path_prefix_eq_of_same_length; [exact Hpre_path|].
       rewrite app_length. simpl. lia.
 Qed.
 
@@ -433,23 +456,23 @@ Proof.
   induction n; intros child p Hlen Hwf Hpre Hneq Hex.
   - (* length child = 0 → child = [] *)
     destruct child; [|simpl in Hlen; lia].
-    destruct p; [exact (absurd eq_refl Hneq) | simpl in Hpre; discriminate].
+    destruct p; [exfalso; apply Hneq; reflexivity | simpl in Hpre; discriminate].
   - destruct child as [|ch ct].
     + (* child = [] *)
-      destruct p; [exact (absurd eq_refl Hneq) | simpl in Hpre; discriminate].
+      destruct p; [exfalso; apply Hneq; reflexivity | simpl in Hpre; discriminate].
     + (* child = ch :: ct, non-empty *)
       destruct (list_eq_dec String.string_dec p (parent_path (ch :: ct))) as [Heq | Hneq'].
       * (* p = parent_path child: one well_formed step *)
         subst p. apply Hwf. exact Hex. discriminate.
-      * (* p is a deeper ancestor: recurse *)
-        apply (Hind (parent_path (ch :: ct)) p).
-        -- (* parent_path is strictly shorter *)
+      * (* p is a deeper ancestor: recurse via IHn on parent_path *)
+        apply (IHn (parent_path (ch :: ct)) p).
+        -- (* parent_path is strictly shorter, so length parent <= n *)
            assert (Hlt : length (parent_path (ch :: ct)) < length (ch :: ct)).
            { apply parent_path_lt. discriminate. }
-           simpl in Hlen. lia.
+           lia.
         -- exact Hwf.
         -- apply path_prefix_parent; [exact Hpre | exact Hneq | discriminate].
-        -- exact Hneq'.
+        -- intros Heq. apply Hneq'. symmetry. exact Heq.
         -- apply Hwf. exact Hex. discriminate.
 Qed.
 
@@ -488,7 +511,7 @@ Proof.
   intros p fs Hwf Hpre.
   destruct Hpre as [Hnotexists [Hparent [Hparentdir Hperms]]].
   unfold rmdir_precondition.
-  repeat split.
+  split; [|split; [|split]].
   - (* is_directory p (mkdir p fs) *)
     apply mkdir_creates_directory.
     unfold mkdir_precondition.
@@ -544,7 +567,7 @@ Proof.
     unfold mkdir, fs_update.
     destruct (list_eq_dec String.string_dec p (parent_path p)) as [Heqpp | Hneqpp].
     + (* p = parent_path p means path_exists p fs — contradicts precondition *)
-      exfalso. apply Hnotex. exists pnode. rewrite <- Heqpp. exact Hpnode.
+      exfalso. apply Hnotex. exists pnode. rewrite Heqpp. exact Hpnode.
     + exact Hpnode.
   - (* q <> p: q existed in original fs *)
     assert (Hqfs : fs q = Some qnode). { exact Hqnode. }
@@ -560,7 +583,18 @@ Proof.
       exists pqnode. exact Hpqnode.
 Qed.
 
-(** Two-directory creation example. *)
+(** Two-directory creation example.
+
+    NOTE (model gap, 2026-06-01): As stated, this example reverses
+    [mkdir p1; mkdir p2] with [rmdir p1] applied BEFORE [rmdir p2]
+    (reading the nested [apply_op] inside-out). That is not the LIFO
+    sequence-reversal that [operation_sequence_reversible] proves,
+    which would be [rmdir p2; rmdir p1]. The example as written is
+    not provable from [two_op_sequence_reversible] without further
+    well-formedness preservation lemmas on [rmdir]. Admitted pending
+    follow-up: either restate to LIFO order, or prove the non-LIFO
+    variant under stronger preconditions. See
+    [docs/PROOF-OPEN-FRONTIER.adoc] for closure paths. *)
 Example mkdir_two_dirs_reversible :
   forall p1 p2 fs,
     p1 <> p2 ->
@@ -572,19 +606,9 @@ Example mkdir_two_dirs_reversible :
         (apply_op (OpMkdir p2)
           (apply_op (OpMkdir p1) fs))) = fs.
 Proof.
-  intros p1 p2 fs Hneq Hwf Hpre1 Hpre2.
-  apply (two_op_sequence_reversible (OpMkdir p1) (OpMkdir p2)).
-  - split.
-    + exact Hpre1.
-    + apply rmdir_precondition_after_mkdir; [| exact Hpre1].
-      assumption.
-  - split.
-    + exact Hpre2.
-    + simpl.
-      apply rmdir_precondition_after_mkdir.
-      * apply mkdir_preserves_well_formed; assumption.
-      * exact Hpre2.
-Qed.
+  (* Admitted: non-LIFO sequence-reversal — not derivable from
+     two_op_sequence_reversible as stated; needs design fix. *)
+Admitted.
 
 (** * Composition Preservation *)
 

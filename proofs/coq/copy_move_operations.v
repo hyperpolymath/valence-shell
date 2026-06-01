@@ -48,6 +48,10 @@ Definition copy_file (src dst : Path) (fs : Filesystem) : Filesystem :=
 
 (** * Move Operation *)
 
+(** Helper: check if path is prefix of another *)
+Definition is_prefix (p1 p2 : Path) : Prop :=
+  exists suffix, p2 = p1 ++ suffix.
+
 (** Precondition for move/rename *)
 Definition move_precondition (src dst : Path) (fs : Filesystem) : Prop :=
   (* Source must exist *)
@@ -64,10 +68,6 @@ Definition move_precondition (src dst : Path) (fs : Filesystem) : Prop :=
   has_write_permission (parent_path src) fs /\
   (* Must have write permission on destination parent *)
   has_write_permission (parent_path dst) fs.
-
-(** Helper: check if path is prefix of another *)
-Definition is_prefix (p1 p2 : Path) : Prop :=
-  exists suffix, p2 = p1 ++ suffix.
 
 (** Move operation *)
 Definition move (src dst : Path) (fs : Filesystem) : Filesystem :=
@@ -107,7 +107,11 @@ Proof.
   destruct Hpre as [[perms Hfile] _].
   rewrite Hfile.
   unfold fs_update.
-  destruct (list_eq_dec string_dec dst src); [contradiction | reflexivity].
+  destruct (list_eq_dec String.string_dec dst src) as [Heq | Hneq_dst].
+  - (* dst = src — contradicts Hneq : src <> dst *)
+    symmetry in Heq. contradiction.
+  - (* dst <> src — both sides equal fs src *)
+    symmetry. exact Hfile.
 Qed.
 
 (** Theorem: copy creates exact duplicate of content *)
@@ -159,15 +163,15 @@ Theorem move_creates_destination :
     move_precondition src dst fs ->
     path_exists dst (move src dst fs).
 Proof.
-  intros src dst fs [[node Hsrc] [Hnotdst _]].
+  intros src dst fs [[node Hsrc] [Hnotdst [_ [Hneq _]]]].
   unfold path_exists, move.
   rewrite Hsrc.
   exists node.
   unfold fs_update.
-  destruct (list_eq_dec string_dec src dst).
-  - (* src = dst contradicts precondition *)
-    destruct (list_eq_dec string_dec dst dst); [reflexivity | contradiction].
-  - destruct (list_eq_dec string_dec dst dst); [reflexivity | contradiction].
+  destruct (list_eq_dec String.string_dec src dst) as [Heq | _].
+  - (* src = dst contradicts precondition Hneq *)
+    contradiction.
+  - destruct (list_eq_dec String.string_dec dst dst) as [_ | Hne]; [reflexivity | contradiction].
 Qed.
 
 (** Theorem: move removes source *)
@@ -190,15 +194,14 @@ Theorem move_preserves_content :
     move_precondition src dst fs ->
     fs src = (move src dst fs) dst.
 Proof.
-  intros src dst fs [[node Hsrc] _].
+  intros src dst fs [[node Hsrc] [_ [_ [Hneq _]]]].
   unfold move.
   rewrite Hsrc.
   unfold fs_update.
-  destruct (list_eq_dec string_dec src dst).
-  - (* src = dst - contradiction *)
-    subst.
-    destruct (list_eq_dec string_dec dst dst); [reflexivity | contradiction].
-  - destruct (list_eq_dec string_dec dst dst); [reflexivity | contradiction].
+  destruct (list_eq_dec String.string_dec src dst) as [Heq | _].
+  - (* src = dst contradicts Hneq *)
+    contradiction.
+  - destruct (list_eq_dec String.string_dec dst dst) as [_ | Hne]; [reflexivity | contradiction].
 Qed.
 
 (** Theorem: move is reversible *)
@@ -208,37 +211,38 @@ Theorem move_reversible :
     move dst src (move src dst fs) = fs.
 Proof.
   intros src dst fs Hpre.
-  unfold move.
   destruct Hpre as [[node Hsrc] [Hnotdst [_ [Hneq _]]]].
-  rewrite Hsrc.
-  unfold fs_update at 2.
-  destruct (list_eq_dec string_dec src dst).
-  - (* src = dst contradicts Hneq *)
-    contradiction.
-  - unfold fs_update at 1.
-    destruct (list_eq_dec string_dec dst dst); [|contradiction].
-    unfold fs_update.
-    apply functional_extensionality.
-    intros p.
-    destruct (list_eq_dec string_dec dst p).
-    + (* dst = p: after reverse move, dst is cleared (None) = fs dst (also None) *)
+  (* First compute the inner move: (move src dst fs) = fs_update src None (fs_update dst (Some node) fs) *)
+  assert (Hinner : move src dst fs = fs_update src None (fs_update dst (Some node) fs)).
+  { unfold move. rewrite Hsrc. reflexivity. }
+  rewrite Hinner.
+  (* Now: move dst src (fs_update src None (fs_update dst (Some node) fs)) = fs *)
+  (* Need to show (fs_update src None (fs_update dst (Some node) fs)) dst = Some node *)
+  assert (Hdstnode : (fs_update src None (fs_update dst (Some node) fs)) dst = Some node).
+  { unfold fs_update.
+    destruct (list_eq_dec String.string_dec src dst) as [Heq | _].
+    - contradiction.
+    - destruct (list_eq_dec String.string_dec dst dst) as [_ | Hne_dd]; [reflexivity | contradiction]. }
+  unfold move at 1.
+  rewrite Hdstnode.
+  apply functional_extensionality.
+  intros p.
+  unfold fs_update.
+  destruct (list_eq_dec String.string_dec dst p) as [Hdp | Hndp].
+  - (* dst = p *)
+    destruct (list_eq_dec String.string_dec src p) as [Hsp | Hnsp].
+    + (* src = p, but dst = p too, so src = dst — contradicts Hneq *)
+      subst. contradiction.
+    + (* Goal: None = fs p. Use Hnotdst: dst=p so fs p must be None to avoid path_exists *)
+      destruct (fs p) eqn:Hfsp.
+      * exfalso. apply Hnotdst. exists f. rewrite Hdp. assumption.
+      * reflexivity.
+  - destruct (list_eq_dec String.string_dec src p) as [Hsp | Hnsp].
+    + (* src = p *)
       subst.
-      destruct (list_eq_dec string_dec src p).
-      * (* src = dst = p, contradiction *)
-        contradiction.
-      * (* source wasn't at dst — result at p is None *)
-        unfold fs_update.
-        destruct (list_eq_dec string_dec dst p); [|contradiction].
-        (* Goal: None = fs p, derive from ¬ path_exists p fs *)
-        destruct (fs p) eqn:Hfsp.
-        -- exfalso. apply Hnotdst. exists f. assumption.
-        -- reflexivity.
-    + destruct (list_eq_dec string_dec src p).
-      * (* src = p *)
-        subst.
-        assumption.
-      * (* neither src nor dst *)
-        destruct (list_eq_dec string_dec dst p); [contradiction|reflexivity].
+      symmetry. assumption.
+    + (* neither src nor dst at p *)
+      reflexivity.
 Qed.
 
 (** * Preservation Theorems *)
@@ -253,7 +257,9 @@ Proof.
   unfold copy_file.
   destruct (fs src).
   - unfold fs_update.
-    destruct (list_eq_dec string_dec dst p); [contradiction | reflexivity].
+    destruct (list_eq_dec String.string_dec dst p) as [Heq | _].
+    + symmetry in Heq. contradiction.
+    + reflexivity.
   - reflexivity.
 Qed.
 
@@ -268,8 +274,11 @@ Proof.
   unfold move.
   destruct (fs src).
   - unfold fs_update.
-    destruct (list_eq_dec string_dec src p); [contradiction|].
-    destruct (list_eq_dec string_dec dst p); [contradiction|reflexivity].
+    destruct (list_eq_dec String.string_dec src p) as [Heq | _].
+    + symmetry in Heq. contradiction.
+    + destruct (list_eq_dec String.string_dec dst p) as [Heq | _].
+      * symmetry in Heq. contradiction.
+      * reflexivity.
   - reflexivity.
 Qed.
 
@@ -283,9 +292,8 @@ Theorem copy_then_move :
     (move dst dst2 (copy_file src dst fs)) dst2 = fs src.
 Proof.
   intros src dst dst2 fs Hcopy Hmove.
-  rewrite <- copy_file_same_content with (src := src) (dst := dst) (fs := fs).
-  - apply move_preserves_content. assumption.
-  - assumption.
+  rewrite <- (move_preserves_content dst dst2 (copy_file src dst fs) Hmove).
+  symmetry. apply copy_file_same_content. assumption.
 Qed.
 
 (** * Summary of Proven Claims *)

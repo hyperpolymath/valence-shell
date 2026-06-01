@@ -99,6 +99,10 @@ Definition parent_exists (p : Path) (fs : Filesystem) : Prop :=
 Definition has_write_permission (p : Path) (fs : Filesystem) : Prop :=
   exists node, fs p = Some node /\ writable (permissions node) = true.
 
+(** Path has read permission *)
+Definition has_read_permission (p : Path) (fs : Filesystem) : Prop :=
+  exists node, fs p = Some node /\ readable (permissions node) = true.
+
 (** Directory is empty (has no children) *)
 Definition is_empty_dir (p : Path) (fs : Filesystem) : Prop :=
   is_directory p fs /\

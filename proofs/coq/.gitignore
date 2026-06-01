@@ -31,3 +31,6 @@ deps/
 Thumbs.db
 build/
 dist/
+
+# Extracted OCaml code (output of extraction.v)
+extracted/
