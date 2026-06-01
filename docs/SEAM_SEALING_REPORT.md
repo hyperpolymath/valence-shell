@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # Seam Sealing Report - Phase 0 Completion
 
 **Version**: 0.7.1 (Phase 0 Sealing Complete)

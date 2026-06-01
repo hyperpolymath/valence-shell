@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # Valence Shell: Roadmap to v1.0.0
 
 **Current Version**: 0.10.0 (Command Substitution)

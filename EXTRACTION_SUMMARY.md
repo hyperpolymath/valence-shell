@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # Lean 4 → OCaml/Zig Extraction Summary
 
 **Date**: 2026-01-28 (status last reviewed 2026-06-01)

@@ -219,6 +219,7 @@ OPERATION_NAME=$1  # e.g., "chmod"
 
 cat > "impl/rust-cli/src/commands/${OPERATION_NAME}.rs" <<EOF
 // SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! ${OPERATION_NAME^} operation
 //!
 //! Formal specification: proofs/lean4/Operations/${OPERATION_NAME^}.lean

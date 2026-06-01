@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # Formal Proofs: Overview for Non-Experts
 
 **Audience**: Anyone curious about the proofs (no math background needed)

@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # Phase 4: Rust-Lean Correspondence Proofs
 
 **Version**: 0.14.0 → 0.15.0

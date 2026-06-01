@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # Valence Shell Formal Proofs
 
 This directory contains formal proofs of filesystem operations across **5 different proof assistants**, establishing the MAA (Mutually Assured Accountability) framework with polyglot verification.

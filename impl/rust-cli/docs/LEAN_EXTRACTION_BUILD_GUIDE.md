@@ -281,6 +281,7 @@ Add to `.github/workflows/lean-verification.yml`:
 
 ```yaml
 # SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 name: Lean Verification Build
 
 on:

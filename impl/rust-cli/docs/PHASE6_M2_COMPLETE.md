@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # Phase 6 M2: I/O Redirections - COMPLETE ✓
 
 **Version**: 0.7.1 → 0.7.2 (candidate)

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 # POSIX 2024 (Issue 8) Compatibility Notes — Valence Shell
 
 **Author**: Jonathan D.A. Jewell

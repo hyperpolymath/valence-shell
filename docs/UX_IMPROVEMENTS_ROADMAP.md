@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # UX/UI Improvements: Matching zsh & fish
 
 **Goal**: Be as concatenative as zsh, as friendly as fish, with clear help/error messages

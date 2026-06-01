@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 # POSIX Compliance Status - Valence Shell (v0.9.0)
 
 **Goal**: Full POSIX shell compliance with formal verification at each increment

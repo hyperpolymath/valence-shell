@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # Phase 6 Milestones 7-10: Advanced Shell Features - COMPLETE ✓
 
 **Version**: 0.13.0 → 0.14.0
