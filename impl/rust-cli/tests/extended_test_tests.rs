@@ -17,49 +17,77 @@ use vsh::test_command::execute_extended_test;
 
 #[test]
 fn test_pattern_match_simple() {
-    let args = vec!["test.txt".to_string(), "==".to_string(), "*.txt".to_string()];
+    let args = vec![
+        "test.txt".to_string(),
+        "==".to_string(),
+        "*.txt".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - matches pattern
 }
 
 #[test]
 fn test_pattern_match_no_match() {
-    let args = vec!["test.log".to_string(), "==".to_string(), "*.txt".to_string()];
+    let args = vec![
+        "test.log".to_string(),
+        "==".to_string(),
+        "*.txt".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 1); // false - doesn't match pattern
 }
 
 #[test]
 fn test_pattern_nomatch_operator() {
-    let args = vec!["test.log".to_string(), "!=".to_string(), "*.txt".to_string()];
+    let args = vec![
+        "test.log".to_string(),
+        "!=".to_string(),
+        "*.txt".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - doesn't match pattern
 }
 
 #[test]
 fn test_pattern_question_mark() {
-    let args = vec!["file1.txt".to_string(), "==".to_string(), "file?.txt".to_string()];
+    let args = vec![
+        "file1.txt".to_string(),
+        "==".to_string(),
+        "file?.txt".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - single char wildcard
 }
 
 #[test]
 fn test_pattern_question_mark_no_match() {
-    let args = vec!["file10.txt".to_string(), "==".to_string(), "file?.txt".to_string()];
+    let args = vec![
+        "file10.txt".to_string(),
+        "==".to_string(),
+        "file?.txt".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 1); // false - two chars don't match single wildcard
 }
 
 #[test]
 fn test_pattern_character_class() {
-    let args = vec!["file1.txt".to_string(), "==".to_string(), "file[0-9].txt".to_string()];
+    let args = vec![
+        "file1.txt".to_string(),
+        "==".to_string(),
+        "file[0-9].txt".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - matches character class
 }
 
 #[test]
 fn test_pattern_multiple_wildcards() {
-    let args = vec!["prefix-test-suffix".to_string(), "==".to_string(), "*-test-*".to_string()];
+    let args = vec![
+        "prefix-test-suffix".to_string(),
+        "==".to_string(),
+        "*-test-*".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - matches both wildcards
 }
@@ -91,7 +119,11 @@ fn test_pattern_wildcard_matches_empty() {
 
 #[test]
 fn test_regex_match_digits() {
-    let args = vec!["12345".to_string(), "=~".to_string(), "^[0-9]+$".to_string()];
+    let args = vec![
+        "12345".to_string(),
+        "=~".to_string(),
+        "^[0-9]+$".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - matches digits
 }
@@ -105,21 +137,33 @@ fn test_regex_match_no_match() {
 
 #[test]
 fn test_regex_email_pattern() {
-    let args = vec!["test@example.com".to_string(), "=~".to_string(), "^[a-z]+@[a-z]+\\.[a-z]+$".to_string()];
+    let args = vec![
+        "test@example.com".to_string(),
+        "=~".to_string(),
+        "^[a-z]+@[a-z]+\\.[a-z]+$".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - matches email pattern
 }
 
 #[test]
 fn test_regex_partial_match() {
-    let args = vec!["test123more".to_string(), "=~".to_string(), "[0-9]+".to_string()];
+    let args = vec![
+        "test123more".to_string(),
+        "=~".to_string(),
+        "[0-9]+".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - contains digits (partial match)
 }
 
 #[test]
 fn test_regex_anchored() {
-    let args = vec!["test123".to_string(), "=~".to_string(), "^[a-z]+$".to_string()];
+    let args = vec![
+        "test123".to_string(),
+        "=~".to_string(),
+        "^[a-z]+$".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 1); // false - has digits, doesn't match letters-only
 }
@@ -133,7 +177,11 @@ fn test_regex_empty_string() {
 
 #[test]
 fn test_regex_invalid_pattern() {
-    let args = vec!["test".to_string(), "=~".to_string(), "[invalid(".to_string()];
+    let args = vec![
+        "test".to_string(),
+        "=~".to_string(),
+        "[invalid(".to_string(),
+    ];
     let result = execute_extended_test(&args);
     assert!(result.is_err()); // Error - invalid regex
 }
@@ -192,9 +240,13 @@ fn test_lexical_case_sensitive() {
 #[test]
 fn test_and_operator_both_true() {
     let args = vec![
-        "test".to_string(), "==".to_string(), "test".to_string(),
+        "test".to_string(),
+        "==".to_string(),
+        "test".to_string(),
         "&&".to_string(),
-        "file.txt".to_string(), "==".to_string(), "*.txt".to_string(),
+        "file.txt".to_string(),
+        "==".to_string(),
+        "*.txt".to_string(),
     ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - both conditions true
@@ -203,9 +255,13 @@ fn test_and_operator_both_true() {
 #[test]
 fn test_and_operator_first_false() {
     let args = vec![
-        "test".to_string(), "==".to_string(), "other".to_string(),
+        "test".to_string(),
+        "==".to_string(),
+        "other".to_string(),
         "&&".to_string(),
-        "file.txt".to_string(), "==".to_string(), "*.txt".to_string(),
+        "file.txt".to_string(),
+        "==".to_string(),
+        "*.txt".to_string(),
     ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 1); // false - first condition false
@@ -214,9 +270,13 @@ fn test_and_operator_first_false() {
 #[test]
 fn test_or_operator_first_true() {
     let args = vec![
-        "test".to_string(), "==".to_string(), "test".to_string(),
+        "test".to_string(),
+        "==".to_string(),
+        "test".to_string(),
         "||".to_string(),
-        "file".to_string(), "==".to_string(), "*.txt".to_string(),
+        "file".to_string(),
+        "==".to_string(),
+        "*.txt".to_string(),
     ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - first condition true (short-circuit)
@@ -225,9 +285,13 @@ fn test_or_operator_first_true() {
 #[test]
 fn test_or_operator_both_false() {
     let args = vec![
-        "test".to_string(), "==".to_string(), "other".to_string(),
+        "test".to_string(),
+        "==".to_string(),
+        "other".to_string(),
         "||".to_string(),
-        "file.log".to_string(), "==".to_string(), "*.txt".to_string(),
+        "file.log".to_string(),
+        "==".to_string(),
+        "*.txt".to_string(),
     ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 1); // false - both conditions false
@@ -236,11 +300,17 @@ fn test_or_operator_both_false() {
 #[test]
 fn test_multiple_and_operators() {
     let args = vec![
-        "a".to_string(), "==".to_string(), "a".to_string(),
+        "a".to_string(),
+        "==".to_string(),
+        "a".to_string(),
         "&&".to_string(),
-        "b".to_string(), "==".to_string(), "b".to_string(),
+        "b".to_string(),
+        "==".to_string(),
+        "b".to_string(),
         "&&".to_string(),
-        "c".to_string(), "==".to_string(), "c".to_string(),
+        "c".to_string(),
+        "==".to_string(),
+        "c".to_string(),
     ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - all three conditions true
@@ -250,11 +320,17 @@ fn test_multiple_and_operators() {
 fn test_or_and_precedence() {
     // (false || true) && false = false
     let args = vec![
-        "a".to_string(), "==".to_string(), "b".to_string(),  // false
+        "a".to_string(),
+        "==".to_string(),
+        "b".to_string(), // false
         "||".to_string(),
-        "c".to_string(), "==".to_string(), "c".to_string(),  // true
+        "c".to_string(),
+        "==".to_string(),
+        "c".to_string(), // true
         "&&".to_string(),
-        "d".to_string(), "==".to_string(), "e".to_string(),  // false
+        "d".to_string(),
+        "==".to_string(),
+        "e".to_string(), // false
     ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 1); // false - because && binds tighter than ||
@@ -266,14 +342,24 @@ fn test_or_and_precedence() {
 
 #[test]
 fn test_negation_simple() {
-    let args = vec!["!".to_string(), "test".to_string(), "==".to_string(), "other".to_string()];
+    let args = vec![
+        "!".to_string(),
+        "test".to_string(),
+        "==".to_string(),
+        "other".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - !(false) = true
 }
 
 #[test]
 fn test_negation_true_expr() {
-    let args = vec!["!".to_string(), "test".to_string(), "==".to_string(), "test".to_string()];
+    let args = vec![
+        "!".to_string(),
+        "test".to_string(),
+        "==".to_string(),
+        "test".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 1); // false - !(true) = false
 }
@@ -283,7 +369,9 @@ fn test_double_negation() {
     let args = vec![
         "!".to_string(),
         "!".to_string(),
-        "test".to_string(), "==".to_string(), "test".to_string(),
+        "test".to_string(),
+        "==".to_string(),
+        "test".to_string(),
     ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - !!(true) = true
@@ -297,7 +385,9 @@ fn test_double_negation() {
 fn test_parentheses_grouping() {
     let args = vec![
         "(".to_string(),
-        "a".to_string(), "==".to_string(), "a".to_string(),
+        "a".to_string(),
+        "==".to_string(),
+        "a".to_string(),
         ")".to_string(),
     ];
     let result = execute_extended_test(&args).unwrap();
@@ -309,9 +399,13 @@ fn test_parentheses_with_or() {
     // (false || true) = true
     let args = vec![
         "(".to_string(),
-        "a".to_string(), "==".to_string(), "b".to_string(),  // false
+        "a".to_string(),
+        "==".to_string(),
+        "b".to_string(), // false
         "||".to_string(),
-        "c".to_string(), "==".to_string(), "c".to_string(),  // true
+        "c".to_string(),
+        "==".to_string(),
+        "c".to_string(), // true
         ")".to_string(),
     ];
     let result = execute_extended_test(&args).unwrap();
@@ -322,12 +416,18 @@ fn test_parentheses_with_or() {
 fn test_parentheses_change_precedence() {
     // false || (true && false) = false
     let args = vec![
-        "a".to_string(), "==".to_string(), "b".to_string(),  // false
+        "a".to_string(),
+        "==".to_string(),
+        "b".to_string(), // false
         "||".to_string(),
         "(".to_string(),
-        "c".to_string(), "==".to_string(), "c".to_string(),  // true
+        "c".to_string(),
+        "==".to_string(),
+        "c".to_string(), // true
         "&&".to_string(),
-        "d".to_string(), "==".to_string(), "e".to_string(),  // false
+        "d".to_string(),
+        "==".to_string(),
+        "e".to_string(), // false
         ")".to_string(),
     ];
     let result = execute_extended_test(&args).unwrap();
@@ -339,7 +439,9 @@ fn test_negation_with_parentheses() {
     let args = vec![
         "!".to_string(),
         "(".to_string(),
-        "a".to_string(), "==".to_string(), "a".to_string(),
+        "a".to_string(),
+        "==".to_string(),
+        "a".to_string(),
         ")".to_string(),
     ];
     let result = execute_extended_test(&args).unwrap();
@@ -423,9 +525,13 @@ fn test_int_less_than() {
 #[test]
 fn test_pattern_and_regex_combined() {
     let args = vec![
-        "test.txt".to_string(), "==".to_string(), "*.txt".to_string(),
+        "test.txt".to_string(),
+        "==".to_string(),
+        "*.txt".to_string(),
         "&&".to_string(),
-        "test".to_string(), "=~".to_string(), "^[a-z]+$".to_string(),
+        "test".to_string(),
+        "=~".to_string(),
+        "^[a-z]+$".to_string(),
     ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - both match
@@ -435,7 +541,9 @@ fn test_pattern_and_regex_combined() {
 fn test_negated_pattern() {
     let args = vec![
         "!".to_string(),
-        "test.log".to_string(), "==".to_string(), "*.txt".to_string(),
+        "test.log".to_string(),
+        "==".to_string(),
+        "*.txt".to_string(),
     ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - !( false) = true
@@ -446,12 +554,18 @@ fn test_complex_with_parentheses() {
     // (file.txt == *.txt && test =~ ^[a-z]+$) || false = true
     let args = vec![
         "(".to_string(),
-        "file.txt".to_string(), "==".to_string(), "*.txt".to_string(),
+        "file.txt".to_string(),
+        "==".to_string(),
+        "*.txt".to_string(),
         "&&".to_string(),
-        "test".to_string(), "=~".to_string(), "^[a-z]+$".to_string(),
+        "test".to_string(),
+        "=~".to_string(),
+        "^[a-z]+$".to_string(),
         ")".to_string(),
         "||".to_string(),
-        "a".to_string(), "==".to_string(), "b".to_string(),  // false
+        "a".to_string(),
+        "==".to_string(),
+        "b".to_string(), // false
     ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - first part is true
@@ -484,14 +598,22 @@ fn test_single_empty_string_arg() {
 
 #[test]
 fn test_pattern_with_spaces() {
-    let args = vec!["hello world".to_string(), "==".to_string(), "hello*".to_string()];
+    let args = vec![
+        "hello world".to_string(),
+        "==".to_string(),
+        "hello*".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - "hello world" matches "hello*"
 }
 
 #[test]
 fn test_regex_with_whitespace() {
-    let args = vec!["hello world".to_string(), "=~".to_string(), "^hello\\s+world$".to_string()];
+    let args = vec![
+        "hello world".to_string(),
+        "=~".to_string(),
+        "^hello\\s+world$".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - matches pattern with whitespace
 }
@@ -500,7 +622,9 @@ fn test_regex_with_whitespace() {
 fn test_unclosed_parenthesis() {
     let args = vec![
         "(".to_string(),
-        "a".to_string(), "==".to_string(), "a".to_string(),
+        "a".to_string(),
+        "==".to_string(),
+        "a".to_string(),
         // Missing )
     ];
     let result = execute_extended_test(&args);
@@ -509,7 +633,12 @@ fn test_unclosed_parenthesis() {
 
 #[test]
 fn test_unexpected_operator() {
-    let args = vec!["a".to_string(), "==".to_string(), "b".to_string(), "extra".to_string()];
+    let args = vec![
+        "a".to_string(),
+        "==".to_string(),
+        "b".to_string(),
+        "extra".to_string(),
+    ];
     let result = execute_extended_test(&args);
     assert!(result.is_err()); // Error - unexpected argument
 }
@@ -521,7 +650,11 @@ fn test_unexpected_operator() {
 #[test]
 fn test_pattern_vs_literal_comparison() {
     // In [[ ]], == does pattern matching
-    let args = vec!["test.txt".to_string(), "==".to_string(), "*.txt".to_string()];
+    let args = vec![
+        "test.txt".to_string(),
+        "==".to_string(),
+        "*.txt".to_string(),
+    ];
     let extended_result = execute_extended_test(&args).unwrap();
     assert_eq!(extended_result, 0); // true - pattern matches
 
@@ -536,7 +669,11 @@ fn test_pattern_vs_literal_comparison() {
 fn test_no_word_splitting_simulation() {
     // In [[]], variables don't undergo word splitting
     // Simulated by passing strings with spaces
-    let args = vec!["hello world".to_string(), "==".to_string(), "hello*".to_string()];
+    let args = vec![
+        "hello world".to_string(),
+        "==".to_string(),
+        "hello*".to_string(),
+    ];
     let result = execute_extended_test(&args).unwrap();
     assert_eq!(result, 0); // true - pattern matches full string
 }

@@ -121,7 +121,11 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::Success)
             }
 
-            Command::Cp { src, dst, redirects } => {
+            Command::Cp {
+                src,
+                dst,
+                redirects,
+            } => {
                 let expanded_src = crate::parser::expand_variables(src, state);
                 let expanded_dst = crate::parser::expand_variables(dst, state);
                 if redirects.is_empty() {
@@ -134,7 +138,11 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::Success)
             }
 
-            Command::Mv { src, dst, redirects } => {
+            Command::Mv {
+                src,
+                dst,
+                redirects,
+            } => {
                 let expanded_src = crate::parser::expand_variables(src, state);
                 let expanded_dst = crate::parser::expand_variables(dst, state);
                 if redirects.is_empty() {
@@ -147,7 +155,11 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::Success)
             }
 
-            Command::Ln { target, link, redirects } => {
+            Command::Ln {
+                target,
+                link,
+                redirects,
+            } => {
                 let expanded_target = crate::parser::expand_variables(target, state);
                 let expanded_link = crate::parser::expand_variables(link, state);
                 if redirects.is_empty() {
@@ -160,7 +172,11 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::Success)
             }
 
-            Command::Chmod { mode, path, redirects } => {
+            Command::Chmod {
+                mode,
+                path,
+                redirects,
+            } => {
                 let expanded_mode = crate::parser::expand_variables(mode, state);
                 let expanded_path = crate::parser::expand_variables(path, state);
                 if redirects.is_empty() {
@@ -174,7 +190,11 @@ impl ExecutableCommand for Command {
             }
 
             #[cfg(unix)]
-            Command::Chown { owner, path, redirects } => {
+            Command::Chown {
+                owner,
+                path,
+                redirects,
+            } => {
                 let expanded_owner = crate::parser::expand_variables(owner, state);
                 let expanded_path = crate::parser::expand_variables(path, state);
                 if redirects.is_empty() {
@@ -242,7 +262,9 @@ impl ExecutableCommand for Command {
             // Navigation (built-ins but not reversible)
             Command::Ls { path, redirects } => {
                 // Expand variables in path
-                let expanded_path = path.as_ref().map(|p| crate::parser::expand_variables(p, state));
+                let expanded_path = path
+                    .as_ref()
+                    .map(|p| crate::parser::expand_variables(p, state));
 
                 if redirects.is_empty() {
                     // Direct output to terminal
@@ -317,7 +339,9 @@ impl ExecutableCommand for Command {
                 use std::path::PathBuf;
 
                 // Expand variables in path first
-                let expanded_path = path.as_ref().map(|p| crate::parser::expand_variables(p, state));
+                let expanded_path = path
+                    .as_ref()
+                    .map(|p| crate::parser::expand_variables(p, state));
 
                 let target = if let Some(ref p) = expanded_path {
                     if p == "-" {
@@ -518,12 +542,17 @@ impl ExecutableCommand for Command {
             }
 
             // Pipeline commands (not reversible by default, but redirections are)
-            Command::Pipeline { stages, redirects, background } => {
+            Command::Pipeline {
+                stages,
+                redirects,
+                background,
+            } => {
                 // Expand variables and command substitutions in all pipeline stages
                 let expanded_stages: Result<Vec<(String, Vec<String>)>> = stages
                     .iter()
                     .map(|(program, args)| {
-                        let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
+                        let expanded_program =
+                            crate::parser::expand_with_command_sub(program, state)?;
                         let expanded_args: Result<Vec<String>> = args
                             .iter()
                             .map(|arg| crate::parser::expand_with_command_sub(arg, state))
@@ -537,7 +566,9 @@ impl ExecutableCommand for Command {
                     // Background pipeline: launch first stage in background, pipe rest
                     // For now, warn and run in foreground — full background pipeline
                     // requires SIGCHLD handler and process group management for all stages
-                    eprintln!("vsh: background pipelines not yet fully supported, running in foreground");
+                    eprintln!(
+                        "vsh: background pipelines not yet fully supported, running in foreground"
+                    );
                 }
 
                 let exit_code = external::execute_pipeline(&expanded_stages, redirects, state)
@@ -628,15 +659,20 @@ impl ExecutableCommand for Command {
             }
 
             // Shell builtins
-
-            Command::Echo { args, no_newline, interpret_escapes, redirects } => {
+            Command::Echo {
+                args,
+                no_newline,
+                interpret_escapes,
+                redirects,
+            } => {
                 let expanded_args: Vec<String> = args
                     .iter()
                     .map(|a| crate::parser::expand_variables(a, state))
                     .collect();
 
                 let output = if *interpret_escapes {
-                    expanded_args.join(" ")
+                    expanded_args
+                        .join(" ")
                         .replace("\\n", "\n")
                         .replace("\\t", "\t")
                         .replace("\\\\", "\\")
@@ -667,15 +703,15 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::Success)
             }
 
-            Command::True => {
-                Ok(ExecutionResult::ExternalCommand { exit_code: 0 })
-            }
+            Command::True => Ok(ExecutionResult::ExternalCommand { exit_code: 0 }),
 
-            Command::False => {
-                Ok(ExecutionResult::ExternalCommand { exit_code: 1 })
-            }
+            Command::False => Ok(ExecutionResult::ExternalCommand { exit_code: 1 }),
 
-            Command::Read { var_names, prompt, redirects: _ } => {
+            Command::Read {
+                var_names,
+                prompt,
+                redirects: _,
+            } => {
                 if let Some(p) = prompt {
                     let expanded_prompt = crate::parser::expand_variables(p, state);
                     eprint!("{}", expanded_prompt);
@@ -697,15 +733,12 @@ impl ExecutableCommand for Command {
                         let ifs = state
                             .get_variable("IFS")
                             .map(|s| s.to_string())
-                            .unwrap_or_else(|| {
-                                crate::posix_builtins::DEFAULT_IFS.to_string()
-                            });
+                            .unwrap_or_else(|| crate::posix_builtins::DEFAULT_IFS.to_string());
 
                         let fields = crate::posix_builtins::ifs_split(value, &ifs);
 
                         for (i, var_name) in var_names.iter().enumerate() {
-                            let expanded_var =
-                                crate::parser::expand_variables(var_name, state);
+                            let expanded_var = crate::parser::expand_variables(var_name, state);
                             if i == var_names.len() - 1 {
                                 // Last variable gets the remainder.
                                 // Rejoin un-consumed fields with a single
@@ -717,10 +750,7 @@ impl ExecutableCommand for Command {
                                 };
                                 state.set_variable(expanded_var, remainder);
                             } else {
-                                let field = fields
-                                    .get(i)
-                                    .cloned()
-                                    .unwrap_or_default();
+                                let field = fields.get(i).cloned().unwrap_or_default();
                                 state.set_variable(expanded_var, field);
                             }
                         }
@@ -798,9 +828,18 @@ impl ExecutableCommand for Command {
                         let enable = arg.starts_with('-');
                         for ch in arg[1..].chars() {
                             match ch {
-                                'e' => state.set_variable("SHOPT_E".to_string(), if enable { "1" } else { "0" }.to_string()),
-                                'x' => state.set_variable("SHOPT_X".to_string(), if enable { "1" } else { "0" }.to_string()),
-                                'u' => state.set_variable("SHOPT_U".to_string(), if enable { "1" } else { "0" }.to_string()),
+                                'e' => state.set_variable(
+                                    "SHOPT_E".to_string(),
+                                    if enable { "1" } else { "0" }.to_string(),
+                                ),
+                                'x' => state.set_variable(
+                                    "SHOPT_X".to_string(),
+                                    if enable { "1" } else { "0" }.to_string(),
+                                ),
+                                'u' => state.set_variable(
+                                    "SHOPT_U".to_string(),
+                                    if enable { "1" } else { "0" }.to_string(),
+                                ),
                                 _ => {}
                             }
                         }
@@ -840,8 +879,12 @@ impl ExecutableCommand for Command {
             }
 
             // Control structures
-
-            Command::If { condition, then_body, elif_parts, else_body } => {
+            Command::If {
+                condition,
+                then_body,
+                elif_parts,
+                else_body,
+            } => {
                 // Execute condition and get exit code
                 let cond_result = condition.execute(state)?;
                 let cond_exit = match cond_result {
@@ -888,7 +931,10 @@ impl ExecutableCommand for Command {
 
                 loop {
                     if iterations >= max_iterations {
-                        return Err(anyhow::anyhow!("while: exceeded {} iterations (safety limit)", max_iterations));
+                        return Err(anyhow::anyhow!(
+                            "while: exceeded {} iterations (safety limit)",
+                            max_iterations
+                        ));
                     }
                     iterations += 1;
 
@@ -907,7 +953,10 @@ impl ExecutableCommand for Command {
 
                     // Execute body
                     last_result = execute_block(body, state)?;
-                    if matches!(last_result, ExecutionResult::Exit | ExecutionResult::Return { .. }) {
+                    if matches!(
+                        last_result,
+                        ExecutionResult::Exit | ExecutionResult::Return { .. }
+                    ) {
                         return Ok(last_result);
                     }
 
@@ -945,7 +994,10 @@ impl ExecutableCommand for Command {
 
                     // Execute body
                     last_result = execute_block(body, state)?;
-                    if matches!(last_result, ExecutionResult::Exit | ExecutionResult::Return { .. }) {
+                    if matches!(
+                        last_result,
+                        ExecutionResult::Exit | ExecutionResult::Return { .. }
+                    ) {
                         return Ok(last_result);
                     }
 
@@ -976,7 +1028,11 @@ impl ExecutableCommand for Command {
             }
 
             // Logical operators (short-circuit evaluation)
-            Command::LogicalOp { operator, left, right } => {
+            Command::LogicalOp {
+                operator,
+                left,
+                right,
+            } => {
                 use crate::parser::LogicalOperator;
 
                 // Execute left command
@@ -997,7 +1053,9 @@ impl ExecutableCommand for Command {
                         if left_exit_code == 0 {
                             right.execute(state)
                         } else {
-                            Ok(ExecutionResult::ExternalCommand { exit_code: left_exit_code })
+                            Ok(ExecutionResult::ExternalCommand {
+                                exit_code: left_exit_code,
+                            })
                         }
                     }
                     LogicalOperator::Or => {
@@ -1005,7 +1063,9 @@ impl ExecutableCommand for Command {
                         if left_exit_code != 0 {
                             right.execute(state)
                         } else {
-                            Ok(ExecutionResult::ExternalCommand { exit_code: left_exit_code })
+                            Ok(ExecutionResult::ExternalCommand {
+                                exit_code: left_exit_code,
+                            })
                         }
                     }
                 }
@@ -1038,7 +1098,11 @@ impl ExecutableCommand for Command {
             }
 
             // Shell function definition
-            Command::FunctionDef { name, body, raw_body } => {
+            Command::FunctionDef {
+                name,
+                body,
+                raw_body,
+            } => {
                 use crate::functions::{FunctionDef as FuncDef, SourceLocation};
                 let def = FuncDef {
                     name: name.clone(),
@@ -1155,18 +1219,13 @@ impl ExecutableCommand for Command {
 
     fn proof_reference(&self) -> Option<ProofReference> {
         use crate::proof_refs::{
-            MKDIR_RMDIR_REVERSIBLE, CREATE_DELETE_REVERSIBLE,
-            COPY_FILE_REVERSIBLE, MOVE_REVERSIBLE, SYMLINK_UNLINK_REVERSIBLE,
-            CHMOD_REVERSIBLE, CHOWN_REVERSIBLE,
+            CHMOD_REVERSIBLE, CHOWN_REVERSIBLE, COPY_FILE_REVERSIBLE, CREATE_DELETE_REVERSIBLE,
+            MKDIR_RMDIR_REVERSIBLE, MOVE_REVERSIBLE, SYMLINK_UNLINK_REVERSIBLE,
         };
 
         match self {
-            Command::Mkdir { .. } | Command::Rmdir { .. } => {
-                Some(MKDIR_RMDIR_REVERSIBLE)
-            }
-            Command::Touch { .. } | Command::Rm { .. } => {
-                Some(CREATE_DELETE_REVERSIBLE)
-            }
+            Command::Mkdir { .. } | Command::Rmdir { .. } => Some(MKDIR_RMDIR_REVERSIBLE),
+            Command::Touch { .. } | Command::Rm { .. } => Some(CREATE_DELETE_REVERSIBLE),
             Command::Cp { .. } => Some(COPY_FILE_REVERSIBLE),
             Command::Mv { .. } => Some(MOVE_REVERSIBLE),
             Command::Ln { .. } => Some(SYMLINK_UNLINK_REVERSIBLE),
@@ -1316,7 +1375,11 @@ impl ExecutableCommand for Command {
                 }
             }
 
-            Command::LogicalOp { operator, left, right } => {
+            Command::LogicalOp {
+                operator,
+                left,
+                right,
+            } => {
                 use crate::parser::LogicalOperator;
                 let op_str = match operator {
                     LogicalOperator::And => "&&",
@@ -1365,12 +1428,10 @@ impl ExecutableCommand for Command {
                     .collect();
                 format!("local {}", vars.join(" "))
             }
-            Command::Trap { action, signals } => {
-                match action {
-                    Some(a) => format!("trap '{}' {}", a, signals.join(" ")),
-                    None => "trap".to_string(),
-                }
-            }
+            Command::Trap { action, signals } => match action {
+                Some(a) => format!("trap '{}' {}", a, signals.join(" ")),
+                None => "trap".to_string(),
+            },
             Command::Alias { definitions } => {
                 if definitions.is_empty() {
                     "alias".to_string()
@@ -1490,7 +1551,9 @@ fn execute_function_call(
         for (var_name, prev_value) in &frame.saved_vars {
             match prev_value {
                 Some(val) => state.set_variable(var_name.clone(), val.clone()),
-                None => { state.unset_variable(var_name); }
+                None => {
+                    state.unset_variable(var_name);
+                }
             }
         }
     }
@@ -1539,7 +1602,12 @@ fn glob_match(pattern: &str, text: &str) -> bool {
     let mut p = pattern.chars().peekable();
     let mut t = text.chars().peekable();
 
-    glob_match_inner(&mut pattern.chars().collect::<Vec<_>>(), &mut text.chars().collect::<Vec<_>>(), 0, 0)
+    glob_match_inner(
+        &mut pattern.chars().collect::<Vec<_>>(),
+        &mut text.chars().collect::<Vec<_>>(),
+        0,
+        0,
+    )
 }
 
 fn glob_match_inner(pattern: &[char], text: &[char], pi: usize, ti: usize) -> bool {

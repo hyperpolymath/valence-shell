@@ -52,18 +52,12 @@ enum ExpansionOp {
     /// Use default value: ${VAR:-default} or ${VAR-default}
     Default {
         value: String,
-        check_null: bool,  // true for :-, false for -
+        check_null: bool, // true for :-, false for -
     },
     /// Assign default value: ${VAR:=default} or ${VAR=default}
-    AssignDefault {
-        value: String,
-        check_null: bool,
-    },
+    AssignDefault { value: String, check_null: bool },
     /// Use alternative value: ${VAR:+value} or ${VAR+value}
-    UseAlternative {
-        value: String,
-        check_null: bool,
-    },
+    UseAlternative { value: String, check_null: bool },
     /// Error if unset: ${VAR:?message} or ${VAR?message}
     ErrorIfUnset {
         message: Option<String>,
@@ -72,10 +66,7 @@ enum ExpansionOp {
     /// String length: ${#VAR}
     Length,
     /// Substring extraction: ${VAR:offset} or ${VAR:offset:length}
-    Substring {
-        offset: i32,
-        length: Option<usize>,
-    },
+    Substring { offset: i32, length: Option<usize> },
 }
 
 /// Parsed parameter expansion from ${VAR...} syntax
@@ -420,7 +411,6 @@ pub enum Command {
     },
 
     // Control structures
-
     /// If/then/elif/else/fi conditional
     If {
         condition: Box<Command>,
@@ -449,7 +439,6 @@ pub enum Command {
     },
 
     // Wow-factor features (unique to verified reversible shell)
-
     /// Explain: proof-annotated dry run showing preconditions, state transition,
     /// inverse operation, and proof references across all 6 verification systems
     Explain {
@@ -481,7 +470,6 @@ pub enum Command {
     },
 
     // Shell functions and related builtins
-
     /// Function definition: `fname() { commands; }` or `function fname { commands; }`
     FunctionDef {
         name: String,
@@ -502,7 +490,6 @@ pub enum Command {
     },
 
     // POSIX builtins (trap, alias, unalias)
-
     /// trap builtin: register signal handlers
     /// `trap 'command' SIGNAL...` or `trap - SIGNAL...` or `trap` (list)
     Trap {
@@ -544,9 +531,9 @@ pub enum LogicalOperator {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum QuoteState {
     None,
-    SingleQuote,   // Inside '...'
-    DoubleQuote,   // Inside "..."
-    Backslash,     // After \ (escape next char)
+    SingleQuote, // Inside '...'
+    DoubleQuote, // Inside "..."
+    Backslash,   // After \ (escape next char)
 }
 
 /// Tokenize input string into words and redirection operators
@@ -742,7 +729,8 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                         // Check if this is start of 2> or 2>&1
                         // Only treat as redirect if '2' is the start of a new token
                         // (not part of a word like "file2>out")
-                        if current_literal.is_empty() && current_word.is_empty()
+                        if current_literal.is_empty()
+                            && current_word.is_empty()
                             && chars.peek() == Some(&'>')
                         {
                             chars.next(); // consume >
@@ -929,7 +917,7 @@ fn parse_variable(
 /// Parse command substitution in $(cmd) form
 fn parse_command_sub_dollar(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<String> {
     let mut cmd = String::new();
-    let mut depth = 1;  // Track nesting depth for nested $()
+    let mut depth = 1; // Track nesting depth for nested $()
 
     while let Some(ch) = chars.next() {
         match ch {
@@ -994,7 +982,7 @@ fn parse_process_sub_input(chars: &mut std::iter::Peekable<std::str::Chars>) -> 
     chars.next(); // consume '('
 
     let mut cmd = String::new();
-    let mut depth = 1;  // Track nesting depth
+    let mut depth = 1; // Track nesting depth
 
     while let Some(ch) = chars.next() {
         match ch {
@@ -1022,7 +1010,7 @@ fn parse_process_sub_output(chars: &mut std::iter::Peekable<std::str::Chars>) ->
     chars.next(); // consume '('
 
     let mut cmd = String::new();
-    let mut depth = 1;  // Track nesting depth
+    let mut depth = 1; // Track nesting depth
 
     while let Some(ch) = chars.next() {
         match ch {
@@ -1069,7 +1057,9 @@ fn parse_extended_test(tokens: &[Token]) -> Result<Command> {
     }
 
     // Find closing ]]
-    let close_pos = tokens.iter().position(|t| matches!(t, Token::ExtendedTestClose))
+    let close_pos = tokens
+        .iter()
+        .position(|t| matches!(t, Token::ExtendedTestClose))
         .ok_or_else(|| anyhow!("Extended test missing closing ]]"))?;
 
     // Extract arguments between [[ and ]]
@@ -1248,7 +1238,7 @@ fn parse_pipeline(tokens: &[Token]) -> Result<Command> {
     Ok(Command::Pipeline {
         stages: parsed_stages,
         redirects: final_redirects,
-        background: false,  // TODO: detect & in pipeline
+        background: false, // TODO: detect & in pipeline
     })
 }
 
@@ -1314,11 +1304,17 @@ fn extract_redirections_from_tokens(tokens: &[Token]) -> Result<(Vec<Token>, Vec
                 let delimiter = expect_word(&tokens, i + 1, "here document delimiter")?;
 
                 // Check if delimiter is quoted (disables expansion)
-                let (delimiter_clean, expand) = if delimiter.starts_with('\'') || delimiter.starts_with('"') {
-                    (delimiter.trim_matches(|c| c == '\'' || c == '"').to_string(), false)
-                } else {
-                    (delimiter.clone(), true)
-                };
+                let (delimiter_clean, expand) =
+                    if delimiter.starts_with('\'') || delimiter.starts_with('"') {
+                        (
+                            delimiter
+                                .trim_matches(|c| c == '\'' || c == '"')
+                                .to_string(),
+                            false,
+                        )
+                    } else {
+                        (delimiter.clone(), true)
+                    };
 
                 // Content will be provided by REPL after reading subsequent lines
                 // For now, create placeholder - will be filled by execute_with_heredoc
@@ -1344,10 +1340,7 @@ fn extract_redirections_from_tokens(tokens: &[Token]) -> Result<(Vec<Token>, Vec
                     (content_word.clone(), true)
                 };
 
-                redirects.push(Redirection::HereString {
-                    content,
-                    expand,
-                });
+                redirects.push(Redirection::HereString { content, expand });
                 i += 2;
             }
 
@@ -1365,7 +1358,9 @@ fn extract_redirections_from_tokens(tokens: &[Token]) -> Result<(Vec<Token>, Vec
             }
 
             Token::ExtendedTestOpen | Token::ExtendedTestClose => {
-                return Err(anyhow!("Unexpected [[ or ]] token - should be handled at top level"));
+                return Err(anyhow!(
+                    "Unexpected [[ or ]] token - should be handled at top level"
+                ));
             }
         }
     }
@@ -1523,7 +1518,8 @@ fn split_on_top_level(input: &str, split_on_newline: bool) -> Vec<&str> {
                 // Check for keyword at word boundary
                 if ch.is_alphabetic() || ch == '_' {
                     let word_start = i;
-                    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_')
+                    {
                         i += 1;
                     }
                     let word = &input[word_start..i];
@@ -1566,13 +1562,20 @@ pub fn parse_command(input: &str) -> Result<Command> {
     // Check for function definitions before tokenization
     // Function definitions contain braces which interact with tokenization
     if let Some((name, body, raw_body)) = crate::functions::parse_function_def(trimmed) {
-        return Ok(Command::FunctionDef { name, body, raw_body });
+        return Ok(Command::FunctionDef {
+            name,
+            body,
+            raw_body,
+        });
     }
 
     // Check for control structures before tokenization
     // Control structures are parsed at the string level because they contain
     // semicolons as internal separators between keywords
-    let first_word = trimmed.split(|c: char| c.is_whitespace() || c == ';').next().unwrap_or("");
+    let first_word = trimmed
+        .split(|c: char| c.is_whitespace() || c == ';')
+        .next()
+        .unwrap_or("");
     match first_word {
         "if" => return parse_if_command(trimmed),
         "while" => return parse_while_command(trimmed),
@@ -1661,7 +1664,10 @@ pub fn parse_command(input: &str) -> Result<Command> {
             // Check for scalar assignment: VAR=value
             if let Some(eq_pos) = first_str.find('=') {
                 // Make sure it's not already handled above
-                if !first_str.contains("=(") && !first_str.contains("[") && !first_str.contains("+=") {
+                if !first_str.contains("=(")
+                    && !first_str.contains("[")
+                    && !first_str.contains("+=")
+                {
                     let name = &first_str[..eq_pos];
                     let value = &first_str[eq_pos + 1..];
 
@@ -1685,7 +1691,10 @@ pub fn parse_command(input: &str) -> Result<Command> {
     // Check for logical operators (&&, ||) - lowest precedence
     // Use rposition to find RIGHTMOST operator for left-to-right associativity:
     // "a && b || c" splits at || giving "(a && b) || c" (POSIX correct)
-    if let Some(op_pos) = tokens.iter().rposition(|t| matches!(t, Token::And | Token::Or)) {
+    if let Some(op_pos) = tokens
+        .iter()
+        .rposition(|t| matches!(t, Token::And | Token::Or))
+    {
         return parse_logical_op(&tokens, op_pos);
     }
 
@@ -1754,11 +1763,17 @@ pub fn parse_command(input: &str) -> Result<Command> {
                 let delimiter = expect_word(&tokens, i + 1, "here document delimiter")?;
 
                 // Check if delimiter is quoted (disables expansion)
-                let (delimiter_clean, expand) = if delimiter.starts_with('\'') || delimiter.starts_with('"') {
-                    (delimiter.trim_matches(|c| c == '\'' || c == '"').to_string(), false)
-                } else {
-                    (delimiter.clone(), true)
-                };
+                let (delimiter_clean, expand) =
+                    if delimiter.starts_with('\'') || delimiter.starts_with('"') {
+                        (
+                            delimiter
+                                .trim_matches(|c| c == '\'' || c == '"')
+                                .to_string(),
+                            false,
+                        )
+                    } else {
+                        (delimiter.clone(), true)
+                    };
 
                 // Content will be provided by REPL after reading subsequent lines
                 // For now, create placeholder - will be filled by execute_with_heredoc
@@ -1784,10 +1799,7 @@ pub fn parse_command(input: &str) -> Result<Command> {
                     (content_word.clone(), true)
                 };
 
-                redirects.push(Redirection::HereString {
-                    content,
-                    expand,
-                });
+                redirects.push(Redirection::HereString { content, expand });
                 i += 2;
             }
 
@@ -1877,7 +1889,10 @@ fn is_valid_var_name(name: &str) -> bool {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 /// Expand variables and command substitutions in a string
-pub fn expand_with_command_sub(input: &str, state: &mut crate::state::ShellState) -> Result<String> {
+pub fn expand_with_command_sub(
+    input: &str,
+    state: &mut crate::state::ShellState,
+) -> Result<String> {
     let mut result = String::new();
     let mut chars = input.chars().peekable();
 
@@ -1976,7 +1991,12 @@ pub fn expand_with_command_sub(input: &str, state: &mut crate::state::ShellState
                 // The peek above already bound next_ch by value;
                 // chars.next() advances the iterator and the bound value
                 // is used directly. Removes three previous panic sites.
-                if next_ch == '?' || next_ch == '$' || next_ch == '#' || next_ch == '@' || next_ch == '*' {
+                if next_ch == '?'
+                    || next_ch == '$'
+                    || next_ch == '#'
+                    || next_ch == '@'
+                    || next_ch == '*'
+                {
                     // Single-character special variable
                     chars.next();
                     result.push_str(&state.expand_variable(&next_ch.to_string()));
@@ -2037,11 +2057,8 @@ pub fn expand_with_process_sub(
             let cmd = parse_process_sub_input(&mut chars)?;
 
             // Create and start process substitution
-            let mut proc_sub = crate::process_sub::ProcessSubstitution::create(
-                ProcessSubType::Input,
-                cmd,
-                state,
-            )?;
+            let mut proc_sub =
+                crate::process_sub::ProcessSubstitution::create(ProcessSubType::Input, cmd, state)?;
             proc_sub.start(state)?;
 
             // Add FIFO path to result
@@ -2095,7 +2112,8 @@ fn parse_parameter_expansion(content: &str) -> Result<ParameterExpansion, String
     }
 
     // Extract variable name (until operator or end)
-    let var_name_end = chars.iter()
+    let var_name_end = chars
+        .iter()
         .position(|&c| matches!(c, ':' | '-' | '=' | '+' | '?'))
         .unwrap_or(chars.len());
 
@@ -2112,14 +2130,17 @@ fn parse_parameter_expansion(content: &str) -> Result<ParameterExpansion, String
     pos = var_name_end;
     let check_null = chars[pos] == ':';
     if check_null {
-        pos += 1;  // Skip ':'
+        pos += 1; // Skip ':'
     }
 
     if pos >= chars.len() {
         // ${VAR:} with nothing after - try substring with offset 0
         return Ok(ParameterExpansion {
             var_name,
-            operation: ExpansionOp::Substring { offset: 0, length: None },
+            operation: ExpansionOp::Substring {
+                offset: 0,
+                length: None,
+            },
         });
     }
 
@@ -2171,17 +2192,19 @@ fn parse_parameter_expansion(content: &str) -> Result<ParameterExpansion, String
             };
             Ok(ParameterExpansion {
                 var_name,
-                operation: ExpansionOp::ErrorIfUnset { message, check_null },
+                operation: ExpansionOp::ErrorIfUnset {
+                    message,
+                    check_null,
+                },
             })
         }
         c if c.is_ascii_digit() || c.is_whitespace() => {
             // ${VAR:offset} or ${VAR: -offset} (substring with space before negative)
             let offset_str = content[pos..].to_string();
-            parse_substring_params(&offset_str)
-                .map(|(offset, length)| ParameterExpansion {
-                    var_name,
-                    operation: ExpansionOp::Substring { offset, length },
-                })
+            parse_substring_params(&offset_str).map(|(offset, length)| ParameterExpansion {
+                var_name,
+                operation: ExpansionOp::Substring { offset, length },
+            })
         }
         _ => Err(format!("Unknown expansion operator: {}", op_char)),
     }
@@ -2194,15 +2217,21 @@ fn parse_substring_params(params: &str) -> Result<(i32, Option<usize>), String> 
     match parts.len() {
         1 => {
             // Just offset (trim to handle ${VAR: -5} with space before negative)
-            let offset = parts[0].trim().parse::<i32>()
+            let offset = parts[0]
+                .trim()
+                .parse::<i32>()
                 .map_err(|_| format!("Invalid offset: {}", parts[0]))?;
             Ok((offset, None))
         }
         2 => {
             // Offset and length (trim both parts)
-            let offset = parts[0].trim().parse::<i32>()
+            let offset = parts[0]
+                .trim()
+                .parse::<i32>()
                 .map_err(|_| format!("Invalid offset: {}", parts[0]))?;
-            let length = parts[1].trim().parse::<usize>()
+            let length = parts[1]
+                .trim()
+                .parse::<usize>()
                 .map_err(|_| format!("Invalid length: {}", parts[1]))?;
             Ok((offset, Some(length)))
         }
@@ -2231,7 +2260,9 @@ fn apply_expansion(expansion: &ParameterExpansion, state: &crate::state::ShellSt
                 // var_value is Some by construction here: the surrounding
                 // `if is_unset || ...` branch is the unset/null path; this
                 // else branch only fires when var_value is Some.
-                var_value.expect("var_value is Some when !is_unset (checked above)").to_string()
+                var_value
+                    .expect("var_value is Some when !is_unset (checked above)")
+                    .to_string()
             }
         }
 
@@ -2248,7 +2279,9 @@ fn apply_expansion(expansion: &ParameterExpansion, state: &crate::state::ShellSt
                 // var_value is Some by construction here: the surrounding
                 // `if is_unset || ...` branch is the unset/null path; this
                 // else branch only fires when var_value is Some.
-                var_value.expect("var_value is Some when !is_unset (checked above)").to_string()
+                var_value
+                    .expect("var_value is Some when !is_unset (checked above)")
+                    .to_string()
             }
         }
 
@@ -2261,7 +2294,10 @@ fn apply_expansion(expansion: &ParameterExpansion, state: &crate::state::ShellSt
             }
         }
 
-        ExpansionOp::ErrorIfUnset { message, check_null } => {
+        ExpansionOp::ErrorIfUnset {
+            message,
+            check_null,
+        } => {
             // ${VAR:?message} or ${VAR?message}
             if is_unset || (*check_null && is_null) {
                 let error_msg = message.as_deref().unwrap_or("parameter null or not set");
@@ -2272,7 +2308,9 @@ fn apply_expansion(expansion: &ParameterExpansion, state: &crate::state::ShellSt
                 // var_value is Some by construction here: the surrounding
                 // `if is_unset || ...` branch is the unset/null path; this
                 // else branch only fires when var_value is Some.
-                var_value.expect("var_value is Some when !is_unset (checked above)").to_string()
+                var_value
+                    .expect("var_value is Some when !is_unset (checked above)")
+                    .to_string()
             }
         }
 
@@ -2307,9 +2345,7 @@ fn apply_substring(value: &str, offset: i32, length: Option<usize>) -> String {
             let end = (start + n).min(chars.len());
             chars[start..end].iter().collect()
         }
-        None => {
-            chars[start..].iter().collect()
-        }
+        None => chars[start..].iter().collect(),
     }
 }
 
@@ -2418,8 +2454,11 @@ pub fn expand_variables(input: &str, state: &crate::state::ShellState) -> String
                 // The peek above already bound next_ch; chars.next() advances
                 // the iterator and the bound value is used directly. Removes
                 // three previous panic sites.
-                if next_ch == '?' || next_ch == '$' || next_ch == '#'
-                    || next_ch == '@' || next_ch == '*'
+                if next_ch == '?'
+                    || next_ch == '$'
+                    || next_ch == '#'
+                    || next_ch == '@'
+                    || next_ch == '*'
                 {
                     // Single-character special variable
                     chars.next();
@@ -2464,7 +2503,10 @@ pub fn expand_variables(input: &str, state: &crate::state::ShellState) -> String
 fn expect_word(tokens: &[Token], index: usize, context: &str) -> Result<String> {
     match tokens.get(index) {
         Some(Token::Word(w)) => Ok(quoted_word_to_string(w)),
-        Some(_) => Err(anyhow!("{}: expected filename, got redirection operator", context)),
+        Some(_) => Err(anyhow!(
+            "{}: expected filename, got redirection operator",
+            context
+        )),
         None => Err(anyhow!("{}: missing filename", context)),
     }
 }
@@ -2559,7 +2601,10 @@ fn quoted_word_to_string(word: &QuotedWord) -> String {
 }
 
 /// Expand command substitution by executing the command and capturing output
-pub fn expand_command_substitution(cmd: &str, state: &mut crate::state::ShellState) -> Result<String> {
+pub fn expand_command_substitution(
+    cmd: &str,
+    state: &mut crate::state::ShellState,
+) -> Result<String> {
     use std::process::{Command as ProcessCommand, Stdio};
 
     // Parse the command
@@ -2582,13 +2627,17 @@ pub fn expand_command_substitution(cmd: &str, state: &mut crate::state::ShellSta
 
             process_cmd.args(&expanded_args);
 
-            let output_result = process_cmd.output()
+            let output_result = process_cmd
+                .output()
                 .with_context(|| format!("Failed to execute: {}", program))?;
 
             if output_result.status.success() {
                 String::from_utf8_lossy(&output_result.stdout).to_string()
             } else {
-                return Err(anyhow!("Command failed with exit code: {:?}", output_result.status.code()));
+                return Err(anyhow!(
+                    "Command failed with exit code: {:?}",
+                    output_result.status.code()
+                ));
             }
         }
 
@@ -2597,7 +2646,8 @@ pub fn expand_command_substitution(cmd: &str, state: &mut crate::state::ShellSta
             std::env::current_dir()
                 .context("Failed to get current directory")?
                 .to_string_lossy()
-                .to_string() + "\n"
+                .to_string()
+                + "\n"
         }
 
         Command::Ls { path, .. } => {
@@ -2614,7 +2664,9 @@ pub fn expand_command_substitution(cmd: &str, state: &mut crate::state::ShellSta
         }
 
         _ => {
-            return Err(anyhow!("Command substitution not supported for this command type"));
+            return Err(anyhow!(
+                "Command substitution not supported for this command type"
+            ));
         }
     };
 
@@ -2625,7 +2677,10 @@ pub fn expand_command_substitution(cmd: &str, state: &mut crate::state::ShellSta
 }
 
 /// Expand a QuotedWord into a final string, respecting quote context
-pub fn expand_quoted_word_with_state(word: &QuotedWord, state: &mut crate::state::ShellState) -> Result<String> {
+pub fn expand_quoted_word_with_state(
+    word: &QuotedWord,
+    state: &mut crate::state::ShellState,
+) -> Result<String> {
     let mut result = String::new();
 
     for part in &word.parts {
@@ -2743,13 +2798,23 @@ fn split_control_keywords<'a>(input: &'a str, keywords: &[&str]) -> Vec<(&'a str
         }
 
         match ch {
-            '\\' if !in_single_quote => { escaped = true; i += 1; }
-            '\'' if !in_double_quote => { in_single_quote = !in_single_quote; i += 1; }
-            '"' if !in_single_quote => { in_double_quote = !in_double_quote; i += 1; }
+            '\\' if !in_single_quote => {
+                escaped = true;
+                i += 1;
+            }
+            '\'' if !in_double_quote => {
+                in_single_quote = !in_single_quote;
+                i += 1;
+            }
+            '"' if !in_single_quote => {
+                in_double_quote = !in_double_quote;
+                i += 1;
+            }
             _ if !in_single_quote && !in_double_quote => {
                 if ch.is_alphabetic() || ch == '_' {
                     let word_start = i;
-                    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_')
+                    {
                         i += 1;
                     }
                     let word = &input[word_start..i];
@@ -2770,7 +2835,8 @@ fn split_control_keywords<'a>(input: &'a str, keywords: &[&str]) -> Vec<(&'a str
                         if nested_depth == 0 && keywords.contains(&word) {
                             // Top-level keyword split point
                             if !last_keyword.is_empty() || !result.is_empty() {
-                                result.push((last_keyword, input[content_start..word_start].trim()));
+                                result
+                                    .push((last_keyword, input[content_start..word_start].trim()));
                             }
                             last_keyword = word;
                             content_start = i;
@@ -2786,7 +2852,9 @@ fn split_control_keywords<'a>(input: &'a str, keywords: &[&str]) -> Vec<(&'a str
                     i += 1;
                 }
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -3008,7 +3076,10 @@ fn parse_for_command(input: &str) -> Result<Command> {
             "in" => {
                 let words_str = content.trim().trim_end_matches(';').trim();
                 if !words_str.is_empty() {
-                    words = words_str.split_whitespace().map(|s| s.to_string()).collect();
+                    words = words_str
+                        .split_whitespace()
+                        .map(|s| s.to_string())
+                        .collect();
                 }
             }
             "do" => {
@@ -3144,16 +3215,30 @@ pub fn is_incomplete_control_structure(input: &str) -> bool {
     while i < bytes.len() {
         let ch = bytes[i] as char;
 
-        if escaped { escaped = false; i += 1; continue; }
+        if escaped {
+            escaped = false;
+            i += 1;
+            continue;
+        }
 
         match ch {
-            '\\' if !in_single_quote => { escaped = true; i += 1; }
-            '\'' if !in_double_quote => { in_single_quote = !in_single_quote; i += 1; }
-            '"' if !in_single_quote => { in_double_quote = !in_double_quote; i += 1; }
+            '\\' if !in_single_quote => {
+                escaped = true;
+                i += 1;
+            }
+            '\'' if !in_double_quote => {
+                in_single_quote = !in_single_quote;
+                i += 1;
+            }
+            '"' if !in_single_quote => {
+                in_double_quote = !in_double_quote;
+                i += 1;
+            }
             _ if !in_single_quote && !in_double_quote => {
                 if ch.is_alphabetic() || ch == '_' {
                     let word_start = i;
-                    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_')
+                    {
                         i += 1;
                     }
                     let word = &trimmed[word_start..i];
@@ -3178,14 +3263,21 @@ pub fn is_incomplete_control_structure(input: &str) -> bool {
                     i += 1;
                 }
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
 
     block_depth > 0
 }
 
-fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>, background: bool) -> Result<Command> {
+fn parse_base_command(
+    cmd: &str,
+    args: Vec<String>,
+    redirects: Vec<Redirection>,
+    background: bool,
+) -> Result<Command> {
     match cmd {
         "mkdir" => {
             if args.is_empty() {
@@ -3297,19 +3389,25 @@ fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>,
             let inner_cmd = &args[0];
             let inner_args = args[1..].to_vec();
             let inner = parse_base_command(inner_cmd, inner_args, vec![], false)?;
-            Ok(Command::Explain { inner: Box::new(inner) })
+            Ok(Command::Explain {
+                inner: Box::new(inner),
+            })
         }
         "checkpoint" => {
             if args.is_empty() {
                 return Err(anyhow!("checkpoint: requires a name"));
             }
-            Ok(Command::Checkpoint { name: args[0].clone() })
+            Ok(Command::Checkpoint {
+                name: args[0].clone(),
+            })
         }
         "restore" => {
             if args.is_empty() {
                 return Err(anyhow!("restore: requires a checkpoint name"));
             }
-            Ok(Command::Restore { name: args[0].clone() })
+            Ok(Command::Restore {
+                name: args[0].clone(),
+            })
         }
         "checkpoints" => Ok(Command::Checkpoints),
         "diff" => {
@@ -3331,8 +3429,8 @@ fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>,
         }
 
         "history" => {
-            let show_proofs = args.contains(&"--proofs".to_string())
-                || args.contains(&"-p".to_string());
+            let show_proofs =
+                args.contains(&"--proofs".to_string()) || args.contains(&"-p".to_string());
             let count = args
                 .iter()
                 .filter(|s| !s.starts_with('-'))
@@ -3499,19 +3597,23 @@ fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>,
             if var_names.is_empty() {
                 var_names.push("REPLY".to_string());
             }
-            Ok(Command::Read { var_names, prompt, redirects })
+            Ok(Command::Read {
+                var_names,
+                prompt,
+                redirects,
+            })
         }
 
         "source" | "." => {
             if args.is_empty() {
                 return Err(anyhow!("source: missing filename"));
             }
-            Ok(Command::Source { file: args[0].clone() })
+            Ok(Command::Source {
+                file: args[0].clone(),
+            })
         }
 
-        "set" => {
-            Ok(Command::Set { args })
-        }
+        "set" => Ok(Command::Set { args }),
 
         "unset" => {
             if args.is_empty() {
@@ -3523,15 +3625,17 @@ fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>,
                     return Err(anyhow!("unset -f: missing function name"));
                 }
                 // We reuse Unset but prefix with "-f " so the executor can distinguish
-                Ok(Command::Unset { name: format!("-f {}", args[1]) })
+                Ok(Command::Unset {
+                    name: format!("-f {}", args[1]),
+                })
             } else {
-                Ok(Command::Unset { name: args[0].clone() })
+                Ok(Command::Unset {
+                    name: args[0].clone(),
+                })
             }
         }
 
-        "eval" => {
-            Ok(Command::Eval { args })
-        }
+        "eval" => Ok(Command::Eval { args }),
 
         "return" => {
             let code = args.get(0).and_then(|s| s.parse::<i32>().ok());
@@ -3559,22 +3663,33 @@ fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>,
         "trap" => {
             if args.is_empty() {
                 // trap with no args: list all traps
-                Ok(Command::Trap { action: None, signals: vec![] })
+                Ok(Command::Trap {
+                    action: None,
+                    signals: vec![],
+                })
             } else if args.len() == 1 {
                 // trap SIGNAL (reset to default)
-                Ok(Command::Trap { action: Some("-".to_string()), signals: vec![args[0].clone()] })
+                Ok(Command::Trap {
+                    action: Some("-".to_string()),
+                    signals: vec![args[0].clone()],
+                })
             } else {
                 // trap 'action' SIGNAL...
                 let action = args[0].clone();
                 let signals = args[1..].to_vec();
-                Ok(Command::Trap { action: Some(action), signals })
+                Ok(Command::Trap {
+                    action: Some(action),
+                    signals,
+                })
             }
         }
 
         "alias" => {
             if args.is_empty() {
                 // alias with no args: list all aliases
-                Ok(Command::Alias { definitions: vec![] })
+                Ok(Command::Alias {
+                    definitions: vec![],
+                })
             } else {
                 let mut definitions = Vec::new();
                 for arg in &args {
@@ -3599,12 +3714,7 @@ fn parse_base_command(cmd: &str, args: Vec<String>, redirects: Vec<Redirection>,
         }
 
         // Conditionals
-        "test" => {
-            Ok(Command::Test {
-                args,
-                redirects,
-            })
-        }
+        "test" => Ok(Command::Test { args, redirects }),
 
         "[" => {
             // For bracket command, verify closing ]
@@ -3683,18 +3793,24 @@ mod tests {
     #[test]
     fn test_parse_history() {
         let cmd = parse_command("history 20 --proofs").unwrap();
-        assert_eq!(cmd, Command::History {
-            count: 20,
-            show_proofs: true
-        });
+        assert_eq!(
+            cmd,
+            Command::History {
+                count: 20,
+                show_proofs: true
+            }
+        );
     }
 
     #[test]
     fn test_parse_begin() {
         let cmd = parse_command("begin mytxn").unwrap();
-        assert_eq!(cmd, Command::Begin {
-            name: "mytxn".to_string()
-        });
+        assert_eq!(
+            cmd,
+            Command::Begin {
+                name: "mytxn".to_string()
+            }
+        );
     }
 
     #[test]
@@ -3901,7 +4017,11 @@ mod tests {
     fn test_parse_simple_pipeline() {
         let cmd = parse_command("ls | grep test").unwrap();
         match cmd {
-            Command::Pipeline { stages, redirects, background } => {
+            Command::Pipeline {
+                stages,
+                redirects,
+                background,
+            } => {
                 assert_eq!(stages.len(), 2);
                 assert_eq!(stages[0].0, "ls");
                 assert_eq!(stages[0].1.len(), 0);
@@ -3935,7 +4055,11 @@ mod tests {
     fn test_parse_pipeline_with_redirect() {
         let cmd = parse_command("ls | grep test > output.txt").unwrap();
         match cmd {
-            Command::Pipeline { stages, redirects, background } => {
+            Command::Pipeline {
+                stages,
+                redirects,
+                background,
+            } => {
                 assert_eq!(stages.len(), 2);
                 assert_eq!(redirects.len(), 1);
                 assert_eq!(background, false);
@@ -3959,14 +4083,14 @@ mod tests {
         // Single command with no pipe should not create pipeline
         let cmd = parse_command("ls").unwrap();
         match cmd {
-            Command::Ls { .. } => {}, // Built-in command
+            Command::Ls { .. } => {} // Built-in command
             _ => panic!("Single command should not create pipeline"),
         }
 
         // Builtin command without pipe should also not create pipeline
         let cmd2 = parse_command("echo hello").unwrap();
         match cmd2 {
-            Command::Echo { .. } => {},
+            Command::Echo { .. } => {}
             _ => panic!("echo should parse as Echo builtin, not pipeline"),
         }
     }
@@ -4000,7 +4124,10 @@ mod tests {
 
         // Test braced variable expansion
         assert_eq!(expand_variables("${VAR}", &state), "test");
-        assert_eq!(expand_variables("prefix_${VAR}_suffix", &state), "prefix_test_suffix");
+        assert_eq!(
+            expand_variables("prefix_${VAR}_suffix", &state),
+            "prefix_test_suffix"
+        );
 
         // Test concatenation
         assert_eq!(expand_variables("${VAR}file", &state), "testfile");
@@ -4032,16 +4159,10 @@ mod tests {
         state.set_variable("SECOND", "World");
 
         // Test multiple variables in one string
-        assert_eq!(
-            expand_variables("$FIRST $SECOND!", &state),
-            "Hello World!"
-        );
+        assert_eq!(expand_variables("$FIRST $SECOND!", &state), "Hello World!");
 
         // Test mixed simple and braced
-        assert_eq!(
-            expand_variables("$FIRST ${SECOND}", &state),
-            "Hello World"
-        );
+        assert_eq!(expand_variables("$FIRST ${SECOND}", &state), "Hello World");
     }
 
     #[test]
@@ -4589,7 +4710,12 @@ mod tests {
     fn test_parse_if_then_fi() {
         let cmd = parse_command("if [ -f test.txt ]; then echo found; fi").unwrap();
         match cmd {
-            Command::If { condition, then_body, elif_parts, else_body } => {
+            Command::If {
+                condition,
+                then_body,
+                elif_parts,
+                else_body,
+            } => {
                 // Condition should be a bracket test
                 assert!(matches!(*condition, Command::Bracket { .. }));
                 assert_eq!(then_body.len(), 1);
@@ -4604,7 +4730,12 @@ mod tests {
     fn test_parse_if_then_else_fi() {
         let cmd = parse_command("if [ -d /tmp ]; then echo yes; else echo no; fi").unwrap();
         match cmd {
-            Command::If { condition, then_body, elif_parts, else_body } => {
+            Command::If {
+                condition,
+                then_body,
+                elif_parts,
+                else_body,
+            } => {
                 assert!(matches!(*condition, Command::Bracket { .. }));
                 assert_eq!(then_body.len(), 1);
                 assert!(elif_parts.is_empty());
@@ -4618,10 +4749,16 @@ mod tests {
     #[test]
     fn test_parse_if_elif_else_fi() {
         let cmd = parse_command(
-            "if [ $x -eq 1 ]; then echo one; elif [ $x -eq 2 ]; then echo two; else echo other; fi"
-        ).unwrap();
+            "if [ $x -eq 1 ]; then echo one; elif [ $x -eq 2 ]; then echo two; else echo other; fi",
+        )
+        .unwrap();
         match cmd {
-            Command::If { then_body, elif_parts, else_body, .. } => {
+            Command::If {
+                then_body,
+                elif_parts,
+                else_body,
+                ..
+            } => {
                 assert_eq!(then_body.len(), 1);
                 assert_eq!(elif_parts.len(), 1);
                 assert!(else_body.is_some());
@@ -4657,7 +4794,8 @@ mod tests {
 
     #[test]
     fn test_parse_case_esac() {
-        let cmd = parse_command("case $x in a) echo a;; b|c) echo bc;; *) echo default;; esac").unwrap();
+        let cmd =
+            parse_command("case $x in a) echo a;; b|c) echo bc;; *) echo default;; esac").unwrap();
         match cmd {
             Command::CaseStatement { word, arms } => {
                 assert_eq!(word, "$x");
@@ -4700,8 +4838,12 @@ mod tests {
         assert!(is_incomplete_control_structure("if true; then"));
         assert!(is_incomplete_control_structure("while true; do"));
         assert!(is_incomplete_control_structure("for x in a b c; do"));
-        assert!(!is_incomplete_control_structure("if true; then echo yes; fi"));
-        assert!(!is_incomplete_control_structure("while true; do echo yes; done"));
+        assert!(!is_incomplete_control_structure(
+            "if true; then echo yes; fi"
+        ));
+        assert!(!is_incomplete_control_structure(
+            "while true; do echo yes; done"
+        ));
         assert!(!is_incomplete_control_structure("echo hello"));
     }
 }
@@ -4767,7 +4909,10 @@ pub fn fill_heredoc_content(
 
     let mut heredoc_index = 0;
     for redirect in redirects.iter_mut() {
-        if let Redirection::HereDoc { ref mut content, .. } = redirect {
+        if let Redirection::HereDoc {
+            ref mut content, ..
+        } = redirect
+        {
             if heredoc_index < heredoc_contents.len() {
                 *content = heredoc_contents[heredoc_index].1.clone();
                 heredoc_index += 1;
@@ -4883,7 +5028,12 @@ mod job_control_tests {
     fn test_parse_background_job() {
         let cmd = parse_command("sleep 10 &").unwrap();
         match cmd {
-            Command::External { program, args, background, .. } => {
+            Command::External {
+                program,
+                args,
+                background,
+                ..
+            } => {
                 assert_eq!(program, "sleep");
                 assert_eq!(args, vec!["10"]);
                 assert!(background);
@@ -4975,7 +5125,11 @@ mod job_control_tests {
     fn test_parse_logical_and() {
         let cmd = parse_command("mkdir foo && touch bar").unwrap();
         match cmd {
-            Command::LogicalOp { operator, left, right } => {
+            Command::LogicalOp {
+                operator,
+                left,
+                right,
+            } => {
                 assert_eq!(operator, LogicalOperator::And);
                 assert!(matches!(*left, Command::Mkdir { .. }));
                 assert!(matches!(*right, Command::Touch { .. }));
@@ -4988,7 +5142,11 @@ mod job_control_tests {
     fn test_parse_logical_or() {
         let cmd = parse_command("test -f file.txt || touch file.txt").unwrap();
         match cmd {
-            Command::LogicalOp { operator, left, right } => {
+            Command::LogicalOp {
+                operator,
+                left,
+                right,
+            } => {
                 assert_eq!(operator, LogicalOperator::Or);
                 assert!(matches!(*left, Command::Test { .. }));
                 assert!(matches!(*right, Command::Touch { .. }));

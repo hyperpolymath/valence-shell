@@ -139,10 +139,7 @@ pub enum Redirection {
     },
 
     /// Here string: `<<< string`
-    HereString {
-        content: String,
-        expand: bool,
-    },
+    HereString { content: String, expand: bool },
 }
 
 /// Type of file modification for undo tracking.
@@ -171,10 +168,7 @@ pub enum FileModification {
     },
 
     /// File was appended to
-    Appended {
-        path: PathBuf,
-        original_size: u64,
-    },
+    Appended { path: PathBuf, original_size: u64 },
 }
 
 impl FileModification {
@@ -191,16 +185,18 @@ impl FileModification {
     pub fn reverse(&self) -> Result<()> {
         match self {
             FileModification::Created { path } => {
-                fs::remove_file(path)
-                    .with_context(|| format!("Failed to remove created file: {}", path.display()))?;
+                fs::remove_file(path).with_context(|| {
+                    format!("Failed to remove created file: {}", path.display())
+                })?;
             }
 
             FileModification::Truncated {
                 path,
                 original_content,
             } => {
-                fs::write(path, original_content)
-                    .with_context(|| format!("Failed to restore truncated file: {}", path.display()))?;
+                fs::write(path, original_content).with_context(|| {
+                    format!("Failed to restore truncated file: {}", path.display())
+                })?;
             }
 
             FileModification::Appended {
@@ -212,10 +208,9 @@ impl FileModification {
                     .open(path)
                     .with_context(|| format!("Failed to open appended file: {}", path.display()))?;
 
-                file.set_len(*original_size)
-                    .with_context(|| {
-                        format!("Failed to truncate appended file: {}", path.display())
-                    })?;
+                file.set_len(*original_size).with_context(|| {
+                    format!("Failed to truncate appended file: {}", path.display())
+                })?;
             }
         }
         Ok(())
@@ -320,15 +315,15 @@ impl RedirectSetup {
                 let metadata = fs::metadata(&path)
                     .with_context(|| format!("Failed to stat file: {}", path.display()))?;
 
-                self.modifications
-                    .push(FileModification::Appended {
-                        path: path.clone(),
-                        original_size: metadata.len(),
-                    });
+                self.modifications.push(FileModification::Appended {
+                    path: path.clone(),
+                    original_size: metadata.len(),
+                });
             } else {
                 // Truncate - save original content
-                let original_content = fs::read(&path)
-                    .with_context(|| format!("Failed to read file for backup: {}", path.display()))?;
+                let original_content = fs::read(&path).with_context(|| {
+                    format!("Failed to read file for backup: {}", path.display())
+                })?;
 
                 // Warn if file is large
                 if original_content.len() > 10 * 1024 * 1024 {
@@ -338,17 +333,15 @@ impl RedirectSetup {
                     );
                 }
 
-                self.modifications
-                    .push(FileModification::Truncated {
-                        path: path.clone(),
-                        original_content,
-                    });
+                self.modifications.push(FileModification::Truncated {
+                    path: path.clone(),
+                    original_content,
+                });
             }
         } else {
             // File doesn't exist - will be created
-            self.modifications.push(FileModification::Created {
-                path: path.clone(),
-            });
+            self.modifications
+                .push(FileModification::Created { path: path.clone() });
         }
 
         // Open file for writing
@@ -430,7 +423,11 @@ impl RedirectSetup {
                 }
             };
 
-            let mut op = Operation::new(op_type, path, state.active_transaction.as_ref().map(|t| t.id));
+            let mut op = Operation::new(
+                op_type,
+                path,
+                state.active_transaction.as_ref().map(|t| t.id),
+            );
             if let Some(data) = undo_data {
                 op = op.with_undo_data(data);
             }
@@ -529,10 +526,7 @@ fn validate_redirections(redirects: &[Redirection], state: &ShellState) -> Resul
 }
 
 /// Check for input/output conflict (same file)
-fn validate_no_input_output_conflict(
-    redirects: &[Redirection],
-    state: &ShellState,
-) -> Result<()> {
+fn validate_no_input_output_conflict(redirects: &[Redirection], state: &ShellState) -> Result<()> {
     let input_files: HashSet<PathBuf> = redirects
         .iter()
         .filter_map(|r| match r {
@@ -622,8 +616,9 @@ fn validate_output_file(file: &str, state: &ShellState) -> Result<()> {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let metadata = fs::metadata(parent)
-                .with_context(|| format!("Failed to stat parent directory: {}", parent.display()))?;
+            let metadata = fs::metadata(parent).with_context(|| {
+                format!("Failed to stat parent directory: {}", parent.display())
+            })?;
 
             let mode = metadata.permissions().mode();
             if mode & 0o200 == 0 {
@@ -635,7 +630,10 @@ fn validate_output_file(file: &str, state: &ShellState) -> Result<()> {
     // If file exists, check it's writable
     if path.exists() {
         if !path.is_file() {
-            anyhow::bail!("Output redirection target is not a file: {}", path.display());
+            anyhow::bail!(
+                "Output redirection target is not a file: {}",
+                path.display()
+            );
         }
 
         #[cfg(unix)]
@@ -799,7 +797,10 @@ mod tests {
             FileModification::Truncated { .. }
         ));
 
-        if let FileModification::Truncated { original_content, .. } = &setup.modifications[0] {
+        if let FileModification::Truncated {
+            original_content, ..
+        } = &setup.modifications[0]
+        {
             assert_eq!(original_content, b"original content");
         }
     }

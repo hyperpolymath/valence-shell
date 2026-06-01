@@ -28,7 +28,7 @@
 use anyhow::Result;
 use std::fs;
 use tempfile::tempdir;
-use vsh::commands::{mkdir, rmdir, rm, touch};
+use vsh::commands::{mkdir, rm, rmdir, touch};
 use vsh::state::ShellState;
 
 /// Test: mkdir followed by rmdir restores original state
@@ -160,7 +160,10 @@ fn test_mkdir_precondition_parent_exists() {
     // Attempting to create nested dir without parent should fail
     let result = mkdir(&mut state, "nonexistent/nested", false);
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Parent directory does not exist"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Parent directory does not exist"));
 }
 
 /// Test: rmdir precondition - path must be a directory

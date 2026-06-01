@@ -32,10 +32,10 @@
 //! GDPR Article 17 ("right to erasure") on cooperating filesystems. For
 //! hardware-level guarantees use [`crate::secure_erase`].
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use colored::Colorize;
 use std::fs::{self, OpenOptions};
-use std::io::{Read, Write, Seek, SeekFrom, BufRead};
+use std::io::{BufRead, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use crate::state::{Operation, OperationType, ShellState};
@@ -239,7 +239,10 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
     // CRITICAL: Require confirmation for irreversible operation
     if !force {
         eprintln!();
-        eprintln!("{}", "⚠️  WARNING: IRREVERSIBLE DELETION".bright_red().bold());
+        eprintln!(
+            "{}",
+            "⚠️  WARNING: IRREVERSIBLE DELETION".bright_red().bold()
+        );
         eprintln!();
         eprintln!("  File: {}", full_path.display().to_string().bright_cyan());
         eprintln!("  Size: {} bytes", file_size.to_string().bright_yellow());
@@ -247,7 +250,10 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
         eprintln!("This will:");
         eprintln!("  1. Overwrite with 3-pass NIST SP 800-88 Purge pattern (random, 0x00, 0xFF)");
         eprintln!("  2. Delete the file");
-        eprintln!("  3. Make recovery {} impossible on in-place filesystems", "cryptographically".bright_red());
+        eprintln!(
+            "  3. Make recovery {} impossible on in-place filesystems",
+            "cryptographically".bright_red()
+        );
         eprintln!("     (CoW filesystems like btrfs/ZFS/APFS and SSDs with FTL");
         eprintln!("     remapping require hardware-level erase — see `secure_erase`)");
         eprintln!();
@@ -281,11 +287,20 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
         "obliterate".bright_red().bold(),
         path
     );
-    println!("{}", "✓ File securely obliterated (CANNOT be undone)".bright_red());
+    println!(
+        "{}",
+        "✓ File securely obliterated (CANNOT be undone)".bright_red()
+    );
 
     if verbose {
-        println!("    {} DoD 5220.22-M 3-pass overwrite", "Method:".bright_black());
-        println!("    {} GDPR Article 17 compliant", "Compliance:".bright_black());
+        println!(
+            "    {} DoD 5220.22-M 3-pass overwrite",
+            "Method:".bright_black()
+        );
+        println!(
+            "    {} GDPR Article 17 compliant",
+            "Compliance:".bright_black()
+        );
         println!("    {} IRREVERSIBLE", "Undo:".bright_black());
     }
 
@@ -311,7 +326,12 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
 /// secure_deletion::obliterate_dir(&mut state, "sensitive_data/", false, false)?;
 /// # Ok::<(), anyhow::Error>(())
 /// ```
-pub fn obliterate_dir(state: &mut ShellState, path: &str, verbose: bool, force: bool) -> Result<()> {
+pub fn obliterate_dir(
+    state: &mut ShellState,
+    path: &str,
+    verbose: bool,
+    force: bool,
+) -> Result<()> {
     let full_path = state.resolve_path(path);
 
     if !full_path.exists() {
@@ -337,11 +357,22 @@ pub fn obliterate_dir(state: &mut ShellState, path: &str, verbose: bool, force: 
     // CRITICAL: Require confirmation
     if !force {
         eprintln!();
-        eprintln!("{}", "⚠️  WARNING: IRREVERSIBLE DIRECTORY DELETION".bright_red().bold());
+        eprintln!(
+            "{}",
+            "⚠️  WARNING: IRREVERSIBLE DIRECTORY DELETION"
+                .bright_red()
+                .bold()
+        );
         eprintln!();
-        eprintln!("  Directory: {}", full_path.display().to_string().bright_cyan());
+        eprintln!(
+            "  Directory: {}",
+            full_path.display().to_string().bright_cyan()
+        );
         eprintln!("  Files: {}", file_count.to_string().bright_yellow());
-        eprintln!("  Total size: {} bytes", total_size.to_string().bright_yellow());
+        eprintln!(
+            "  Total size: {} bytes",
+            total_size.to_string().bright_yellow()
+        );
         eprintln!();
         eprintln!("{}", "This operation CANNOT be undone.".bright_red().bold());
         eprintln!();
@@ -354,8 +385,8 @@ pub fn obliterate_dir(state: &mut ShellState, path: &str, verbose: bool, force: 
 
     // Obliterate all files in directory tree
     let mut obliterated = 0usize;
-    for entry in walkdir::WalkDir::new(&full_path)
-        .contents_first(true) // Process files before directories
+    for entry in walkdir::WalkDir::new(&full_path).contents_first(true)
+    // Process files before directories
     {
         let entry = entry?;
         let entry_path = entry.path();
@@ -390,7 +421,11 @@ pub fn obliterate_dir(state: &mut ShellState, path: &str, verbose: bool, force: 
     );
     println!(
         "{}",
-        format!("✓ {} files securely obliterated (CANNOT be undone)", obliterated).bright_red()
+        format!(
+            "✓ {} files securely obliterated (CANNOT be undone)",
+            obliterated
+        )
+        .bright_red()
     );
 
     Ok(())
@@ -399,8 +434,8 @@ pub fn obliterate_dir(state: &mut ShellState, path: &str, verbose: bool, force: 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::path::PathBuf;
+    use tempfile::TempDir;
 
     #[test]
     fn test_secure_overwrite_3pass() {

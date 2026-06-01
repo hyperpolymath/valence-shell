@@ -53,8 +53,8 @@ pub struct Job {
 pub struct JobTable {
     jobs: Vec<Job>,
     next_id: usize,
-    current_job_id: Option<usize>,   // %+ marker
-    previous_job_id: Option<usize>,  // %- marker
+    current_job_id: Option<usize>,  // %+ marker
+    previous_job_id: Option<usize>, // %- marker
 }
 
 impl JobTable {
@@ -186,7 +186,6 @@ impl JobTable {
     pub fn jobs(&self) -> &[Job] {
         &self.jobs
     }
-
 }
 
 impl Default for JobTable {
@@ -289,6 +288,6 @@ mod tests {
         assert_eq!(lines.len(), 2);
         assert!(lines[0].contains("[1]"));
         assert!(lines[1].contains("[2]"));
-        assert!(lines[1].contains("+"));  // Current job marker
+        assert!(lines[1].contains("+")); // Current job marker
     }
 }

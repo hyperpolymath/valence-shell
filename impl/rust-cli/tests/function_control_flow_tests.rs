@@ -43,8 +43,7 @@ fn function_body_contains_for_loop() -> Result<()> {
     let temp = tempdir()?;
     let mut state = ShellState::new(temp.path().to_str().unwrap())?;
 
-    parse_command("ffunc() { for d in a b c; do mkdir $d; done; }")?
-        .execute(&mut state)?;
+    parse_command("ffunc() { for d in a b c; do mkdir $d; done; }")?.execute(&mut state)?;
     parse_command("ffunc")?.execute(&mut state)?;
 
     assert!(state.resolve_path("a").exists());
@@ -58,10 +57,8 @@ fn function_body_contains_case_statement() -> Result<()> {
     let temp = tempdir()?;
     let mut state = ShellState::new(temp.path().to_str().unwrap())?;
 
-    parse_command(
-        "cfunc() { case $1 in a) mkdir chose_a ;; b) mkdir chose_b ;; esac; }",
-    )?
-    .execute(&mut state)?;
+    parse_command("cfunc() { case $1 in a) mkdir chose_a ;; b) mkdir chose_b ;; esac; }")?
+        .execute(&mut state)?;
 
     parse_command("cfunc b")?.execute(&mut state)?;
 
@@ -79,8 +76,7 @@ fn return_from_inside_if_sets_exit_code() -> Result<()> {
     let temp = tempdir()?;
     let mut state = ShellState::new(temp.path().to_str().unwrap())?;
 
-    parse_command("rf() { if true; then return 7; fi; mkdir after; }")?
-        .execute(&mut state)?;
+    parse_command("rf() { if true; then return 7; fi; mkdir after; }")?.execute(&mut state)?;
     parse_command("rf")?.execute(&mut state)?;
 
     assert_eq!(state.last_exit_code, 7);

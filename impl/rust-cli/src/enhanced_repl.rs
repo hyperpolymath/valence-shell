@@ -11,10 +11,10 @@
 use anyhow::Result;
 use nu_ansi_term::{Color, Style};
 use reedline::{
-    default_emacs_keybindings, ColumnarMenu, Completer, DefaultHinter, DefaultValidator,
-    Emacs, FileBackedHistory, HistoryItem, KeyCode, KeyModifiers, MenuBuilder, Prompt,
-    PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineEvent,
-    ReedlineMenu, Signal, Span, StyledText, Suggestion,
+    default_emacs_keybindings, ColumnarMenu, Completer, DefaultHinter, DefaultValidator, Emacs,
+    FileBackedHistory, HistoryItem, KeyCode, KeyModifiers, MenuBuilder, Prompt, PromptEditMode,
+    PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineEvent, ReedlineMenu, Signal,
+    Span, StyledText, Suggestion,
 };
 use std::borrow::Cow;
 use std::path::PathBuf;
@@ -27,12 +27,60 @@ use crate::state::ShellState;
 
 /// Shell commands for completion
 const BUILTIN_COMMANDS: &[&str] = &[
-    "cd", "pwd", "exit", "mkdir", "rmdir", "touch", "rm", "cp", "mv", "ln", "cat", "echo", "ls",
-    "undo", "redo", "history", "begin", "commit", "rollback", "help",
-    "true", "false", "read", "source", "set", "unset", "eval", "export",
-    "if", "then", "elif", "else", "fi", "while", "until", "for", "do", "done", "case", "esac", "in",
-    "test", "jobs", "fg", "bg", "kill",
-    "chmod", "chown", "explain", "checkpoint", "restore", "checkpoints", "diff", "replay",
+    "cd",
+    "pwd",
+    "exit",
+    "mkdir",
+    "rmdir",
+    "touch",
+    "rm",
+    "cp",
+    "mv",
+    "ln",
+    "cat",
+    "echo",
+    "ls",
+    "undo",
+    "redo",
+    "history",
+    "begin",
+    "commit",
+    "rollback",
+    "help",
+    "true",
+    "false",
+    "read",
+    "source",
+    "set",
+    "unset",
+    "eval",
+    "export",
+    "if",
+    "then",
+    "elif",
+    "else",
+    "fi",
+    "while",
+    "until",
+    "for",
+    "do",
+    "done",
+    "case",
+    "esac",
+    "in",
+    "test",
+    "jobs",
+    "fg",
+    "bg",
+    "kill",
+    "chmod",
+    "chown",
+    "explain",
+    "checkpoint",
+    "restore",
+    "checkpoints",
+    "diff",
+    "replay",
 ];
 
 /// Custom completer for VSH
@@ -71,7 +119,10 @@ fn complete_path(prefix: &str, pos: usize) -> Vec<Suggestion> {
     } else if prefix.ends_with('/') {
         PathBuf::from(prefix)
     } else {
-        PathBuf::from(prefix).parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf()
+        PathBuf::from(prefix)
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .to_path_buf()
     };
 
     let prefix_path = PathBuf::from(prefix);
@@ -194,8 +245,7 @@ pub fn run(state: &mut ShellState) -> Result<()> {
         .join(".vsh_history");
 
     let history = Box::new(
-        FileBackedHistory::with_file(1000, history_file)
-            .expect("Failed to initialize history"),
+        FileBackedHistory::with_file(1000, history_file).expect("Failed to initialize history"),
     );
 
     // Set up completion menu
@@ -236,10 +286,7 @@ pub fn run(state: &mut ShellState) -> Result<()> {
 
     loop {
         // Build prompt
-        let txn_name = state
-            .active_transaction
-            .as_ref()
-            .map(|t| t.name.clone());
+        let txn_name = state.active_transaction.as_ref().map(|t| t.name.clone());
         let undo_count = state.history.iter().filter(|o| !o.undone).count();
         let cwd = std::env::current_dir()
             .ok()
@@ -316,7 +363,11 @@ pub fn run(state: &mut ShellState) -> Result<()> {
                 // Reedline handles Ctrl-C itself (returns Signal::CtrlC) so
                 // we fire the trap synchronously here rather than relying on
                 // the SIGINT flag.
-                if let Some(handler) = state.traps.get(crate::posix_builtins::TrapSignal::Int).map(|s| s.to_string()) {
+                if let Some(handler) = state
+                    .traps
+                    .get(crate::posix_builtins::TrapSignal::Int)
+                    .map(|s| s.to_string())
+                {
                     if let Ok(cmd) = parser::parse_command(&handler) {
                         if let Ok(ExecutionResult::Exit) = cmd.execute(state) {
                             break;
@@ -378,8 +429,7 @@ fn execute_line(state: &mut ShellState, input: &str) -> Result<bool> {
     // Handle execution result
     match result {
         ExecutionResult::Exit => Ok(true),
-        ExecutionResult::ExternalCommand { exit_code }
-        | ExecutionResult::Return { exit_code } => {
+        ExecutionResult::ExternalCommand { exit_code } | ExecutionResult::Return { exit_code } => {
             state.last_exit_code = exit_code;
             Ok(false)
         }

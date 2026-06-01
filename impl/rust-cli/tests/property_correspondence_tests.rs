@@ -10,7 +10,7 @@ use anyhow::Result;
 use proptest::prelude::*;
 use std::fs;
 use tempfile::tempdir;
-use vsh::commands::{mkdir, rmdir, rm, touch};
+use vsh::commands::{mkdir, rm, rmdir, touch};
 use vsh::state::ShellState;
 
 // ============================================================================
@@ -24,20 +24,18 @@ fn dir_name() -> impl Strategy<Value = String> {
 
 /// Generate valid file names with extension
 fn file_name() -> impl Strategy<Value = String> {
-    ("[a-z][a-z0-9_]{0,10}", "[a-z]{2,4}")
-        .prop_map(|(name, ext)| format!("{}.{}", name, ext))
+    ("[a-z][a-z0-9_]{0,10}", "[a-z]{2,4}").prop_map(|(name, ext)| format!("{}.{}", name, ext))
 }
 
 /// Generate lists of directory names (for path components)
 fn dir_path() -> impl Strategy<Value = String> {
-    prop::collection::vec(dir_name(), 1..=3)
-        .prop_map(|parts| parts.join("/"))
+    prop::collection::vec(dir_name(), 1..=3).prop_map(|parts| parts.join("/"))
 }
 
 /// Generate either a file or directory name
 fn any_name() -> impl Strategy<Value = (String, bool)> {
     prop_oneof![
-        dir_name().prop_map(|n| (n, true)),  // (name, is_dir)
+        dir_name().prop_map(|n| (n, true)),   // (name, is_dir)
         file_name().prop_map(|n| (n, false)), // (name, is_file)
     ]
 }

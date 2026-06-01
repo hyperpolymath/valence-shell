@@ -129,11 +129,7 @@ pub fn expand_glob(pattern: &str, base_dir: &Path) -> Result<Vec<PathBuf>> {
     if !pattern.starts_with('/') {
         matches = matches
             .into_iter()
-            .map(|p| {
-                p.strip_prefix(base_dir)
-                    .unwrap_or(&p)
-                    .to_path_buf()
-            })
+            .map(|p| p.strip_prefix(base_dir).unwrap_or(&p).to_path_buf())
             .collect();
     }
 
@@ -203,8 +199,8 @@ fn expand_braces_limited(pattern: &str, remaining: usize) -> Vec<String> {
                 // arm above) sets brace_start = Some(i) when brace_depth was
                 // zero, and only the matched '}' decrements it back. So this
                 // expect documents an unreachable case rather than a TODO.
-                let start = brace_start
-                    .expect("brace_start invariant: Some whenever brace_depth >= 1");
+                let start =
+                    brace_start.expect("brace_start invariant: Some whenever brace_depth >= 1");
                 let prefix = &pattern[..start];
                 let suffix = &pattern[i + 1..];
                 let content = &pattern[start + 1..i];
@@ -351,20 +347,11 @@ mod tests {
 
     #[test]
     fn test_split_brace_content() {
-        assert_eq!(
-            split_brace_content("a,b,c"),
-            vec!["a", "b", "c"]
-        );
+        assert_eq!(split_brace_content("a,b,c"), vec!["a", "b", "c"]);
 
-        assert_eq!(
-            split_brace_content("main,lib"),
-            vec!["main", "lib"]
-        );
+        assert_eq!(split_brace_content("main,lib"), vec!["main", "lib"]);
 
         // Nested braces
-        assert_eq!(
-            split_brace_content("a,{b,c}"),
-            vec!["a", "{b,c}"]
-        );
+        assert_eq!(split_brace_content("a,{b,c}"), vec!["a", "{b,c}"]);
     }
 }

@@ -109,10 +109,7 @@ fn test_function_restores_positional_params() -> Result<()> {
     invoke_cmd.execute(&mut state)?;
 
     // Positional params should be restored
-    assert_eq!(
-        state.get_positional_param(1),
-        Some("outer_arg")
-    );
+    assert_eq!(state.get_positional_param(1), Some("outer_arg"));
 
     Ok(())
 }

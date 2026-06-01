@@ -11,7 +11,7 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use crate::glob;
-use crate::redirection::{Redirection, RedirectSetup};
+use crate::redirection::{RedirectSetup, Redirection};
 use crate::signals;
 use crate::state::ShellState;
 
@@ -156,19 +156,20 @@ pub fn execute_pipeline(
         let is_last = idx == stages.len() - 1;
 
         // Configure stdin
-        let stdin_cfg = if is_first {
-            // First stage: inherit from shell
-            Stdio::inherit()
-        } else {
-            // Middle/last stages: read from previous stdout.
-            // Invariant: when idx > 0, the previous iteration spawned a
-            // non-last child with Stdio::piped() stdout (line below) and
-            // stored child.stdout into prev_stdout after spawning. So the
-            // expect documents an unreachable branch rather than a TODO.
-            Stdio::from(prev_stdout.take().expect(
-                "prev_stdout invariant: previous non-last stage stored its piped stdout",
-            ))
-        };
+        let stdin_cfg =
+            if is_first {
+                // First stage: inherit from shell
+                Stdio::inherit()
+            } else {
+                // Middle/last stages: read from previous stdout.
+                // Invariant: when idx > 0, the previous iteration spawned a
+                // non-last child with Stdio::piped() stdout (line below) and
+                // stored child.stdout into prev_stdout after spawning. So the
+                // expect documents an unreachable branch rather than a TODO.
+                Stdio::from(prev_stdout.take().expect(
+                    "prev_stdout invariant: previous non-last stage stored its piped stdout",
+                ))
+            };
 
         // Configure stdout. Pivot on redirect_setup directly: it is Some
         // iff redirects is non-empty (constructed above), so matching the
@@ -345,8 +346,11 @@ fn stdio_config_from_redirects(
                 let file_handle = File::create(&target)
                     .with_context(|| format!("Failed to open output file: {}", target.display()))?;
                 // Keep a clone for potential 2>&1 duplication
-                stdout_file_dup = Some(file_handle.try_clone()
-                    .context("Failed to duplicate stdout file handle for 2>&1 tracking")?);
+                stdout_file_dup = Some(
+                    file_handle
+                        .try_clone()
+                        .context("Failed to duplicate stdout file handle for 2>&1 tracking")?,
+                );
                 stdout_cfg = Stdio::from(file_handle);
             }
 
@@ -356,9 +360,17 @@ fn stdio_config_from_redirects(
                     .create(true)
                     .append(true)
                     .open(&target)
-                    .with_context(|| format!("Failed to open output file for append: {}", target.display()))?;
-                stdout_file_dup = Some(file_handle.try_clone()
-                    .context("Failed to duplicate stdout file handle for 2>&1 tracking")?);
+                    .with_context(|| {
+                        format!(
+                            "Failed to open output file for append: {}",
+                            target.display()
+                        )
+                    })?;
+                stdout_file_dup = Some(
+                    file_handle
+                        .try_clone()
+                        .context("Failed to duplicate stdout file handle for 2>&1 tracking")?,
+                );
                 stdout_cfg = Stdio::from(file_handle);
             }
 
@@ -372,10 +384,7 @@ fn stdio_config_from_redirects(
             Redirection::ErrorOutput { file } | Redirection::ErrorAppend { file } => {
                 let target = state.resolve_path(file);
                 let file_handle = if matches!(redirect, Redirection::ErrorAppend { .. }) {
-                    OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(&target)
+                    OpenOptions::new().create(true).append(true).open(&target)
                 } else {
                     File::create(&target)
                 }
@@ -394,8 +403,11 @@ fn stdio_config_from_redirects(
                     .try_clone()
                     .context("Failed to duplicate file handle")?;
 
-                stdout_file_dup = Some(file_handle.try_clone()
-                    .context("Failed to duplicate stdout file handle for 2>&1 tracking")?);
+                stdout_file_dup = Some(
+                    file_handle
+                        .try_clone()
+                        .context("Failed to duplicate stdout file handle for 2>&1 tracking")?,
+                );
                 stdout_cfg = Stdio::from(file_handle);
                 stderr_cfg = Stdio::from(file_handle2);
             }
@@ -405,22 +417,23 @@ fn stdio_config_from_redirects(
                 // POSIX processes redirections left-to-right, so at this point
                 // stdout_file_dup reflects the current stdout target (if redirected)
                 if let Some(ref f) = stdout_file_dup {
-                    stderr_cfg = Stdio::from(f.try_clone()
-                        .context("Failed to duplicate fd for 2>&1")?);
+                    stderr_cfg =
+                        Stdio::from(f.try_clone().context("Failed to duplicate fd for 2>&1")?);
                 } else {
                     // stdout is still inherited (terminal), so stderr inherits too
                     stderr_cfg = Stdio::inherit();
                 }
             }
 
-            Redirection::HereDoc { content, expand, strip_tabs, .. } => {
+            Redirection::HereDoc {
+                content,
+                expand,
+                strip_tabs,
+                ..
+            } => {
                 // Process here document content
-                let processed = crate::parser::process_heredoc_content(
-                    content,
-                    *strip_tabs,
-                    *expand,
-                    state,
-                )?;
+                let processed =
+                    crate::parser::process_heredoc_content(content, *strip_tabs, *expand, state)?;
 
                 // Write heredoc content to a pipe instead of a temp file (avoids
                 // predictable temp path + symlink attacks entirely).
@@ -428,13 +441,16 @@ fn stdio_config_from_redirects(
                 let mut pipe_fds = [0i32; 2];
                 // SAFETY: pipe() is a POSIX syscall; pipe_fds is a valid 2-element array.
                 if unsafe { libc::pipe(pipe_fds.as_mut_ptr()) } != 0 {
-                    anyhow::bail!("Failed to create pipe for here document: {}", std::io::Error::last_os_error());
+                    anyhow::bail!(
+                        "Failed to create pipe for here document: {}",
+                        std::io::Error::last_os_error()
+                    );
                 }
                 // SAFETY: pipe_fds[1] is a valid file descriptor from pipe().
                 let mut write_end = unsafe { File::from_raw_fd(pipe_fds[1]) };
                 std::io::Write::write_all(&mut write_end, processed.as_bytes())?;
                 drop(write_end); // Close write end so reader gets EOF
-                // SAFETY: pipe_fds[0] is a valid file descriptor from pipe().
+                                 // SAFETY: pipe_fds[0] is a valid file descriptor from pipe().
                 let read_end = unsafe { File::from_raw_fd(pipe_fds[0]) };
                 stdin_cfg = Stdio::from(read_end);
             }
@@ -453,13 +469,16 @@ fn stdio_config_from_redirects(
                 let mut pipe_fds = [0i32; 2];
                 // SAFETY: pipe() is a POSIX syscall; pipe_fds is a valid 2-element array.
                 if unsafe { libc::pipe(pipe_fds.as_mut_ptr()) } != 0 {
-                    anyhow::bail!("Failed to create pipe for here string: {}", std::io::Error::last_os_error());
+                    anyhow::bail!(
+                        "Failed to create pipe for here string: {}",
+                        std::io::Error::last_os_error()
+                    );
                 }
                 // SAFETY: pipe_fds[1] is a valid file descriptor from pipe().
                 let mut write_end = unsafe { File::from_raw_fd(pipe_fds[1]) };
                 std::io::Write::write_all(&mut write_end, processed.as_bytes())?;
                 drop(write_end); // Close write end so reader gets EOF
-                // SAFETY: pipe_fds[0] is a valid file descriptor from pipe().
+                                 // SAFETY: pipe_fds[0] is a valid file descriptor from pipe().
                 let read_end = unsafe { File::from_raw_fd(pipe_fds[0]) };
                 stdin_cfg = Stdio::from(read_end);
             }
@@ -492,8 +511,7 @@ fn expand_glob_args(args: &[String], _state: &ShellState) -> Result<Vec<String>>
     let mut expanded: Vec<String> = Vec::new();
 
     // Get current working directory for glob expansion
-    let cwd = std::env::current_dir()
-        .context("Failed to get current working directory")?;
+    let cwd = std::env::current_dir().context("Failed to get current working directory")?;
 
     for arg in args {
         // Check if argument contains glob metacharacters
@@ -725,10 +743,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
-        let stages = vec![
-            ("true".to_string(), vec![]),
-            ("true".to_string(), vec![]),
-        ];
+        let stages = vec![("true".to_string(), vec![]), ("true".to_string(), vec![])];
         let exit_code = execute_pipeline(&stages, &[], &mut state).unwrap();
         assert_eq!(exit_code, 0, "true | true should return 0");
     }
@@ -740,10 +755,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
-        let stages = vec![
-            ("true".to_string(), vec![]),
-            ("false".to_string(), vec![]),
-        ];
+        let stages = vec![("true".to_string(), vec![]), ("false".to_string(), vec![])];
         let exit_code = execute_pipeline(&stages, &[], &mut state).unwrap();
         assert_eq!(exit_code, 1, "true | false should return 1 (from false)");
     }
@@ -767,8 +779,8 @@ mod tests {
     #[test]
     fn test_pipeline_with_redirect() {
         // Test pipeline with output redirection
-        use tempfile::TempDir;
         use std::fs;
+        use tempfile::TempDir;
         let temp = TempDir::new().unwrap();
         let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 

@@ -9,9 +9,9 @@
 //! - String length: ${#VAR}
 //! - Substring: ${VAR:offset}, ${VAR:offset:length}
 
-use vsh::state::ShellState;
-use vsh::parser::expand_variables;
 use tempfile::TempDir;
+use vsh::parser::expand_variables;
+use vsh::state::ShellState;
 
 /// Helper to create test state
 fn test_state() -> ShellState {
@@ -40,23 +40,26 @@ fn test_default_value_set() {
 #[test]
 fn test_default_value_null_with_colon() {
     let mut state = test_state();
-    state.set_variable("VAR", "");  // Set to empty
-    // ${VAR:-default} checks for null, so should use default
+    state.set_variable("VAR", ""); // Set to empty
+                                   // ${VAR:-default} checks for null, so should use default
     assert_eq!(expand_variables("${VAR:-default}", &state), "default");
 }
 
 #[test]
 fn test_default_value_null_without_colon() {
     let mut state = test_state();
-    state.set_variable("VAR", "");  // Set to empty
-    // ${VAR-default} doesn't check for null, only unset
+    state.set_variable("VAR", ""); // Set to empty
+                                   // ${VAR-default} doesn't check for null, only unset
     assert_eq!(expand_variables("${VAR-default}", &state), "");
 }
 
 #[test]
 fn test_default_value_with_spaces() {
     let state = test_state();
-    assert_eq!(expand_variables("${VAR:-default value}", &state), "default value");
+    assert_eq!(
+        expand_variables("${VAR:-default value}", &state),
+        "default value"
+    );
 }
 
 #[test]
@@ -64,10 +67,7 @@ fn test_default_value_multiple_in_string() {
     let mut state = test_state();
     state.set_variable("A", "foo");
     // B is unset
-    assert_eq!(
-        expand_variables("${A:-x} and ${B:-y}", &state),
-        "foo and y"
-    );
+    assert_eq!(expand_variables("${A:-x} and ${B:-y}", &state), "foo and y");
 }
 
 // ============================================================================
@@ -386,7 +386,10 @@ fn test_length_special_chars() {
 fn test_default_with_dollar_signs() {
     let state = test_state();
     // Default value contains literal dollar (not variable)
-    assert_eq!(expand_variables("${VAR:-$$}", &state), format!("{}", std::process::id()));
+    assert_eq!(
+        expand_variables("${VAR:-$$}", &state),
+        format!("{}", std::process::id())
+    );
 }
 
 // ============================================================================
@@ -410,10 +413,7 @@ fn test_deeply_nested_with_mixed_operators() {
     state.set_variable("X", "set");
     state.set_variable("Y", "value");
     // Nested with different operators
-    assert_eq!(
-        expand_variables("${A:-${X:+${Y}}}", &state),
-        "value"
-    );
+    assert_eq!(expand_variables("${A:-${X:+${Y}}}", &state), "value");
 }
 
 #[test]
@@ -516,7 +516,10 @@ fn test_unicode_emoji_substring() {
 fn test_default_value_with_newlines() {
     let state = test_state();
     // Default contains newlines
-    assert_eq!(expand_variables("${VAR:-line1\nline2}", &state), "line1\nline2");
+    assert_eq!(
+        expand_variables("${VAR:-line1\nline2}", &state),
+        "line1\nline2"
+    );
 }
 
 #[test]
@@ -577,7 +580,10 @@ fn test_default_with_special_chars() {
     let mut state = test_state();
     state.set_variable("MYPATH", "/usr/bin");
     // Default with variable expansion (MYPATH will be expanded)
-    assert_eq!(expand_variables("${VAR:-$MYPATH:/usr/local}", &state), "/usr/bin:/usr/local");
+    assert_eq!(
+        expand_variables("${VAR:-$MYPATH:/usr/local}", &state),
+        "/usr/bin:/usr/local"
+    );
 }
 
 #[test]
@@ -592,7 +598,10 @@ fn test_nested_in_double_quotes() {
 fn test_whitespace_in_default() {
     let state = test_state();
     // Default with various whitespace
-    assert_eq!(expand_variables("${VAR:-  tabs\t\tand  spaces  }", &state), "  tabs\t\tand  spaces  ");
+    assert_eq!(
+        expand_variables("${VAR:-  tabs\t\tand  spaces  }", &state),
+        "  tabs\t\tand  spaces  "
+    );
 }
 
 #[test]

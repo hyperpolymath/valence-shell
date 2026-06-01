@@ -41,7 +41,10 @@ fn stress_deep_nesting_1000_levels() {
     fs::create_dir_all(&current_path).unwrap();
 
     let create_time = start.elapsed();
-    println!("✓ Created 1000-level nested directories in {:?}", create_time);
+    println!(
+        "✓ Created 1000-level nested directories in {:?}",
+        create_time
+    );
 
     // Verify it exists
     assert!(current_path.exists());
@@ -83,7 +86,10 @@ fn stress_deep_nesting_no_stack_overflow() {
 
     // Should not cause stack overflow
     let result = fs::create_dir_all(&current_path);
-    assert!(result.is_ok(), "Should handle 5000 levels without stack overflow");
+    assert!(
+        result.is_ok(),
+        "Should handle 5000 levels without stack overflow"
+    );
 
     // Cleanup should also not overflow
     let cleanup_result = fs::remove_dir_all(temp.path().join("d0"));
@@ -119,7 +125,11 @@ fn stress_large_file_1gb() {
 
     // Verify size
     let metadata = fs::metadata(&large_file).unwrap();
-    assert_eq!(metadata.len(), 1024 * 1024 * 1024, "File should be exactly 1GB");
+    assert_eq!(
+        metadata.len(),
+        1024 * 1024 * 1024,
+        "File should be exactly 1GB"
+    );
 
     // Test operations on large file
     let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
@@ -130,7 +140,10 @@ fn stress_large_file_1gb() {
     let touch_time = touch_start.elapsed();
     println!("✓ Touch on 1GB file in {:?}", touch_time);
 
-    assert!(touch_time.as_millis() < 100, "Touch should be <100ms even for large files");
+    assert!(
+        touch_time.as_millis() < 100,
+        "Touch should be <100ms even for large files"
+    );
 
     // Memory usage check: should not load entire file into memory
     // This test would fail if implementation naively reads entire file
@@ -274,8 +287,16 @@ fn stress_undo_redo_efficiency() {
     let avg_undo_us = undo_time.as_micros() / 100;
     let avg_redo_us = redo_time.as_micros() / 100;
 
-    assert!(avg_undo_us < 1000, "Undo should be <1ms per op (was {}μs)", avg_undo_us);
-    assert!(avg_redo_us < 1000, "Redo should be <1ms per op (was {}μs)", avg_redo_us);
+    assert!(
+        avg_undo_us < 1000,
+        "Undo should be <1ms per op (was {}μs)",
+        avg_undo_us
+    );
+    assert!(
+        avg_redo_us < 1000,
+        "Redo should be <1ms per op (was {}μs)",
+        avg_redo_us
+    );
 }
 
 // ============================================================
@@ -332,7 +353,9 @@ fn stress_concurrent_multiple_instances() {
 #[ignore]
 fn stress_concurrent_no_corruption() {
     let temp = TempDir::new().unwrap();
-    let state = Arc::new(Mutex::new(ShellState::new(temp.path().to_str().unwrap()).unwrap()));
+    let state = Arc::new(Mutex::new(
+        ShellState::new(temp.path().to_str().unwrap()).unwrap(),
+    ));
 
     // Multiple threads sharing same ShellState (via Mutex)
     let mut handles = vec![];

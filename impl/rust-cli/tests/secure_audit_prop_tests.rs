@@ -34,8 +34,7 @@ fn dir_name() -> impl Strategy<Value = String> {
 }
 
 fn file_name() -> impl Strategy<Value = String> {
-    ("[a-z][a-z0-9_]{0,10}", "[a-z]{1,4}")
-        .prop_map(|(name, ext)| format!("{}.{}", name, ext))
+    ("[a-z][a-z0-9_]{0,10}", "[a-z]{1,4}").prop_map(|(name, ext)| format!("{}.{}", name, ext))
 }
 
 fn file_content() -> impl Strategy<Value = Vec<u8>> {

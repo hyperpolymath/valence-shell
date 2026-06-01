@@ -74,7 +74,7 @@ impl AuditEntry {
                 .ok()
                 .and_then(|p| p.to_str().map(|s| s.to_string()))
                 .unwrap_or_else(|| "/".to_string()),
-            signature: None,  // TODO: Add HMAC signing
+            signature: None, // TODO: Add HMAC signing
         }
     }
 
@@ -129,10 +129,7 @@ impl AuditLog {
                 .open(&log_path)?;
         }
 
-        Ok(Self {
-            log_path,
-            hmac_key,
-        })
+        Ok(Self { log_path, hmac_key })
     }
 
     /// Resolve the default audit-log path following the XDG Base Directory spec.
@@ -221,8 +218,8 @@ impl AuditLog {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn read_all(&self) -> Result<Vec<AuditEntry>> {
-        let content = std::fs::read_to_string(&self.log_path)
-            .context("Failed to read audit log")?;
+        let content =
+            std::fs::read_to_string(&self.log_path).context("Failed to read audit log")?;
 
         let mut entries = Vec::new();
         for (line_num, line) in content.lines().enumerate() {
@@ -233,7 +230,11 @@ impl AuditLog {
             match AuditEntry::from_json_line(line) {
                 Ok(entry) => entries.push(entry),
                 Err(e) => {
-                    eprintln!("Warning: Failed to parse audit entry at line {}: {}", line_num + 1, e);
+                    eprintln!(
+                        "Warning: Failed to parse audit entry at line {}: {}",
+                        line_num + 1,
+                        e
+                    );
                 }
             }
         }
@@ -389,13 +390,16 @@ mod tests {
         let log = AuditLog::new(log_path, None).unwrap();
 
         let op1 = Operation::new(OperationType::Mkdir, "dir1".to_string(), None);
-        log.append(&AuditEntry::from_operation(&op1, "success", None)).unwrap();
+        log.append(&AuditEntry::from_operation(&op1, "success", None))
+            .unwrap();
 
         let op2 = Operation::new(OperationType::CreateFile, "file1".to_string(), None);
-        log.append(&AuditEntry::from_operation(&op2, "success", None)).unwrap();
+        log.append(&AuditEntry::from_operation(&op2, "success", None))
+            .unwrap();
 
         let op3 = Operation::new(OperationType::Mkdir, "dir2".to_string(), None);
-        log.append(&AuditEntry::from_operation(&op3, "success", None)).unwrap();
+        log.append(&AuditEntry::from_operation(&op3, "success", None))
+            .unwrap();
 
         let mkdirs = log.read_by_type("Mkdir").unwrap();
         assert_eq!(mkdirs.len(), 2);

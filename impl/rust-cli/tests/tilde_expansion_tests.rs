@@ -43,10 +43,7 @@ fn tilde_plus_expands_to_pwd() {
 
     std::env::set_var("PWD", "/some/where");
     assert_eq!(expand_variables("~+", &state), "/some/where");
-    assert_eq!(
-        expand_variables("~+/subdir", &state),
-        "/some/where/subdir"
-    );
+    assert_eq!(expand_variables("~+/subdir", &state), "/some/where/subdir");
 }
 
 #[test]

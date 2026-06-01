@@ -35,11 +35,7 @@ pub struct ProcessSubstitution {
 
 impl ProcessSubstitution {
     /// Create new process substitution with FIFO
-    pub fn create(
-        sub_type: ProcessSubType,
-        cmd: String,
-        state: &mut ShellState,
-    ) -> Result<Self> {
+    pub fn create(sub_type: ProcessSubType, cmd: String, state: &mut ShellState) -> Result<Self> {
         // Generate globally-unique FIFO path:
         //   /tmp/vsh-fifo-<pid>-<counter>-<uuidv4>
         // The pid + counter make collisions improbable in single-process use;
@@ -55,8 +51,9 @@ impl ProcessSubstitution {
         #[cfg(unix)]
         {
             use std::ffi::CString;
-            let path_str = fifo_path.to_str()
-                .ok_or_else(|| anyhow!("FIFO path contains invalid UTF-8: {}", fifo_path.display()))?;
+            let path_str = fifo_path.to_str().ok_or_else(|| {
+                anyhow!("FIFO path contains invalid UTF-8: {}", fifo_path.display())
+            })?;
             let path_cstr = CString::new(path_str)
                 .map_err(|_| anyhow!("FIFO path contains null bytes: {}", fifo_path.display()))?;
             // SAFETY: path_cstr is a valid NUL-terminated C string; mkfifo is a POSIX syscall
@@ -71,17 +68,27 @@ impl ProcessSubstitution {
                     let result = unsafe { libc::mkfifo(path_cstr.as_ptr(), 0o600) };
                     if result != 0 {
                         let err = std::io::Error::last_os_error();
-                        return Err(anyhow!("Failed to create FIFO {}: {}", fifo_path.display(), err));
+                        return Err(anyhow!(
+                            "Failed to create FIFO {}: {}",
+                            fifo_path.display(),
+                            err
+                        ));
                     }
                 } else {
-                    return Err(anyhow!("Failed to create FIFO {}: {}", fifo_path.display(), err));
+                    return Err(anyhow!(
+                        "Failed to create FIFO {}: {}",
+                        fifo_path.display(),
+                        err
+                    ));
                 }
             }
         }
 
         #[cfg(not(unix))]
         {
-            return Err(anyhow!("Process substitution requires Unix (FIFOs not supported on Windows)"));
+            return Err(anyhow!(
+                "Process substitution requires Unix (FIFOs not supported on Windows)"
+            ));
         }
 
         Ok(Self {
@@ -187,7 +194,11 @@ fn start_command_with_output_redirect(
             }
             cmd
         }
-        _ => return Err(anyhow!("Command type not supported in process substitution")),
+        _ => {
+            return Err(anyhow!(
+                "Command type not supported in process substitution"
+            ))
+        }
     };
 
     // Use sh -c to run: cmd > fifo_path
@@ -226,7 +237,11 @@ fn start_command_with_input_redirect(
             }
             cmd
         }
-        _ => return Err(anyhow!("Command type not supported for output process substitution")),
+        _ => {
+            return Err(anyhow!(
+                "Command type not supported for output process substitution"
+            ))
+        }
     };
 
     // Use sh -c to run: cmd < fifo_path
@@ -250,11 +265,9 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut state = ShellState::new(temp_dir.path().to_str().unwrap()).unwrap();
 
-        let proc_sub = ProcessSubstitution::create(
-            ProcessSubType::Input,
-            "echo test".to_string(),
-            &mut state,
-        ).unwrap();
+        let proc_sub =
+            ProcessSubstitution::create(ProcessSubType::Input, "echo test".to_string(), &mut state)
+                .unwrap();
 
         // FIFO should exist
         assert!(proc_sub.fifo_path.exists());
@@ -278,17 +291,13 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut state = ShellState::new(temp_dir.path().to_str().unwrap()).unwrap();
 
-        let proc_sub1 = ProcessSubstitution::create(
-            ProcessSubType::Input,
-            "echo a".to_string(),
-            &mut state,
-        ).unwrap();
+        let proc_sub1 =
+            ProcessSubstitution::create(ProcessSubType::Input, "echo a".to_string(), &mut state)
+                .unwrap();
 
-        let proc_sub2 = ProcessSubstitution::create(
-            ProcessSubType::Input,
-            "echo b".to_string(),
-            &mut state,
-        ).unwrap();
+        let proc_sub2 =
+            ProcessSubstitution::create(ProcessSubType::Input, "echo b".to_string(), &mut state)
+                .unwrap();
 
         // FIFOs should have different paths
         assert_ne!(proc_sub1.fifo_path, proc_sub2.fifo_path);
