@@ -107,3 +107,8 @@ zig-out/
 # Crash recovery artifacts
 ai-cli-crash-capture/
 .cache/
+
+# vsh runtime state (sandbox transcript)
+.vsh_state.json
+# Accidental shell-redirect output from `> $FILE` testing
+$FILE
