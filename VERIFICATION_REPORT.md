@@ -1,7 +1,7 @@
 # Verification Coverage Report
 
 **Generated**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-**Version**: 0.14.0
+**Version**: see `CHANGELOG.md` (release history) and `impl/rust-cli/Cargo.toml` `[package].version` (semver pin)
 **Phase**: M14 Complete - Conditionals & Logical Operators
 
 ---
@@ -271,5 +271,5 @@ pub fn mkdir(state: &mut ShellState, path: &str, quiet: bool) -> Result<()> {
 ---
 
 **Report Generated**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-**Valence Shell Version**: 0.14.0
+**Valence Shell Version**: see `CHANGELOG.md` (release history) and `impl/rust-cli/Cargo.toml` `[package].version` (semver pin)
 **Phase**: M14 Complete

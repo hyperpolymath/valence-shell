@@ -337,7 +337,7 @@ A: The **proofs** guarantee model reversibility. The **implementation** (OCaml F
 ---
 
 **Last Updated**: 2025-11-22
-**Version**: 0.5.0
+**Version**: see `CHANGELOG.md` (release history) and `impl/rust-cli/Cargo.toml` `[package].version` (semver pin)
 **Proven**: ~256 theorems across 6 verification systems
 
 **Summary**: Every operation in Valence Shell has a mathematically proven inverse. This isn't hope or testing—it's **formal proof**. Mistakes are reversible. Experimentation is safe. Accountability is guaranteed.

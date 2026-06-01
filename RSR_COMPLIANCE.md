@@ -3,7 +3,7 @@
 **Rhodium Standard Repository (RSR) Framework**
 
 **Project**: Valence Shell (vsh)
-**Version**: 0.5.0
+**Version**: see `CHANGELOG.md` (release history) and `impl/rust-cli/Cargo.toml` `[package].version` (semver pin)
 **Date**: 2025-11-22
 **Compliance Level**: **Bronze** (with Silver characteristics)
 
@@ -420,7 +420,7 @@ ls .well-known/security.txt .well-known/ai.txt .well-known/humans.txt  # ✅ ALL
 **Last Verified**: 2025-11-22
 **Next Review**: 2026-01-22 (quarterly)
 **Compliance Version**: RSR Framework v1.0
-**Project Version**: 0.5.0
+**Project Version**: see `CHANGELOG.md` (release history) and `impl/rust-cli/Cargo.toml` `[package].version` (semver pin)
 
 **Maintainer Signature**: [To be added]
 **Date**: 2025-11-22

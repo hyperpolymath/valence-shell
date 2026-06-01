@@ -323,7 +323,7 @@ MPL-2.0 (Palimpsest License)
 ---
 
 **Last Updated**: 2026-06-01 (drift reconcile: 32 src files / 21,331 LoC, 3 proof holes per audit, 478 theorem candidates, 7 fuzz targets)
-**Version**: 0.9.0
+**Version**: see `CHANGELOG.md` (release history) and `impl/rust-cli/Cargo.toml` `[package].version` (semver pin)
 **Status**: Advanced research prototype — NOT production-ready
 **Tests**: 736 passing, 0 failures, 14 ignored
 **Completion**: ~78% (up from 72% at 2026-03-08)
