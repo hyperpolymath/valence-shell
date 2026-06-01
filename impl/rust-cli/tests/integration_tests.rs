@@ -13,7 +13,6 @@
 
 use anyhow::Result;
 use reedline::Highlighter;
-use std::path::PathBuf;
 use tempfile::TempDir;
 use vsh::{
     audit_log::{AuditEntry, AuditLog},
@@ -171,7 +170,7 @@ fn test_history_limits() -> Result<()> {
 fn test_secure_deletion_dry_run() -> Result<()> {
     // We can't actually test secure deletion without destroying real files,
     // but we can test the module imports and basic structures work
-    use vsh::commands::secure_deletion;
+    
 
     // Verify the module is accessible
     // (actual secure deletion would require confirmation prompts)
@@ -212,7 +211,7 @@ fn test_end_to_end_workflow() -> Result<()> {
     assert!(temp_dir.path().join("project/README.md").exists());
 
     // Verify history tracking
-    assert!(state.history.len() > 0, "History should contain operations");
+    assert!(!state.history.is_empty(), "History should contain operations");
 
     Ok(())
 }

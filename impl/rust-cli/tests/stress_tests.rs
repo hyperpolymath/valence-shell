@@ -15,7 +15,6 @@ mod fixtures;
 use fixtures::tempfile::TempDir;
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Instant;
@@ -156,7 +155,7 @@ fn stress_large_file_undo_streaming() {
     let file_path = temp.path().join("large.txt");
 
     // Create 100MB file
-    let size = 100 * 1024 * 1024;
+    let _size = 100 * 1024 * 1024;
     let mut file = fs::File::create(&file_path).unwrap();
     let chunk = vec![b'A'; 1024 * 1024]; // 1MB chunks
 

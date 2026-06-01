@@ -14,9 +14,8 @@
 //! ```
 
 use anyhow::{anyhow, Result};
-use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
-use std::process::{Child, Command as ProcessCommand, Stdio};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command as ProcessCommand};
 
 use crate::parser::{parse_command, Command, ProcessSubType};
 use crate::state::ShellState;
@@ -162,7 +161,7 @@ impl Drop for ProcessSubstitution {
 fn start_command_with_output_redirect(
     cmd: &Command,
     state: &mut ShellState,
-    output_path: &PathBuf,
+    output_path: &Path,
 ) -> Result<Child> {
     // For FIFOs, we use shell redirection (sh -c "cmd > fifo") to avoid blocking
     // The shell handles the FIFO opening in the background properly
@@ -216,7 +215,7 @@ fn start_command_with_output_redirect(
 fn start_command_with_input_redirect(
     cmd: &Command,
     state: &mut ShellState,
-    input_path: &PathBuf,
+    input_path: &Path,
 ) -> Result<Child> {
     // For FIFOs, use shell redirection: sh -c "cmd < fifo"
 

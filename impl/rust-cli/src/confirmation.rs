@@ -3,7 +3,7 @@
 //!
 //! SAFETY CRITICAL: Prevents accidental data destruction
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use colored::Colorize;
 use std::io::{self, Write};
 
@@ -337,7 +337,6 @@ mod tests {
 
     #[test]
     fn test_count_files() {
-        let count = count_files_in_tree("/tmp").unwrap_or(0);
-        assert!(count >= 0);
+        let _ = count_files_in_tree("/tmp").unwrap_or(0);
     }
 }

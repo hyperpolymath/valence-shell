@@ -240,6 +240,12 @@ pub struct RedirectSetup {
     pub modifications: Vec<FileModification>,
 }
 
+impl Default for RedirectSetup {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RedirectSetup {
     /// Create a new empty redirection setup
     pub fn new() -> Self {

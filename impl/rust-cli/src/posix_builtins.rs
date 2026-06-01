@@ -29,6 +29,7 @@ pub enum TrapSignal {
 
 impl TrapSignal {
     /// Parse a signal name or number
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_uppercase().as_str() {
             "EXIT" | "0" => Some(Self::Exit),

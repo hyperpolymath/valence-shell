@@ -24,7 +24,6 @@
 //!
 //! Author: Jonathan D.A. Jewell
 
-use std::collections::HashMap;
 
 // =========================================================================
 // Core types
@@ -355,7 +354,7 @@ mod tests {
         let reversibility = registry.by_category(PropertyCategory::Reversibility);
         assert!(reversibility.len() >= 5);
         let security = registry.by_category(PropertyCategory::Security);
-        assert!(security.len() >= 1);
+        assert!(!security.is_empty());
     }
 
     #[test]

@@ -974,7 +974,7 @@ fn test_glob_no_expansion_in_quotes() {
         .output()
         .unwrap();
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let _stdout = String::from_utf8_lossy(&output.stdout);
     // Note: This test may need quote handling in parser to work correctly
     // For now it documents expected behavior
 }

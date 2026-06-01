@@ -6,7 +6,6 @@
 //!
 //! This complements correspondence_tests.rs with QuickCheck-style generative testing.
 
-use anyhow::Result;
 use proptest::prelude::*;
 use std::fs;
 use tempfile::tempdir;
@@ -28,11 +27,13 @@ fn file_name() -> impl Strategy<Value = String> {
 }
 
 /// Generate lists of directory names (for path components)
+#[allow(dead_code)]
 fn dir_path() -> impl Strategy<Value = String> {
     prop::collection::vec(dir_name(), 1..=3).prop_map(|parts| parts.join("/"))
 }
 
 /// Generate either a file or directory name
+#[allow(dead_code)]
 fn any_name() -> impl Strategy<Value = (String, bool)> {
     prop_oneof![
         dir_name().prop_map(|n| (n, true)),   // (name, is_dir)
@@ -313,7 +314,7 @@ proptest! {
         // Deduplicate paths to avoid EEXIST on repeated mkdir
         let mut unique_paths: Vec<&String> = Vec::new();
         for path in &paths {
-            if !unique_paths.iter().any(|p| *p == path) {
+            if !unique_paths.contains(&path) {
                 unique_paths.push(path);
             }
         }

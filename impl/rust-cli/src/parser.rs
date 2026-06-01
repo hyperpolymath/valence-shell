@@ -567,7 +567,10 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
             push_literal!();
             if !current_word.is_empty() {
                 tokens.push(Token::Word(current_word.clone()));
-                current_word = QuotedWord::new();
+                #[allow(unused_assignments)]
+                {
+                    current_word = QuotedWord::new();
+                }
             }
         };
     }
@@ -919,7 +922,7 @@ fn parse_command_sub_dollar(chars: &mut std::iter::Peekable<std::str::Chars>) ->
     let mut cmd = String::new();
     let mut depth = 1; // Track nesting depth for nested $()
 
-    while let Some(ch) = chars.next() {
+    for ch in chars.by_ref() {
         match ch {
             '(' => {
                 // Check if it's $( to track nested command substitution
@@ -947,7 +950,7 @@ fn parse_command_sub_backtick(chars: &mut std::iter::Peekable<std::str::Chars>) 
     let mut cmd = String::new();
     let mut escaped = false;
 
-    while let Some(ch) = chars.next() {
+    for ch in chars.by_ref() {
         match (ch, escaped) {
             ('\\', false) => escaped = true,
             ('`', false) => return Ok(cmd),
@@ -984,7 +987,7 @@ fn parse_process_sub_input(chars: &mut std::iter::Peekable<std::str::Chars>) -> 
     let mut cmd = String::new();
     let mut depth = 1; // Track nesting depth
 
-    while let Some(ch) = chars.next() {
+    for ch in chars.by_ref() {
         match ch {
             '(' => {
                 depth += 1;
@@ -1012,7 +1015,7 @@ fn parse_process_sub_output(chars: &mut std::iter::Peekable<std::str::Chars>) ->
     let mut cmd = String::new();
     let mut depth = 1; // Track nesting depth
 
-    while let Some(ch) = chars.next() {
+    for ch in chars.by_ref() {
         match ch {
             '(' => {
                 depth += 1;
@@ -1032,23 +1035,6 @@ fn parse_process_sub_output(chars: &mut std::iter::Peekable<std::str::Chars>) ->
     Err(anyhow!("Unclosed process substitution: >("))
 }
 
-/// Parse a pipeline command (tokens containing `|` operators).
-///
-/// Splits the token stream on Pipe operators, parses each stage as (program, args),
-/// and extracts final redirections from the last stage.
-///
-/// # Arguments
-/// * `tokens` - Token stream containing at least one `Token::Pipe`
-///
-/// # Returns
-/// [`Command::Pipeline`] with stages and final redirections
-///
-/// # Errors
-/// Returns error if:
-/// - Pipeline has empty stages
-/// - Pipeline has less than 2 stages
-/// - Stage has no command name
-/// - Invalid redirections in last stage
 /// Parse extended test command [[ ... ]]
 fn parse_extended_test(tokens: &[Token]) -> Result<Command> {
     // Verify structure: [[ ... ]]
@@ -1064,13 +1050,13 @@ fn parse_extended_test(tokens: &[Token]) -> Result<Command> {
 
     // Extract arguments between [[ and ]]
     let mut args = Vec::new();
-    for i in 1..close_pos {
-        if let Token::Word(w) = &tokens[i] {
+    for token in tokens.iter().take(close_pos).skip(1) {
+        if let Token::Word(w) = token {
             args.push(quoted_word_to_string(w));
         } else {
             // For now, convert other tokens to strings
             // TODO: Handle operators specially in Task #40
-            args.push(format!("{:?}", tokens[i]));
+            args.push(format!("{:?}", token));
         }
     }
 
@@ -1301,7 +1287,7 @@ fn extract_redirections_from_tokens(tokens: &[Token]) -> Result<(Vec<Token>, Vec
             Token::HereDoc | Token::HereDocDash => {
                 // Here document: << DELIMITER or <<- DELIMITER
                 let strip_tabs = matches!(&tokens[i], Token::HereDocDash);
-                let delimiter = expect_word(&tokens, i + 1, "here document delimiter")?;
+                let delimiter = expect_word(tokens, i + 1, "here document delimiter")?;
 
                 // Check if delimiter is quoted (disables expansion)
                 let (delimiter_clean, expand) =
@@ -1329,7 +1315,7 @@ fn extract_redirections_from_tokens(tokens: &[Token]) -> Result<(Vec<Token>, Vec
 
             Token::HereString => {
                 // Here string: <<< word
-                let content_word = expect_word(&tokens, i + 1, "here string content")?;
+                let content_word = expect_word(tokens, i + 1, "here string content")?;
 
                 // Check if quoted (disables expansion)
                 let (content, expand) = if content_word.starts_with('\'') {
@@ -1514,9 +1500,9 @@ fn split_on_top_level(input: &str, split_on_newline: bool) -> Vec<&str> {
                 }
                 i += 1;
             }
-            _ if !in_single_quote && !in_double_quote && paren_depth == 0 => {
+            _ if !in_single_quote && !in_double_quote && paren_depth == 0
                 // Check for keyword at word boundary
-                if ch.is_alphabetic() || ch == '_' {
+                && (ch.is_alphabetic() || ch == '_') => {
                     let word_start = i;
                     while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_')
                     {
@@ -1536,10 +1522,7 @@ fn split_on_top_level(input: &str, split_on_newline: bool) -> Vec<&str> {
                             block_depth = (block_depth - 1).max(0);
                         }
                     }
-                } else {
-                    i += 1;
                 }
-            }
             _ => {
                 i += 1;
             }
@@ -1594,7 +1577,7 @@ pub fn parse_command(input: &str) -> Result<Command> {
 
     // Check for variable/array assignment
     // Must be first token and contain '=' but not be a redirection
-    if tokens.len() >= 1 {
+    if !tokens.is_empty() {
         if let Token::Word(first_word) = &tokens[0] {
             let first_str = quoted_word_to_string(first_word);
 
@@ -2100,6 +2083,7 @@ fn parse_parameter_expansion(content: &str) -> Result<ParameterExpansion, String
     }
 
     let chars: Vec<char> = content.chars().collect();
+    #[allow(unused_assignments)]
     let mut pos = 0;
 
     // Check for length operator: ${#VAR}
@@ -2361,10 +2345,10 @@ fn apply_substring(value: &str, offset: i32, length: Option<usize>) -> String {
 /// (produced by `quoted_word_to_string` for quoted `~`) stays literal.
 fn expand_tilde(input: &str) -> String {
     // An escaped tilde `\~` means the tilde was inside quotes — leave it.
-    if input.starts_with("\\~") {
+    if let Some(stripped) = input.strip_prefix("\\~") {
         let mut s = String::with_capacity(input.len());
         s.push('~');
-        s.push_str(&input[2..]);
+        s.push_str(stripped);
         return s;
     }
 
@@ -2677,7 +2661,8 @@ pub fn expand_command_substitution(
 }
 
 /// Expand a QuotedWord into a final string, respecting quote context
-pub fn expand_quoted_word_with_state(
+#[allow(dead_code, private_interfaces)]
+pub(crate) fn expand_quoted_word_with_state(
     word: &QuotedWord,
     state: &mut crate::state::ShellState,
 ) -> Result<String> {
@@ -2753,7 +2738,6 @@ pub fn expand_quoted_word_with_state(
     Ok(result)
 }
 
-/// Parse base command with arguments and redirections
 // ---------------------------------------------------------------------------
 // Control structure parsers
 // ---------------------------------------------------------------------------
@@ -2810,8 +2794,8 @@ fn split_control_keywords<'a>(input: &'a str, keywords: &[&str]) -> Vec<(&'a str
                 in_double_quote = !in_double_quote;
                 i += 1;
             }
-            _ if !in_single_quote && !in_double_quote => {
-                if ch.is_alphabetic() || ch == '_' {
+            _ if !in_single_quote && !in_double_quote
+                && (ch.is_alphabetic() || ch == '_') => {
                     let word_start = i;
                     while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_')
                     {
@@ -2848,10 +2832,7 @@ fn split_control_keywords<'a>(input: &'a str, keywords: &[&str]) -> Vec<(&'a str
                             nested_depth -= 1;
                         }
                     }
-                } else {
-                    i += 1;
                 }
-            }
             _ => {
                 i += 1;
             }
@@ -3234,8 +3215,8 @@ pub fn is_incomplete_control_structure(input: &str) -> bool {
                 in_double_quote = !in_double_quote;
                 i += 1;
             }
-            _ if !in_single_quote && !in_double_quote => {
-                if ch.is_alphabetic() || ch == '_' {
+            _ if !in_single_quote && !in_double_quote
+                && (ch.is_alphabetic() || ch == '_') => {
                     let word_start = i;
                     while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_')
                     {
@@ -3259,10 +3240,7 @@ pub fn is_incomplete_control_structure(input: &str) -> bool {
                             block_depth -= 1;
                         }
                     }
-                } else {
-                    i += 1;
                 }
-            }
             _ => {
                 i += 1;
             }
@@ -3372,11 +3350,11 @@ fn parse_base_command(
             })
         }
         "undo" => {
-            let count = args.get(0).and_then(|s| s.parse().ok()).unwrap_or(1);
+            let count = args.first().and_then(|s| s.parse().ok()).unwrap_or(1);
             Ok(Command::Undo { count })
         }
         "redo" => {
-            let count = args.get(0).and_then(|s| s.parse().ok()).unwrap_or(1);
+            let count = args.first().and_then(|s| s.parse().ok()).unwrap_or(1);
             Ok(Command::Redo { count })
         }
 
@@ -3411,7 +3389,7 @@ fn parse_base_command(
         }
         "checkpoints" => Ok(Command::Checkpoints),
         "diff" => {
-            let target = args.get(0).and_then(|s| s.parse().ok()).unwrap_or(0);
+            let target = args.first().and_then(|s| s.parse().ok()).unwrap_or(0);
             Ok(Command::Diff { target_op: target })
         }
         "replay" => {
@@ -3457,7 +3435,7 @@ fn parse_base_command(
         "graph" => Ok(Command::Graph),
         "proofs" | "proof" => Ok(Command::Proofs),
         "ls" => Ok(Command::Ls {
-            path: args.get(0).map(|s| s.to_string()),
+            path: args.first().map(|s| s.to_string()),
             redirects,
         }),
         "pwd" => Ok(Command::Pwd { redirects }),
@@ -3467,7 +3445,7 @@ fn parse_base_command(
                 return Err(anyhow!("cd: redirections not supported for this command"));
             }
             Ok(Command::Cd {
-                path: args.get(0).map(|s| s.to_string()),
+                path: args.first().map(|s| s.to_string()),
             })
         }
 
@@ -3514,14 +3492,14 @@ fn parse_base_command(
         "fg" => {
             // fg with optional job spec
             Ok(Command::Fg {
-                job_spec: args.get(0).map(|s| s.to_string()),
+                job_spec: args.first().map(|s| s.to_string()),
             })
         }
 
         "bg" => {
             // bg with optional job spec
             Ok(Command::Bg {
-                job_spec: args.get(0).map(|s| s.to_string()),
+                job_spec: args.first().map(|s| s.to_string()),
             })
         }
 
@@ -3530,7 +3508,7 @@ fn parse_base_command(
             let (signal, job_spec) = if args.len() >= 2 && args[0].starts_with('-') {
                 // kill -9 %1 or kill -SIGTERM %1
                 (Some(args[0].clone()), args[1].clone())
-            } else if args.len() >= 1 {
+            } else if !args.is_empty() {
                 // kill %1 (default SIGTERM)
                 (None, args[0].clone())
             } else {
@@ -3638,7 +3616,7 @@ fn parse_base_command(
         "eval" => Ok(Command::Eval { args }),
 
         "return" => {
-            let code = args.get(0).and_then(|s| s.parse::<i32>().ok());
+            let code = args.first().and_then(|s| s.parse::<i32>().ok());
             Ok(Command::Return { code })
         }
 
@@ -3747,6 +3725,7 @@ mod tests {
     use super::*;
 
     // Helper function for tests to create simple literal words
+    #[allow(dead_code)]
     fn word(s: &str) -> QuotedWord {
         let mut w = QuotedWord::new();
         w.push_literal(s.to_string());
@@ -4028,7 +4007,7 @@ mod tests {
                 assert_eq!(stages[1].0, "grep");
                 assert_eq!(stages[1].1, vec!["test"]);
                 assert!(redirects.is_empty());
-                assert_eq!(background, false);
+                assert!(!background);
             }
             _ => panic!("Expected Pipeline"),
         }
@@ -4062,7 +4041,7 @@ mod tests {
             } => {
                 assert_eq!(stages.len(), 2);
                 assert_eq!(redirects.len(), 1);
-                assert_eq!(background, false);
+                assert!(!background);
                 match &redirects[0] {
                     Redirection::Output { file } => assert_eq!(file, "output.txt"),
                     _ => panic!("Expected Output redirection"),
@@ -4277,7 +4256,7 @@ mod tests {
         let tokens = result.unwrap();
         // Should have at least echo token
         // Empty quoted strings may or may not create separate tokens
-        assert!(tokens.len() >= 1);
+        assert!(!tokens.is_empty());
     }
 
     #[test]
@@ -4353,7 +4332,6 @@ mod tests {
             Command::External { args: _, .. } | Command::Touch { path: _, .. } => {
                 // After parsing, before execution, $1 should still be present
                 // Expansion happens during execution
-                assert!(true);
             }
             _ => {}
         }
@@ -4412,7 +4390,7 @@ mod tests {
 
         if let Token::Word(w) = &tokens[1] {
             // Should have literal "Result: " and command sub
-            assert!(w.parts.len() >= 1);
+            assert!(!w.parts.is_empty());
             assert_eq!(w.quote_type, QuoteType::Double);
         }
     }
@@ -4929,8 +4907,8 @@ pub fn extract_heredoc_delimiters(input: &str) -> Result<Vec<String>> {
     let tokens = tokenize(input)?;
 
     for i in 0..tokens.len() {
-        if matches!(tokens[i], Token::HereDoc | Token::HereDocDash) {
-            if i + 1 < tokens.len() {
+        if matches!(tokens[i], Token::HereDoc | Token::HereDocDash)
+            && i + 1 < tokens.len() {
                 if let Token::Word(ref word) = tokens[i + 1] {
                     let delimiter = quoted_word_to_string(word);
                     // Remove quotes if present
@@ -4938,7 +4916,6 @@ pub fn extract_heredoc_delimiters(input: &str) -> Result<Vec<String>> {
                     delimiters.push(clean.to_string());
                 }
             }
-        }
     }
 
     Ok(delimiters)

@@ -22,7 +22,7 @@ pub use tempfile::{self, TempDir};
 /// // temp automatically cleaned up on drop
 /// ```
 pub fn test_sandbox(test_name: &str) -> TempDir {
-    TempDir::with_prefix(&format!("vsh_test_{}_", test_name))
+    TempDir::with_prefix(format!("vsh_test_{}_", test_name))
         .expect("Failed to create test sandbox")
 }
 
@@ -38,6 +38,7 @@ pub fn test_sandbox(test_name: &str) -> TempDir {
 /// └── nested/
 ///     └── deep/
 /// ```
+#[allow(dead_code)]
 pub fn populated_sandbox(test_name: &str) -> TempDir {
     let temp = test_sandbox(test_name);
 

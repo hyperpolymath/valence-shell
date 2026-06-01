@@ -52,7 +52,7 @@ fn security_no_command_injection_via_path() {
 
 #[test]
 fn security_no_shell_metacharacter_execution() {
-    let temp = TempDir::new().unwrap();
+    let _temp = TempDir::new().unwrap();
 
     // Parse commands with shell metacharacters
     let test_cases = vec![
@@ -127,6 +127,7 @@ fn security_absolute_path_handling() {
 
     // For safety, we should reject absolute paths in sandboxed mode
     if result.is_ok() {
+        #[allow(clippy::join_absolute_paths)]
         let created_path = state.root.join("/tmp/escape");
         assert!(
             created_path.starts_with(temp.path()),
@@ -175,7 +176,7 @@ fn security_extreme_path_length() {
         // Good - rejected long path
     } else {
         // If accepted, verify it doesn't cause issues
-        let created_path = state.root.join(&long_path);
+        let _created_path = state.root.join(&long_path);
         // Just verify no panic
     }
 }
@@ -286,7 +287,6 @@ fn security_no_privilege_escalation() {
                 "security_no_privilege_escalation: SKIPPED (running as root). \
                  Set VSH_ALLOW_ROOT_TESTS=1 to acknowledge."
             );
-            return;
         }
     }
 }

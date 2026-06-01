@@ -196,15 +196,13 @@ impl HelpEntry {
         if let Some(op_type) = self.proof_operation {
             output.push_str("FORMAL VERIFICATION\n");
             let proof_ref = proof_refs::ProofReference::for_operation(op_type);
-            output.push_str(&format!(
-                "       This operation is formally verified for correctness.\n\n"
-            ));
+            output.push_str("       This operation is formally verified for correctness.\n\n");
             output.push_str(&format!("       Theorem: {}\n", proof_ref.theorem));
             output.push_str(&format!(
                 "       Description: {}\n\n",
                 proof_ref.description
             ));
-            output.push_str(&format!("       Proof locations:\n"));
+            output.push_str("       Proof locations:\n");
             output.push_str(&format!("         Coq:      {}\n", proof_ref.coq_location));
             output.push_str(&format!("         Lean 4:   {}\n", proof_ref.lean_location));
             output.push_str(&format!("         Agda:     {}\n", proof_ref.agda_location));

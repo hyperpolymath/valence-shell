@@ -312,7 +312,7 @@ mkdir test_dir
     fn test_deeply_nested_operations() {
         let temp = TempDir::new().unwrap();
         let root = temp.path().to_str().unwrap();
-        let mut state = ShellState::new(root).unwrap();
+        let state = ShellState::new(root).unwrap();
 
         // Create nested structure
         let mut current_path = String::new();
@@ -326,8 +326,8 @@ mkdir test_dir
             assert!(result.is_ok());
         }
 
-        // Verify history grows
-        assert!(state.history.len() >= 0);
+        // Verify history is well-formed (always true; sanity check)
+        let _ = state.history.len();
     }
 
     #[test]

@@ -434,7 +434,7 @@ fn test_special_variable_arg_count() {
     let result = expand_variables("$#", &state);
     // Should return "2" (the count of positional params)
     // Note: Actual value depends on implementation
-    assert!(result.len() >= 1, "Got: '{}'", result);
+    assert!(!result.is_empty(), "Got: '{}'", result);
 }
 
 #[test]

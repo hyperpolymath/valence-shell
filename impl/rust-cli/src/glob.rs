@@ -34,10 +34,10 @@ const MAX_GLOB_RESULTS: usize = 100_000;
 /// assert!(!contains_glob_pattern("\\*.txt")); // Escaped
 /// ```
 pub fn contains_glob_pattern(s: &str) -> bool {
-    let mut chars = s.chars().peekable();
+    let chars = s.chars().peekable();
     let mut escaped = false;
 
-    while let Some(ch) = chars.next() {
+    for ch in chars {
         if escaped {
             escaped = false;
             continue;
@@ -169,12 +169,12 @@ fn expand_braces_limited(pattern: &str, remaining: usize) -> Vec<String> {
     }
 
     // Find first unescaped {
-    let mut chars = pattern.chars().enumerate().peekable();
+    let chars = pattern.chars().enumerate().peekable();
     let mut brace_start = None;
     let mut brace_depth = 0;
     let mut escaped = false;
 
-    while let Some((i, ch)) = chars.next() {
+    for (i, ch) in chars {
         if escaped {
             escaped = false;
             continue;
