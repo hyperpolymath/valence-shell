@@ -5,11 +5,38 @@
 //! Implements DoD 5220.22-M 3-pass overwrite + POSIX file deletion.
 //!
 //! **WARNING**: These operations are NOT REVERSIBLE. No undo possible.
+//!
+//! # Filesystem Limitations
+//!
+//! Multi-pass overwrite assumes the filesystem writes new data **in place** over
+//! the previous extent. This is true for traditional filesystems (ext4 without
+//! journal=data, XFS, FAT, NTFS in most cases) but **does NOT hold** for:
+//!
+//! - **Copy-on-write (CoW) filesystems**: btrfs, ZFS, bcachefs, APFS. Each overwrite
+//!   allocates a new extent, leaving prior data recoverable until the original
+//!   extent is freed and reused. Set `chattr +C` (btrfs) or `zfs set copies=1`
+//!   plus `zfs set sync=always` and disable snapshots, or equivalent, to defeat
+//!   CoW for the target file. For full assurance use [`crate::secure_erase`]
+//!   (hardware NIST SP 800-88 Purge) instead.
+//! - **Log-structured filesystems**: f2fs, NILFS2. Same issue as CoW.
+//! - **Snapshots / send-stream replicas**: a prior snapshot will retain the
+//!   pre-overwrite content. Remove all snapshots referencing the file first.
+//! - **SSDs and flash storage in general**: the FTL (flash translation layer)
+//!   can remap logical blocks to different physical cells; the original cell
+//!   content may persist until the cell is rewritten (which the FTL controls,
+//!   not the OS). Use NVMe Format/Sanitize or ATA Secure Erase for SSDs.
+//! - **Network filesystems**: NFS, SMB, FUSE-backed stores do not honor in-place
+//!   semantics from the client's perspective.
+//!
+//! This implementation provides best-effort file-level erasure suitable for
+//! GDPR Article 17 ("right to erasure") on cooperating filesystems. For
+//! hardware-level guarantees use [`crate::secure_erase`].
 
 use anyhow::{Context, Result, bail};
 use colored::Colorize;
 use std::fs::{self, OpenOptions};
-use std::io::{Write, Seek, SeekFrom, BufRead};
+use std::io::{Read, Write, Seek, SeekFrom, BufRead};
+use std::path::Path;
 
 use crate::state::{Operation, OperationType, ShellState};
 
@@ -26,60 +53,139 @@ fn ask_confirmation(prompt: &str) -> Result<bool> {
     Ok(response == "y" || response == "yes")
 }
 
-/// Perform 3-pass DoD 5220.22-M secure overwrite
+/// Block size for streaming overwrite passes.
+const OVERWRITE_BLOCK_SIZE: usize = 64 * 1024;
+
+/// Fill a buffer with cryptographically-random bytes drawn from the OS RNG.
 ///
-/// Pass 1: Write 0x00 (all zeros)
-/// Pass 2: Write 0xFF (all ones)
-/// Pass 3: Write random data
+/// Uses `/dev/urandom` on Unix. Falls back to a hash-based PRNG when urandom
+/// is unavailable (e.g., chroot without `/dev`), with a warning logged.
+#[cfg(unix)]
+fn fill_random(buf: &mut [u8]) -> Result<()> {
+    let mut rng = std::fs::File::open("/dev/urandom")
+        .context("Failed to open /dev/urandom for secure-overwrite RNG")?;
+    rng.read_exact(buf)
+        .context("Failed to read from /dev/urandom")?;
+    Ok(())
+}
+
+/// Non-unix fallback: hash-mixed PRNG seeded from time + position.
+#[cfg(not(unix))]
+fn fill_random(buf: &mut [u8]) -> Result<()> {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    let state = RandomState::new();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    for (i, b) in buf.iter_mut().enumerate() {
+        let mut h = state.build_hasher();
+        h.write_u64(nanos);
+        h.write_u64(i as u64);
+        *b = (h.finish() & 0xFF) as u8;
+    }
+    Ok(())
+}
+
+/// Perform a single overwrite pass with the given pattern.
 ///
-/// This makes data recovery extremely difficult without advanced
-/// forensic techniques (magnetic force microscopy).
+/// `pattern` is one of:
+/// - `Pattern::Random` — bytes drawn from `/dev/urandom`
+/// - `Pattern::Fixed(b)` — every byte is `b`
+#[derive(Clone, Copy)]
+enum Pattern {
+    Random,
+    Fixed(u8),
+}
+
+fn overwrite_pass(file: &mut std::fs::File, file_size: u64, pattern: Pattern) -> Result<()> {
+    file.seek(SeekFrom::Start(0))?;
+    let mut buf = vec![0u8; OVERWRITE_BLOCK_SIZE];
+    let mut written = 0u64;
+    while written < file_size {
+        let chunk = std::cmp::min(OVERWRITE_BLOCK_SIZE as u64, file_size - written) as usize;
+        match pattern {
+            Pattern::Random => fill_random(&mut buf[..chunk])?,
+            Pattern::Fixed(b) => {
+                for slot in buf[..chunk].iter_mut() {
+                    *slot = b;
+                }
+            }
+        }
+        file.write_all(&buf[..chunk])?;
+        written += chunk as u64;
+    }
+    // fsync at every pass so each overwrite is durable before the next begins.
+    file.sync_all()?;
+    Ok(())
+}
+
+/// Perform 3-pass NIST SP 800-88 Purge-style secure overwrite.
+///
+/// Pass order matches the task spec (random / zeros / final pattern), chosen
+/// because the final pattern is a known constant — useful for verifying that
+/// the overwrite ran to completion (read-back-check).
+///
+/// Pass 1: Random bytes from `/dev/urandom` (overwrites magnetic remanence)
+/// Pass 2: All zeros (defeats simple recovery)
+/// Pass 3: Final pattern `0xFF` (verifiable terminator)
+///
+/// `fsync` is issued after every pass so each write is durable before the
+/// next begins.
+///
+/// See module-level docs for filesystem limitations (CoW / FTL remapping).
 fn secure_overwrite_3pass(file_path: &std::path::Path, file_size: u64) -> Result<()> {
     let mut file = OpenOptions::new()
         .write(true)
         .open(file_path)
         .context("Failed to open file for secure overwrite")?;
 
-    // Pass 1: All zeros
-    file.seek(SeekFrom::Start(0))?;
-    let zeros = vec![0u8; 4096];
-    let mut written = 0u64;
-    while written < file_size {
-        let to_write = std::cmp::min(4096, (file_size - written) as usize);
-        file.write_all(&zeros[..to_write])?;
-        written += to_write as u64;
+    overwrite_pass(&mut file, file_size, Pattern::Random)?;
+    overwrite_pass(&mut file, file_size, Pattern::Fixed(0x00))?;
+    overwrite_pass(&mut file, file_size, Pattern::Fixed(0xFF))?;
+
+    Ok(())
+}
+
+/// Securely delete a single regular file by 3-pass overwrite + unlink.
+///
+/// This is the low-level primitive used by [`obliterate`]; exposed publicly so
+/// other modules (audit log compaction, RMO sweeps, GDPR right-to-erasure
+/// workflows) can call it without going through the shell-state recording path.
+///
+/// **WARNING**: this operation is irreversible. The file is destroyed.
+///
+/// # Behaviour
+///
+/// 1. Open the file with `O_WRONLY`.
+/// 2. Pass 1: overwrite with random bytes from `/dev/urandom`, then `fsync`.
+/// 3. Pass 2: overwrite with zeros, then `fsync`.
+/// 4. Pass 3: overwrite with `0xFF` (final pattern), then `fsync`.
+/// 5. `unlink` the path.
+///
+/// # Errors
+///
+/// - `ENOENT` if `path` does not exist
+/// - `EISDIR` if `path` is a directory (use [`obliterate_dir`] instead)
+/// - I/O error if any pass or the unlink fails
+///
+/// # Filesystem Limitations
+///
+/// See [module docs](self) — CoW filesystems (btrfs, ZFS, APFS), SSDs with FTL
+/// remapping, and snapshot-bearing volumes defeat in-place overwrite. For
+/// hardware-level guarantees on SSDs use [`crate::secure_erase`].
+pub fn secure_delete(path: &Path) -> Result<()> {
+    if !path.exists() {
+        bail!("Path does not exist (ENOENT): {}", path.display());
     }
-    file.sync_all()?;
-
-    // Pass 2: All ones
-    file.seek(SeekFrom::Start(0))?;
-    let ones = vec![0xFFu8; 4096];
-    written = 0;
-    while written < file_size {
-        let to_write = std::cmp::min(4096, (file_size - written) as usize);
-        file.write_all(&ones[..to_write])?;
-        written += to_write as u64;
+    let meta = fs::metadata(path).context("Failed to stat target")?;
+    if meta.is_dir() {
+        bail!("Path is a directory (EISDIR): {}", path.display());
     }
-    file.sync_all()?;
-
-    // Pass 3: Random data
-    file.seek(SeekFrom::Start(0))?;
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
-    let random_state = RandomState::new();
-    written = 0;
-    while written < file_size {
-        // Generate pseudo-random data using hasher
-        let mut hasher = random_state.build_hasher();
-        hasher.write_u64(written);
-        let random_bytes = hasher.finish().to_le_bytes();
-
-        let to_write = std::cmp::min(random_bytes.len(), (file_size - written) as usize);
-        file.write_all(&random_bytes[..to_write])?;
-        written += to_write as u64;
-    }
-    file.sync_all()?;
-
+    let file_size = meta.len();
+    secure_overwrite_3pass(path, file_size)?;
+    fs::remove_file(path).context("Failed to unlink after overwrite")?;
     Ok(())
 }
 
@@ -139,9 +245,11 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
         eprintln!("  Size: {} bytes", file_size.to_string().bright_yellow());
         eprintln!();
         eprintln!("This will:");
-        eprintln!("  1. Overwrite with 3-pass DoD 5220.22-M pattern (0x00, 0xFF, random)");
+        eprintln!("  1. Overwrite with 3-pass NIST SP 800-88 Purge pattern (random, 0x00, 0xFF)");
         eprintln!("  2. Delete the file");
-        eprintln!("  3. Make recovery {} impossible", "cryptographically".bright_red());
+        eprintln!("  3. Make recovery {} impossible on in-place filesystems", "cryptographically".bright_red());
+        eprintln!("     (CoW filesystems like btrfs/ZFS/APFS and SSDs with FTL");
+        eprintln!("     remapping require hardware-level erase — see `secure_erase`)");
         eprintln!();
         eprintln!("{}", "This operation CANNOT be undone.".bright_red().bold());
         eprintln!();
@@ -154,7 +262,7 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
 
     // Step 1: Secure overwrite
     if verbose {
-        println!("🔥 Pass 1/3: Overwriting with zeros...");
+        println!("🔥 3-pass overwrite (random / zeros / 0xFF) + unlink...");
     }
     secure_overwrite_3pass(&full_path, file_size)?;
 

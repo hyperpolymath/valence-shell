@@ -135,6 +135,41 @@ impl AuditLog {
         })
     }
 
+    /// Resolve the default audit-log path following the XDG Base Directory spec.
+    ///
+    /// Search order:
+    /// 1. `$XDG_STATE_HOME/valence-shell/audit.log` when `XDG_STATE_HOME` is set.
+    /// 2. `$HOME/.local/state/valence-shell/audit.log` otherwise.
+    /// 3. Errors if neither `XDG_STATE_HOME` nor `HOME` is set.
+    ///
+    /// The directory is *not* created; that is deferred to [`AuditLog::new`].
+    pub fn default_path() -> Result<PathBuf> {
+        if let Ok(xdg) = std::env::var("XDG_STATE_HOME") {
+            if !xdg.is_empty() {
+                return Ok(PathBuf::from(xdg).join("valence-shell").join("audit.log"));
+            }
+        }
+        if let Ok(home) = std::env::var("HOME") {
+            if !home.is_empty() {
+                return Ok(PathBuf::from(home)
+                    .join(".local")
+                    .join("state")
+                    .join("valence-shell")
+                    .join("audit.log"));
+            }
+        }
+        anyhow::bail!(
+            "Cannot determine default audit-log path: neither XDG_STATE_HOME nor HOME is set"
+        );
+    }
+
+    /// Open (or create) the audit log at the XDG-default location.
+    ///
+    /// Convenience wrapper around [`AuditLog::default_path`] + [`AuditLog::new`].
+    pub fn with_default_path(hmac_key: Option<Vec<u8>>) -> Result<Self> {
+        Self::new(Self::default_path()?, hmac_key)
+    }
+
     /// Append audit entry to log
     ///
     /// This is the core append-only operation. Failures are non-fatal
@@ -314,6 +349,36 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].path, "dir1");
         assert_eq!(entries[1].path, "file1");
+    }
+
+    #[test]
+    fn test_default_path_uses_xdg_state_home_when_set() {
+        // Snapshot env, set XDG_STATE_HOME, query, restore.
+        // Use a process-unique key to keep parallel tests independent.
+        let prev_xdg = std::env::var_os("XDG_STATE_HOME");
+        let prev_home = std::env::var_os("HOME");
+        // SAFETY: these env vars are read elsewhere in this crate only via
+        // AuditLog::default_path; we restore before exiting the test.
+        // Test runner is single-threaded for env mutations per-process; we
+        // accept the parallel-test caveat documented at module level.
+        unsafe {
+            std::env::set_var("XDG_STATE_HOME", "/tmp/proptest-xdg-state");
+        }
+        let path = AuditLog::default_path().unwrap();
+        assert_eq!(
+            path,
+            PathBuf::from("/tmp/proptest-xdg-state/valence-shell/audit.log")
+        );
+        unsafe {
+            match prev_xdg {
+                Some(v) => std::env::set_var("XDG_STATE_HOME", v),
+                None => std::env::remove_var("XDG_STATE_HOME"),
+            }
+            match prev_home {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
     }
 
     #[test]
