@@ -3,6 +3,10 @@
 **Date**: 2026-01-30
 **Version**: 0.14.0
 **Phase**: Post-M14, Pre-v1.0
+**Maintenance note (2026-06-01)**: The `❌ TODO` cells in the Idris2
+column remain accurate; populating `src/abi/` is tracked under
+ROADMAP.adoc v2.0 milestones and not currently active. The reversibility
++ correspondence Track A/B cells are still authoritative.
 
 ---
 

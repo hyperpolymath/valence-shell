@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v4
+        uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824  # v4
 
       - name: Install Lean 4
         run: |
@@ -45,7 +45,7 @@ jobs:
           toolchain: stable
 
       - name: Cache Lean build
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
         with:
           path: proofs/lean4/.lake
           key: ${{ runner.os }}-lean-${{ hashFiles('proofs/lean4/lakefile.lean', 'proofs/lean4/lean-toolchain') }}
@@ -74,7 +74,7 @@ jobs:
           nm -D impl/ocaml/liblean_vsh.so | grep vsh_safe || echo "Warning: vsh_safe functions not exported"
 
       - name: Cache Rust build
-        uses: Swatinem/rust-cache@bc1860267c1b189716ecde249f61cf86e8408d91  # v2
+        uses: Swatinem/rust-cache@8ba370a7908a18ecf2b2aa574dbfdf4e4e50514c  # v2
         with:
           workspaces: impl/rust-cli
 
@@ -114,7 +114,7 @@ jobs:
           # Note: with-lean binary would be in different target dir, skip for now
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: lean-extraction-artifacts
           path: |
@@ -129,7 +129,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824
 
       - name: Install Lean 4
         run: |
@@ -171,7 +171,7 @@ jobs:
           cargo bench --bench lean_verification_overhead -- --baseline baseline
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: benchmark-results
           path: impl/rust-cli/target/criterion/

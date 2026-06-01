@@ -204,8 +204,8 @@ External: execute("echo", ["Alice"])
 - ✅ PHASE6_M11_COMPLETE.md - This document (completion report)
 
 ### User-Facing Docs
-- ⏳ GETTING_STARTED.md - TODO: Add variable examples section
-- ⏳ vsh help text - TODO: Add variable commands to help
+- ⏳ GETTING_STARTED.md - pending: Add variable examples section (tracked under #41)
+- ⏳ vsh help text - pending: Add variable commands to help (tracked under #41)
 
 ---
 

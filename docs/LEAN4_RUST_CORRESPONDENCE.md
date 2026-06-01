@@ -224,7 +224,9 @@ pub fn rmdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 - Operations cannot escape sandbox
 - Root directory within sandbox can be removed (but shouldn't be!)
 
-**TODO**: Add explicit root check:
+**Pending (tracked under #41 — seam walk, 2026-06-01)**: Add explicit
+root check:
+
 ```rust
 if full_path == state.root() {
     anyhow::bail!("Cannot remove root directory");

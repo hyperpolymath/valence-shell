@@ -15,6 +15,8 @@ replacement for bash/zsh.
 For the full honest status see `CLAUDE.md`; for caveats per claim see
 `EXPLAINME.adoc`; for proof-debt see `docs/PROOF_HOLES_AUDIT.md`.
 
+_Last refreshed: 2026-06-01 (maintenance sweep M2/M3/M4)._
+
 == v0.9.x — Stabilisation (D → C per CRG v2.0)
 
 Tracked against `docs/governance/CRG-AUDIT-2026-04-18.adoc`. Goal: green
@@ -24,13 +26,16 @@ CI on `rust-cli.yml`, dogfood evidence, structural compliance.
   `impl/rust-cli/src/`. Batches 1-3 cleared 136 of ~530 (commits
   `712e3a1`, `962da88`, `f045ced`). Remaining concentrated in
   `parser.rs` (116), `commands.rs` (66), `arith.rs` (55), `state.rs`
-  (35) — each warrants its own session.
-* [ ] Close the Coq `admit.` in `proofs/coq/filesystem_composition.v:199`
-  (`single_op_reversible` `OpRmdir` branch) or update
-  `[coq-proof-status] admitted = 1` with full justification.
+  (35) — each warrants its own session. Tracked under #41 (seam walk).
+* [x] **Resolved 2026-06-01 (#55, PR #55)**: The Coq `admit.` in
+  `proofs/coq/filesystem_composition.v` `single_op_reversible` was
+  closed; `verify-proofs` CI job re-enabled with `Print Assumptions`
+  wiring. Three new admits surfaced and were filed as #56/#57/#58.
 * [ ] Turn `rust-cli.yml` green after the `.expect` sweep completes.
-* [ ] Enable `validation.yml verify-proofs` job (currently `if: false`);
-  start with Lean 4 via `lake build`, then phase in Coq/Agda/Isabelle/Z3.
+* [x] **Resolved 2026-06-01 (#49, PR #55)**: `validation.yml
+  verify-proofs` re-enabled; build oracle now red-on-real-failure
+  rather than silently disabled. Five cascading Coq build errors fixed
+  in the same PR.
 * [ ] Per-directory README coverage 23% → ~90% (17 subtrees missing,
   enumerated in the audit).
 * [ ] Add `[dogfooding-status]` to STATE.a2ml with concrete daily-use
@@ -57,6 +62,26 @@ CI on `rust-cli.yml`, dogfood evidence, structural compliance.
    2026-02-12 in commit `5802dc9` (predates the 2026-04-18 audit; the
    audit's residual claim was stale). Phase 4C design docs under
    `impl/rust-cli/docs/` carry archival banners noting the removal.
+
+== v0.9.x — Closed-issue housekeeping (2026-06-01)
+
+The following Phase-0 / housekeeping issues closed on 2026-06-01; their
+remediation work is rolled into the historical record above.
+
+* [x] **#33** — security: 8 Critical/High panic-attack findings (Track
+  C). Resolved by PR #52 (panic-attack triage); see
+  `audits/assail-classifications.a2ml` for retained suppressions.
+* [x] **#44** — Docs max-out vs standards. Resolved by PR #53;
+  `INTENT.contractile` + `methodology.a2ml` placeholders filled.
+* [x] **#46** — CI/CD reds on main (6 distinct workflows). Resolved by
+  PR #54; 8 governance workflow fixes landed.
+* [x] **#49** — Re-enable `verify-proofs` CI job + 5 Coq build errors.
+  Resolved by PR #55; 22 Coq errors closed and `Print Assumptions`
+  wired.
+
+Open follow-ups: #41 (seam walk: panics + TODOs), #42 (proof inventory),
+#43 (test+bench expansion), #45 (filesystem-theory gap), #51 (L3 echo
+integration), #56/#57/#58 (the three admits surfaced by #55).
 
 == v0.10.x — POSIX Coverage
 
@@ -86,7 +111,7 @@ Hard requirements before any v1.0 claim:
   See audit `=== External validation` section for the proposed diverse-6
   shape.
 * [ ] Complete RMO (Remove-Match-Obliterate) implementation for GDPR
-  compliance — currently stubs only.
+  compliance — currently stubs only. Tracked under #41.
 * [ ] Echidna integration for automated property-based verification.
 
 == v2.0 — Idris2 Extraction Path

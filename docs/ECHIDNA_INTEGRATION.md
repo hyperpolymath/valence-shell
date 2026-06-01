@@ -280,7 +280,7 @@ echidna aspect-tag proofs/lean4/ --output verification-coverage.md
 - ✅ Reversibility: Proven (Lean 4, Coq, Agda, Isabelle, Mizar)
 - ✅ Preconditions: Implemented (Rust)
 - ✅ Error handling: ENOENT, ENOTDIR, ENOTEMPTY (Rust)
-- ⚠️ Root check: Missing in Rust (TODO)
+- ⚠️ Root check: Missing in Rust (tracked under #41 — seam walk)
 - ✅ Tests: 4/5 passing (root check missing)
 ```
 

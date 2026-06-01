@@ -57,7 +57,7 @@
 - Read user input
 - Tab completion
 - History (command history, not operation history)
-- Syntax highlighting (TODO)
+- Syntax highlighting (deferred to v1.0; tracked under #41)
 - Prompt rendering
 
 **Key Components**:

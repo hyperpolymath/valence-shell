@@ -55,7 +55,7 @@ This README provides orientation; individual files are self-describing.
 
 | `ECHIDNA_INTEGRATION.md`
 | Echidna validator integration spec (audit item 10b — wiring still
-  TODO; spec is the design source).
+  pending per ROADMAP.adoc v1.0 gate; spec is the design source).
 
 | `PHASE2_REPORT.md` / `PHASE3_INITIAL_REPORT.md` / `PHASE6_M*_DESIGN.md` (10 docs)
 | Per-phase milestone designs and reports. The PHASE6_M*_DESIGN docs
