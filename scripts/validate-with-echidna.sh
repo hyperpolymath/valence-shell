@@ -48,7 +48,7 @@ verify_file() {
 
     if [ ! -f "$REPO_ROOT/$file" ]; then
         echo "[SKIP] $label — file not found: $file"
-        ((SKIPPED++))
+        SKIPPED=$((SKIPPED + 1))
         return 0
     fi
 
@@ -56,28 +56,28 @@ verify_file() {
     local output
     output=$("$ECHIDNA" verify "$REPO_ROOT/$file" --prover "$prover" --timeout 120 $VERBOSE $FORMAT_FLAG 2>&1) && {
         echo -e "\r[PASS] $label"
-        ((PASSED++))
+        PASSED=$((PASSED + 1))
     } || {
         # Distinguish prover-not-found from actual verification failure
         if echo "$output" | grep -qi "not found\|not installed\|not available\|no such\|cannot find"; then
             echo -e "\r[SKIP] $label (prover '$prover' not available)"
-            ((SKIPPED++))
+            SKIPPED=$((SKIPPED + 1))
         else
             echo -e "\r[FAIL] $label"
             if [ -n "$VERBOSE" ]; then
                 echo "       $output" | head -3
             fi
-            ((FAILED++))
+            FAILED=$((FAILED + 1))
         fi
     }
 }
 
 # ─── Step 1: Verify Lean 4 proofs (primary source of truth) ───
 echo "── Step 1: Lean 4 Proofs ──"
-verify_file "Lean 4: FilesystemModel"       "proofs/lean4/FilesystemModel.lean"       "lean4"
-verify_file "Lean 4: FileOperations"        "proofs/lean4/FileOperations.lean"        "lean4"
-verify_file "Lean 4: FilesystemComposition" "proofs/lean4/FilesystemComposition.lean"  "lean4"
-verify_file "Lean 4: FilesystemEquivalence" "proofs/lean4/FilesystemEquivalence.lean"  "lean4"
+verify_file "Lean 4: FilesystemModel"       "proofs/lean4/FilesystemModel.lean"       "lean"
+verify_file "Lean 4: FileOperations"        "proofs/lean4/FileOperations.lean"        "lean"
+verify_file "Lean 4: FilesystemComposition" "proofs/lean4/FilesystemComposition.lean"  "lean"
+verify_file "Lean 4: FilesystemEquivalence" "proofs/lean4/FilesystemEquivalence.lean"  "lean"
 echo ""
 
 # ─── Step 2: Verify Coq proofs ───
@@ -123,19 +123,19 @@ echo "── Step 7: Rust Correspondence Tests ──"
 echo -n "[....] cargo test --test correspondence_tests"
 if (cd "$REPO_ROOT/impl/rust-cli" && cargo test --test correspondence_tests 2>/dev/null); then
     echo -e "\r[PASS] cargo test --test correspondence_tests (28 tests)"
-    ((PASSED++))
+    PASSED=$((PASSED + 1))
 else
     echo -e "\r[FAIL] cargo test --test correspondence_tests"
-    ((FAILED++))
+    FAILED=$((FAILED + 1))
 fi
 
 echo -n "[....] cargo test --test property_tests"
 if (cd "$REPO_ROOT/impl/rust-cli" && cargo test --test property_tests 2>/dev/null); then
     echo -e "\r[PASS] cargo test --test property_tests (28 tests)"
-    ((PASSED++))
+    PASSED=$((PASSED + 1))
 else
     echo -e "\r[FAIL] cargo test --test property_tests"
-    ((FAILED++))
+    FAILED=$((FAILED + 1))
 fi
 echo ""
 
