@@ -1,7 +1,7 @@
 # Lean 4 → OCaml/Zig Extraction Summary
 
-**Date**: 2026-01-28
-**Status**: Design Complete, Implementation TODO
+**Date**: 2026-01-28 (status last reviewed 2026-06-01)
+**Status**: Design Complete, Implementation Pending (ROADMAP v2.0 — Idris2 path)
 
 ---
 

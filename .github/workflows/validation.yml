@@ -14,7 +14,7 @@ jobs:
   validate-correspondence:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+      - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
         with:
           fetch-depth: 0
 
@@ -24,7 +24,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache Rust dependencies
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
         with:
           path: |
             ~/.cargo/bin/
@@ -40,7 +40,7 @@ jobs:
 
       - name: Upload validation report
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: validation-report
           path: validation-report.md
@@ -49,7 +49,7 @@ jobs:
     name: verify-proofs (Coq build oracle)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+      - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
 
       - name: Install Coq via apt
         run: |
@@ -85,7 +85,7 @@ jobs:
   property-testing:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+      - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable

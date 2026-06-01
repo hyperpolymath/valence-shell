@@ -20,10 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+        uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
 
       - name: Checkout casket-ssg
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+        uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
         with:
           repository: hyperpolymath/casket-ssg
           path: .casket-ssg
@@ -35,7 +35,7 @@ jobs:
           cabal-version: '3.10'
 
       - name: Cache Cabal
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
         with:
           path: |
             ~/.cabal/packages

@@ -16,7 +16,7 @@ jobs:
   lint-workflows:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
 
       - name: Check SPDX headers
         run: |

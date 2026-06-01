@@ -722,8 +722,8 @@ fn posix_pipeline_exit_codes() {
 - [x] cd: POSIX-compliant
 - [x] exit: POSIX-compliant
 - [x] test/[: POSIX-compliant (all operators)
-- [ ] pwd: Not yet implemented (TODO)
-- [ ] set: Partial (shell options not implemented)
+- [ ] pwd: Not yet implemented (tracked under #41)
+- [ ] set: Partial (shell options not implemented; tracked under #41)
 
 ### Extensions (Non-POSIX, vsh-specific)
 - [x] undo: Reverse last operation

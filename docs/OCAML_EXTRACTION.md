@@ -1,8 +1,8 @@
 # OCaml Extraction from Lean 4
 
-**Status**: Design Complete, Implementation TODO
+**Status**: Design Complete, Implementation Pending (ROADMAP v2.0 — Idris2 path)
 **Version**: 0.1.0
-**Updated**: 2026-01-28
+**Updated**: 2026-01-28 (status last reviewed 2026-06-01)
 
 ---
 

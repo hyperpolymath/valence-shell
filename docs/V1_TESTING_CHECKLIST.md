@@ -2,7 +2,13 @@
 
 **Status**: Pre-v1.0 Release Validation
 **Target**: 100% completion before v1.0 release
-**Last Updated**: 2026-01-29
+**Last Updated**: 2026-06-01
+
+> **Maintenance note (2026-06-01):** The `❌ TODO` markers below for
+> Layers 3 / 7 / 9 / 10 remain accurate and are tracked under
+> [#43 — test + bench expansion](https://github.com/hyperpolymath/valence-shell/issues/43).
+> Markers are kept as planning aids; do not delete without coordinated
+> closure of #43.
 
 ---
 

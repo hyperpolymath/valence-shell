@@ -598,7 +598,7 @@ Layer 10: BENCHMARKING (Performance Metrics)
 VERIFICATION STATUS:
 ✅ Layers 1-5: Complete (256+ proofs, 157+ tests)
 🔄 Layer 6: Partial (fuzzing infrastructure ready)
-❌ Layers 7-10: TODO for v1.0
+❌ Layers 7-10: pending v1.0 (tracked under #43 — test+bench expansion)
 ```
 
 ---
