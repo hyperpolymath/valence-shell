@@ -45,3 +45,6 @@ lean_lib CopyMoveOperations where
 
 lean_lib PermissionOperations where
   srcDir := "."
+
+lean_lib CrashConsistency where
+  srcDir := "."
