@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 = scripts/ — Utility Scripts
 
 POSIX-shell helper scripts driven by the project's CI workflows and
