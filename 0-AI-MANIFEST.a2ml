@@ -1,15 +1,75 @@
+# SPDX-License-Identifier: MPL-2.0
+# 0-AI-MANIFEST.a2ml — AI agent entry point for valence-shell
+#
+# Lexicographic-first machine-readable file so any agent that does a
+# default-sorted directory walk discovers this first. Points at the
+# canonical contractile family and the agent_instructions/ tree.
 
-# AI Assistant Instructions
+[manifest]
+project = "valence-shell"
+version = "0.9.0"
+status = "Advanced research prototype — NOT production-ready"
+license = "MPL-2.0"
+last-updated = "2026-06-01"
 
-## Repository Focus
-- `rsr-template-repo` is treated as a Rhodium Standard Repository; obey the Rhodium policies, maintain `.bot_directives`, and keep `.machines_readable/6scm/` authoritative.
-- Prefer to keep generated files out of source control, and regenerate them with the documented commands before committing.
+# What this project IS — one-line summary; for the full statement read
+# .machine_readable/INTENT.contractile (the load-bearing artefact).
+description = "Formally verified Unix-style shell with proven reversibility across 6 proof systems (Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3). Implements the MAA (Mutually Assured Accountability) framework."
 
-## Workflow
-1. Inspect `.machines_readable/6scm/STATE.scm` for blockers and next actions.
-2. Respect any constraints listed inside `.machines_readable/6scm/AGENTIC.scm` when tooling changes are requested.
-3. After finishing edits, update STATE with your outcomes and commit with a concise, imperative message.
+[entry-points]
+# Read these in order at session start.
+contractile-purpose       = ".machine_readable/INTENT.contractile"
+contractile-must          = ".machine_readable/MUST.contractile"
+contractile-trust         = ".machine_readable/TRUST.contractile"
+contractile-adjust        = ".machine_readable/ADJUST.contractile"
+methodology               = ".machine_readable/agent_instructions/methodology.a2ml"
+coverage                  = ".machine_readable/agent_instructions/coverage.a2ml"
+debt                      = ".machine_readable/agent_instructions/debt.a2ml"
+human-claude-handbook     = "CLAUDE.md"
+human-readme              = "README.adoc"
+human-explainme           = "EXPLAINME.adoc"
+human-faq                 = "FAQ.adoc"
 
-## Delivery Promises
-- Mention in summaries whether STATE, `contractiles/`, or `.bot_directives/` changed.
-- Keep this file in sync with the repository’s status; update it if the governance changes.
+[honest-status]
+# The single source of truth for proof debt is docs/PROOF_HOLES_AUDIT.md.
+# If you see different numbers anywhere, file an issue.
+proof-holes-doc      = "docs/PROOF_HOLES_AUDIT.md"
+deep-audit-log-dir   = "docs/audits/"
+latest-deep-audit    = "docs/audits/2026-06-01-deep-audit.adoc"
+
+[counts-as-of-last-audit]
+# Per docs/audits/2026-06-01-deep-audit.adoc + issue #42.
+theorem-candidates       = 478
+proof-systems            = 6
+proof-holes-remaining    = 3       # 1 real gap + 1 justified axiom + 1 structural axiom
+rust-source-files        = 32
+rust-loc                 = 21331
+tests-passing            = 736
+tests-ignored            = 14
+tests-failing            = 0
+fuzz-targets             = 7
+
+[boundary-convention]
+# Per estate-standard feedback_estate_boundary_conventions:
+in-process-ffi    = "Zig (impl/zig/)"
+formal-abi        = "Idris2 (proofs/idris2/)"
+beam-native       = "SNIFs — not currently wired"
+compile-target    = "typed-wasm — not currently a target"
+service-discovery = "Groove Protocol — not currently wired"
+
+[delivery-promises]
+# Every agent session must:
+# 1. Read INTENT before changing scope.
+# 2. Update docs/PROOF_HOLES_AUDIT.md the same commit that changes any proof.
+# 3. Keep README/CLAUDE.md numbers in sync with reality (see docs/audits/).
+# 4. Never collapse the 6-system polyglot stack (divergent invariant).
+update-on-touch = [
+  ".machine_readable/INTENT.contractile",
+  ".machine_readable/MUST.contractile",
+  ".machine_readable/TRUST.contractile",
+  ".machine_readable/ADJUST.contractile",
+  "docs/PROOF_HOLES_AUDIT.md",
+  "docs/audits/",
+  "CLAUDE.md",
+  "README.adoc",
+]

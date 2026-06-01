@@ -398,5 +398,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute to future releases.
 
 ---
 
-**Maintained by**: See [MAINTAINERS.md](MAINTAINERS.md)
+**Maintained by**: See [MAINTAINERS.adoc](MAINTAINERS.adoc)
 **License**: Palimpsest-MPL 1.0 or later (see link:LICENSE[LICENSE])

@@ -8,8 +8,8 @@
 # Reference: ADR-002 in standards/agentic-a2ml/docs/
 
 [metadata]
-version = "1.0.0"
-last-updated = "2026-03-24"
+version = "1.1.0"
+last-updated = "2026-06-01"
 spec = "https://github.com/hyperpolymath/standards/blob/main/agentic-a2ml/docs/ADR-002-methodology-layer.adoc"
 
 # ============================================================================
@@ -55,7 +55,7 @@ perfective = 10   # % for SPDX headers, doc updates, formatting, style
 # Customise this per project — the template default is generic.
 
 [methodology.unique-strength]
-description = "{{PROJECT_UNIQUE_STRENGTH}}"
+description = "Proof-backed MAA (Mutually Assured Accountability) framework with polyglot verification: the SAME core reversibility theorems proven across 6 independent proof systems (Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3) on top of DIFFERENT logical foundations (CIC, dependent TT, intensional TT, HOL, Tarski-Grothendieck set theory, SMT). Cross-validation between foundations catches modelling errors that any single prover would miss, and the Idris2 ABI layer carries the proof story across the FFI boundary into the Rust CLI runtime. Sibling projects diverge: echidna is dyadic-Coq-only, proven is single-Idris2, ephapax is four-layer-Coq for typed-wasm — none of them carry cross-foundation cross-validation. Divergent-mode work in valence-shell must DEEPEN the polyglot story (close a hole in System X by porting the proof from System Y, tighten the cross-system correspondence, extend Idris2 ABI coverage of newly-proven operations) rather than introduce a 7th system or substitute a stronger single-prover stack."
 deepen-not-broaden = true
 
 # ============================================================================
@@ -71,15 +71,21 @@ deepen-not-broaden = true
 
 [methodology.divergent-invariants]
 rules = [
-  # Customise per project. Examples:
-  # "Idris2 only for formal verification — no Lean4, Coq, Agda",
-  # "believe_me count must remain zero",
-  # "FFI architecture: Idris2 → RefC → Zig → C ABI (no shortcuts)",
+  "Polyglot stays at exactly 6 verification systems (Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3) — do not add a 7th and do not drop one to simplify",
+  "Lean 4 is the canonical specification — when foundations disagree, Lean is the source of truth and the others cross-validate",
+  "Coq proofs in proofs/coq/ MUST remain extractable to OCaml — no introduction of non-computational axioms beyond the documented set (funext, well-formedness, decidability of is_empty_dir)",
+  "Proof-hole count is monotone non-increasing — never trade a closed hole for a new one without an explicit ADR; PROOF_HOLES_AUDIT.md is the bookkeeping",
+  "RMR (Remove-Match-Reverse) theorems are reversibility statements; RMO (Remove-Match-Obliterate) theorems are NON-injectivity statements — never collapse the two; the historical mis-statement obliterate_not_reversible was already caught and replaced 2026-04-03",
+  "Idris2 ABI layer is the only sanctioned proof-to-FFI carrier — do not bypass it with raw C bindings or unverified Rust FFI",
+  "Rust is the single production runtime — divergent work goes into impl/rust-cli/, not into impl/ocaml/ (extraction target, design only) or impl/elixir/ (reference, stale)",
+  "POSIX coverage is a means, not an end — do not add shell syntax that has no path to a proof story",
+  "Honest-status discipline — every claim must have a counterpart caveat (EXPLAINME.adoc pattern); README/CLAUDE.md numbers MUST match docs/PROOF_HOLES_AUDIT.md and reality",
 ]
 
-# Optional: language invariant for the core strength
-# If set, divergent mode will not introduce other languages for this purpose
-# language-invariant = "idris2"
+# Language invariant for the core strength: there is no SINGLE language —
+# the polyglot itself is the invariant. The set of 6 verification systems is
+# the riverbank; do not introduce a 7th and do not drop one.
+# language-invariant = "polyglot-6"
 
 # ============================================================================
 # CONSTRAINT HINTS
@@ -89,9 +95,15 @@ rules = [
 
 [methodology.known-constraints]
 constraints = [
-  # Customise per project. Examples:
-  # "End-to-end build has never been verified",
-  # "libproject.so does not exist yet — all bindings call stubs",
+  "Lean -> Rust correspondence is property-tested only (~85% confidence), NOT mechanised — closing this is the critical-path blocker to v1.0.0",
+  "Elixir NIF build is broken — impl/elixir/ is reference-only; do not block work on it",
+  "BEAM daemon is designed but not implemented — no current SNIF carrier",
+  "Coq has 1 remaining real proof gap: obliterate_overwrites_all_blocks (mechanical induction over overwrite passes) — see docs/PROOF_HOLES_AUDIT.md",
+  "Agda has 1 structural axiom (funext) — provable in cubical Agda, intentional in intensional TT",
+  "Coq has 1 justified decidability axiom (is_empty_dir_dec) — infinite-domain Filesystem = Path -> option FSNode; switching to FMaps.t FSNode is the documented migration",
+  "RMO (GDPR / secure deletion) primitives are stubs in impl/rust-cli/src/commands/secure_deletion.rs — proofs exist for the model, runtime does not yet bind to them",
+  "OCaml extraction path exists in proofs/coq/extraction.v but the extracted code is not wired into a build target",
+  "Idris2 ABI carrier has 2 holes + 10 partial markers per the 2026-06-01 deep audit (issue #42) — these are the FFI boundary obligations",
 ]
 
 # ============================================================================

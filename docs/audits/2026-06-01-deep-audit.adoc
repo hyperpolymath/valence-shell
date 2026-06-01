@@ -1,0 +1,346 @@
+// SPDX-License-Identifier: MPL-2.0
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Deep Audit — 2026-06-01
+:toc: macro
+:toclevels: 3
+:icons: font
+
+toc::[]
+
+== Scope
+
+Comprehensive cross-cutting audit of valence-shell against the estate
+documentation + verification standards (mirrors the verisimdb#81 framing).
+Filed as issues #41–#46 + #49 + #51 on 2026-06-01. This file is the
+audit-log baseline; future audits should append rather than rewrite.
+
+== Filed issues (seed inventory)
+
+[cols="1,4,3",options="header"]
+|===
+|Issue |Title |Scope
+
+|#41
+|Seam walk — 3 prod panics + 10 unreachables + 28 TODOs + 6 proof holes
+|Cross-boundary defects in `impl/rust-cli/` + proof debt summary
+
+|#42
+|Proof inventory — 478 candidate theorems + 8-theorem foundation pack
+|Full enumeration across 6 verification systems + Idris2 ABI layer
+
+|#43
+|Test + bench dramatic expansion — 736 → 2000+ tests, 3 → 15 benches, 7 → 20 fuzz
+|Verification-surface growth plan
+
+|#44
+|Docs max-out vs standards — INTENT.contractile + methodology.a2ml placeholders
+|This document's parent issue
+
+|#45
+|Filesystem-theory + practice gap (POSIX 2024, atomicity, crash-consistency)
+|Where the model diverges from the OS reality
+
+|#46
+|CI/CD reds on main — 6 distinct workflows failing, root causes catalogued
+|Pipeline truthfulness
+
+|#49
+|proofs(coq): re-enable verify-proofs CI job; fix 5 cascading build errors
+|Coq verification gate
+
+|#51
+|[Integration] Ground L3 (reversibility + equivalence + loss) theorems in echo-types
+|Cross-repo proof grounding (companion to issue #44's audit)
+|===
+
+== Drift counts — before/after reconciliation
+
+[cols="3,2,2,2",options="header"]
+|===
+|Claim |Source |Before |After (2026-06-01)
+
+|"Tests passing"
+|`README.adoc:25`
+|602
+|736 (matches `CLAUDE.md`)
+
+|"Tests Passing" (features bullet)
+|`README.adoc:60`
+|555
+|736
+
+|"Theorem count" (badge)
+|`README.adoc:14`
+|`200+`
+|`478 candidates`
+
+|"Theorem count" (features bullet)
+|`README.adoc:42`
+|`~250+`
+|`~478` (per issue #42 inventory)
+
+|"Theorem count" (trust-boundary diagram)
+|`README.adoc:286`
+|`~250+ theorems`
+|`~478 candidates`
+
+|"Theorem count" (verification-status)
+|`README.adoc:321`
+|`~250+`
+|`~478`
+
+|"Theorem count" (RSR compliance)
+|`README.adoc:467`
+|`~250+`
+|`~478`
+
+|"Theorem count" (status footer)
+|`README.adoc:566`
+|`~250+`
+|`~478 theorem candidates (1 real gap remaining)`
+
+|"Fuzz targets"
+|`README.adoc:65`
+|4
+|7 (parser, arith, job-spec, signal-parse, path-ops, glob-expansion, state-machine)
+
+|"Tests" (FAQ "production-ready?")
+|`README.adoc:490`
+|177
+|736; version corrected 0.14.0 → 0.9.0
+
+|"Version" (citation BibTeX)
+|`README.adoc:540`
+|0.14.0 / year 2025
+|0.9.0 / year 2026
+
+|"Source files / LoC"
+|`CLAUDE.md:83`
+|`~21,000 lines / 33 source files`
+|`21,331 lines / 32 source files` (measured 2026-06-01)
+
+|"Source files / LoC" (internal-contradiction site)
+|`CLAUDE.md:178`
+|`30 source files / 15,720 lines`
+|`32 source files / 21,331 lines` (reconciled to single value)
+
+|"Proof holes"
+|`CLAUDE.md:85`
+|`10 across 8 files (4 gaps, 4 axioms, 2 structural)`
+|`3 total: 1 real gap + 1 justified axiom + 1 structural axiom` (matches `docs/PROOF_HOLES_AUDIT.md`)
+
+|"Real proof gaps" (Critical Priority)
+|`CLAUDE.md:92`
+|`4 real proof gaps`
+|`1 real proof gap` (Coq `obliterate_overwrites_all_blocks`)
+
+|"Theorem count" (Codebase Metrics)
+|`CLAUDE.md:84`
+|`~200+`
+|`~478 candidates` (per issue #42)
+
+|"Tests" (Directory Structure tree)
+|`CLAUDE.md:180`
+|602
+|736
+
+|README license-badge image URL
+|`README.adoc:3`
+|Broken (`https://[License: PMPL-1.0,link=...`)
+|Fixed (proper shields.io URL, MPL-2.0)
+
+|README CHANGELOG link
+|`README.adoc:404`
+|`CHANGELOG.md`
+|`CHANGELOG.adoc` (dual source removed)
+
+|Cross-repo references to `MAINTAINERS.md` / `CHANGELOG.md`
+|`GOVERNANCE.adoc`, `RSR_COMPLIANCE.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.adoc`
+|10+ references
+|All updated to `.adoc` (dual-source eliminated)
+
+|`0-AI-MANIFEST.a2ml` body
+|`0-AI-MANIFEST.a2ml`
+|Stale template — refers to `rsr-template-repo` + `.machines_readable/6scm/`
+|Reconciled to point at `.machine_readable/` + the contractile family (this audit cycle)
+|===
+
+== Files changed in this audit cycle
+
+=== Updated
+
+* `.machine_readable/INTENT.contractile` — all 5 placeholder slots filled
+  (purpose, anti-purpose, monorepo-or-standalone, deps × 2, consumers × 2);
+  9-item `architectural-invariants` filled; 8-item `ask-before-touching`
+  filled; ecosystem section now explicit about "STANDALONE" + 11 documented
+  deps + explicit "no known downstream consumers at v0.9.0" rather than
+  fabricated names.
+
+* `.machine_readable/agent_instructions/methodology.a2ml` —
+  `PROJECT_UNIQUE_STRENGTH` placeholder filled with the polyglot-6
+  cross-foundation argument and the divergence-from-siblings contrast
+  (vs. echidna dyadic-Coq-only, proven single-Idris2, ephapax four-layer-Coq);
+  9-rule `divergent-invariants` filled; 9-item `known-constraints` filled;
+  `last-updated` bumped 2026-03-24 → 2026-06-01.
+
+* `README.adoc` — 11 numeric-drift sites reconciled (see drift-count
+  table above); license badge URL fixed; citation BibTeX version + year
+  corrected; FAQ section internal version corrected.
+
+* `CLAUDE.md` — 5 numeric-drift sites reconciled; internal contradiction
+  (`33/21k` vs `30/15.7k` source files) resolved; proof-holes count
+  synced to `docs/PROOF_HOLES_AUDIT.md`; directory tree updated (now
+  shows `idris2/`, `zig/`, `mcp/`, `audits/`, `fuzz/`); "Last Updated"
+  bumped.
+
+=== Added
+
+* `FAQ.adoc` — 12 Q&A pairs covering: what is vsh, why prove a shell,
+  why six systems, how to trust the proofs, production-readiness, the
+  count drift itself, RMR vs RMO, algorithmic vs thermodynamic
+  reversibility, licence/usage, Absolute Zero / CNO heritage, FFI/ABI
+  surface, MAA framework definition.
+
+* `docs/audits/2026-06-01-deep-audit.adoc` — this file.
+
+=== Deleted (dual-source consolidation)
+
+* `CHANGELOG.md` — superseded by `CHANGELOG.adoc` (estate-asciidoc
+  convention). 9 outbound references updated.
+
+* `MAINTAINERS.md` — superseded by `MAINTAINERS.adoc`. 10+ outbound
+  references updated (`GOVERNANCE.adoc`, `RSR_COMPLIANCE.md`,
+  `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`).
+
+== Standards-canon Gold tier — checklist closure
+
+Per the issue #44 framing (mirrors verisimdb#81):
+
+* [x] Fill `INTENT.contractile` placeholders (purpose, anti-purpose,
+  architectural invariants, ecosystem)
+* [x] Fill `methodology.a2ml` `PROJECT_UNIQUE_STRENGTH` + divergent
+  invariants
+* [x] Reconcile README count claims (theorems, tests, fuzz, source
+  files) with `CLAUDE.md` and reality
+* [x] Fix the 33-vs-30 source-file internal contradiction in
+  `CLAUDE.md`
+* [x] Refresh `CLAUDE.md:85` "10 proof holes" → 3 (matching
+  `docs/PROOF_HOLES_AUDIT.md`)
+* [x] Add `FAQ.adoc`
+* [x] Delete `MAINTAINERS.md` (keep `.adoc`); same for `CHANGELOG`
+* [x] Add `docs/audits/2026-06-01-deep-audit.adoc`
+
+== Newly surfaced drift (not in issue #44 — found during execution)
+
+These were discovered while executing the #44 plan and are recorded
+here rather than the PR description (per protocol):
+
+. **`README.adoc:3` license badge URL is malformed** — was
+  `image:https://[License: PMPL-1.0,link="..."]`, which is not a valid
+  AsciiDoc image macro. Fixed to a proper `shields.io` URL with the
+  correct `MPL-2.0` licence (the PMPL-1.0 reference was also stale
+  — the project migrated to MPL-2.0 in commit `990b147`).
+
+. **`README.adoc:540` citation BibTeX claimed version `0.14.0`,
+  year `2025`** — out of sync with the rest of the document (which
+  is consistently `0.9.0` / 2026). Fixed.
+
+. **`README.adoc:490` FAQ "production-ready" answer referenced
+  `v0.14.0`, `82% complete`, `177 tests`** — three independent
+  staleness signals in the same paragraph. Reconciled to v0.9.0,
+  ~78%, 736 tests.
+
+. **`0-AI-MANIFEST.a2ml` is a template stub** referring to
+  `rsr-template-repo` and `.machines_readable/6scm/` (a path that
+  does not exist; canonical is `.machine_readable/`). Reconciled in
+  this audit cycle to point at the actual contractile family layout.
+
+. **`MAINTAINERS.md` content is materially different from
+  `MAINTAINERS.adoc`** — the `.md` file lists a "[To be added]"
+  contact placeholder; the `.adoc` file lists Jonathan D.A. Jewell
+  as Lead Maintainer with GitHub handle. Choosing the `.adoc` (more
+  current + estate convention) — see the `Deleted` section above.
+
+. **`CHANGELOG.md` and `CHANGELOG.adoc` had structurally different
+  histories** — the `.md` file ended at `0.14.0` (2026-01-29);
+  the `.adoc` file includes the same history but at full detail
+  with proper `// SPDX-License-Identifier: MPL-2.0` header. The
+  `.md` is also missing several entries that the `.adoc` has.
+  Keeping `.adoc` (estate convention + more complete).
+
+. **README `Status:` footer line said `Tests: 602 passing`** but
+  the `IMPORTANT` admonition near the top already showed the same
+  `602` figure, while `CLAUDE.md` has been at `736` since 2026-04-20.
+  Drift confirms #44's diagnosis.
+
+. **Wiki state (per `gh api repos/hyperpolymath/valence-shell --jq
+  .has_wiki`):** wiki is **enabled but effectively empty** — single
+  stub page `Home.md` containing only "Welcome to the valence-shell
+  wiki!". Surfaced here as a follow-up rather than written from
+  this audit (wikis are user-facing artefacts and need owner
+  direction on tone/scope). Potential follow-up: decide whether to
+  (a) populate with curated extracts of `README.adoc` + `FAQ.adoc`,
+  (b) disable the wiki and redirect readers to `docs/`, or (c)
+  leave as-is with a `Home.md` pointing at `docs/` and
+  `EXPLAINME.adoc`.
+
+. **`impl/rust-cli/$FILE`** — a literal 5-byte file named `$FILE`
+  exists at the top of `impl/rust-cli/`. Almost certainly a shell
+  artefact from a CI cycle (`$FILE` unset, command wrote to it
+  literally). Filed as a follow-up cleanup target; not in scope
+  for this docs PR.
+
+. **`.well-known/ai.txt` references `AI.a2ml`** as an entry point,
+  but the canonical agent-entry-point in this repo is
+  `0-AI-MANIFEST.a2ml` (lexicographic-first to be auto-discovered).
+  Possible inconsistency with the estate-wide agent-discovery
+  convention — flagged for follow-up.
+
+== Wiki state
+
+`gh api repos/hyperpolymath/valence-shell --jq .has_wiki` returns
+`true`. Cloning `https://github.com/hyperpolymath/valence-shell.wiki.git`
+yields a single page:
+
+[source]
+----
+Home.md (35 bytes):
+    Welcome to the valence-shell wiki!
+----
+
+This is GitHub's default placeholder. No content. Treated as a
+follow-up item (see drift #8 above); no wiki content was written
+during this audit because wiki pages are user-facing artefacts
+that need owner direction.
+
+== Methodology used
+
+This audit followed the verisimdb#81 shape:
+
+. Enumerate canonical-file presence + currency (the per-file table
+  at the top of issue #44).
+. Locate placeholder strings (`{{...}}`) in `.machine_readable/`.
+. Cross-check numeric claims (theorem count, test count, source-file
+  count, fuzz-target count, proof-hole count) against actual reality
+  via `find`/`wc -l`/`grep` and the `PROOF_HOLES_AUDIT.md`.
+. Diff dual-source pairs (`MAINTAINERS.adoc` vs `.md`, `CHANGELOG.adoc`
+  vs `.md`) and consolidate on the estate-convention winner.
+. Walk the open-issue tail (#41–#46, #49, #51) and capture each as
+  audit-table input.
+. Inspect sibling-repo `.machine_readable/agent_instructions/methodology.a2ml`
+  (echidna, proven, ephapax) to ground the divergence-statement in
+  `methodology.a2ml`.
+
+== Next audit
+
+The next deep audit should run after either:
+
+* The Lean → Rust correspondence proof lands (v1.0.0 milestone), or
+* A new proof system is added (which is forbidden by
+  `methodology.a2ml` divergent-invariants — so this is effectively a
+  trigger for *removing* a system, which would itself require an ADR).
+
+Whichever comes first, the audit should refresh the count table
+above against the post-change reality and append a new
+`docs/audits/YYYY-MM-DD-deep-audit.adoc` rather than overwrite this
+file.

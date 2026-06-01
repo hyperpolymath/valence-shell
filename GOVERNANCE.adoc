@@ -75,7 +75,7 @@ Valence Shell follows a **Tri-Perimeter Governance Model** aligned with the TPCF
 * Commitment to project values
 * Active participation
 
-**Current**: See MAINTAINERS.md
+**Current**: See MAINTAINERS.adoc
 
 === Trusted Contributors
 
@@ -151,7 +151,7 @@ Valence Shell follows a **Tri-Perimeter Governance Model** aligned with the TPCF
 
 **Scenarios**:
 
-* Voluntary: Maintainer steps down (honored in MAINTAINERS.md as emeritus)
+* Voluntary: Maintainer steps down (honored in MAINTAINERS.adoc as emeritus)
 * Inactivity: No activity for 6+ months (gentle inquiry first)
 * Code of Conduct violation: Per enforcement process
 
@@ -188,7 +188,7 @@ Valence Shell follows a **Tri-Perimeter Governance Model** aligned with the TPCF
 
 === Release Process
 
-. Version bump in CHANGELOG.md
+. Version bump in CHANGELOG.adoc
 . Tag commit: `git tag -a v0.x.x`
 . CI/CD runs full verification
 . All proofs must compile
@@ -266,7 +266,7 @@ See CODE_OF_CONDUCT.md for full details.
 * **Public discussion**: GitHub/GitLab issues
 * **Security issues**: See SECURITY.md
 * **Code of Conduct**: See CODE_OF_CONDUCT.md
-* **General email**: See MAINTAINERS.md
+* **General email**: See MAINTAINERS.adoc
 
 == Values and Principles
 
@@ -291,4 +291,4 @@ This governance model is inspired by:
 
 Last Updated: 2025-11-22 +
 Version: 1.0 +
-Maintainer: See MAINTAINERS.md
+Maintainer: See MAINTAINERS.adoc

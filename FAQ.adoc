@@ -1,0 +1,222 @@
+// SPDX-License-Identifier: MPL-2.0
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Frequently Asked Questions
+:toc: macro
+:toclevels: 2
+:icons: font
+
+toc::[]
+
+== What is valence-shell, in one sentence?
+
+A formally verified Unix-style shell whose model-layer filesystem operations
+(`mkdir`, `rmdir`, `cp`, `mv`, `ln -s`, `chmod`, `chown`, file content read/write)
+are proven reversible across six independent proof systems (Coq, Lean 4, Agda,
+Isabelle/HOL, Mizar, Z3), with a working interactive Rust CLI that mirrors those
+proven operations and provides undo/redo, named checkpoints, and proof-annotated
+dry-runs.
+
+== Why prove anything about a shell?
+
+Because every traditional shell silently relies on the user trusting the
+filesystem-mutation primitives the shell exposes. `mkdir` and `rmdir` are
+*assumed* to be inverses; `cp` is *assumed* to be a non-destructive copy; `rm -rf`
+is *assumed* to do what its name suggests. valence-shell makes those assumptions
+mathematical theorems with machine-checkable proofs in six different logical
+foundations, so an error in one foundation's modelling does not propagate.
+
+This matters most for two classes of work:
+
+* **Reversible operations (RMR — Remove-Match-Reverse)** — undo/redo,
+  checkpoint/restore, transaction grouping. If you can prove the operation is
+  reversible, you can ship the rollback button.
+* **Auditably irreversible operations (RMO — Remove-Match-Obliterate)** — GDPR
+  "right to be forgotten", secure deletion. If you can prove the operation
+  *destroys information* (is non-injective), you can give a third-party
+  attestation of compliance.
+
+== Why six proof systems and not one?
+
+Cross-validation. The six systems sit on different logical foundations:
+
+* Lean 4 — dependent type theory (primary spec)
+* Coq — Calculus of Inductive Constructions (extraction path to OCaml)
+* Agda — intensional type theory
+* Isabelle/HOL — higher-order logic
+* Mizar — Tarski-Grothendieck set theory
+* Z3 SMT — first-order logic with theories
+
+If all six prove the same theorem, it is *extremely* unlikely that all six
+modelled the problem incorrectly in the same way. This is the same pattern
+seL4 and CompCert use, and it is the central technical commitment of the
+project — see `INTENT.contractile` and `.machine_readable/agent_instructions/methodology.a2ml`
+for the architectural-invariant statement.
+
+== How do I trust the proofs?
+
+Run them yourself, air-gapped if you prefer:
+
+[source,bash]
+----
+# With Nix (recommended — pins the prover versions)
+nix develop
+just verify-proofs
+
+# Or per-system
+just build-coq      # produces .vo certificates
+just build-lean4    # compiles to executable
+just build-agda     # type-checks, generates interface files
+just build-isabelle # builds heap image
+just build-mizar    # set-theoretic foundation
+just build-z3       # SMT SAT/UNSAT queries
+----
+
+The proof artefacts are the trust anchor, not the README claims. If the
+README claims a theorem exists and `just verify-proofs` does not produce
+a certificate for it, the README is wrong — file an issue.
+
+For an honest accounting of *which* theorems are open holes vs. proved,
+see `docs/PROOF_HOLES_AUDIT.md` (the single source of truth) and the
+deep-audit inventory in `docs/audits/2026-06-01-deep-audit.adoc`.
+
+== Is this production-ready?
+
+**No.** valence-shell at v0.9.0 is an advanced research prototype.
+
+What is solid:
+
+* The 6-system proofs of the model-layer operations. ~478 theorem candidates;
+  1 real gap remaining (Coq `obliterate_overwrites_all_blocks`) + 2 documented
+  axioms (1 justified decidability + 1 structural funext).
+* The Rust CLI. 736 tests passing, 0 failures, 7 fuzz targets, working shell
+  surface (pipelines, redirections, here-docs, job control, variables, control
+  structures, glob, quoting).
+
+What is **not** solid enough for production:
+
+* The link from the proven model to the Rust runtime is *property-tested*
+  (~85% confidence), not *mechanically proven*. This is the v1.0.0 blocker.
+* RMO (secure deletion / GDPR) primitives are stubs in the runtime even where
+  the model is proved.
+* POSIX coverage is a strict subset; word-splitting in external command args,
+  full subshell `(...)` syntax, and `~user` tilde expansion are not implemented.
+
+Use for research, education, experimentation. Do not use as your login shell
+on a system you care about.
+
+== Why is `200+ theorems` / `250+ theorems` / `~478 candidates` all over the place?
+
+Historical drift. The figure varied as proof work landed and as different
+counting methodologies were used (definitions vs. lemmas vs. all proof
+obligations including the Idris2 ABI). The 2026-06-01 deep audit (issue #42)
+locked the count at **478 theorem candidates** across all 6 proof systems
+plus the Idris2 ABI layer, distributed as:
+
+[cols="1,1,3",options="header"]
+|===
+|System |Count |Notes
+|Lean 4 |101 |Primary source of truth
+|Coq |131 |Includes `extraction.v` — 3 admits remaining
+|Isabelle/HOL |76 |Cross-validation
+|Agda |85 |3 postulates remaining (including funext)
+|Mizar |63 |Set-theoretic foundation
+|Z3 SMT |125 asserts |Automated decision procedures
+|Idris2 (ABI + filesystem) |~22 |2 holes + 10 partial markers
+|===
+
+If you see a stale number elsewhere in the repo, please file an issue —
+the audit log at `docs/audits/` is the bookkeeping.
+
+== What's the difference between RMR and RMO?
+
+* **RMR — Remove-Match-Reverse.** The operation is *reversible*: there exists
+  an inverse that recovers the prior state exactly. Theorems of this form
+  look like `precondition p fs -> reverse(op(p, fs)) = fs`. This is what
+  `mkdir`/`rmdir`, `cp`/`mv`/`ln -s`, file write, and `chmod`/`chown` get.
+* **RMO — Remove-Match-Obliterate.** The operation *destroys information*: it
+  is provably non-injective (different starting states can produce the same
+  result). Theorems of this form look like
+  `exists fs1 fs2, fs1 != fs2 /\ obliterate(fs1) = obliterate(fs2)`. This is
+  the correct formalisation of "irreversibly deleted" — the historical
+  formulation `not (exists recover, recover(obliterate(...)) = sfs)` is
+  *false* (the constant function trivially satisfies it) and was caught and
+  replaced 2026-04-03 across Agda, Isabelle, and Lean 4.
+
+The two are complementary: RMR gives you safety (rollback exists), RMO gives
+you privacy (no rollback is possible, by construction).
+
+== What's the difference between algorithmic and thermodynamic reversibility?
+
+* **Algorithmic** (what valence-shell has): `F⁻¹(F(s)) = s` — operations can
+  be undone; the information needed to invert is preserved by the system.
+* **Thermodynamic** (what valence-shell does NOT have): the Landauer limit
+  / Bennett's reversible computing — physical energy → 0 per bit erased.
+
+valence-shell makes claims about the former, not the latter. If you need
+thermodynamic guarantees, you need different hardware, not different proofs.
+
+== Can I use this in my project?
+
+* **For research / education / experimentation**: yes, please.
+* **For production**: not yet (wait for v1.0.0; the v1.0.0 blocker is the
+  mechanised Lean → Rust correspondence proof).
+* **Licence**: `MPL-2.0` (SPDX). See `LICENSE`. Note that the project migrated
+  from PMPL-1.0 to MPL-2.0 in commit `990b147` — the `LICENSES/` directory
+  carries the REUSE-format SPDX metadata.
+
+== How does this relate to Absolute Zero / CNO?
+
+Absolute Zero contributed the **CNO (Certified Null Operation)** composition
+theory: a reversible operation followed by its inverse is provably the
+identity. valence-shell implements that theory specifically for filesystem
+operations — see the `cno_identity_element` theorem in the README and the
+proofs of `operation_sequence_reversible`.
+
+== Where is the FFI / ABI surface?
+
+Valence-shell follows the estate boundary-convention policy
+(`feedback_estate_boundary_conventions`):
+
+* In-process FFI (Rust ↔ C) — Zig scaffolding in `impl/zig/`.
+* Formal ABI / proof carrier — Idris2 in `proofs/idris2/` (~22 theorems, 2 holes,
+  10 partial markers per issue #42).
+* BEAM ↔ native — would use SNIFs; not currently wired (BEAM daemon is
+  designed but not implemented).
+* Compile target / typed-wasm — not currently a target.
+* Cross-system service discovery — Groove Protocol; not currently wired.
+
+The Rust CLI is the production runtime; OCaml extraction (`proofs/coq/extraction.v`)
+exists in design form but is not wired into a build target.
+
+== What is the MAA framework, exactly?
+
+**MAA — Mutually Assured Accountability.** Every filesystem-touching action
+in valence-shell falls into one of two provable categories:
+
+. RMR — reversible, with a proven inverse and an undo/redo path.
+. RMO — irreversible by design, with a proof that information was destroyed
+  and an audit trail that survives the destruction.
+
+"Mutually assured" means *both* parties (the user and any third-party auditor)
+have machine-checkable evidence: the user knows what undo/redo guarantees
+they have; the auditor can verify that a claimed deletion actually destroyed
+the information. No party can claim a different story than the proofs allow.
+
+This is the broader reason the project exists. The shell is the artefact; the
+framework is the contribution.
+
+== Where do I report a problem?
+
+* **Bug** — https://github.com/Hyperpolymath/valence-shell/issues
+* **Security vulnerability** — see `SECURITY.md` and `.well-known/security.txt`.
+* **A documentation count is wrong** — file an issue tagged `docs` and cite the
+  reality (`find ... | wc -l`, `cargo test`, etc.). The 2026-06-01 deep-audit
+  log in `docs/audits/2026-06-01-deep-audit.adoc` is the bookkeeping baseline.
+* **The proofs don't reproduce** — please attach `just verify-proofs` output
+  and the version of each prover you used (`nix develop` pins them).
+
+== Who maintains this?
+
+See `MAINTAINERS.adoc`. Primary development is on GitLab
+(`https://gitlab.com/non-initiate/rhodinised/vsh`); the GitHub repository is
+the canonical public mirror.
