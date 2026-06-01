@@ -43,7 +43,7 @@
 //! // Content will be "hello world"
 //! ```
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 /// Quote state for a segment of text
 #[derive(Debug, Clone, PartialEq, Eq)]

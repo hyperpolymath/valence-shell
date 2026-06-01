@@ -558,8 +558,8 @@ impl ShellState {
     /// Resolve a path relative to sandbox root
     /// Prevents path traversal attacks via `..` components
     pub fn resolve_path(&self, path: &str) -> PathBuf {
-        let raw = if path.starts_with('/') {
-            self.root.join(&path[1..])
+        let raw = if let Some(stripped) = path.strip_prefix('/') {
+            self.root.join(stripped)
         } else {
             self.root.join(path)
         };
@@ -818,7 +818,7 @@ impl ShellState {
     pub fn is_array(&self, name: &str) -> bool {
         self.variables
             .get(name)
-            .map_or(false, |v| matches!(v, VariableValue::Array(_)))
+            .is_some_and(|v| matches!(v, VariableValue::Array(_)))
     }
 
     // ========================================================================

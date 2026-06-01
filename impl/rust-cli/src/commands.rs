@@ -1677,7 +1677,7 @@ pub fn show_graph(state: &ShellState) -> Result<()> {
                 .unwrap_or_else(|| format!("[non-reversible: {}]", op.path));
             print!("{}", inverse_str.bright_yellow());
         }
-        print!(" → [initial]\n");
+        println!(" → [initial]");
     }
 
     Ok(())
@@ -1797,7 +1797,7 @@ pub fn fg(state: &mut ShellState, job_spec: Option<&str>) -> Result<()> {
         }
 
         // Update job state based on wait result
-        if unsafe { libc::WIFSTOPPED(status) } {
+        if libc::WIFSTOPPED(status) {
             state.jobs.update_job_state(pgid, JobState::Stopped);
             println!(
                 "\n[{}]+  Stopped              {}",
@@ -2187,7 +2187,7 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
             let expanded = crate::parser::expand_variables(path, state);
             let resolved = state.resolve_path(&expanded);
             let parent = resolved.parent();
-            let parent_exists = parent.map_or(false, |p| p.exists());
+            let parent_exists = parent.is_some_and(|p| p.exists());
             let path_free = !resolved.exists();
             println!(
                 "    {} Parent exists:       {}",
@@ -2222,7 +2222,8 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
                 resolved.display()
             );
         }
-        crate::parser::Command::Chmod { path, .. } | crate::parser::Command::Chown { path, .. } => {
+        crate::parser::Command::Chmod { path: _, .. }
+        | crate::parser::Command::Chown { path: _, .. } => {
             // Outer arm guarantees we are in {Chmod, Chown}; the inner match
             // exists only to extract the `path` field uniformly. Any other
             // variant here is a structural bug, surfaced as typed error.
@@ -2577,15 +2578,12 @@ pub fn replay(state: &ShellState, start: usize, end: usize) -> Result<()> {
             op.path,
             format!("[op:{}]", &op.id.to_string()[..8]).bright_black()
         );
-        println!(
-            "    State: fs{} ──▶ fs{}",
-            if idx == 0 {
-                "₀".to_string()
-            } else {
-                format!("_{}", idx)
-            },
-            format!("_{}", idx + 1)
-        );
+        let from_state = if idx == 0 {
+            "₀".to_string()
+        } else {
+            format!("_{}", idx)
+        };
+        println!("    State: fs{} ──▶ fs_{}", from_state, idx + 1);
         println!(
             "    Proof: {} {}",
             proof.theorem.bright_cyan(),

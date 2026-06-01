@@ -274,8 +274,8 @@ fn try_parse_bash_function(input: &str) -> Option<(String, Vec<String>, String)>
     let after_name = rest[name_end..].trim_start();
 
     // Skip optional () if present
-    let body_start_str = if after_name.starts_with("()") {
-        after_name[2..].trim_start()
+    let body_start_str = if let Some(stripped) = after_name.strip_prefix("()") {
+        stripped.trim_start()
     } else {
         after_name
     };
@@ -303,7 +303,7 @@ fn try_parse_bash_function(input: &str) -> Option<(String, Vec<String>, String)>
 fn parse_function_body(body_str: &str) -> Vec<String> {
     // Split on semicolons and newlines, filtering empty segments
     body_str
-        .split(|c| c == ';' || c == '\n')
+        .split([';', '\n'])
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect()

@@ -6,7 +6,6 @@
 
 use std::env;
 use std::fs;
-use std::path::PathBuf;
 
 /// Calculate Levenshtein distance between two strings
 ///
@@ -36,9 +35,11 @@ pub fn levenshtein_distance(a: &str, b: &str) -> usize {
     let mut matrix = vec![vec![0; len_b + 1]; len_a + 1];
 
     // Initialize first row and column
+    #[allow(clippy::needless_range_loop)]
     for i in 0..=len_a {
         matrix[i][0] = i;
     }
+    #[allow(clippy::needless_range_loop)]
     for j in 0..=len_b {
         matrix[0][j] = j;
     }

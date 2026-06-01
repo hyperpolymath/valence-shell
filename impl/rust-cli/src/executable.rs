@@ -853,9 +853,8 @@ impl ExecutableCommand for Command {
 
             Command::Unset { name } => {
                 let expanded_name = crate::parser::expand_variables(name, state);
-                if expanded_name.starts_with("-f ") {
+                if let Some(func_name) = expanded_name.strip_prefix("-f ") {
                     // unset -f: remove a function
-                    let func_name = &expanded_name[3..];
                     if !state.functions.unset(func_name) {
                         eprintln!("unset: {}: not a function", func_name);
                     }
@@ -1160,7 +1159,7 @@ impl ExecutableCommand for Command {
                     for sig_name in signals {
                         let expanded = crate::parser::expand_variables(sig_name, state);
                         if let Some(sig) = TrapSignal::from_str(&expanded) {
-                            state.traps.set(sig, &action);
+                            state.traps.set(sig, action);
                         } else {
                             eprintln!("trap: {}: invalid signal specification", expanded);
                         }
@@ -1599,12 +1598,12 @@ fn case_pattern_matches(word: &str, pattern: &str) -> bool {
 
 /// Simple glob pattern matching for case statements
 fn glob_match(pattern: &str, text: &str) -> bool {
-    let mut p = pattern.chars().peekable();
-    let mut t = text.chars().peekable();
+    let _p = pattern.chars().peekable();
+    let _t = text.chars().peekable();
 
     glob_match_inner(
-        &mut pattern.chars().collect::<Vec<_>>(),
-        &mut text.chars().collect::<Vec<_>>(),
+        &pattern.chars().collect::<Vec<_>>(),
+        &text.chars().collect::<Vec<_>>(),
         0,
         0,
     )

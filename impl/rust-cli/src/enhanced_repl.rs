@@ -12,9 +12,9 @@ use anyhow::Result;
 use nu_ansi_term::{Color, Style};
 use reedline::{
     default_emacs_keybindings, ColumnarMenu, Completer, DefaultHinter, DefaultValidator, Emacs,
-    FileBackedHistory, HistoryItem, KeyCode, KeyModifiers, MenuBuilder, Prompt, PromptEditMode,
+    FileBackedHistory, KeyCode, KeyModifiers, MenuBuilder, Prompt, PromptEditMode,
     PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineEvent, ReedlineMenu, Signal,
-    Span, StyledText, Suggestion,
+    Span, Suggestion,
 };
 use std::borrow::Cow;
 use std::path::PathBuf;
@@ -180,16 +180,17 @@ fn complete_path(prefix: &str, pos: usize) -> Vec<Suggestion> {
 struct VshPrompt {
     txn_name: Option<String>,
     undo_count: usize,
+    #[allow(dead_code)]
     cwd: String,
     continuation: bool,
 }
 
 impl Prompt for VshPrompt {
-    fn render_prompt_left(&self) -> Cow<str> {
+    fn render_prompt_left(&self) -> Cow<'_, str> {
         Cow::Borrowed("")
     }
 
-    fn render_prompt_right(&self) -> Cow<str> {
+    fn render_prompt_right(&self) -> Cow<'_, str> {
         if let Some(ref txn) = self.txn_name {
             Cow::Owned(format!("[txn:{}]", txn))
         } else {
@@ -197,7 +198,7 @@ impl Prompt for VshPrompt {
         }
     }
 
-    fn render_prompt_indicator(&self, _edit_mode: PromptEditMode) -> Cow<str> {
+    fn render_prompt_indicator(&self, _edit_mode: PromptEditMode) -> Cow<'_, str> {
         if self.continuation {
             return Cow::Owned(Color::Yellow.paint("...> ").to_string());
         }
@@ -217,14 +218,14 @@ impl Prompt for VshPrompt {
         Cow::Owned(format!("{}{}", undo_indicator, txn_indicator))
     }
 
-    fn render_prompt_multiline_indicator(&self) -> Cow<str> {
+    fn render_prompt_multiline_indicator(&self) -> Cow<'_, str> {
         Cow::Borrowed("...> ")
     }
 
     fn render_prompt_history_search_indicator(
         &self,
         history_search: PromptHistorySearch,
-    ) -> Cow<str> {
+    ) -> Cow<'_, str> {
         let prefix = match history_search.status {
             PromptHistorySearchStatus::Passing => "",
             PromptHistorySearchStatus::Failing => "failing ",

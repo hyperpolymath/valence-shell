@@ -6,7 +6,7 @@
 
 use colored::Colorize;
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::correction::suggest_correction;
 

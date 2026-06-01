@@ -175,6 +175,7 @@ impl VshHighlighter {
                     // Check for multi-character operators
                     let mut op = String::from(ch);
                     if let Some(&next_ch) = chars.peek() {
+                        #[allow(clippy::if_same_then_else)]
                         if (ch == '>' || ch == '<' || ch == '&' || ch == '|') && next_ch == ch {
                             chars.next();
                             op.push(next_ch);

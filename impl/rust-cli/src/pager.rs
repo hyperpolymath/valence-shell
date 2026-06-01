@@ -115,13 +115,10 @@ impl Pager {
             // Check if more content remains
             if current_line < total_lines {
                 // Show prompt
-                let remaining = total_lines - current_line;
+                let _remaining = total_lines - current_line;
                 print!(
-                    "\r{}",
-                    format!(
-                        "-- MORE -- ({}/{} lines) [space=next page, enter=next line, q=quit] ",
-                        current_line, total_lines
-                    )
+                    "\r-- MORE -- ({}/{} lines) [space=next page, enter=next line, q=quit] ",
+                    current_line, total_lines
                 );
                 io::stdout().flush()?;
 

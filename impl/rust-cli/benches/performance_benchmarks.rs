@@ -16,9 +16,8 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::fs;
-use std::io::Write;
 use tempfile::TempDir;
-use vsh::commands::{mkdir, redo, rm, touch, undo};
+use vsh::commands::{mkdir, redo, undo};
 use vsh::glob::expand_glob;
 use vsh::state::ShellState;
 

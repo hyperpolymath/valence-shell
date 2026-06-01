@@ -665,7 +665,7 @@ pub fn eval_arith(expr: &ArithExpr, state: &ShellState) -> Result<i64> {
                 ArithOp::BitOr => Ok(lval | rval),
                 ArithOp::BitXor => Ok(lval ^ rval),
                 ArithOp::ShiftLeft => {
-                    if rval < 0 || rval >= 64 {
+                    if !(0..64).contains(&rval) {
                         Err(anyhow!("Shift count out of range: {}", rval))
                     } else {
                         lval.checked_shl(rval as u32)
@@ -673,7 +673,7 @@ pub fn eval_arith(expr: &ArithExpr, state: &ShellState) -> Result<i64> {
                     }
                 }
                 ArithOp::ShiftRight => {
-                    if rval < 0 || rval >= 64 {
+                    if !(0..64).contains(&rval) {
                         Err(anyhow!("Shift count out of range: {}", rval))
                     } else {
                         lval.checked_shr(rval as u32)

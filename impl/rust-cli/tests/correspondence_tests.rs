@@ -357,8 +357,8 @@ fn test_createfile_creates_file() -> Result<()> {
 
 use proptest::prelude::*;
 
-/// Property test: mkdir followed by rmdir always restores state
-/// Corresponds to Lean theorem: mkdir_rmdir_reversible (property version)
+// Property test: mkdir followed by rmdir always restores state
+// Corresponds to Lean theorem: mkdir_rmdir_reversible (property version)
 proptest! {
     #[test]
     fn prop_mkdir_rmdir_reversible(name in "[a-z]{1,10}") {
@@ -379,7 +379,7 @@ proptest! {
     }
 }
 
-/// Property test: touch followed by rm always restores state
+// Property test: touch followed by rm always restores state
 proptest! {
     #[test]
     fn prop_touch_rm_reversible(name in "[a-z]{1,10}\\.txt") {
@@ -400,7 +400,7 @@ proptest! {
     }
 }
 
-/// Property test: operations on disjoint paths are independent
+// Property test: operations on disjoint paths are independent
 proptest! {
     #[test]
     fn prop_path_independence(

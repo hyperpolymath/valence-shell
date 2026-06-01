@@ -15,7 +15,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use uuid::Uuid;
 
 use crate::state::Operation;

@@ -14,7 +14,6 @@
 
 use proptest::prelude::*;
 use std::fs;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 // ─── Helpers ───
