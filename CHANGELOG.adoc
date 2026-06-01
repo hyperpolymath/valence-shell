@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cargo fmt` sweep across `impl/rust-cli/` (PR #73)
 - SHA-pin `standards/governance-reusable.yml` from floating `@main` (PR #103)
 - 5 GH Action SHA bumps (`checkout` → 1cce339, `cache` → 27d5ce7, `upload-artifact` → 043fb46, `rust-cache` → 8ba370a, `scorecard-action` → af76153) + 30 cargo dep bumps (PR #68)
+- Add Idris2 build oracle: Justfile recipes + `idris-verification.yml` workflow + README docs (PR #106 — closes #70)
+- Drop `codeql.yml`: the JS/TS leg failed under newer codeql-action SHAs (empty-source rejection) and the repo is Rust-primary; Hypatia Neurosymbolic Analysis covers semantic analysis (closes #71)
 
 ==== Licensing
 - LICENSE: drop Palimpsest preamble + FALLBACK framing → plain MPL-2.0 (PR #101)
@@ -52,10 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove accidentally-tracked runtime artifacts `impl/rust-cli/$FILE` + `.vsh_state.json` from PR #73's test session; add both to `.gitignore` (PR #75)
 
 ==== Issues filed (PR-sized work units)
-- #60, #61 — RMO.idr theorem-shape redesigns (Idris2 `?holes` are non-theorems by type signature, not gaps to fill)
+- #60, #61 — RMO.idr theorem-shape redesigns CLOSED via PR #105 (Idris2 `?holes` were non-theorems by type signature; signatures redesigned to mirror Coq)
 - #63-#66 — 4 crash-consistency sub-frontiers (POSIX 2024 edges / concurrency-multi-process / Idris2-via-typed-WASM / hardware barriers)
-- #70 — Idris2 build oracle infra (Justfile target + CI job + stdlib provision)
-- #71 — CodeQL JS/TS regression with newer action SHAs
+- #70 — Idris2 build oracle infra CLOSED via PR #106 (Justfile target + CI job + README docs)
+- #71 — CodeQL JS/TS regression CLOSED (workflow dropped — Hypatia covers semantic analysis)
 - #76-#94 — 17 sub-issues under #41/#42/#43/#45 for Option-2 full-closure work
 
 == [0.14.0] - 2026-01-29
