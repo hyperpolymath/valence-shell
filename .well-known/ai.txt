@@ -13,5 +13,7 @@ Disallow-Generation: yes
 # AI agents must preserve Emotional Lineage per PMPL Section 3.
 #
 # For AI agent integration instructions, see:
-#   AI.a2ml (AI entry point)
-#   .machine_readable/ (structured project state)
+#   0-AI-MANIFEST.a2ml (lexicographic-first AI entry point)
+#   .machine_readable/INTENT.contractile (purpose + ecosystem)
+#   .machine_readable/agent_instructions/methodology.a2ml (mode/budget/invariants)
+#   docs/audits/ (drift-reconciliation audit log)

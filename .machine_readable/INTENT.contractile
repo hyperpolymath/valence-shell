@@ -30,17 +30,47 @@
 ; ── End Definitions ──────────────────────────────────────────────
 
 (intent-contractile
-  (version "1.0.0")
+  (version "1.1.0")
   (repo "valence-shell")
 
   ; === Purpose (what this repo IS) ===
   (purpose
-    "{{ONE_PARAGRAPH_PURPOSE}}"
+    "valence-shell (vsh) is a formally verified Unix-style shell whose every \
+     filesystem-touching operation is backed by a machine-checkable proof of \
+     reversibility. It implements the MAA (Mutually Assured Accountability) \
+     framework: the model-layer operations (mkdir/rmdir, create/delete/write, \
+     cp/mv/ln -s, chmod/chown) are proven reversible across 6 independent \
+     proof systems (Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3) so that \
+     cross-validation catches errors a single foundation would miss. The \
+     primary deliverable is a working interactive Rust CLI (impl/rust-cli/) \
+     that mirrors those proven operations and provides undo/redo, named \
+     checkpoints, transaction grouping, and proof-annotated dry-runs — \
+     plus enough POSIX shell surface (pipelines, redirections, here-docs, \
+     job control, variables, control structures, glob, quoting) to be \
+     actually usable. The long-term motivation is GDPR-grade auditable \
+     deletion: every act on the filesystem should be either reversible \
+     (RMR) or attestably irreversible (RMO), with the choice and the proof \
+     observable to a third party."
   )
 
   ; === Anti-Purpose (what this repo is NOT — prevents scope creep) ===
   (anti-purpose
-    "{{ONE_PARAGRAPH_ANTI_PURPOSE}}"
+    "valence-shell is NOT a drop-in bash/zsh replacement: it is \
+     verification-first, not POSIX-first. POSIX compliance is a means to \
+     the end of running real shell scripts against proven operations, not \
+     the goal itself — features that cannot be modelled and proven \
+     reversible (or attestably irreversible) are out of scope for the \
+     core. It is NOT a research vehicle for shell language design: \
+     syntactic innovation goes to other shells. It is NOT a production \
+     shell as of v0.9.0 — the extraction gap (Lean → Rust → POSIX \
+     syscalls) is not formally closed; the Rust CLI matches the proven \
+     model via property tests at roughly 85% confidence, not via a \
+     mechanised correspondence theorem. It is NOT a general-purpose \
+     filesystem library: external consumers should not depend on \
+     impl/rust-cli/ internals; the stable surface is the proofs and \
+     (eventually) an extracted, verified runtime. It is NOT a place for \
+     unverified 'convenience features' — every command must have a \
+     proof story or an explicit, documented gap."
     ; Examples:
     ; "This is NOT a general-purpose database — it solves one specific problem."
     ; "This is NOT a framework — it is a library with a focused API."
@@ -49,24 +79,57 @@
 
   ; === Key Architectural Decisions That Must Not Be Reversed ===
   (architectural-invariants
-    ; *REMINDER: List the foundational decisions*
-    ; ("Idris2 for ABI definitions — dependent types prove interface correctness")
-    ; ("Zig for FFI — zero-cost C ABI compatibility")
-    ; ("Elixir for supervision — OTP fault tolerance")
+    ("Polyglot verification — 6 proof systems (Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3) prove the SAME core theorems across DIFFERENT logical foundations; do not collapse to a single prover")
+    ("Lean 4 is the primary spec — when proofs disagree, Lean is the canonical statement; other systems cross-validate")
+    ("Coq is the extraction path — proofs in coq/ must remain extractable to OCaml/Rust; do not introduce non-computational axioms beyond the documented set (funext, well-formedness, decidability of is_empty_dir)")
+    ("Rust is the primary runtime — impl/rust-cli/ is the only production-tracked implementation; OCaml/Elixir/Zig live in impl/ but are reference/FFI artefacts only")
+    ("MAA framework split — RMR (Remove-Match-Reverse) operations MUST be proven reversible; RMO (Remove-Match-Obliterate) operations MUST be proven non-injective (information-loss) — never collapse the two")
+    ("Honest-status discipline — every claim in README/CLAUDE.md/contractiles must have a counterpart caveat; the EXPLAINME.adoc per-claim caveat pattern is load-bearing")
+    ("Reversibility predicate is conditional — theorems are of the form `precondition p fs -> reverse(op(p, fs)) = fs`; never weaken to unconditional reversibility")
+    ("Proof-hole audit is authoritative — `docs/PROOF_HOLES_AUDIT.md` is the single source of truth for remaining gaps; CLAUDE.md and README MUST be kept in sync with it")
+    ("Six-tool boundary policy is in force — Zig for APIs/FFIs, Idris2 for ABIs, SNIFs for BEAM↔native, typed-wasm for compile targets, Groove Protocol for cross-system service discovery; bash/POSIX is the user surface, not an internal interop layer")
   )
 
   ; === Sensitive Areas (if in doubt, ask) ===
   (ask-before-touching
-    ; *REMINDER: List areas where LLMs should check before modifying*
-    ; "src/abi/ — formal proofs, changes require re-verification"
-    ; "ffi/zig/ — C ABI boundary, changes affect all language bindings"
-    ; ".machine_readable/ — checkpoint files, format is specified"
+    "proofs/coq/ proofs/lean4/ proofs/agda/ proofs/isabelle/ proofs/mizar/ proofs/z3/ — every change requires re-verification across affected systems"
+    "proofs/idris2/ — ABI carriers; changes here ripple to FFI surface"
+    "docs/PROOF_HOLES_AUDIT.md — single-source-of-truth for proof debt; any change must be reflected in CLAUDE.md and README counts the same commit"
+    ".machine_readable/ — contractile family (MUST/TRUST/DUST/INTENT/ADJUST) + a2ml agent state; format is specified by the agentic-a2ml ADRs"
+    "impl/rust-cli/src/state.rs — operation history, undo/redo, checkpoints; this is the runtime correspondence to the proven model"
+    "impl/rust-cli/src/commands/secure_deletion.rs and proofs/idris2/RMO.idr — RMO/GDPR claims; the entire compliance story rides on these"
+    "EXPLAINME.adoc — the per-claim-caveat scaffold; do not delete or 'simplify' without owner sign-off"
+    "LICENSE + LICENSES/ — REUSE-format SPDX; the project migrated PMPL-1.0 → MPL-2.0 in commit 990b147 and must not regress"
   )
 
   ; === Ecosystem Position ===
   (ecosystem
-    (belongs-to "{{MONOREPO_OR_STANDALONE}}")
-    (depends-on ("{{DEP1}}" "{{DEP2}}"))
-    (depended-on-by ("{{CONSUMER1}}" "{{CONSUMER2}}"))
+    (belongs-to "STANDALONE")
+    ; The proof systems, the Rust CLI, the ABI carriers, and the supporting
+    ; reference implementations (OCaml/Elixir/Zig) all live in this single repo.
+    ; valence-shell is NOT a sub-project of a larger monorepo.
+
+    (depends-on
+      "Coq 8.18+ — Calculus of Inductive Constructions, extraction to OCaml"
+      "Lean 4.3+ — primary specification language (dependent type theory)"
+      "Agda 2.6.4+ — intensional type theory, cross-validation"
+      "Isabelle/HOL 2024 — higher-order logic, cross-validation"
+      "Mizar — Tarski-Grothendieck set theory, cross-validation"
+      "Z3 4.12+ — SMT solver, automated decision procedures"
+      "Rust toolchain (stable, edition 2021) — impl/rust-cli/ primary implementation"
+      "cargo-fuzz — fuzz harness (7 targets in impl/rust-cli/fuzz/fuzz_targets/)"
+      "reedline — interactive REPL backend"
+      "Just (command runner) — top-level build orchestration"
+      "Nix (recommended) — pinned multi-prover toolchain via flake.nix"
+    )
+
+    (depended-on-by
+      ; valence-shell has no known production downstream consumers at v0.9.0.
+      ; It is a standalone research prototype. Treat any future consumer
+      ; relationship as a hard architectural decision requiring INTENT update.
+      "NONE_AT_V0_9_0 — no known downstream consumers; this is a standalone research prototype"
+      ; Conceptual / aspirational relationships (NOT current code dependencies):
+      "absolute-zero (conceptual ancestor) — CNO composition theory predates this project; vsh implements it for filesystem ops"
+    )
   )
 )
