@@ -1,4 +1,5 @@
 -- SPDX-License-Identifier: MPL-2.0
+-- Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -- Filesystem Model - Core Types and Definitions
 --
 -- This module defines the abstract filesystem model used throughout
