@@ -133,6 +133,28 @@ Proof.
   - apply Heq.
 Qed.
 
+(** [mkdir_with] / [create_file_with] preserve equivalence — same shape
+    as their default-perms cousins. *)
+Lemma mkdir_with_preserves_equiv :
+  forall p pe fs1 fs2,
+    fs1 ≈ fs2 ->
+    mkdir_with p pe fs1 ≈ mkdir_with p pe fs2.
+Proof.
+  intros p pe fs1 fs2 Heq p'.
+  unfold mkdir_with, fs_update.
+  destruct (list_eq_dec String.string_dec p p'); [reflexivity | apply Heq].
+Qed.
+
+Lemma create_file_with_preserves_equiv :
+  forall p pe fs1 fs2,
+    fs1 ≈ fs2 ->
+    create_file_with p pe fs1 ≈ create_file_with p pe fs2.
+Proof.
+  intros p pe fs1 fs2 Heq p'.
+  unfold create_file_with, fs_update.
+  destruct (list_eq_dec String.string_dec p p'); [reflexivity | apply Heq].
+Qed.
+
 (** Generic operation preserves equivalence *)
 Theorem apply_op_preserves_equiv :
   forall op fs1 fs2,
@@ -151,6 +173,10 @@ Proof.
     apply create_file_preserves_equiv; assumption.
   - (* OpDeleteFile *)
     apply delete_file_preserves_equiv; assumption.
+  - (* OpMkdirWithPerms *)
+    apply mkdir_with_preserves_equiv; assumption.
+  - (* OpCreateFileWithPerms *)
+    apply create_file_with_preserves_equiv; assumption.
 Qed.
 
 (** * Substitution Property *)
@@ -172,7 +198,7 @@ Qed.
 Theorem reversible_creates_equiv :
   forall op fs,
     reversible op fs ->
-    apply_op (reverse_op op) (apply_op op fs) ≈ fs.
+    apply_op (reverse_op op fs) (apply_op op fs) ≈ fs.
 Proof.
   intros op fs Hrev p.
   rewrite (single_op_reversible op fs Hrev).
@@ -183,7 +209,7 @@ Qed.
 Theorem sequence_reversible_equiv :
   forall ops fs,
     all_reversible ops fs ->
-    apply_sequence (reverse_sequence ops) (apply_sequence ops fs) ≈ fs.
+    apply_sequence (reverse_sequence ops fs) (apply_sequence ops fs) ≈ fs.
 Proof.
   intros ops fs Hrev p.
   rewrite (operation_sequence_reversible ops fs Hrev).
@@ -198,7 +224,7 @@ Qed.
 Theorem cno_identity_element :
   forall op fs,
     reversible op fs ->
-    apply_op (reverse_op op) (apply_op op fs) ≈ fs.
+    apply_op (reverse_op op fs) (apply_op op fs) ≈ fs.
 Proof.
   exact reversible_creates_equiv.
 Qed.
@@ -207,7 +233,7 @@ Qed.
 Theorem sequence_cno_identity :
   forall ops fs,
     all_reversible ops fs ->
-    apply_sequence (reverse_sequence ops) (apply_sequence ops fs) ≈ fs.
+    apply_sequence (reverse_sequence ops fs) (apply_sequence ops fs) ≈ fs.
 Proof.
   exact sequence_reversible_equiv.
 Qed.
