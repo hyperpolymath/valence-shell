@@ -70,8 +70,8 @@
 - Elixir tests: ✅ **+6** (NIF-specific behavior)
 - **Total test coverage increase: ~60 new tests/benchmarks**
 
-## FAKE-FUZZ ALERT
+## Fuzz coverage
 
-- `tests/fuzz/placeholder.txt` is a scorecard placeholder inherited from rsr-template-repo — it does NOT provide real fuzz testing
-- Replace with an actual fuzz harness (see rsr-template-repo/tests/fuzz/README.adoc) or remove the file
-- Priority: P2 — creates false impression of fuzz coverage
+- Real fuzz harnesses live at `impl/rust-cli/fuzz/fuzz_targets/` (cargo-fuzz) and `.clusterfuzzlite/` (ClusterFuzzLite CI integration).
+- The legacy `tests/fuzz/placeholder.txt` scorecard-placeholder was removed on 2026-06-01; the real harnesses now satisfy the fuzz-coverage scorecard signal.
+- Missing fuzz targets per #43 (quotes, redirection, here_docs, command_sub, process_sub) tracked separately.
