@@ -2,6 +2,7 @@
 
 // ref lib/vsh/nif.ex:33
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 // Valence Shell - Zigler NIF implementation
 
 const std = @import("std");

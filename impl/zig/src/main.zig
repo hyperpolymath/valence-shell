@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Valence Shell - Zig Fast Path
 //!
 //! Fast startup path for simple operations (~5ms cold start).

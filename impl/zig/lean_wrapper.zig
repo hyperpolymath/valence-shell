@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Valence Shell - Zig Wrapper for Lean 4 Extracted Code
 //!
 //! This file provides Zig-callable wrappers around Lean 4 compiled code.
