@@ -11,6 +11,7 @@ Require Import List.
 Require Import Bool.
 Require Import Arith.
 Require Import Lia.
+Require Import Coq.Logic.FunctionalExtensionality.
 Import ListNotations.
 
 Require Import filesystem_model.
@@ -18,12 +19,29 @@ Require Import file_operations.
 
 (** * Operation Abstraction *)
 
-(** Abstract operation type *)
+(** Abstract operation type.
+
+    The [OpMkdirWithPerms] and [OpCreateFileWithPerms] constructors carry
+    the [Permissions] snapshot of the node being re-created.  They exist
+    so that the inverse of an [OpRmdir]/[OpDeleteFile] can faithfully
+    restore the original entry (closure path #2 from the model-gap design
+    note below — see the [single_op_reversible] header docstring). *)
 Inductive Operation : Type :=
   | OpMkdir : Path -> Operation
   | OpRmdir : Path -> Operation
   | OpCreateFile : Path -> Operation
-  | OpDeleteFile : Path -> Operation.
+  | OpDeleteFile : Path -> Operation
+  | OpMkdirWithPerms : Path -> Permissions -> Operation
+  | OpCreateFileWithPerms : Path -> Permissions -> Operation.
+
+(** [mkdir_with] and [create_file_with]: write a node with the supplied
+    [Permissions] rather than [default_perms].  These are used exclusively
+    by the inverse-of-removal path. *)
+Definition mkdir_with (p : Path) (pe : Permissions) (fs : Filesystem) : Filesystem :=
+  fs_update p (Some (mkFSNode Directory pe)) fs.
+
+Definition create_file_with (p : Path) (pe : Permissions) (fs : Filesystem) : Filesystem :=
+  fs_update p (Some (mkFSNode File pe)) fs.
 
 (** Apply an operation to a filesystem *)
 Definition apply_op (op : Operation) (fs : Filesystem) : Filesystem :=
@@ -32,15 +50,39 @@ Definition apply_op (op : Operation) (fs : Filesystem) : Filesystem :=
   | OpRmdir p => rmdir p fs
   | OpCreateFile p => create_file p fs
   | OpDeleteFile p => delete_file p fs
+  | OpMkdirWithPerms p pe => mkdir_with p pe fs
+  | OpCreateFileWithPerms p pe => create_file_with p pe fs
   end.
 
-(** Reverse of an operation *)
-Definition reverse_op (op : Operation) : Operation :=
+(** Reverse of an operation given the pre-state.
+
+    The pre-state [fs] is consulted only for the [OpRmdir] /
+    [OpDeleteFile] cases, where the perms of the to-be-removed node are
+    captured so the inverse can restore them exactly.  For all other
+    constructors the reverse is independent of [fs].
+
+    Design rationale: keeping [reverse_op] as a function of [op] alone
+    would force us to pick a single [Permissions] value at definition
+    time — the only honest choice would be [default_perms], which gives
+    back the existing (provably-false-for-non-default-perms) statement.
+    Threading [fs] is the minimal change that lets the inverse depend on
+    runtime state and is consistent with the directive's closure path #2. *)
+Definition reverse_op (op : Operation) (fs : Filesystem) : Operation :=
   match op with
   | OpMkdir p => OpRmdir p
-  | OpRmdir p => OpMkdir p
+  | OpRmdir p =>
+      match fs p with
+      | Some node => OpMkdirWithPerms p (permissions node)
+      | None => OpMkdir p  (* unreachable when [op] has valid precondition *)
+      end
   | OpCreateFile p => OpDeleteFile p
-  | OpDeleteFile p => OpCreateFile p
+  | OpDeleteFile p =>
+      match fs p with
+      | Some node => OpCreateFileWithPerms p (permissions node)
+      | None => OpCreateFile p  (* unreachable when [op] has valid precondition *)
+      end
+  | OpMkdirWithPerms p _ => OpRmdir p
+  | OpCreateFileWithPerms p _ => OpDeleteFile p
   end.
 
 (** * Operation Sequences *)
@@ -52,9 +94,22 @@ Fixpoint apply_sequence (ops : list Operation) (fs : Filesystem) : Filesystem :=
   | op :: rest => apply_sequence rest (apply_op op fs)
   end.
 
-(** Reverse a sequence of operations *)
-Definition reverse_sequence (ops : list Operation) : list Operation :=
-  map reverse_op (rev ops).
+(** Reverse a sequence of operations.
+
+    Because [reverse_op] now consults the pre-state, the LIFO reversal
+    must thread the running pre-state of each operation through.  Given
+    [ops = [o1; o2; o3]] applied to [fs], the reversal sequence is
+    [[reverse_op o3 (apply_sequence [o1;o2] fs);
+       reverse_op o2 (apply_sequence [o1] fs);
+       reverse_op o1 fs]]
+    i.e. each operation's inverse is computed against the state in which
+    that operation was originally applied. *)
+Fixpoint reverse_sequence (ops : list Operation) (fs : Filesystem) : list Operation :=
+  match ops with
+  | [] => []
+  | op :: rest =>
+      reverse_sequence rest (apply_op op fs) ++ [reverse_op op fs]
+  end.
 
 (** * Precondition Predicates *)
 
@@ -65,6 +120,12 @@ Definition op_precondition (op : Operation) (fs : Filesystem) : Prop :=
   | OpRmdir p => rmdir_precondition p fs
   | OpCreateFile p => create_file_precondition p fs
   | OpDeleteFile p => delete_file_precondition p fs
+  | OpMkdirWithPerms p _ =>
+      (* same shape as mkdir_precondition — the perms argument is only
+         used for the body of the node written *)
+      mkdir_precondition p fs
+  | OpCreateFileWithPerms p _ =>
+      create_file_precondition p fs
   end.
 
 (** All operations in sequence have valid preconditions *)
@@ -79,7 +140,7 @@ Fixpoint all_preconditions (ops : list Operation) (fs : Filesystem) : Prop :=
 (** Operation is reversible (preconditions for reverse hold) *)
 Definition reversible (op : Operation) (fs : Filesystem) : Prop :=
   op_precondition op fs /\
-  op_precondition (reverse_op op) (apply_op op fs).
+  op_precondition (reverse_op op fs) (apply_op op fs).
 
 (** All operations in sequence are reversible *)
 Fixpoint all_reversible (ops : list Operation) (fs : Filesystem) : Prop :=
@@ -113,44 +174,36 @@ Proof.
   reflexivity.
 Qed.
 
-(** Reverse of reverse is original *)
-Lemma reverse_op_involutive :
-  forall op,
-    reverse_op (reverse_op op) = op.
-Proof.
-  intros op.
-  destruct op; simpl; reflexivity.
-Qed.
-
 (** Reverse of empty sequence *)
 Lemma reverse_sequence_nil :
-  reverse_sequence [] = [].
+  forall fs, reverse_sequence [] fs = [].
 Proof.
-  unfold reverse_sequence.
+  intros fs.
   simpl.
   reflexivity.
 Qed.
 
-(** Reverse distributes over append *)
+(** Reverse distributes over append.
+
+    Threading the pre-state requires expressing the right argument's
+    pre-state as the result of applying [ops1] to [fs]. *)
 Lemma reverse_sequence_app :
-  forall ops1 ops2,
-    reverse_sequence (ops1 ++ ops2) =
-    reverse_sequence ops2 ++ reverse_sequence ops1.
+  forall ops1 ops2 fs,
+    reverse_sequence (ops1 ++ ops2) fs =
+    reverse_sequence ops2 (apply_sequence ops1 fs) ++ reverse_sequence ops1 fs.
 Proof.
-  intros ops1 ops2.
-  unfold reverse_sequence.
-  rewrite rev_app_distr.
-  rewrite map_app.
-  reflexivity.
+  intros ops1.
+  induction ops1 as [| op ops1' IH]; intros ops2 fs.
+  - simpl. rewrite app_nil_r. reflexivity.
+  - simpl. rewrite IH. rewrite app_assoc. reflexivity.
 Qed.
 
 (** Reverse of single operation *)
 Lemma reverse_sequence_singleton :
-  forall op,
-    reverse_sequence [op] = [reverse_op op].
+  forall op fs,
+    reverse_sequence [op] fs = [reverse_op op fs].
 Proof.
-  intros op.
-  unfold reverse_sequence.
+  intros op fs.
   simpl.
   reflexivity.
 Qed.
@@ -195,72 +248,111 @@ Qed.
 
 (** Generic single operation reversibility.
 
-    PROOF STATUS: Admitted — see [docs/PROOF-NARRATIVE.adoc] § Assumption
-    Registry. The OpRmdir and OpDeleteFile branches both depend on the
-    same model gap: [mkdir] / [create_file] write [default_perms], but
-    the original entry may have had non-default permissions, so
-    [mkdir(rmdir(fs))] ≠ [fs] and [create_file(delete_file(fs))] ≠ [fs]
-    when the original perms were not default.
+    PROOF STATUS (2026-06-01, PR #N): Closed via closure path #2 — the
+    [Operation] inductive now carries [OpMkdirWithPerms] and
+    [OpCreateFileWithPerms] constructors, and [reverse_op] is threaded
+    with the pre-state so the inverse of an [OpRmdir]/[OpDeleteFile] can
+    capture the original node's permissions and faithfully restore them.
 
-    Three closure paths on file: (A) strengthen [reversible (OpRmdir p) fs]
-    and [reversible (OpDeleteFile p) fs] to additionally require
-    [fs p = Some (mkFSNode _ default_perms)]; (B) add [OpMkdirWithPerms]
-    and [OpCreateFileWithPerms] variants whose [reverse_op] carries the
-    original perm snapshot; (C) move to a [Filesystem × UndoLog] model
-    where the inverse operation reads the snapshot from the log.
+    Historical model gap (now resolved): [mkdir] / [create_file] write
+    [default_perms], but the original entry being removed by [rmdir] /
+    [delete_file] may have had non-default permissions, making the naive
+    "[mkdir o rmdir = id]" claim false in general.  The fix routes the
+    inverse of [OpRmdir]/[OpDeleteFile] through the
+    [...WithPerms] variants that re-create the node with the captured
+    perms.
 
-    Two pre-existing bugs were uncovered while writing this docstring:
-
-    (1) The original form ended [Qed.] after a mid-proof [admit.] in
-        the OpRmdir branch. Modern Coq treats this as an incomplete
-        proof and refuses — meaning the file did not previously
-        compile under [coqc] (CI status: verify-proofs job is disabled
-        per [_CoqProject]). Switching to [Admitted.] registers the
-        missing branches as Axiom-equivalents.
-
-    (2) The original OpDeleteFile branch invoked
-        [apply create_delete_file_reversible. assumption.], which
-        proves [delete_file p (create_file p fs) = fs] — the *forward*
-        direction. The OpDeleteFile branch of [single_op_reversible]
-        needs the *reverse* direction
-        [create_file p (delete_file p fs) = fs], which is unprovable
-        under the same model gap. Now also explicitly [admit].
-
-    Downstream theorems ([operation_sequence_reversible],
-    [two_op_sequence_reversible], [three_op_sequence_reversible],
-    [reversible_creates_CNO]) keep their proof scripts; they now show
-    [single_op_reversible] in their [Print Assumptions] output, which
-    is the correct behaviour for an unproven leaf. *)
+    All four "natural" constructors plus the two [...WithPerms]
+    constructors are now provably reversible from [reversible op fs]
+    alone — no extra precondition is needed beyond what [reversible]
+    already enforces. *)
 Theorem single_op_reversible :
   forall op fs,
     reversible op fs ->
-    apply_op (reverse_op op) (apply_op op fs) = fs.
+    apply_op (reverse_op op fs) (apply_op op fs) = fs.
 Proof.
   intros op fs [Hpre Hrev].
-  destruct op.
+  destruct op as [p | p | p | p | p pe | p pe].
   - (* OpMkdir *)
-    apply single_mkdir_reversible.
+    simpl in *.
+    apply mkdir_rmdir_reversible.
     assumption.
-  - (* OpRmdir — model gap, see header docstring *)
-    admit.
+  - (* OpRmdir — closure via OpMkdirWithPerms *)
+    simpl.
+    (* [Hpre] is [rmdir_precondition p fs], which contains
+       [is_directory p fs] — that is, [fs p = Some (mkFSNode Directory perms)]
+       for some [perms].  Thus [match fs p with ...] reduces. *)
+    destruct Hpre as [Hdir _].
+    destruct Hdir as [perms Hpd].
+    rewrite Hpd. simpl.
+    (* Goal: mkdir_with p (permissions {| node_type := Directory;
+                                          permissions := perms |})
+                          (rmdir p fs) = fs *)
+    unfold mkdir_with, rmdir, fs_update.
+    apply functional_extensionality.
+    intros p'.
+    destruct (list_eq_dec String.string_dec p p') as [Heq | Hneq].
+    + (* p = p': rebuild original node *)
+      subst p'. simpl. rewrite Hpd. reflexivity.
+    + reflexivity.
   - (* OpCreateFile *)
-    apply single_create_file_reversible.
+    simpl in *.
+    apply create_delete_file_reversible.
     assumption.
-  - (* OpDeleteFile — model gap, see header docstring *)
-    admit.
-Admitted.
+  - (* OpDeleteFile — closure via OpCreateFileWithPerms *)
+    simpl.
+    destruct Hpre as [Hfile _].
+    destruct Hfile as [perms Hpf].
+    rewrite Hpf. simpl.
+    unfold create_file_with, delete_file, fs_update.
+    apply functional_extensionality.
+    intros p'.
+    destruct (list_eq_dec String.string_dec p p') as [Heq | Hneq].
+    + subst p'. simpl. rewrite Hpf. reflexivity.
+    + reflexivity.
+  - (* OpMkdirWithPerms — inverse is OpRmdir, which deletes; restoring
+       the pre-state requires that [fs p = None].  This is given by
+       [mkdir_precondition], which contains [~ path_exists p fs]. *)
+    simpl in *.
+    unfold mkdir_with, rmdir, fs_update.
+    apply functional_extensionality.
+    intros p'.
+    destruct (list_eq_dec String.string_dec p p') as [Heq | Hneq].
+    + subst p'.
+      destruct Hpre as [Hnotex _].
+      destruct (fs p) as [node|] eqn:Hfp.
+      * exfalso. apply Hnotex. exists node. exact Hfp.
+      * reflexivity.
+    + reflexivity.
+  - (* OpCreateFileWithPerms — same as OpMkdirWithPerms shape *)
+    simpl in *.
+    unfold create_file_with, delete_file, fs_update.
+    apply functional_extensionality.
+    intros p'.
+    destruct (list_eq_dec String.string_dec p p') as [Heq | Hneq].
+    + subst p'.
+      destruct Hpre as [Hnotex _].
+      destruct (fs p) as [node|] eqn:Hfp.
+      * exfalso. apply Hnotex. exists node. exact Hfp.
+      * reflexivity.
+    + reflexivity.
+Qed.
 
 (** * Composition Theorems *)
 
 (** Main composition theorem: reversing a sequence of reversible operations
     returns to the original state.
 
+    Because [reverse_sequence] now threads the pre-state of each
+    operation, the second argument to the outer [apply_sequence] is
+    [fs] (the global pre-state) rather than the post-state.
+
     This is the key theorem connecting to Absolute Zero's CNO composition theory.
 *)
 Theorem operation_sequence_reversible :
   forall (ops : list Operation) (fs : Filesystem),
     all_reversible ops fs ->
-    apply_sequence (reverse_sequence ops) (apply_sequence ops fs) = fs.
+    apply_sequence (reverse_sequence ops fs) (apply_sequence ops fs) = fs.
 Proof.
   intros ops.
   induction ops as [| op ops' IH].
@@ -271,38 +363,34 @@ Proof.
   - (* Inductive case: op :: ops' *)
     intros fs [Hrev_op Hrev_rest].
     simpl.
-    (* Goal: apply_sequence (reverse_sequence (op :: ops')) (apply_sequence ops' (apply_op op fs)) = fs *)
-    unfold reverse_sequence.
-    simpl.
-    rewrite map_app.
-    simpl.
-    (* Goal: apply_sequence (map reverse_op (rev ops') ++ [reverse_op op])
+    (* Goal: apply_sequence
+              (reverse_sequence ops' (apply_op op fs) ++ [reverse_op op fs])
               (apply_sequence ops' (apply_op op fs)) = fs *)
     rewrite apply_sequence_app.
-    (* Goal: apply_sequence [reverse_op op]
-              (apply_sequence (map reverse_op (rev ops'))
-                              (apply_sequence ops' (apply_op op fs))) = fs *)
-    (* The inner apply_sequence (map reverse_op (rev ops')) = apply_sequence (reverse_sequence ops') (definitional) *)
-    fold (reverse_sequence ops').
     rewrite (IH (apply_op op fs) Hrev_rest).
-    (* Goal: apply_sequence [reverse_op op] (apply_op op fs) = fs *)
+    (* Goal: apply_sequence [reverse_op op fs] (apply_op op fs) = fs *)
     simpl.
     apply single_op_reversible.
     assumption.
 Qed.
 
-(** Two-operation sequence *)
+(** Two-operation sequence.
+
+    The pre-state for [reverse_op op2] is [apply_op op1 fs] (the state in
+    which [op2] was applied), and for [reverse_op op1] it is [fs]
+    itself. *)
 Theorem two_op_sequence_reversible :
   forall op1 op2 fs,
     reversible op1 fs ->
     reversible op2 (apply_op op1 fs) ->
-    apply_op (reverse_op op1)
-      (apply_op (reverse_op op2)
+    apply_op (reverse_op op1 fs)
+      (apply_op (reverse_op op2 (apply_op op1 fs))
         (apply_op op2 (apply_op op1 fs))) = fs.
 Proof.
   intros op1 op2 fs Hrev1 Hrev2.
-  apply (operation_sequence_reversible [op1; op2]).
-  simpl.
+  pose proof (operation_sequence_reversible [op1; op2] fs) as Hseq.
+  simpl in Hseq.
+  apply Hseq.
   split; [assumption | split; [assumption | trivial]].
 Qed.
 
@@ -312,7 +400,7 @@ Theorem three_op_sequence_reversible :
     reversible op1 fs ->
     reversible op2 (apply_op op1 fs) ->
     reversible op3 (apply_op op2 (apply_op op1 fs)) ->
-    apply_sequence (reverse_sequence [op1; op2; op3])
+    apply_sequence (reverse_sequence [op1; op2; op3] fs)
       (apply_sequence [op1; op2; op3] fs) = fs.
 Proof.
   intros op1 op2 op3 fs Hrev1 Hrev2 Hrev3.
@@ -331,16 +419,14 @@ Qed.
 Definition is_CNO_sequence (ops : list Operation) : Prop :=
   forall fs,
     all_reversible ops fs ->
-    apply_sequence (ops ++ reverse_sequence ops) fs = fs.
+    apply_sequence (ops ++ reverse_sequence ops fs) fs = fs.
 
 Theorem reversible_creates_CNO :
   forall op,
     is_CNO_sequence [op].
 Proof.
   intros op fs [Hrev _].
-  unfold reverse_sequence.
   simpl.
-  (* Goal after simpl: apply_op (reverse_op op) (apply_op op fs) = fs *)
   apply single_op_reversible.
   assumption.
 Qed.
@@ -642,3 +728,13 @@ Qed.
     connecting to Absolute Zero's CNO framework and providing
     algebraic structure to the reversibility framework.
 *)
+
+(** * Axiom Audit *)
+
+(** [single_op_reversible] is the load-bearing leaf this PR closes.
+    Print its assumptions so any axiom slippage shows up at compile
+    time.  Expected output: only [functional_extensionality] (used to
+    prove pointwise-equal filesystems are equal as functions). *)
+Print Assumptions single_op_reversible.
+Print Assumptions operation_sequence_reversible.
+Print Assumptions reversible_creates_CNO.
