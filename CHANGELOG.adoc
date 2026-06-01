@@ -17,6 +17,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full POSIX shell compliance (subset)
 - RMO (Remove-Match-Obliterate) proofs for GDPR compliance
 
+=== Added — 2026-06-01
+
+==== Proof work
+- Coq: `single_op_reversible` Qed-closed via `OpMkdirWithPerms` + `OpCreateFileWithPerms` constructor-variant approach; zero new axioms (PR #67)
+- Lean 4: `crash_atomic_within_op_mkdir` keystone theorem + 280-line `docs/THEORY-CRASH-CONSISTENCY.adoc` design doc (PR #62, closes #45 keystone)
+- Idris2: `Filesystem/Model.idr` typecheck fixed via `Data.Maybe` import + `Eq Path` + `Eq FSEntry` instances (PR #69)
+- Cross-system witness matrix + open-frontier docs (PRs #47/#62)
+
+==== Implementation
+- Real `secure_delete` (3-pass overwrite with `/dev/urandom`/zeros/`0xFF` + fsync + unlink) replacing the stub (PR #72)
+- Real `audit_log` (XDG_STATE_HOME, JSON-lines, append-only) replacing the stub (PR #72)
+- 6 `unreachable!` in `commands.rs` converted to typed `CommandError` variants (PR #72)
+- 20 new property-correspondence tests bringing total to 757 passing / 0 failing (PR #72)
+
+==== CI/CD hardening
+- Clippy `-D warnings` sweep: 86 errors → 0 across 34 files in `impl/rust-cli/` (PR #74)
+- `cargo fmt` sweep across `impl/rust-cli/` (PR #73)
+- SHA-pin `standards/governance-reusable.yml` from floating `@main` (PR #103)
+- 5 GH Action SHA bumps (`checkout` → 1cce339, `cache` → 27d5ce7, `upload-artifact` → 043fb46, `rust-cache` → 8ba370a, `scorecard-action` → af76153) + 30 cargo dep bumps (PR #68)
+
+==== Licensing
+- LICENSE: drop Palimpsest preamble + FALLBACK framing → plain MPL-2.0 (PR #101)
+- SPDX-FileCopyrightText sweep across the codebase: 267 files in 7 language-batched PRs (PRs #95-#100, #102):
+  * 105 Markdown · 70 Rust · 44 AsciiDoc · 22 Zig+C+H · 11 Elixir · 10 Idris2 + LICENSE + anchor taxonomy
+
+==== Documentation
+- RSR-template gap fill: 188 `{{project}}` / `{{PROJECT}}` / `{{BUILD_CMD}}` placeholders replaced across 10 files (PR #59)
+- Anchor taxonomy migration: `.machine_readable/anchors/ANCHOR.a2ml` → `.machine_readable/6a2/anchor/ANCHOR.a2ml` + `0-AI-MANIFEST.a2ml` + `README.adoc` (PR #102)
+- ROADMAP refreshed with landed-PR cross-refs (M2 + M3 + M4 sweep, PR #68)
+- Wiki bootstrapped (Home + Session-Log-2026-06-01)
+
+==== Fixed
+- Remove accidentally-tracked runtime artifacts `impl/rust-cli/$FILE` + `.vsh_state.json` from PR #73's test session; add both to `.gitignore` (PR #75)
+
+==== Issues filed (PR-sized work units)
+- #60, #61 — RMO.idr theorem-shape redesigns (Idris2 `?holes` are non-theorems by type signature, not gaps to fill)
+- #63-#66 — 4 crash-consistency sub-frontiers (POSIX 2024 edges / concurrency-multi-process / Idris2-via-typed-WASM / hardware barriers)
+- #70 — Idris2 build oracle infra (Justfile target + CI job + stdlib provision)
+- #71 — CodeQL JS/TS regression with newer action SHAs
+- #76-#94 — 17 sub-issues under #41/#42/#43/#45 for Option-2 full-closure work
+
 == [0.14.0] - 2026-01-29
 
 === Added
