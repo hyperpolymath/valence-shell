@@ -19,6 +19,7 @@ Import ListNotations.
 
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Coq.Logic.Classical.
+Require Import Coq.Logic.ClassicalEpsilon.
 
 Require Import filesystem_model.
 Require Import file_operations.
@@ -132,8 +133,10 @@ Proof.
   intros p fs.
   unfold is_empty_dir.
   destruct (is_directory_dec p fs) as [Hdir | Hnotdir].
-  - (* p is a directory: decide whether all proper children are absent *)
-    destruct (classic (forall child : Path,
+  - (* p is a directory: decide whether all proper children are absent.
+       Use excluded_middle_informative (LEM lifted into Set/sumbool) since
+       classic returns Prop. *)
+    destruct (excluded_middle_informative (forall child : Path,
         path_prefix p child = true -> child <> p -> ~ path_exists child fs))
       as [Hemp | Hnotempty].
     + left. split; assumption.
@@ -247,7 +250,7 @@ Proof.
     injection H; intro; subst.
     split; [|reflexivity].
     unfold rmdir_precondition.
-    repeat split; assumption.
+    split; [|split; [|split]]; assumption.
   - (* <- *)
     intros [Hpre Heq].
     subst fs'.

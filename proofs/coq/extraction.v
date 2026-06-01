@@ -4,6 +4,8 @@
     This bridges the gap between formal proofs and real implementation.
 *)
 
+Require Import String.
+Require Import List.
 Require Import ExtrOcamlBasic.
 Require Import ExtrOcamlString.
 

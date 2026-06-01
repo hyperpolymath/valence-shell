@@ -46,25 +46,39 @@ jobs:
           path: validation-report.md
 
   verify-proofs:
+    name: verify-proofs (Coq build oracle)
     runs-on: ubuntu-latest
-    if: false  # Disabled until proof systems installed in CI
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
 
-      - name: Install proof assistants
+      - name: Install Coq via apt
         run: |
-          # TODO: Install Coq, Lean 4, Agda, Isabelle, Z3
-          echo "Proof verification disabled - install proof systems"
+          sudo apt-get update
+          sudo apt-get install -y coq
 
-      - name: Verify Lean 4 proofs
-        run: |
-          cd proofs/lean4
-          lake build
+      - name: Show Coq version
+        run: coqc --version
 
-      - name: Verify Coq proofs
+      - name: Build Coq proofs (oracle)
+        working-directory: proofs/coq
         run: |
-          cd proofs/coq
-          make clean && make all
+          coq_makefile -f _CoqProject -o Makefile
+          make -j1
+
+      - name: Print Assumptions for top-level theorems
+        working-directory: proofs/coq
+        run: |
+          # Coq disallows '-' in identifiers — use underscores in the helper file name.
+          cat > /tmp/print_assumptions.v <<'EOF'
+          Require Import ValenceShell.filesystem_composition.
+          Require Import ValenceShell.copy_move_operations.
+          Print Assumptions single_op_reversible.
+          Print Assumptions operation_sequence_reversible.
+          Print Assumptions reversible_creates_CNO.
+          Print Assumptions copy_file_reversible.
+          EOF
+          coqc -R . ValenceShell /tmp/print_assumptions.v 2>&1 | tee print_assumptions.log
+          echo "=== Print Assumptions surfaced (see job log above) ==="
 
   property-testing:
     runs-on: ubuntu-latest

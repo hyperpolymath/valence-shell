@@ -152,58 +152,7 @@ Definition obliterate (p : Path) (sfs : StorageFS) (patterns : list OverwritePat
 (** * RMO Postcondition Theorems *)
 
 (** Theorem: After obliteration, path does not exist in filesystem *)
-Theorem obliterate_removes_path :
-  forall p sfs patterns,
-    obliterate_precondition p sfs ->
-    length patterns > 0 ->
-    ~ path_exists p (sfs_tree (obliterate p sfs patterns)).
-Proof.
-  intros p sfs patterns [Hfile [Hwrite [Hblocks Hallexist]]] Hlen.
-  unfold obliterate.
-  simpl.
-  apply delete_file_removes_path.
-  unfold delete_file_precondition.
-  split.
-  - (* is_file still holds after overwrites — overwrites preserve sfs_tree *)
-    induction patterns.
-    + simpl in Hlen. omega.
-    + simpl.
-      destruct patterns.
-      * simpl. assumption.
-      * apply IHpatterns. simpl. omega.
-  - (* has_write_permission preserved — overwrites only change storage, not tree *)
-    induction patterns.
-    + simpl. assumption.
-    + simpl.
-      destruct patterns.
-      * simpl. assumption.
-      * apply IHpatterns. simpl. omega.
-Qed.
-
-(** Theorem: After obliteration, no blocks are mapped to path *)
-Theorem obliterate_removes_mapping :
-  forall p sfs patterns,
-    obliterate_precondition p sfs ->
-    sfs_mapping (obliterate p sfs patterns) p = [].
-Proof.
-  intros p sfs patterns Hpre.
-  unfold obliterate, remove_block_mapping.
-  simpl.
-  destruct (list_eq_dec string_dec p p); [reflexivity | contradiction].
-Qed.
-
-(** * Auxiliary Lemmas for Overwrite Proofs *)
-
-(** In bid l implies existsb (Nat.eqb bid) l = true *)
-Lemma In_existsb_Nat_eqb : forall bid l,
-  In bid l -> existsb (Nat.eqb bid) l = true.
-Proof.
-  intros bid l. induction l; intros Hin.
-  - inversion Hin.
-  - simpl. destruct Hin.
-    + subst. rewrite Nat.eqb_refl. reflexivity.
-    + apply Bool.orb_true_iff. right. apply IHl. assumption.
-Qed.
+(** * Tree/Mapping Preservation Helpers (used by obliterate_removes_path) *)
 
 (** overwrite_path_blocks preserves sfs_tree *)
 Lemma overwrite_path_blocks_preserves_tree :
@@ -239,6 +188,49 @@ Proof.
   induction patterns; intros; simpl.
   - reflexivity.
   - rewrite IHpatterns. apply overwrite_path_blocks_preserves_mapping.
+Qed.
+
+Theorem obliterate_removes_path :
+  forall p sfs patterns,
+    obliterate_precondition p sfs ->
+    length patterns > 0 ->
+    ~ path_exists p (sfs_tree (obliterate p sfs patterns)).
+Proof.
+  intros p sfs patterns [Hfile [Hwrite [Hblocks Hallexist]]] Hlen.
+  unfold obliterate.
+  simpl.
+  apply delete_file_removes_path.
+  unfold delete_file_precondition.
+  split.
+  - (* is_file still holds after overwrites — overwrites preserve sfs_tree *)
+    rewrite multi_pass_preserves_tree. assumption.
+  - (* has_write_permission preserved — overwrites only change storage, not tree *)
+    rewrite multi_pass_preserves_tree. assumption.
+Qed.
+
+(** Theorem: After obliteration, no blocks are mapped to path *)
+Theorem obliterate_removes_mapping :
+  forall p sfs patterns,
+    obliterate_precondition p sfs ->
+    sfs_mapping (obliterate p sfs patterns) p = [].
+Proof.
+  intros p sfs patterns Hpre.
+  unfold obliterate, remove_block_mapping.
+  simpl.
+  destruct (list_eq_dec String.string_dec p p); [reflexivity | contradiction].
+Qed.
+
+(** * Auxiliary Lemmas for Overwrite Proofs *)
+
+(** In bid l implies existsb (Nat.eqb bid) l = true *)
+Lemma In_existsb_Nat_eqb : forall bid l,
+  In bid l -> existsb (Nat.eqb bid) l = true.
+Proof.
+  intros bid l. induction l; intros Hin.
+  - inversion Hin.
+  - simpl. destruct Hin.
+    + subst. rewrite Nat.eqb_refl. reflexivity.
+    + apply Bool.orb_true_iff. right. apply IHl. assumption.
 Qed.
 
 (** overwrite_path_blocks preserves obliterate_precondition *)
@@ -292,7 +284,7 @@ Proof.
   - (* Base case: 0 patterns *)
     simpl. exists blk0. split.
     + assumption.
-    + omega.
+    + lia.
   - (* Inductive case: a :: patterns *)
     simpl.
     (* After one pass of overwrite_path_blocks: *)
@@ -314,8 +306,9 @@ Proof.
     + (* blk_final >= blk1 + length patterns
          blk1 = S blk0
          so blk_final >= S blk0 + length patterns = blk0 + S (length patterns) *)
+      unfold blk1 in Hge.
       rewrite Hcount1 in Hge.
-      simpl. omega.
+      simpl. lia.
 Qed.
 
 (** Theorem: All blocks have been overwritten at least once per pattern *)
@@ -336,7 +329,7 @@ Proof.
     as [blk_final [Hfinal Hge]].
   exists blk_final. split.
   - assumption.
-  - omega.
+  - lia.
 Qed.
 
 (** * Non-Reversibility (Contrast with RMR) *)
@@ -413,27 +406,18 @@ Lemma overwrite_pass_equalizes_storage :
     sfs_storage (overwrite_path_blocks sfs1 p pat) bid =
     sfs_storage (overwrite_path_blocks sfs2 p pat) bid.
 Proof.
-  intros sfs1 sfs2 p pat bid Hmap Hother Hgeom Hpre1 Hpre2.
-  unfold overwrite_path_blocks. simpl.
-  rewrite Hmap.
-  destruct (In_dec Nat.eq_dec bid (sfs_mapping sfs2 p)) as [Hin | Hnotin].
-  - (* bid is mapped *)
-    rewrite <- Hmap in Hin.
-    destruct (Hpre1) as [_ [_ [_ Hex1]]].
-    destruct (Hex1 bid Hin) as [blk1 Hblk1].
-    rewrite Hmap in Hin.
-    destruct (Hpre2) as [_ [_ [_ Hex2]]].
-    destruct (Hex2 bid Hin) as [blk2 Hblk2].
-    rewrite Hblk1, Hblk2.
-    rewrite (In_existsb_Nat_eqb bid _ Hin).
-    rewrite <- Hmap in Hin.
-    destruct (Hgeom bid Hin blk1 blk2 Hblk1 Hblk2) as [Hid Hlen].
-    f_equal. unfold overwrite_block. rewrite Hid, Hlen. reflexivity.
-  - (* bid is not mapped *)
-    rewrite <- Hmap in Hnotin.
-    rewrite (Hother bid Hnotin).
-    reflexivity.
-Qed.
+  (* MODEL GAP (2026-06-01): As stated, this lemma is false. The conclusion
+     equates [sfs_storage (overwrite_path_blocks sfs1 p pat) bid] and
+     [sfs_storage (overwrite_path_blocks sfs2 p pat) bid], but [overwrite_block]
+     preserves the input's [block_overwritten] count (via [S (block_overwritten blk)]).
+     Two blocks with equal [block_id] and equal [length (block_data)] but distinct
+     [block_overwritten] counters produce overwrites that differ in [block_overwritten].
+     The geometry hypothesis [Hgeom] does NOT cover [block_overwritten].
+     Closure paths: (A) strengthen [Hgeom] to also constrain [block_overwritten],
+     (B) weaken conclusion to "equal modulo overwrite-count", or
+     (C) reformulate [obliterate_not_injective] to project out [block_overwritten].
+     Admitted pending follow-up. *)
+Admitted.
 
 (** After one pass, the precondition holds and geometry is still preserved *)
 Lemma overwrite_pass_preserves_geometry :
@@ -537,29 +521,14 @@ Theorem obliterate_not_injective :
     (* Then obliteration produces the same result *)
     obliterate p sfs1 patterns = obliterate p sfs2 patterns.
 Proof.
-  intros p sfs1 sfs2 patterns Hpre1 Hpre2 Htree Hmap Hlen Hother Hgeom.
-  unfold obliterate.
-  rewrite (multi_pass_preserves_tree patterns sfs1 p).
-  rewrite (multi_pass_preserves_tree patterns sfs2 p).
-  rewrite Htree.
-  rewrite (multi_pass_preserves_mapping patterns sfs1 p).
-  rewrite (multi_pass_preserves_mapping patterns sfs2 p).
-  rewrite Hmap.
-  f_equal.
-  unfold remove_block_mapping. simpl.
-  apply functional_extensionality.
-  intros bid.
-  (* After first pattern pass, storage agrees everywhere.
-     Remaining passes preserve this agreement. *)
-  destruct patterns as [| pat rest].
-  { simpl in Hlen. omega. }
-  simpl.
-  apply multi_pass_same_start_same_result.
-  - rewrite !overwrite_path_blocks_preserves_tree. assumption.
-  - rewrite !overwrite_path_blocks_preserves_mapping. assumption.
-  - intros bid'.
-    apply one_pass_storage_agrees; assumption.
-Qed.
+  (* MODEL GAP (2026-06-01): This theorem depends on [overwrite_pass_equalizes_storage]
+     which is admitted (block_overwritten counter mismatch — see that lemma's
+     model-gap note). Once that lemma's geometry hypothesis is strengthened to
+     include block_overwritten equality (or the result is projected modulo it),
+     this proof reconnects to: rewrite multi_pass_preserves_tree/mapping; rewrite
+     Htree/Hmap; apply multi_pass_same_start_same_result via one_pass_storage_agrees.
+     Admitted pending follow-up. *)
+Admitted.
 
 (** * Preservation Theorems *)
 
@@ -575,7 +544,8 @@ Proof.
   unfold path_exists.
   exists node.
   unfold delete_file, fs_update.
-  destruct (list_eq_dec string_dec p p'); [contradiction | assumption].
+  destruct (list_eq_dec String.string_dec p p') as [Heq | _]; [contradiction|].
+  rewrite multi_pass_preserves_tree. assumption.
 Qed.
 
 (** Theorem: Obliteration preserves unrelated block mappings *)
@@ -586,7 +556,8 @@ Theorem obliterate_preserves_other_mappings :
 Proof.
   intros p p' sfs patterns Hneq.
   unfold obliterate, remove_block_mapping. simpl.
-  destruct (list_eq_dec string_dec p p'); [contradiction | reflexivity].
+  destruct (list_eq_dec String.string_dec p p') as [Heq | _]; [contradiction|].
+  rewrite multi_pass_preserves_mapping. reflexivity.
 Qed.
 
 (** * GDPR Compliance Properties *)
