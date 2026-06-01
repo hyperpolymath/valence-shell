@@ -22,8 +22,7 @@ pub use tempfile::{self, TempDir};
 /// // temp automatically cleaned up on drop
 /// ```
 pub fn test_sandbox(test_name: &str) -> TempDir {
-    TempDir::with_prefix(format!("vsh_test_{}_", test_name))
-        .expect("Failed to create test sandbox")
+    TempDir::with_prefix(format!("vsh_test_{}_", test_name)).expect("Failed to create test sandbox")
 }
 
 /// Create a test sandbox with pre-populated structure

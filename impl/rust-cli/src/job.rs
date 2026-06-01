@@ -10,7 +10,6 @@
 //! - Job specifications (%1, %+, %-, %name, %?pattern)
 //! - Current and previous job markers
 
-
 /// Job state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobState {

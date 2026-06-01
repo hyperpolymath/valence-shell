@@ -615,7 +615,7 @@ fn parse_extended_primary_expr(args: &[String], start: usize) -> Result<(TestExp
 mod tests {
     use super::*;
     use std::fs::File;
-    
+
     use tempfile::TempDir;
 
     #[test]

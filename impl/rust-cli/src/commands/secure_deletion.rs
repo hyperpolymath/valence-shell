@@ -434,7 +434,7 @@ pub fn obliterate_dir(
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     use tempfile::TempDir;
 
     #[test]

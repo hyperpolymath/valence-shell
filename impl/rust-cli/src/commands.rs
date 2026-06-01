@@ -2222,7 +2222,8 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
                 resolved.display()
             );
         }
-        crate::parser::Command::Chmod { path: _, .. } | crate::parser::Command::Chown { path: _, .. } => {
+        crate::parser::Command::Chmod { path: _, .. }
+        | crate::parser::Command::Chown { path: _, .. } => {
             // Outer arm guarantees we are in {Chmod, Chown}; the inner match
             // exists only to extract the `path` field uniformly. Any other
             // variant here is a structural bug, surfaced as typed error.

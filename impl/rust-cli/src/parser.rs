@@ -1502,27 +1502,27 @@ fn split_on_top_level(input: &str, split_on_newline: bool) -> Vec<&str> {
             }
             _ if !in_single_quote && !in_double_quote && paren_depth == 0
                 // Check for keyword at word boundary
-                && (ch.is_alphabetic() || ch == '_') => {
-                    let word_start = i;
-                    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_')
-                    {
-                        i += 1;
-                    }
-                    let word = &input[word_start..i];
-                    // Keywords only count at word boundaries (followed by space, ;, newline, or EOF)
-                    let at_boundary = i >= bytes.len()
-                        || bytes[i] == b' '
-                        || bytes[i] == b'\t'
-                        || bytes[i] == b';'
-                        || bytes[i] == b'\n';
-                    if at_boundary {
-                        if is_block_open_keyword(word) {
-                            block_depth += 1;
-                        } else if is_block_close_keyword(word) {
-                            block_depth = (block_depth - 1).max(0);
-                        }
+                && (ch.is_alphabetic() || ch == '_') =>
+            {
+                let word_start = i;
+                while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                    i += 1;
+                }
+                let word = &input[word_start..i];
+                // Keywords only count at word boundaries (followed by space, ;, newline, or EOF)
+                let at_boundary = i >= bytes.len()
+                    || bytes[i] == b' '
+                    || bytes[i] == b'\t'
+                    || bytes[i] == b';'
+                    || bytes[i] == b'\n';
+                if at_boundary {
+                    if is_block_open_keyword(word) {
+                        block_depth += 1;
+                    } else if is_block_close_keyword(word) {
+                        block_depth = (block_depth - 1).max(0);
                     }
                 }
+            }
             _ => {
                 i += 1;
             }
@@ -2794,45 +2794,42 @@ fn split_control_keywords<'a>(input: &'a str, keywords: &[&str]) -> Vec<(&'a str
                 in_double_quote = !in_double_quote;
                 i += 1;
             }
-            _ if !in_single_quote && !in_double_quote
-                && (ch.is_alphabetic() || ch == '_') => {
-                    let word_start = i;
-                    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_')
-                    {
-                        i += 1;
-                    }
-                    let word = &input[word_start..i];
+            _ if !in_single_quote && !in_double_quote && (ch.is_alphabetic() || ch == '_') => {
+                let word_start = i;
+                while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                    i += 1;
+                }
+                let word = &input[word_start..i];
 
-                    let at_boundary = word_start == 0
-                        || bytes[word_start - 1] == b' '
-                        || bytes[word_start - 1] == b'\t'
-                        || bytes[word_start - 1] == b';'
-                        || bytes[word_start - 1] == b'\n';
+                let at_boundary = word_start == 0
+                    || bytes[word_start - 1] == b' '
+                    || bytes[word_start - 1] == b'\t'
+                    || bytes[word_start - 1] == b';'
+                    || bytes[word_start - 1] == b'\n';
 
-                    let ends_boundary = i >= bytes.len()
-                        || bytes[i] == b' '
-                        || bytes[i] == b'\t'
-                        || bytes[i] == b';'
-                        || bytes[i] == b'\n';
+                let ends_boundary = i >= bytes.len()
+                    || bytes[i] == b' '
+                    || bytes[i] == b'\t'
+                    || bytes[i] == b';'
+                    || bytes[i] == b'\n';
 
-                    if at_boundary && ends_boundary {
-                        if nested_depth == 0 && keywords.contains(&word) {
-                            // Top-level keyword split point
-                            if !last_keyword.is_empty() || !result.is_empty() {
-                                result
-                                    .push((last_keyword, input[content_start..word_start].trim()));
-                            }
-                            last_keyword = word;
-                            content_start = i;
-                            // Do NOT change nested_depth — this is OUR keyword, not a nested one
-                        } else if is_block_open_keyword(word) {
-                            // Nested control structure — track depth so we skip inner keywords
-                            nested_depth += 1;
-                        } else if is_block_close_keyword(word) && nested_depth > 0 {
-                            nested_depth -= 1;
+                if at_boundary && ends_boundary {
+                    if nested_depth == 0 && keywords.contains(&word) {
+                        // Top-level keyword split point
+                        if !last_keyword.is_empty() || !result.is_empty() {
+                            result.push((last_keyword, input[content_start..word_start].trim()));
                         }
+                        last_keyword = word;
+                        content_start = i;
+                        // Do NOT change nested_depth — this is OUR keyword, not a nested one
+                    } else if is_block_open_keyword(word) {
+                        // Nested control structure — track depth so we skip inner keywords
+                        nested_depth += 1;
+                    } else if is_block_close_keyword(word) && nested_depth > 0 {
+                        nested_depth -= 1;
                     }
                 }
+            }
             _ => {
                 i += 1;
             }
@@ -3215,32 +3212,30 @@ pub fn is_incomplete_control_structure(input: &str) -> bool {
                 in_double_quote = !in_double_quote;
                 i += 1;
             }
-            _ if !in_single_quote && !in_double_quote
-                && (ch.is_alphabetic() || ch == '_') => {
-                    let word_start = i;
-                    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_')
-                    {
-                        i += 1;
-                    }
-                    let word = &trimmed[word_start..i];
-                    let at_boundary = word_start == 0
-                        || bytes[word_start - 1] == b' '
-                        || bytes[word_start - 1] == b'\t'
-                        || bytes[word_start - 1] == b';'
-                        || bytes[word_start - 1] == b'\n';
-                    let ends_boundary = i >= bytes.len()
-                        || bytes[i] == b' '
-                        || bytes[i] == b'\t'
-                        || bytes[i] == b';'
-                        || bytes[i] == b'\n';
-                    if at_boundary && ends_boundary {
-                        if is_block_open_keyword(word) {
-                            block_depth += 1;
-                        } else if is_block_close_keyword(word) {
-                            block_depth -= 1;
-                        }
+            _ if !in_single_quote && !in_double_quote && (ch.is_alphabetic() || ch == '_') => {
+                let word_start = i;
+                while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                    i += 1;
+                }
+                let word = &trimmed[word_start..i];
+                let at_boundary = word_start == 0
+                    || bytes[word_start - 1] == b' '
+                    || bytes[word_start - 1] == b'\t'
+                    || bytes[word_start - 1] == b';'
+                    || bytes[word_start - 1] == b'\n';
+                let ends_boundary = i >= bytes.len()
+                    || bytes[i] == b' '
+                    || bytes[i] == b'\t'
+                    || bytes[i] == b';'
+                    || bytes[i] == b'\n';
+                if at_boundary && ends_boundary {
+                    if is_block_open_keyword(word) {
+                        block_depth += 1;
+                    } else if is_block_close_keyword(word) {
+                        block_depth -= 1;
                     }
                 }
+            }
             _ => {
                 i += 1;
             }
@@ -4907,15 +4902,14 @@ pub fn extract_heredoc_delimiters(input: &str) -> Result<Vec<String>> {
     let tokens = tokenize(input)?;
 
     for i in 0..tokens.len() {
-        if matches!(tokens[i], Token::HereDoc | Token::HereDocDash)
-            && i + 1 < tokens.len() {
-                if let Token::Word(ref word) = tokens[i + 1] {
-                    let delimiter = quoted_word_to_string(word);
-                    // Remove quotes if present
-                    let clean = delimiter.trim_matches(|c| c == '\'' || c == '"');
-                    delimiters.push(clean.to_string());
-                }
+        if matches!(tokens[i], Token::HereDoc | Token::HereDocDash) && i + 1 < tokens.len() {
+            if let Token::Word(ref word) = tokens[i + 1] {
+                let delimiter = quoted_word_to_string(word);
+                // Remove quotes if present
+                let clean = delimiter.trim_matches(|c| c == '\'' || c == '"');
+                delimiters.push(clean.to_string());
             }
+        }
     }
 
     Ok(delimiters)
