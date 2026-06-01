@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # Proof Holes Audit - Valence Shell
 
 **Date**: 2026-04-12 (updated after P0 believe_me sweep — Coq layer)

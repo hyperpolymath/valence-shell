@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # Third-Party Notices
 
 This repository is licensed under **Palimpsest-MPL 1.0 or later** (SPDX: `MPL-2.0`).

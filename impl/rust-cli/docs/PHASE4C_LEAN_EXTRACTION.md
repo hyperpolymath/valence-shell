@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # Phase 4C: Lean Extraction Pipeline
 
 > **⚠️ ARCHIVED 2026-04-19** — describes the Phase 4C design where

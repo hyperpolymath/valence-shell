@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # Phase 6 Milestone 11: Shell Variables - Design
 
 **Version**: 0.14.0 → 0.15.0

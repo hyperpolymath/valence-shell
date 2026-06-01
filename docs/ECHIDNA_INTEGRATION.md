@@ -95,6 +95,7 @@ echidna-prover-api = { git = "https://github.com/hyperpolymath/echidna", branch 
 ```bash
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 # Validate valence-shell build with ECHIDNA
 
 set -euo pipefail

@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # Contributor Guide (Tier 1): Feature Contributors
 
 **Target Audience**: Rust developers (no verification knowledge needed)

@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # OCaml Extraction from Lean 4
 
 **Status**: Design Complete, Implementation Pending (ROADMAP v2.0 — Idris2 path)

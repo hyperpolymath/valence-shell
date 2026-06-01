@@ -1,3 +1,7 @@
+<!--
+SPDX-License-Identifier: MPL-2.0
+Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
 # Idris2 Proofs for Valence Shell
 
 **Status**: Initial Implementation (v0.14.0)
