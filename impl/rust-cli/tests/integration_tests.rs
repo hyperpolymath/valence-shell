@@ -12,9 +12,9 @@
 //! - History limits
 
 use anyhow::Result;
+use reedline::Highlighter;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use reedline::Highlighter;
 use vsh::{
     audit_log::{AuditEntry, AuditLog},
     commands,
@@ -159,7 +159,10 @@ fn test_history_limits() -> Result<()> {
     }
 
     // Verify history is limited
-    assert!(state.history.len() <= 5, "History should be limited to 5 operations");
+    assert!(
+        state.history.len() <= 5,
+        "History should be limited to 5 operations"
+    );
 
     Ok(())
 }
@@ -242,7 +245,10 @@ fn test_all_features_integration() -> Result<()> {
 
     // Verify audit log
     let entries = audit_log.read_all()?;
-    assert!(entries.len() >= 4, "Audit log should contain at least 4 entries");
+    assert!(
+        entries.len() >= 4,
+        "Audit log should contain at least 4 entries"
+    );
 
     // Test undo
     commands::undo(&mut state, 2, false)?;

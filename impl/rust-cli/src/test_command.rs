@@ -45,17 +45,17 @@ pub enum TestExpr {
     FileNotEmpty(String), // -s
 
     /// String tests
-    StringEmpty(String),    // -z
+    StringEmpty(String), // -z
     StringNotEmpty(String), // -n
     StringEqual(String, String),
     StringNotEqual(String, String),
 
     /// Integer comparisons
-    IntEqual(String, String),     // -eq
-    IntNotEqual(String, String),  // -ne
-    IntLessThan(String, String),  // -lt
-    IntLessEqual(String, String), // -le
-    IntGreater(String, String),   // -gt
+    IntEqual(String, String), // -eq
+    IntNotEqual(String, String),     // -ne
+    IntLessThan(String, String),     // -lt
+    IntLessEqual(String, String),    // -le
+    IntGreater(String, String),      // -gt
     IntGreaterEqual(String, String), // -ge
 
     /// Logical operators
@@ -88,13 +88,9 @@ impl TestExpr {
             // File tests
             TestExpr::FileExists(path) => Ok(Path::new(path).exists()),
 
-            TestExpr::FileIsRegular(path) => {
-                Ok(Path::new(path).is_file())
-            }
+            TestExpr::FileIsRegular(path) => Ok(Path::new(path).is_file()),
 
-            TestExpr::FileIsDirectory(path) => {
-                Ok(Path::new(path).is_dir())
-            }
+            TestExpr::FileIsDirectory(path) => Ok(Path::new(path).is_dir()),
 
             TestExpr::FileIsReadable(path) => {
                 let path = Path::new(path);
@@ -146,9 +142,11 @@ impl TestExpr {
 
             // Integer comparisons
             TestExpr::IntEqual(a, b) => {
-                let a_val = a.parse::<i64>()
+                let a_val = a
+                    .parse::<i64>()
                     .context("Invalid integer for -eq comparison")?;
-                let b_val = b.parse::<i64>()
+                let b_val = b
+                    .parse::<i64>()
                     .context("Invalid integer for -eq comparison")?;
                 Ok(a_val == b_val)
             }
@@ -184,9 +182,7 @@ impl TestExpr {
             }
 
             // Logical operators
-            TestExpr::Not(expr) => {
-                Ok(!expr.evaluate()?)
-            }
+            TestExpr::Not(expr) => Ok(!expr.evaluate()?),
 
             TestExpr::And(left, right) => {
                 // Short-circuit evaluation
@@ -336,7 +332,10 @@ fn parse_primary_expr(args: &[String], start: usize) -> Result<(TestExpr, usize)
             if start + 1 >= args.len() {
                 bail!("test: -d requires argument");
             }
-            return Ok((TestExpr::FileIsDirectory(args[start + 1].clone()), start + 2));
+            return Ok((
+                TestExpr::FileIsDirectory(args[start + 1].clone()),
+                start + 2,
+            ));
         }
         "-r" => {
             if start + 1 >= args.len() {
@@ -354,7 +353,10 @@ fn parse_primary_expr(args: &[String], start: usize) -> Result<(TestExpr, usize)
             if start + 1 >= args.len() {
                 bail!("test: -x requires argument");
             }
-            return Ok((TestExpr::FileIsExecutable(args[start + 1].clone()), start + 2));
+            return Ok((
+                TestExpr::FileIsExecutable(args[start + 1].clone()),
+                start + 2,
+            ));
         }
         "-s" => {
             if start + 1 >= args.len() {
@@ -435,7 +437,11 @@ pub fn execute_extended_test(args: &[String]) -> Result<i32> {
 
     // Verify all args were consumed
     if pos < args.len() {
-        bail!("[[: unexpected argument at position {}: '{}'", pos, args[pos]);
+        bail!(
+            "[[: unexpected argument at position {}: '{}'",
+            pos,
+            args[pos]
+        );
     }
 
     let result = expr.evaluate()?;
@@ -521,7 +527,10 @@ fn parse_extended_primary_expr(args: &[String], start: usize) -> Result<(TestExp
             if start + 1 >= args.len() {
                 bail!("[[: -d requires argument");
             }
-            return Ok((TestExpr::FileIsDirectory(args[start + 1].clone()), start + 2));
+            return Ok((
+                TestExpr::FileIsDirectory(args[start + 1].clone()),
+                start + 2,
+            ));
         }
         "-r" => {
             if start + 1 >= args.len() {
@@ -539,7 +548,10 @@ fn parse_extended_primary_expr(args: &[String], start: usize) -> Result<(TestExp
             if start + 1 >= args.len() {
                 bail!("[[: -x requires argument");
             }
-            return Ok((TestExpr::FileIsExecutable(args[start + 1].clone()), start + 2));
+            return Ok((
+                TestExpr::FileIsExecutable(args[start + 1].clone()),
+                start + 2,
+            ));
         }
         "-s" => {
             if start + 1 >= args.len() {
@@ -646,7 +658,9 @@ mod tests {
     #[test]
     fn test_string_empty() {
         assert!(TestExpr::StringEmpty("".to_string()).evaluate().unwrap());
-        assert!(!TestExpr::StringEmpty("text".to_string()).evaluate().unwrap());
+        assert!(!TestExpr::StringEmpty("text".to_string())
+            .evaluate()
+            .unwrap());
     }
 
     #[test]
@@ -660,14 +674,26 @@ mod tests {
 
     #[test]
     fn test_int_comparisons() {
-        assert!(TestExpr::IntEqual("42".to_string(), "42".to_string()).evaluate().unwrap());
-        assert!(!TestExpr::IntEqual("42".to_string(), "43".to_string()).evaluate().unwrap());
+        assert!(TestExpr::IntEqual("42".to_string(), "42".to_string())
+            .evaluate()
+            .unwrap());
+        assert!(!TestExpr::IntEqual("42".to_string(), "43".to_string())
+            .evaluate()
+            .unwrap());
 
-        assert!(TestExpr::IntLessThan("10".to_string(), "20".to_string()).evaluate().unwrap());
-        assert!(!TestExpr::IntLessThan("20".to_string(), "10".to_string()).evaluate().unwrap());
+        assert!(TestExpr::IntLessThan("10".to_string(), "20".to_string())
+            .evaluate()
+            .unwrap());
+        assert!(!TestExpr::IntLessThan("20".to_string(), "10".to_string())
+            .evaluate()
+            .unwrap());
 
-        assert!(TestExpr::IntGreater("20".to_string(), "10".to_string()).evaluate().unwrap());
-        assert!(!TestExpr::IntGreater("10".to_string(), "20".to_string()).evaluate().unwrap());
+        assert!(TestExpr::IntGreater("20".to_string(), "10".to_string())
+            .evaluate()
+            .unwrap());
+        assert!(!TestExpr::IntGreater("10".to_string(), "20".to_string())
+            .evaluate()
+            .unwrap());
     }
 
     #[test]
@@ -720,7 +746,10 @@ mod tests {
     fn test_parse_string_comparison() {
         let args = vec!["hello".to_string(), "=".to_string(), "world".to_string()];
         let expr = parse_test_expr(&args, false).unwrap();
-        assert_eq!(expr, TestExpr::StringEqual("hello".to_string(), "world".to_string()));
+        assert_eq!(
+            expr,
+            TestExpr::StringEqual("hello".to_string(), "world".to_string())
+        );
     }
 
     #[test]

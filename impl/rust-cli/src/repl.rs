@@ -108,10 +108,7 @@ pub fn run(state: &mut ShellState) -> Result<()> {
 
 fn build_prompt(state: &ShellState) -> String {
     let txn_indicator = if let Some(ref txn) = state.active_transaction {
-        format!(
-            "{}/",
-            format!("txn:{}", txn.name).bright_cyan()
-        )
+        format!("{}/", format!("txn:{}", txn.name).bright_cyan())
     } else {
         String::new()
     };
@@ -153,18 +150,10 @@ fn execute_line(state: &mut ShellState, input: &str) -> Result<bool> {
 
     // Handle aliases before parsing
     let input_normalized = match trimmed {
-        s if s.starts_with("u ") || s == "u" => {
-            trimmed.replacen("u", "undo", 1)
-        }
-        s if s.starts_with("r ") || s == "r" => {
-            trimmed.replacen("r", "redo", 1)
-        }
-        s if s.starts_with("h ") || s == "h" => {
-            trimmed.replacen("h", "history", 1)
-        }
-        s if s.starts_with("g ") || s == "g" => {
-            trimmed.replacen("g", "graph", 1)
-        }
+        s if s.starts_with("u ") || s == "u" => trimmed.replacen("u", "undo", 1),
+        s if s.starts_with("r ") || s == "r" => trimmed.replacen("r", "redo", 1),
+        s if s.starts_with("h ") || s == "h" => trimmed.replacen("h", "history", 1),
+        s if s.starts_with("g ") || s == "g" => trimmed.replacen("g", "graph", 1),
         "q" => "quit".to_string(),
         _ => trimmed.to_string(),
     };
@@ -181,8 +170,7 @@ fn execute_line(state: &mut ShellState, input: &str) -> Result<bool> {
     // Handle execution result
     match result {
         ExecutionResult::Exit => Ok(true),
-        ExecutionResult::ExternalCommand { exit_code }
-        | ExecutionResult::Return { exit_code } => {
+        ExecutionResult::ExternalCommand { exit_code } | ExecutionResult::Return { exit_code } => {
             // Return leaking past a function boundary is defensive: the
             // `Command::Return` handler already errors if invoked outside
             // a function, so we treat it as a plain exit-code result here.
@@ -198,41 +186,89 @@ fn print_help() {
     println!();
 
     println!("{}", "Filesystem Operations:".bright_yellow());
-    println!("  {}      Create a directory", "mkdir <path>".bright_green());
-    println!("  {}      Remove an empty directory", "rmdir <path>".bright_green());
-    println!("  {}      Create an empty file", "touch <path>".bright_green());
+    println!(
+        "  {}      Create a directory",
+        "mkdir <path>".bright_green()
+    );
+    println!(
+        "  {}      Remove an empty directory",
+        "rmdir <path>".bright_green()
+    );
+    println!(
+        "  {}      Create an empty file",
+        "touch <path>".bright_green()
+    );
     println!("  {}         Remove a file", "rm <path>".bright_green());
-    println!("  {}         List directory contents", "ls [path]".bright_green());
+    println!(
+        "  {}         List directory contents",
+        "ls [path]".bright_green()
+    );
     println!("  {}         Change directory", "cd [path]".bright_green());
-    println!("  {}          Return to previous directory", "cd -".bright_green());
-    println!("  {}            Show current directory", "pwd".bright_green());
+    println!(
+        "  {}          Return to previous directory",
+        "cd -".bright_green()
+    );
+    println!(
+        "  {}            Show current directory",
+        "pwd".bright_green()
+    );
     println!();
 
     println!("{}", "Reversibility:".bright_yellow());
-    println!("  {}        Undo last operation(s)", "undo [N]".bright_cyan());
-    println!("  {}        Redo last undone operation(s)", "redo [N]".bright_cyan());
+    println!(
+        "  {}        Undo last operation(s)",
+        "undo [N]".bright_cyan()
+    );
+    println!(
+        "  {}        Redo last undone operation(s)",
+        "redo [N]".bright_cyan()
+    );
     println!("  {} Show operation history", "history [N]".bright_cyan());
-    println!("  {}       Add --proofs to see theorems", "history -p".bright_cyan());
+    println!(
+        "  {}       Add --proofs to see theorems",
+        "history -p".bright_cyan()
+    );
     println!("  {}           Show operation DAG", "graph".bright_cyan());
     println!();
 
     println!("{}", "Transactions:".bright_yellow());
-    println!("  {}  Start a transaction group", "begin <name>".bright_magenta());
-    println!("  {}         Commit current transaction", "commit".bright_magenta());
-    println!("  {}       Rollback current transaction", "rollback".bright_magenta());
+    println!(
+        "  {}  Start a transaction group",
+        "begin <name>".bright_magenta()
+    );
+    println!(
+        "  {}         Commit current transaction",
+        "commit".bright_magenta()
+    );
+    println!(
+        "  {}       Rollback current transaction",
+        "rollback".bright_magenta()
+    );
     println!();
 
     println!("{}", "Job Control:".bright_yellow());
     println!("  {}  Run command in background", "cmd &".bright_green());
     println!("  {}            List all jobs", "jobs".bright_green());
     println!("  {}       List jobs with PIDs", "jobs -l".bright_green());
-    println!("  {}        Bring job to foreground", "fg [%N]".bright_green());
-    println!("  {}        Continue job in background", "bg [%N]".bright_green());
-    println!("  {}      Send signal to job", "kill [-%N] %N".bright_green());
+    println!(
+        "  {}        Bring job to foreground",
+        "fg [%N]".bright_green()
+    );
+    println!(
+        "  {}        Continue job in background",
+        "bg [%N]".bright_green()
+    );
+    println!(
+        "  {}      Send signal to job",
+        "kill [-%N] %N".bright_green()
+    );
     println!();
 
     println!("{}", "Information:".bright_yellow());
-    println!("  {}         Show verification info", "proofs".bright_white());
+    println!(
+        "  {}         Show verification info",
+        "proofs".bright_white()
+    );
     println!("  {}         Show shell status", "status".bright_white());
     println!("  {}           Show this help", "help".bright_white());
     println!();
@@ -244,7 +280,11 @@ fn print_help() {
 
     println!("{}", "External Commands:".bright_yellow());
     println!("  Any other command will be executed as an external program");
-    println!("  Example: {} or {}", "ls -la".bright_green(), "cat file.txt".bright_green());
+    println!(
+        "  Example: {} or {}",
+        "ls -la".bright_green(),
+        "cat file.txt".bright_green()
+    );
     println!();
 
     println!(
@@ -260,7 +300,11 @@ fn print_help() {
 fn print_status(state: &ShellState) {
     println!("{}", "═══ Shell Status ═══".bright_blue().bold());
     println!();
-    println!("  {}: {}", "Sandbox root".bright_black(), state.root.display());
+    println!(
+        "  {}: {}",
+        "Sandbox root".bright_black(),
+        state.root.display()
+    );
     println!(
         "  {}: {}",
         "Total operations".bright_black(),

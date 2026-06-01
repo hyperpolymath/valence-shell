@@ -393,7 +393,10 @@ mod tests {
 
     #[test]
     fn test_property_category_display() {
-        assert_eq!(format!("{}", PropertyCategory::Reversibility), "reversibility");
+        assert_eq!(
+            format!("{}", PropertyCategory::Reversibility),
+            "reversibility"
+        );
         assert_eq!(format!("{}", PropertyCategory::Security), "security");
     }
 }

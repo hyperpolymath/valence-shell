@@ -76,10 +76,7 @@ impl QuotedSegment {
 
     /// Check if this segment allows variable expansion
     pub fn allows_variable_expansion(&self) -> bool {
-        matches!(
-            self.state,
-            QuoteState::Unquoted | QuoteState::DoubleQuoted
-        )
+        matches!(self.state, QuoteState::Unquoted | QuoteState::DoubleQuoted)
     }
 
     /// Check if this segment allows glob expansion
@@ -228,7 +225,8 @@ pub fn parse_quotes(input: &str) -> Result<Vec<QuotedSegment>> {
 
     // Check for unclosed quotes
     if state != QuoteState::Unquoted {
-        anyhow::bail!("Unclosed quote (expected closing {})",
+        anyhow::bail!(
+            "Unclosed quote (expected closing {})",
             match state {
                 QuoteState::SingleQuoted => "'",
                 QuoteState::DoubleQuoted => "\"",
@@ -268,9 +266,9 @@ pub fn parse_quotes(input: &str) -> Result<Vec<QuotedSegment>> {
 /// assert!(!should_expand_glob(&segments));
 /// ```
 pub fn should_expand_glob(segments: &[QuotedSegment]) -> bool {
-    segments.iter().any(|seg| {
-        seg.allows_glob_expansion() && crate::glob::contains_glob_pattern(&seg.content)
-    })
+    segments
+        .iter()
+        .any(|seg| seg.allows_glob_expansion() && crate::glob::contains_glob_pattern(&seg.content))
 }
 
 /// Reconstruct the expanded string from quoted segments

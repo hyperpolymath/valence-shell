@@ -57,10 +57,10 @@ pub fn levenshtein_distance(a: &str, b: &str) -> usize {
 
             matrix[i][j] = std::cmp::min(
                 std::cmp::min(
-                    matrix[i - 1][j] + 1,      // Deletion
-                    matrix[i][j - 1] + 1,      // Insertion
+                    matrix[i - 1][j] + 1, // Deletion
+                    matrix[i][j - 1] + 1, // Insertion
                 ),
-                matrix[i - 1][j - 1] + cost,  // Substitution
+                matrix[i - 1][j - 1] + cost, // Substitution
             );
         }
     }
@@ -74,12 +74,12 @@ fn get_all_commands() -> Vec<String> {
 
     // Built-in commands
     let builtins: Vec<String> = vec![
-        "cd", "exit", "undo", "redo", "history", "help",
-        "mkdir", "rmdir", "touch", "rm",
-        "test", "[",
-        "pwd", "echo", "export", "unset", "set",
-        "jobs", "fg", "bg", "kill",
-    ].iter().map(|s| s.to_string()).collect();
+        "cd", "exit", "undo", "redo", "history", "help", "mkdir", "rmdir", "touch", "rm", "test",
+        "[", "pwd", "echo", "export", "unset", "set", "jobs", "fg", "bg", "kill",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
 
     commands.extend(builtins);
 
@@ -188,7 +188,8 @@ pub fn suggest_corrections(cmd: &str, limit: usize) -> Vec<String> {
     matches.sort_by_key(|(dist, _)| *dist);
 
     // Take top N, return just the commands
-    matches.into_iter()
+    matches
+        .into_iter()
         .take(limit)
         .map(|(_, cmd)| cmd)
         .collect()

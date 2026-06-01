@@ -18,7 +18,7 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use std::fs;
 use std::io::Write;
 use tempfile::TempDir;
-use vsh::commands::{mkdir, rm, touch, undo, redo};
+use vsh::commands::{mkdir, redo, rm, touch, undo};
 use vsh::glob::expand_glob;
 use vsh::state::ShellState;
 
@@ -50,24 +50,28 @@ fn bench_undo_scaling(c: &mut Criterion) {
 
     for num_ops in [10, 50, 100].iter() {
         group.throughput(Throughput::Elements(*num_ops as u64));
-        group.bench_with_input(BenchmarkId::from_parameter(num_ops), num_ops, |b, &num_ops| {
-            b.iter(|| {
-                let temp = TempDir::new().unwrap();
-                let root = temp.path().to_str().unwrap();
-                let mut state = ShellState::new(root).unwrap();
+        group.bench_with_input(
+            BenchmarkId::from_parameter(num_ops),
+            num_ops,
+            |b, &num_ops| {
+                b.iter(|| {
+                    let temp = TempDir::new().unwrap();
+                    let root = temp.path().to_str().unwrap();
+                    let mut state = ShellState::new(root).unwrap();
 
-                // Create operations
-                for i in 0..num_ops {
-                    mkdir(&mut state, &format!("dir_{}", i), false).unwrap();
-                }
+                    // Create operations
+                    for i in 0..num_ops {
+                        mkdir(&mut state, &format!("dir_{}", i), false).unwrap();
+                    }
 
-                // Benchmark undoing all
-                for _ in 0..num_ops {
-                    undo(&mut state, 1, false).unwrap();
-                }
-                black_box(&state);
-            });
-        });
+                    // Benchmark undoing all
+                    for _ in 0..num_ops {
+                        undo(&mut state, 1, false).unwrap();
+                    }
+                    black_box(&state);
+                });
+            },
+        );
     }
 
     group.finish();
@@ -216,9 +220,10 @@ fn bench_checkpoint_creation(c: &mut Criterion) {
                 state
             },
             |mut state| {
-                state
-                    .checkpoints
-                    .insert("test".to_string(), (state.history.len(), chrono::Utc::now()));
+                state.checkpoints.insert(
+                    "test".to_string(),
+                    (state.history.len(), chrono::Utc::now()),
+                );
                 black_box(&state.checkpoints);
             },
             criterion::BatchSize::SmallInput,

@@ -6,7 +6,7 @@
 //! - NVMe Format/Sanitize (NVMe SSDs)
 //! - Cryptographic erase (when supported)
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -59,11 +59,7 @@ pub fn detect_drive_type(device: &str) -> Result<DriveType> {
     }
 
     // Fallback: Check with smartctl if available
-    if let Ok(output) = Command::new("smartctl")
-        .arg("-i")
-        .arg(device)
-        .output()
-    {
+    if let Ok(output) = Command::new("smartctl").arg("-i").arg(device).output() {
         let info = String::from_utf8_lossy(&output.stdout);
         if info.contains("Solid State Device") || info.contains("NVMe") {
             return Ok(DriveType::SataSSD);
@@ -115,8 +111,7 @@ pub fn check_ata_secure_erase_support(device: &str) -> Result<bool> {
     let info = String::from_utf8_lossy(&output.stdout);
 
     // Check for "supported: enhanced erase"
-    Ok(info.contains("supported: enhanced erase") ||
-       info.contains("SECURITY ERASE UNIT"))
+    Ok(info.contains("supported: enhanced erase") || info.contains("SECURITY ERASE UNIT"))
 }
 
 /// Perform ATA Secure Erase
@@ -187,7 +182,7 @@ pub fn nvme_format_crypto(device: &str) -> Result<()> {
     let status = Command::new("nvme")
         .arg("format")
         .arg(device)
-        .arg("--ses=1")  // Secure Erase Settings: Cryptographic Erase
+        .arg("--ses=1") // Secure Erase Settings: Cryptographic Erase
         .status()
         .context("Failed to execute NVMe format")?;
 
@@ -204,9 +199,9 @@ pub fn nvme_sanitize(device: &str, block_erase: bool) -> Result<()> {
     println!("🔥 Performing NVMe Sanitize (this may take a long time)...");
 
     let action = if block_erase {
-        "--sanact=2"  // Block Erase
+        "--sanact=2" // Block Erase
     } else {
-        "--sanact=1"  // Exit Failure Mode
+        "--sanact=1" // Exit Failure Mode
     };
 
     let status = Command::new("nvme")

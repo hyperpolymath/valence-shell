@@ -41,7 +41,10 @@ fn test_mkdir_rmdir_reversible() {
     fs::remove_dir(&target).unwrap();
 
     // Verify return to initial state
-    assert!(!target.exists(), "rmdir(mkdir(p)) should return to initial state");
+    assert!(
+        !target.exists(),
+        "rmdir(mkdir(p)) should return to initial state"
+    );
 }
 
 /// Test: touch followed by rm returns to initial state
@@ -64,7 +67,10 @@ fn test_create_delete_file_reversible() {
     fs::remove_file(&target).unwrap();
 
     // Verify return to initial state
-    assert!(!target.exists(), "rm(touch(p)) should return to initial state");
+    assert!(
+        !target.exists(),
+        "rm(touch(p)) should return to initial state"
+    );
 }
 
 /// Test: Nested operations can be fully reversed
@@ -98,7 +104,10 @@ fn test_operation_sequence_reversible() {
     fs::remove_dir(&dir1).unwrap();
 
     // Verify return to initial state
-    assert!(!dir1.exists(), "Sequence reversal should return to initial state");
+    assert!(
+        !dir1.exists(),
+        "Sequence reversal should return to initial state"
+    );
 }
 
 // ============================================================
@@ -135,7 +144,10 @@ fn test_mkdir_enoent() {
     let target = temp.path().join("nonexistent/child");
 
     let result = fs::create_dir(&target);
-    assert!(result.is_err(), "mkdir should fail when parent doesn't exist");
+    assert!(
+        result.is_err(),
+        "mkdir should fail when parent doesn't exist"
+    );
 
     let err = result.unwrap_err();
     assert_eq!(
@@ -162,12 +174,14 @@ fn test_rmdir_enotempty() {
     // Some systems return PermissionDenied or Other
     let err = result.unwrap_err();
     assert!(
-        matches!(err.kind(),
-            std::io::ErrorKind::DirectoryNotEmpty |
-            std::io::ErrorKind::PermissionDenied |
-            std::io::ErrorKind::Other
+        matches!(
+            err.kind(),
+            std::io::ErrorKind::DirectoryNotEmpty
+                | std::io::ErrorKind::PermissionDenied
+                | std::io::ErrorKind::Other
         ),
-        "Error should indicate directory not empty, got {:?}", err.kind()
+        "Error should indicate directory not empty, got {:?}",
+        err.kind()
     );
 }
 
@@ -296,14 +310,21 @@ fn test_transaction_rollback_simulation() {
     // Rollback: reverse all operations
     for (op, path) in operations.iter().rev() {
         match *op {
-            "mkdir" => { fs::remove_dir(path).unwrap(); }
-            "touch" => { fs::remove_file(path).unwrap(); }
+            "mkdir" => {
+                fs::remove_dir(path).unwrap();
+            }
+            "touch" => {
+                fs::remove_file(path).unwrap();
+            }
             _ => {}
         }
     }
 
     // Verify rollback
-    assert!(!target1.exists(), "Rollback should remove all created items");
+    assert!(
+        !target1.exists(),
+        "Rollback should remove all created items"
+    );
     assert!(!target2.exists());
     assert!(!target3.exists());
 }
@@ -354,7 +375,10 @@ fn test_deep_nesting() {
         current = current.parent().unwrap().to_path_buf();
     }
 
-    assert!(!temp.path().join("a").exists(), "Deep cleanup should remove all");
+    assert!(
+        !temp.path().join("a").exists(),
+        "Deep cleanup should remove all"
+    );
 }
 
 /// Test: Special characters in paths
@@ -680,13 +704,20 @@ fn test_redirect_undo_file_truncated() {
         .unwrap();
 
     let truncated = fs::read_to_string(&target).unwrap();
-    assert_ne!(truncated.trim(), original_content, "File should be truncated");
+    assert_ne!(
+        truncated.trim(),
+        original_content,
+        "File should be truncated"
+    );
 
     // Undo: restore original content
     fs::write(&target, &saved_content).unwrap();
 
     let restored = fs::read_to_string(&target).unwrap();
-    assert_eq!(restored, original_content, "Undo should restore original content");
+    assert_eq!(
+        restored, original_content,
+        "Undo should restore original content"
+    );
 }
 
 /// Test: Undo file append from redirection
@@ -719,8 +750,14 @@ fn test_redirect_undo_file_appended() {
 
     // Verify append happened
     let appended = fs::read_to_string(&target).unwrap();
-    assert!(appended.len() > original_content.len(), "File should be larger");
-    assert!(appended.contains("line2"), "Appended content should be present");
+    assert!(
+        appended.len() > original_content.len(),
+        "File should be larger"
+    );
+    assert!(
+        appended.contains("line2"),
+        "Appended content should be present"
+    );
 
     // Undo: truncate to original size
     let file = OpenOptions::new().write(true).open(&target).unwrap();
@@ -729,7 +766,10 @@ fn test_redirect_undo_file_appended() {
 
     // Verify undo
     let restored = fs::read_to_string(&target).unwrap();
-    assert_eq!(restored, original_content, "Undo should restore original size");
+    assert_eq!(
+        restored, original_content,
+        "Undo should restore original size"
+    );
 }
 
 /// Test: Redo file truncation
@@ -742,15 +782,27 @@ fn test_redirect_redo_truncate() {
 
     // Truncate
     fs::write(&target, "").unwrap();
-    assert_eq!(fs::read_to_string(&target).unwrap(), "", "Should be truncated");
+    assert_eq!(
+        fs::read_to_string(&target).unwrap(),
+        "",
+        "Should be truncated"
+    );
 
     // Undo (restore)
     fs::write(&target, "original").unwrap();
-    assert_eq!(fs::read_to_string(&target).unwrap(), "original", "Should be restored");
+    assert_eq!(
+        fs::read_to_string(&target).unwrap(),
+        "original",
+        "Should be restored"
+    );
 
     // Redo (truncate again)
     fs::write(&target, "").unwrap();
-    assert_eq!(fs::read_to_string(&target).unwrap(), "", "Should be truncated again");
+    assert_eq!(
+        fs::read_to_string(&target).unwrap(),
+        "",
+        "Should be truncated again"
+    );
 }
 // ============================================================
 // Glob Expansion Tests (Phase 6 M12)
@@ -770,9 +822,18 @@ fn test_glob_wildcard_expansion() {
     let matches = vsh::glob::expand_glob("*.txt", temp.path()).unwrap();
     let names: Vec<String> = matches.iter().map(|p| p.display().to_string()).collect();
 
-    assert!(names.contains(&"file1.txt".to_string()), "Should match file1.txt");
-    assert!(names.contains(&"file2.txt".to_string()), "Should match file2.txt");
-    assert!(!names.iter().any(|n| n.contains("file3.log")), "Should not match .log files");
+    assert!(
+        names.contains(&"file1.txt".to_string()),
+        "Should match file1.txt"
+    );
+    assert!(
+        names.contains(&"file2.txt".to_string()),
+        "Should match file2.txt"
+    );
+    assert!(
+        !names.iter().any(|n| n.contains("file3.log")),
+        "Should not match .log files"
+    );
 }
 
 /// Test: Question mark glob (file?.txt)
@@ -789,9 +850,18 @@ fn test_glob_question_mark() {
     let matches = vsh::glob::expand_glob("file?.txt", temp.path()).unwrap();
     let names: Vec<String> = matches.iter().map(|p| p.display().to_string()).collect();
 
-    assert!(names.contains(&"file1.txt".to_string()), "Should match single character");
-    assert!(names.contains(&"file2.txt".to_string()), "Should match single character");
-    assert!(!names.contains(&"file10.txt".to_string()), "Should not match two characters");
+    assert!(
+        names.contains(&"file1.txt".to_string()),
+        "Should match single character"
+    );
+    assert!(
+        names.contains(&"file2.txt".to_string()),
+        "Should match single character"
+    );
+    assert!(
+        !names.contains(&"file10.txt".to_string()),
+        "Should not match two characters"
+    );
 }
 
 /// Test: Brace expansion (file{1,2,3}.txt)
@@ -812,11 +882,19 @@ fn test_glob_brace_expansion() {
     // Each expanded pattern should match existing files when globbed
     for pattern in &expanded {
         let matches = vsh::glob::expand_glob(pattern, temp.path()).unwrap();
-        assert_eq!(matches.len(), 1, "Pattern {} should match one file", pattern);
+        assert_eq!(
+            matches.len(),
+            1,
+            "Pattern {} should match one file",
+            pattern
+        );
     }
 
     // file4.txt should not be in the expansion
-    assert!(!expanded.contains(&"file4.txt".to_string()), "Should not include file4.txt");
+    assert!(
+        !expanded.contains(&"file4.txt".to_string()),
+        "Should not include file4.txt"
+    );
 }
 
 /// Test: Empty glob matches return literal (POSIX behavior)
@@ -834,7 +912,10 @@ fn test_glob_no_matches_literal() {
         .unwrap();
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("*.xyz"), "Should pass literal pattern when no matches");
+    assert!(
+        stdout.contains("*.xyz"),
+        "Should pass literal pattern when no matches"
+    );
 }
 
 /// Test: Glob expansion in multiple arguments
@@ -852,13 +933,31 @@ fn test_glob_multiple_args() {
     let txt_matches = vsh::glob::expand_glob("*.txt", temp.path()).unwrap();
     let log_matches = vsh::glob::expand_glob("*.log", temp.path()).unwrap();
 
-    let txt_names: Vec<String> = txt_matches.iter().map(|p| p.display().to_string()).collect();
-    let log_names: Vec<String> = log_matches.iter().map(|p| p.display().to_string()).collect();
+    let txt_names: Vec<String> = txt_matches
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect();
+    let log_names: Vec<String> = log_matches
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect();
 
-    assert!(txt_names.contains(&"a1.txt".to_string()), "Should expand *.txt");
-    assert!(txt_names.contains(&"a2.txt".to_string()), "Should expand *.txt");
-    assert!(log_names.contains(&"b1.log".to_string()), "Should expand *.log");
-    assert!(log_names.contains(&"b2.log".to_string()), "Should expand *.log");
+    assert!(
+        txt_names.contains(&"a1.txt".to_string()),
+        "Should expand *.txt"
+    );
+    assert!(
+        txt_names.contains(&"a2.txt".to_string()),
+        "Should expand *.txt"
+    );
+    assert!(
+        log_names.contains(&"b1.log".to_string()),
+        "Should expand *.log"
+    );
+    assert!(
+        log_names.contains(&"b2.log".to_string()),
+        "Should expand *.log"
+    );
 }
 
 /// Test: Glob patterns do not expand in quoted strings
@@ -893,8 +992,14 @@ fn test_glob_hidden_files() {
     let matches = vsh::glob::expand_glob("*.txt", temp.path()).unwrap();
     let names: Vec<String> = matches.iter().map(|p| p.display().to_string()).collect();
 
-    assert!(names.contains(&"visible.txt".to_string()), "Should match visible files");
-    assert!(!names.iter().any(|n| n.contains(".hidden")), "Should not match hidden files without explicit .");
+    assert!(
+        names.contains(&"visible.txt".to_string()),
+        "Should match visible files"
+    );
+    assert!(
+        !names.iter().any(|n| n.contains(".hidden")),
+        "Should not match hidden files without explicit ."
+    );
 }
 
 /// Test: Glob character class [0-9]
@@ -911,7 +1016,16 @@ fn test_glob_character_class() {
     let matches = vsh::glob::expand_glob("file[0-9].txt", temp.path()).unwrap();
     let names: Vec<String> = matches.iter().map(|p| p.display().to_string()).collect();
 
-    assert!(names.contains(&"file1.txt".to_string()), "Should match digit 1");
-    assert!(names.contains(&"file2.txt".to_string()), "Should match digit 2");
-    assert!(!names.contains(&"fileA.txt".to_string()), "Should not match letter A");
+    assert!(
+        names.contains(&"file1.txt".to_string()),
+        "Should match digit 1"
+    );
+    assert!(
+        names.contains(&"file2.txt".to_string()),
+        "Should match digit 2"
+    );
+    assert!(
+        !names.contains(&"fileA.txt".to_string()),
+        "Should not match letter A"
+    );
 }

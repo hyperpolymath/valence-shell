@@ -3,9 +3,9 @@
 //!
 //! SAFETY CRITICAL: Prevents accidental data destruction
 
-use anyhow::{Result, bail};
-use std::io::{self, Write};
+use anyhow::{bail, Result};
 use colored::Colorize;
+use std::io::{self, Write};
 
 /// Confirmation level for operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,7 +38,10 @@ fn confirm_file_deletion(path: &str, method: &str) -> Result<bool> {
     println!("  File:   {}", path.bright_white());
     println!("  Method: {} (NIST SP 800-88)", method.bright_cyan());
     println!();
-    println!("{}", "  This operation is IRREVERSIBLE!".bright_red().bold());
+    println!(
+        "{}",
+        "  This operation is IRREVERSIBLE!".bright_red().bold()
+    );
     println!("  The file cannot be recovered after deletion.");
     println!();
 
@@ -56,10 +59,16 @@ fn confirm_tree_deletion(path: &str, method: &str) -> Result<bool> {
     println!("{}", "⚠️  SECURE TREE DELETION".yellow().bold());
     println!();
     println!("  Directory: {}", path.bright_white());
-    println!("  Files:     {} files will be destroyed", file_count.to_string().bright_red().bold());
+    println!(
+        "  Files:     {} files will be destroyed",
+        file_count.to_string().bright_red().bold()
+    );
     println!("  Method:    {} (NIST SP 800-88)", method.bright_cyan());
     println!();
-    println!("{}", "  THIS OPERATION IS IRREVERSIBLE!".bright_red().bold());
+    println!(
+        "{}",
+        "  THIS OPERATION IS IRREVERSIBLE!".bright_red().bold()
+    );
     println!("  All {} files will be permanently destroyed.", file_count);
     println!();
 
@@ -74,38 +83,80 @@ fn confirm_device_erase(device: &str, method: &str) -> Result<bool> {
     let device_info = get_device_info(device)?;
 
     println!();
-    println!("{}", "🚨 CRITICAL WARNING - DEVICE-LEVEL SECURE ERASE 🚨".bright_red().bold());
+    println!(
+        "{}",
+        "🚨 CRITICAL WARNING - DEVICE-LEVEL SECURE ERASE 🚨"
+            .bright_red()
+            .bold()
+    );
     println!();
     println!("{}", "═".repeat(60).bright_red());
     println!();
-    println!("  {}", "THIS WILL ERASE THE ENTIRE DEVICE!".bright_red().bold());
-    println!("  {}", "ALL DATA ON THE DEVICE WILL BE PERMANENTLY DESTROYED!".bright_red().bold());
+    println!(
+        "  {}",
+        "THIS WILL ERASE THE ENTIRE DEVICE!".bright_red().bold()
+    );
+    println!(
+        "  {}",
+        "ALL DATA ON THE DEVICE WILL BE PERMANENTLY DESTROYED!"
+            .bright_red()
+            .bold()
+    );
     println!();
     println!("{}", "═".repeat(60).bright_red());
     println!();
     println!("  Device:   {}", device.bright_white().bold());
     println!("  Type:     {}", device_info.drive_type.bright_yellow());
     println!("  Size:     {}", device_info.size.bright_yellow());
-    println!("  Method:   {} (NIST SP 800-88 Purge)", method.bright_cyan());
+    println!(
+        "  Method:   {} (NIST SP 800-88 Purge)",
+        method.bright_cyan()
+    );
     println!();
     println!("  Mounted partitions:");
     for mount in &device_info.mounts {
-        println!("    {} → {}", mount.partition.bright_red(), mount.mount_point.bright_white());
+        println!(
+            "    {} → {}",
+            mount.partition.bright_red(),
+            mount.mount_point.bright_white()
+        );
     }
     println!();
     println!("{}", "  SAFETY CHECKS:".bright_yellow().bold());
-    println!("    {} System drive check", if device_info.is_system_drive { "❌ SYSTEM DRIVE DETECTED!".bright_red().bold() } else { "✓ Not system drive".green() });
-    println!("    {} Mount check", if device_info.mounts.is_empty() { "✓ Device unmounted".green() } else { "⚠️  Device has mounted partitions!".bright_red().bold() });
+    println!(
+        "    {} System drive check",
+        if device_info.is_system_drive {
+            "❌ SYSTEM DRIVE DETECTED!".bright_red().bold()
+        } else {
+            "✓ Not system drive".green()
+        }
+    );
+    println!(
+        "    {} Mount check",
+        if device_info.mounts.is_empty() {
+            "✓ Device unmounted".green()
+        } else {
+            "⚠️  Device has mounted partitions!".bright_red().bold()
+        }
+    );
     println!();
 
     if device_info.is_system_drive {
-        println!("{}", "❌ ABORTED: Cannot erase system drive!".bright_red().bold());
+        println!(
+            "{}",
+            "❌ ABORTED: Cannot erase system drive!".bright_red().bold()
+        );
         println!();
         return Ok(false);
     }
 
     if !device_info.mounts.is_empty() {
-        println!("{}", "⚠️  WARNING: Device has mounted partitions!".bright_yellow().bold());
+        println!(
+            "{}",
+            "⚠️  WARNING: Device has mounted partitions!"
+                .bright_yellow()
+                .bold()
+        );
         println!("   You must unmount all partitions before secure erase.");
         println!();
 
@@ -128,7 +179,12 @@ fn confirm_device_erase(device: &str, method: &str) -> Result<bool> {
 
     if input != device {
         println!();
-        println!("{}", "❌ Device name mismatch - operation CANCELLED".bright_red().bold());
+        println!(
+            "{}",
+            "❌ Device name mismatch - operation CANCELLED"
+                .bright_red()
+                .bold()
+        );
         println!();
         return Ok(false);
     }
@@ -257,9 +313,7 @@ fn get_mounted_partitions(device: &str) -> Result<Vec<MountInfo>> {
 
 fn is_system_device(device: &str) -> Result<bool> {
     // Check if root filesystem is on this device
-    let output = std::process::Command::new("df")
-        .arg("/")
-        .output()?;
+    let output = std::process::Command::new("df").arg("/").output()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 

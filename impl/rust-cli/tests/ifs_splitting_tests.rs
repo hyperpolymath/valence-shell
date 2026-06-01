@@ -23,8 +23,7 @@ fn for_loop_splits_variable_by_default_ifs() -> Result<()> {
 
     state.set_variable("ITEMS", "alpha beta gamma");
 
-    parse_command("for x in $ITEMS; do mkdir $x; done")?
-        .execute(&mut state)?;
+    parse_command("for x in $ITEMS; do mkdir $x; done")?.execute(&mut state)?;
 
     assert!(state.resolve_path("alpha").exists());
     assert!(state.resolve_path("beta").exists());
@@ -40,8 +39,7 @@ fn for_loop_splits_variable_by_custom_ifs() -> Result<()> {
     state.set_variable("CSV", "one,two,three");
     state.set_variable("IFS", ",");
 
-    parse_command("for x in $CSV; do mkdir $x; done")?
-        .execute(&mut state)?;
+    parse_command("for x in $CSV; do mkdir $x; done")?.execute(&mut state)?;
 
     assert!(state.resolve_path("one").exists());
     assert!(state.resolve_path("two").exists());
@@ -60,8 +58,7 @@ fn for_loop_with_empty_ifs_does_not_split() -> Result<()> {
     // With empty IFS, the entire value is one word.
     // The for-loop body runs once and creates one dir whose name
     // contains a space.
-    parse_command("for x in $WORDS; do mkdir $x; done")?
-        .execute(&mut state)?;
+    parse_command("for x in $WORDS; do mkdir $x; done")?.execute(&mut state)?;
 
     // "hello world" stays as one token — but mkdir may receive it as
     // two words due to the shell's argument tokenization. The key test
@@ -82,8 +79,7 @@ fn for_loop_splits_newlines_in_variable() -> Result<()> {
     // Newline is part of default IFS
     state.set_variable("LINES", "line1\nline2\nline3");
 
-    parse_command("for x in $LINES; do mkdir $x; done")?
-        .execute(&mut state)?;
+    parse_command("for x in $LINES; do mkdir $x; done")?.execute(&mut state)?;
 
     assert!(state.resolve_path("line1").exists());
     assert!(state.resolve_path("line2").exists());
@@ -99,8 +95,7 @@ fn for_loop_literal_words_not_affected_by_ifs() -> Result<()> {
     // Literal words in the for-list are already split by the parser
     // at whitespace boundaries. IFS affects EXPANSION splitting, not
     // literal splitting.
-    parse_command("for x in one two three; do mkdir $x; done")?
-        .execute(&mut state)?;
+    parse_command("for x in one two three; do mkdir $x; done")?.execute(&mut state)?;
 
     assert!(state.resolve_path("one").exists());
     assert!(state.resolve_path("two").exists());

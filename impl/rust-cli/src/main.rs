@@ -20,8 +20,8 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 
 // Use library modules
-use vsh::{commands, state};
 use vsh::executable::{ExecutableCommand, ExecutionResult};
+use vsh::{commands, state};
 
 // REPL modules (choose one based on feature flags)
 #[cfg(feature = "enhanced-repl")]
@@ -141,8 +141,7 @@ fn main() -> Result<()> {
     let root = match cli.root {
         Some(r) => r,
         None => {
-            let current = std::env::current_dir()
-                .context("Failed to get current directory")?;
+            let current = std::env::current_dir().context("Failed to get current directory")?;
             current.to_string_lossy().to_string()
         }
     };
@@ -230,7 +229,11 @@ fn main() -> Result<()> {
     }
 
     // Run EXIT trap if registered
-    if let Some(exit_cmd) = state.traps.get(vsh::posix_builtins::TrapSignal::Exit).map(|s| s.to_string()) {
+    if let Some(exit_cmd) = state
+        .traps
+        .get(vsh::posix_builtins::TrapSignal::Exit)
+        .map(|s| s.to_string())
+    {
         if let Ok(cmd) = vsh::parser::parse_command(&exit_cmd) {
             let _ = cmd.execute(&mut state);
         }
@@ -290,7 +293,11 @@ fn execute_script_content(content: &str, state: &mut state::ShellState) -> Resul
     }
 
     // Run EXIT trap if registered
-    if let Some(exit_cmd) = state.traps.get(vsh::posix_builtins::TrapSignal::Exit).map(|s| s.to_string()) {
+    if let Some(exit_cmd) = state
+        .traps
+        .get(vsh::posix_builtins::TrapSignal::Exit)
+        .map(|s| s.to_string())
+    {
         if let Ok(cmd) = vsh::parser::parse_command(&exit_cmd) {
             let _ = cmd.execute(state);
         }

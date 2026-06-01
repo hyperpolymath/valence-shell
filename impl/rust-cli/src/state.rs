@@ -114,15 +114,15 @@ impl OperationType {
             OperationType::FileTruncated => Some(OperationType::WriteFile), // Restore original content
             OperationType::FileAppended => Some(OperationType::FileAppended), // Self-inverse (truncate to original size)
             OperationType::CopyFile => Some(OperationType::DeleteFile), // Undo copy = delete destination
-            OperationType::Move => Some(OperationType::Move), // Self-inverse (move back)
+            OperationType::Move => Some(OperationType::Move),           // Self-inverse (move back)
             OperationType::Symlink => Some(OperationType::Unlink),
             OperationType::Unlink => Some(OperationType::Symlink),
             OperationType::SetVariable => Some(OperationType::SetVariable), // Self-inverse (restore previous)
             OperationType::UnsetVariable => Some(OperationType::SetVariable), // Restore = set previous value
             OperationType::Chmod => Some(OperationType::Chmod), // Self-inverse (restore previous mode)
             OperationType::Chown => Some(OperationType::Chown), // Self-inverse (restore previous uid:gid)
-            OperationType::HardwareErase => None, // NOT REVERSIBLE
-            OperationType::Obliterate => None, // NOT REVERSIBLE - GDPR deletion
+            OperationType::HardwareErase => None,               // NOT REVERSIBLE
+            OperationType::Obliterate => None,                  // NOT REVERSIBLE - GDPR deletion
         }
     }
 
@@ -381,11 +381,7 @@ impl ShellState {
 
         // Persist state - warn on failure but don't abort
         if let Err(e) = self.save() {
-            eprintln!(
-                "{} Failed to save state: {}",
-                "Warning:".bright_yellow(),
-                e
-            );
+            eprintln!("{} Failed to save state: {}", "Warning:".bright_yellow(), e);
             eprintln!("Operation succeeded but may not persist across restarts");
         }
     }
@@ -405,11 +401,7 @@ impl ShellState {
 
         // Persist state - warn on failure but don't abort
         if let Err(e) = self.save() {
-            eprintln!(
-                "{} Failed to save state: {}",
-                "Warning:".bright_yellow(),
-                e
-            );
+            eprintln!("{} Failed to save state: {}", "Warning:".bright_yellow(), e);
             eprintln!("Redo succeeded but may not persist across restarts");
         }
     }
@@ -425,7 +417,8 @@ impl ShellState {
 
                 // Archive old operations if path is set
                 if let Some(ref archive_path) = self.history_archive_path {
-                    if let Err(e) = self.archive_operations(&self.history[0..excess], archive_path) {
+                    if let Err(e) = self.archive_operations(&self.history[0..excess], archive_path)
+                    {
                         eprintln!(
                             "{} Failed to archive old history: {}",
                             "Warning:".bright_yellow(),
@@ -657,7 +650,8 @@ impl ShellState {
 
     /// Set a shell variable (no undo tracking — use set_variable_tracked for reversibility)
     pub fn set_variable(&mut self, name: impl Into<String>, value: impl Into<String>) {
-        self.variables.insert(name.into(), VariableValue::Scalar(value.into()));
+        self.variables
+            .insert(name.into(), VariableValue::Scalar(value.into()));
     }
 
     /// Set a shell variable with undo tracking.
@@ -672,11 +666,11 @@ impl ShellState {
         let undo_data = serde_json::to_vec(&previous).unwrap_or_default();
 
         // Perform the set
-        self.variables.insert(name.clone(), VariableValue::Scalar(value));
+        self.variables
+            .insert(name.clone(), VariableValue::Scalar(value));
 
         // Record operation
-        let op = Operation::new(OperationType::SetVariable, name, None)
-            .with_undo_data(undo_data);
+        let op = Operation::new(OperationType::SetVariable, name, None).with_undo_data(undo_data);
         self.record_operation(op);
     }
 
@@ -741,7 +735,8 @@ impl ShellState {
         for (index, value) in elements.into_iter().enumerate() {
             array.insert(index, value);
         }
-        self.variables.insert(name.into(), VariableValue::Array(array));
+        self.variables
+            .insert(name.into(), VariableValue::Array(array));
     }
 
     /// Get a single array element by index
@@ -757,9 +752,7 @@ impl ShellState {
     /// Returns None if variable doesn't exist or is not an array
     pub fn get_array_all(&self, name: &str) -> Option<Vec<&str>> {
         self.variables.get(name).and_then(|v| match v {
-            VariableValue::Array(arr) => {
-                Some(arr.values().map(|s| s.as_str()).collect())
-            }
+            VariableValue::Array(arr) => Some(arr.values().map(|s| s.as_str()).collect()),
             VariableValue::Scalar(_) => None,
         })
     }
@@ -823,7 +816,9 @@ impl ShellState {
 
     /// Check if a variable is an array
     pub fn is_array(&self, name: &str) -> bool {
-        self.variables.get(name).map_or(false, |v| matches!(v, VariableValue::Array(_)))
+        self.variables
+            .get(name)
+            .map_or(false, |v| matches!(v, VariableValue::Array(_)))
     }
 
     // ========================================================================
@@ -846,10 +841,7 @@ impl ShellState {
                         VariableValue::Scalar(s) => s.clone(),
                         VariableValue::Array(arr) => {
                             // Join array elements with spaces (bash behavior)
-                            arr.values()
-                                .cloned()
-                                .collect::<Vec<_>>()
-                                .join(" ")
+                            arr.values().cloned().collect::<Vec<_>>().join(" ")
                         }
                     };
                     (name.clone(), string_value)
@@ -997,7 +989,10 @@ mod tests {
     #[test]
     fn test_get_array_all() {
         let mut state = ShellState::new("/tmp/vsh_array_test_3").unwrap();
-        state.set_array("arr", vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+        state.set_array(
+            "arr",
+            vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        );
 
         let all = state.get_array_all("arr").unwrap();
         assert_eq!(all, vec!["a", "b", "c"]);
@@ -1105,7 +1100,10 @@ mod tests {
     #[test]
     fn test_export_array() {
         let mut state = ShellState::new("/tmp/vsh_array_test_13").unwrap();
-        state.set_array("arr", vec!["one".to_string(), "two".to_string(), "three".to_string()]);
+        state.set_array(
+            "arr",
+            vec!["one".to_string(), "two".to_string(), "three".to_string()],
+        );
         state.export_variable("arr");
 
         let exported = state.get_exported_env();
@@ -1161,7 +1159,10 @@ mod tests {
     #[test]
     fn test_array_with_empty_strings() {
         let mut state = ShellState::new("/tmp/vsh_array_test_19").unwrap();
-        state.set_array("arr", vec!["".to_string(), "nonempty".to_string(), "".to_string()]);
+        state.set_array(
+            "arr",
+            vec!["".to_string(), "nonempty".to_string(), "".to_string()],
+        );
 
         assert_eq!(state.get_array_length("arr"), 3);
         assert_eq!(state.get_array_element("arr", 0), Some(""));
@@ -1235,7 +1236,10 @@ mod tests {
         let last_op = state.history.last().unwrap();
         let previous: Option<VariableValue> =
             serde_json::from_slice(last_op.undo_data.as_ref().unwrap()).unwrap();
-        assert_eq!(previous, Some(VariableValue::Scalar("old_value".to_string())));
+        assert_eq!(
+            previous,
+            Some(VariableValue::Scalar("old_value".to_string()))
+        );
     }
 
     #[test]
@@ -1289,18 +1293,12 @@ mod tests {
 
     #[test]
     fn test_chmod_inverse() {
-        assert_eq!(
-            OperationType::Chmod.inverse(),
-            Some(OperationType::Chmod)
-        );
+        assert_eq!(OperationType::Chmod.inverse(), Some(OperationType::Chmod));
     }
 
     #[test]
     fn test_chown_inverse() {
-        assert_eq!(
-            OperationType::Chown.inverse(),
-            Some(OperationType::Chown)
-        );
+        assert_eq!(OperationType::Chown.inverse(), Some(OperationType::Chown));
     }
 
     #[test]

@@ -22,13 +22,13 @@ pub mod glob;
 pub mod help;
 pub mod highlighter;
 pub mod history;
-pub mod quotes;
 pub mod job;
 pub mod pager;
 pub mod parser;
 pub mod posix_builtins;
 pub mod process_sub;
 pub mod proof_refs;
+pub mod quotes;
 pub mod redirection;
 pub mod repl;
 pub mod secure_erase;
@@ -43,8 +43,8 @@ pub mod verification;
 pub mod echidna_integration;
 
 // Re-export commonly used types
-pub use state::ShellState;
 pub use executable::ExecutableCommand;
+pub use state::ShellState;
 
 // Re-export signal handling
 pub use signals::INTERRUPT_REQUESTED;

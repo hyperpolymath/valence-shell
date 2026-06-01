@@ -42,7 +42,10 @@ fn security_no_command_injection_via_path() {
         if result.is_ok() {
             // If it succeeded, verify it created a literal directory with that name
             let created_path = state.root.join(malicious_path);
-            assert!(created_path.exists(), "Should create literal path, not execute command");
+            assert!(
+                created_path.exists(),
+                "Should create literal path, not execute command"
+            );
         }
     }
 }
@@ -55,7 +58,10 @@ fn security_no_shell_metacharacter_execution() {
     let test_cases = vec![
         ("mkdir foo; rm -rf /", "Should not execute rm"),
         ("touch file && cat /etc/passwd", "Should not execute cat"),
-        ("mkdir test | grep test", "Should parse as pipeline, not execute"),
+        (
+            "mkdir test | grep test",
+            "Should parse as pipeline, not execute",
+        ),
     ];
 
     for (input, expected_behavior) in test_cases {
@@ -139,11 +145,7 @@ fn security_null_byte_injection() {
     let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Null byte injection attempts
-    let null_byte_paths = vec![
-        "file\0.txt",
-        "foo\0bar",
-        "test\0/etc/passwd",
-    ];
+    let null_byte_paths = vec!["file\0.txt", "foo\0bar", "test\0/etc/passwd"];
 
     for path in null_byte_paths {
         let result = vsh::commands::touch(&mut state, path, true);
@@ -184,12 +186,7 @@ fn security_unicode_handling() {
     let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
     // Unicode in paths (valid on modern filesystems)
-    let unicode_paths = vec![
-        "测试文件.txt",
-        "файл.txt",
-        "αρχείο.txt",
-        "🚀.txt",
-    ];
+    let unicode_paths = vec!["测试文件.txt", "файл.txt", "αρχείο.txt", "🚀.txt"];
 
     for path in unicode_paths {
         let result = vsh::commands::touch(&mut state, path, true);
@@ -197,7 +194,11 @@ fn security_unicode_handling() {
         // Should handle Unicode gracefully
         if result.is_ok() {
             let created_path = state.root.join(path);
-            assert!(created_path.exists(), "Unicode path should be supported: {}", path);
+            assert!(
+                created_path.exists(),
+                "Unicode path should be supported: {}",
+                path
+            );
         }
     }
 }
@@ -229,8 +230,8 @@ fn security_no_infinite_loops_in_parser() {
     // Parser should handle malformed input without hanging
 
     let malicious_inputs = vec![
-        "(((((((((((((((((((((((((((((((((((((((((",  // Deep nesting
-        "\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"",  // Many quotes
+        "(((((((((((((((((((((((((((((((((((((((((", // Deep nesting
+        "\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"", // Many quotes
         "||||||||||||||||||||||||||||||||||||||||",  // Many pipes
         "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&",  // Many operators
     ];

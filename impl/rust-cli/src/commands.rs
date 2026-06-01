@@ -110,11 +110,7 @@ pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     if verbose {
         let proof = OperationType::Mkdir.proof_reference();
         println!("    {} {}", "Proof:".bright_black(), proof.format_short());
-        println!(
-            "    {} rmdir {}",
-            "Undo:".bright_black(),
-            path
-        );
+        println!("    {} rmdir {}", "Undo:".bright_black(), path);
     }
 
     Ok(())
@@ -291,8 +287,8 @@ pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 
     fs::remove_file(&full_path).context("rm failed")?;
 
-    let op = Operation::new(OperationType::DeleteFile, path.to_string(), None)
-        .with_undo_data(content);
+    let op =
+        Operation::new(OperationType::DeleteFile, path.to_string(), None).with_undo_data(content);
     let op_id = op.id;
     state.record_operation(op);
 
@@ -534,11 +530,7 @@ pub fn symlink(state: &mut ShellState, target: &str, link: &str, verbose: bool) 
     if verbose {
         let proof = OperationType::Symlink.proof_reference();
         println!("    {} {}", "Proof:".bright_black(), proof.format_short());
-        println!(
-            "    {} unlink {}",
-            "Undo:".bright_black(),
-            link
-        );
+        println!("    {} unlink {}", "Undo:".bright_black(), link);
     }
 
     Ok(())
@@ -562,8 +554,8 @@ pub fn chmod(state: &mut ShellState, mode_str: &str, path: &str, verbose: bool) 
     #[cfg(unix)]
     let old_mode = {
         use std::os::unix::fs::PermissionsExt;
-        let metadata = fs::symlink_metadata(&file_path)
-            .context("chmod: failed to read metadata")?;
+        let metadata =
+            fs::symlink_metadata(&file_path).context("chmod: failed to read metadata")?;
         metadata.permissions().mode()
     };
     #[cfg(not(unix))]
@@ -615,8 +607,7 @@ pub fn chmod(state: &mut ShellState, mode_str: &str, path: &str, verbose: bool) 
 fn parse_chmod_mode(mode_str: &str, current_mode: u32) -> Result<u32> {
     // Try octal first
     if mode_str.chars().all(|c| c.is_ascii_digit()) {
-        let mode = u32::from_str_radix(mode_str, 8)
-            .context("Invalid octal mode")?;
+        let mode = u32::from_str_radix(mode_str, 8).context("Invalid octal mode")?;
         if mode > 0o7777 {
             anyhow::bail!("Mode out of range: {:o}", mode);
         }
@@ -639,10 +630,22 @@ fn parse_chmod_mode(mode_str: &str, current_mode: u32) -> Result<u32> {
 
         while let Some(&c) = chars.peek() {
             match c {
-                'u' => { who_mask |= 0o700; chars.next(); }
-                'g' => { who_mask |= 0o070; chars.next(); }
-                'o' => { who_mask |= 0o007; chars.next(); }
-                'a' => { who_mask |= 0o777; chars.next(); }
+                'u' => {
+                    who_mask |= 0o700;
+                    chars.next();
+                }
+                'g' => {
+                    who_mask |= 0o070;
+                    chars.next();
+                }
+                'o' => {
+                    who_mask |= 0o007;
+                    chars.next();
+                }
+                'a' => {
+                    who_mask |= 0o777;
+                    chars.next();
+                }
                 '+' | '-' | '=' => break,
                 _ => anyhow::bail!("Invalid who character: '{}'", c),
             }
@@ -705,8 +708,7 @@ pub fn chown(state: &mut ShellState, owner_str: &str, path: &str, verbose: bool)
 
     // Capture current ownership for undo
     use std::os::unix::fs::MetadataExt;
-    let metadata = fs::symlink_metadata(&file_path)
-        .context("chown: failed to read metadata")?;
+    let metadata = fs::symlink_metadata(&file_path).context("chown: failed to read metadata")?;
     let old_uid = metadata.uid();
     let old_gid = metadata.gid();
 
@@ -769,7 +771,11 @@ fn parse_chown_spec(spec: &str, current_uid: u32, current_gid: u32) -> Result<(u
                         // SAFETY: c_name is a valid NUL-terminated string; getpwnam
                         // returns a pointer to a static passwd struct or null.
                         let pw = unsafe { libc::getpwnam(c_name.as_ptr()) };
-                        if pw.is_null() { u32::MAX } else { unsafe { (*pw).pw_uid } }
+                        if pw.is_null() {
+                            u32::MAX
+                        } else {
+                            unsafe { (*pw).pw_uid }
+                        }
                     }
                     Err(_) => u32::MAX, // Name contains null bytes — invalid
                 }
@@ -784,7 +790,11 @@ fn parse_chown_spec(spec: &str, current_uid: u32, current_gid: u32) -> Result<(u
                         // SAFETY: c_name is a valid NUL-terminated string; getgrnam
                         // returns a pointer to a static group struct or null.
                         let gr = unsafe { libc::getgrnam(c_name.as_ptr()) };
-                        if gr.is_null() { u32::MAX } else { unsafe { (*gr).gr_gid } }
+                        if gr.is_null() {
+                            u32::MAX
+                        } else {
+                            unsafe { (*gr).gr_gid }
+                        }
                     }
                     Err(_) => u32::MAX, // Name contains null bytes — invalid
                 }
@@ -804,7 +814,11 @@ fn parse_chown_spec(spec: &str, current_uid: u32, current_gid: u32) -> Result<(u
                 Ok(c_name) => {
                     // SAFETY: c_name is a valid NUL-terminated string; getpwnam is POSIX-safe.
                     let pw = unsafe { libc::getpwnam(c_name.as_ptr()) };
-                    if pw.is_null() { u32::MAX } else { unsafe { (*pw).pw_uid } }
+                    if pw.is_null() {
+                        u32::MAX
+                    } else {
+                        unsafe { (*pw).pw_uid }
+                    }
                 }
                 Err(_) => u32::MAX,
             }
@@ -885,12 +899,12 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
             OperationType::FileAppended => {
                 // Undo append: truncate file to original size
-                let size_bytes = op.undo_data.as_ref().context("Missing original size for undo")?;
-                let original_size = u64::from_le_bytes(
-                    size_bytes[..8]
-                        .try_into()
-                        .context("Invalid size data")?,
-                );
+                let size_bytes = op
+                    .undo_data
+                    .as_ref()
+                    .context("Missing original size for undo")?;
+                let original_size =
+                    u64::from_le_bytes(size_bytes[..8].try_into().context("Invalid size data")?);
 
                 use std::fs::OpenOptions;
                 let file = OpenOptions::new()
@@ -916,7 +930,9 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
             OperationType::Symlink => {
                 // Undo unlink = re-create the symlink
-                let target = op.undo_data.as_ref()
+                let target = op
+                    .undo_data
+                    .as_ref()
                     .map(|d| String::from_utf8_lossy(d).to_string())
                     .context("Missing symlink target for undo")?;
                 #[cfg(unix)]
@@ -927,7 +943,9 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
             OperationType::SetVariable => {
                 // Undo variable set = restore previous value (or unset if was unset)
-                let previous: Option<crate::state::VariableValue> = op.undo_data.as_ref()
+                let previous: Option<crate::state::VariableValue> = op
+                    .undo_data
+                    .as_ref()
                     .and_then(|d| serde_json::from_slice(d).ok())
                     .unwrap_or(None);
                 match previous {
@@ -942,7 +960,9 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
             OperationType::UnsetVariable => {
                 // Undo unset = restore the variable to its previous value
-                let previous: Option<crate::state::VariableValue> = op.undo_data.as_ref()
+                let previous: Option<crate::state::VariableValue> = op
+                    .undo_data
+                    .as_ref()
                     .and_then(|d| serde_json::from_slice(d).ok())
                     .unwrap_or(None);
                 if let Some(val) = previous {
@@ -951,10 +971,12 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
             OperationType::Chmod => {
                 // Undo chmod = restore previous mode from undo_data
-                let mode_bytes = op.undo_data.as_ref().context("Missing mode data for undo chmod")?;
-                let old_mode = u32::from_le_bytes(
-                    mode_bytes[..4].try_into().context("Invalid mode data")?
-                );
+                let mode_bytes = op
+                    .undo_data
+                    .as_ref()
+                    .context("Missing mode data for undo chmod")?;
+                let old_mode =
+                    u32::from_le_bytes(mode_bytes[..4].try_into().context("Invalid mode data")?);
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
@@ -964,7 +986,9 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
             OperationType::Chown => {
                 // Undo chown = restore previous uid:gid from undo_data
-                let uid_gid_str = op.undo_data.as_ref()
+                let uid_gid_str = op
+                    .undo_data
+                    .as_ref()
                     .map(|d| String::from_utf8_lossy(d).to_string())
                     .context("Missing uid:gid data for undo chown")?;
                 #[cfg(unix)]
@@ -1084,11 +1108,15 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
             OperationType::FileAppended => {
                 // Cannot redo append without knowing what was appended
-                anyhow::bail!("FileAppended redo not yet implemented (would need appended content)");
+                anyhow::bail!(
+                    "FileAppended redo not yet implemented (would need appended content)"
+                );
             }
             OperationType::CopyFile => {
                 // Redo copy: copy again from src (stored in undo_data) to dst (path)
-                let src = op.undo_data.as_ref()
+                let src = op
+                    .undo_data
+                    .as_ref()
                     .map(|d| String::from_utf8_lossy(d).to_string())
                     .context("Missing source path for redo cp")?;
                 let src_path = state.resolve_path(&src);
@@ -1106,7 +1134,9 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
             OperationType::Symlink => {
                 // Redo symlink: create symlink again
-                let target = op.undo_data.as_ref()
+                let target = op
+                    .undo_data
+                    .as_ref()
                     .map(|d| String::from_utf8_lossy(d).to_string())
                     .context("Missing symlink target for redo")?;
                 #[cfg(unix)]
@@ -1124,7 +1154,10 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 // For redo, we need the value that was set, but we don't have it.
                 // Redo of SetVariable is a no-op — variable state has moved on.
                 // This is correct: variable redo is best-effort; filesystem redo is exact.
-                println!("{}", "Variable set cannot be exactly redone (state-dependent)".bright_yellow());
+                println!(
+                    "{}",
+                    "Variable set cannot be exactly redone (state-dependent)".bright_yellow()
+                );
             }
             OperationType::UnsetVariable => {
                 // Redo unset: unset the variable again
@@ -1133,15 +1166,24 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
             OperationType::Chmod => {
                 // Redo chmod: cannot exactly redo without storing new mode
-                println!("{}", "chmod cannot be exactly redone (state-dependent)".bright_yellow());
+                println!(
+                    "{}",
+                    "chmod cannot be exactly redone (state-dependent)".bright_yellow()
+                );
             }
             OperationType::Chown => {
                 // Redo chown: cannot exactly redo without storing new uid:gid
-                println!("{}", "chown cannot be exactly redone (state-dependent)".bright_yellow());
+                println!(
+                    "{}",
+                    "chown cannot be exactly redone (state-dependent)".bright_yellow()
+                );
             }
             OperationType::HardwareErase | OperationType::Obliterate => {
                 // Cannot redo - irreversible operations
-                anyhow::bail!("{:?} cannot be redone - operation is irreversible", op.op_type);
+                anyhow::bail!(
+                    "{:?} cannot be redone - operation is irreversible",
+                    op.op_type
+                );
             }
         }
 
@@ -1197,8 +1239,13 @@ pub fn history(state: &ShellState, count: usize, show_proofs: bool) -> Result<()
 
     for op in history.iter().rev() {
         let status = if op.undone {
-            format!("[undone by {}]", op.undone_by.map(|u| u.to_string()[..8].to_string()).unwrap_or_default())
-                .bright_red()
+            format!(
+                "[undone by {}]",
+                op.undone_by
+                    .map(|u| u.to_string()[..8].to_string())
+                    .unwrap_or_default()
+            )
+            .bright_red()
         } else {
             "".normal()
         };
@@ -1326,7 +1373,11 @@ pub fn commit_transaction(state: &mut ShellState) -> Result<()> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
-    let ops: Vec<_> = state.current_transaction_ops().iter().map(|o| (*o).clone()).collect();
+    let ops: Vec<_> = state
+        .current_transaction_ops()
+        .iter()
+        .map(|o| (*o).clone())
+        .collect();
 
     if ops.is_empty() {
         println!("{}", "Nothing to rollback".bright_yellow());
@@ -1342,12 +1393,8 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
             let path = state.resolve_path(&op.path);
 
             let result = match inverse_type {
-                OperationType::Rmdir => {
-                    fs::remove_dir(&path).context("Failed to remove directory")
-                }
-                OperationType::Mkdir => {
-                    fs::create_dir(&path).context("Failed to create directory")
-                }
+                OperationType::Rmdir => fs::remove_dir(&path).context("Failed to remove directory"),
+                OperationType::Mkdir => fs::create_dir(&path).context("Failed to create directory"),
                 OperationType::DeleteFile => {
                     fs::remove_file(&path).context("Failed to remove file")
                 }
@@ -1397,27 +1444,43 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                     if let Some(target_bytes) = op.undo_data.as_ref() {
                         let target = String::from_utf8_lossy(target_bytes).to_string();
                         #[cfg(unix)]
-                        { std::os::unix::fs::symlink(&target, &path).context("Failed to re-create symlink") }
+                        {
+                            std::os::unix::fs::symlink(&target, &path)
+                                .context("Failed to re-create symlink")
+                        }
                         #[cfg(not(unix))]
-                        { Err(anyhow::anyhow!("Symbolic links not supported on this platform")) }
+                        {
+                            Err(anyhow::anyhow!(
+                                "Symbolic links not supported on this platform"
+                            ))
+                        }
                     } else {
                         Err(anyhow::anyhow!("Missing symlink target for rollback"))
                     }
                 }
                 OperationType::SetVariable => {
                     // Rollback variable set: restore previous value
-                    let previous: Option<crate::state::VariableValue> = op.undo_data.as_ref()
+                    let previous: Option<crate::state::VariableValue> = op
+                        .undo_data
+                        .as_ref()
                         .and_then(|d| serde_json::from_slice(d).ok())
                         .unwrap_or(None);
                     match previous {
-                        Some(val) => { state.variables.insert(op.path.clone(), val); }
-                        None => { state.variables.remove(&op.path); state.exported_vars.remove(&op.path); }
+                        Some(val) => {
+                            state.variables.insert(op.path.clone(), val);
+                        }
+                        None => {
+                            state.variables.remove(&op.path);
+                            state.exported_vars.remove(&op.path);
+                        }
                     }
                     Ok(())
                 }
                 OperationType::UnsetVariable => {
                     // Rollback unset: restore the variable
-                    let previous: Option<crate::state::VariableValue> = op.undo_data.as_ref()
+                    let previous: Option<crate::state::VariableValue> = op
+                        .undo_data
+                        .as_ref()
                         .and_then(|d| serde_json::from_slice(d).ok())
                         .unwrap_or(None);
                     if let Some(val) = previous {
@@ -1434,7 +1497,8 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                             {
                                 use std::os::unix::fs::PermissionsExt;
                                 let perms = fs::Permissions::from_mode(old_mode);
-                                fs::set_permissions(&path, perms).context("Failed to restore permissions")
+                                fs::set_permissions(&path, perms)
+                                    .context("Failed to restore permissions")
                             }
                             #[cfg(not(unix))]
                             Ok(())
@@ -1459,7 +1523,10 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                                     .context("Path contains null bytes")?;
                                 let ret = unsafe { libc::chown(c_path.as_ptr(), uid, gid) };
                                 if ret != 0 {
-                                    Err(anyhow::anyhow!("Failed to restore ownership: {}", std::io::Error::last_os_error()))
+                                    Err(anyhow::anyhow!(
+                                        "Failed to restore ownership: {}",
+                                        std::io::Error::last_os_error()
+                                    ))
                                 } else {
                                     Ok(())
                                 }
@@ -1588,10 +1655,7 @@ pub fn show_graph(state: &ShellState) -> Result<()> {
         println!("                │ (no operations)");
         println!("                ▼");
         println!("┌─────────────────────────────────────┐");
-        println!(
-            "│ {} │",
-            "[current state] ◄── YOU ARE HERE".bright_yellow()
-        );
+        println!("│ {} │", "[current state] ◄── YOU ARE HERE".bright_yellow());
         println!("└─────────────────────────────────────┘");
     }
 
@@ -1606,7 +1670,9 @@ pub fn show_graph(state: &ShellState) -> Result<()> {
                 print!(" → ");
             }
             // Defensive: handle operations without inverses (shouldn't happen currently)
-            let inverse_str = op.op_type.inverse()
+            let inverse_str = op
+                .op_type
+                .inverse()
                 .map(|inv| format!("{} {}", inv, op.path))
                 .unwrap_or_else(|| format!("[non-reversible: {}]", op.path));
             print!("{}", inverse_str.bright_yellow());
@@ -1681,7 +1747,9 @@ pub fn fg(state: &mut ShellState, job_spec: Option<&str>) -> Result<()> {
     let spec = job_spec.unwrap_or("%+");
 
     // Find the job
-    let job = state.jobs.get_job(spec)
+    let job = state
+        .jobs
+        .get_job(spec)
         .ok_or_else(|| anyhow::anyhow!("fg: no such job: {}", spec))?;
 
     let pgid = job.pgid;
@@ -1731,7 +1799,11 @@ pub fn fg(state: &mut ShellState, job_spec: Option<&str>) -> Result<()> {
         // Update job state based on wait result
         if unsafe { libc::WIFSTOPPED(status) } {
             state.jobs.update_job_state(pgid, JobState::Stopped);
-            println!("\n[{}]+  Stopped              {}", job_id, job_cmd.trim_end_matches(" &"));
+            println!(
+                "\n[{}]+  Stopped              {}",
+                job_id,
+                job_cmd.trim_end_matches(" &")
+            );
         } else {
             // Job completed - remove from table
             state.jobs.remove_job(job_id);
@@ -1761,7 +1833,9 @@ pub fn bg(state: &mut ShellState, job_spec: Option<&str>) -> Result<()> {
     let spec = job_spec.unwrap_or("%+");
 
     // Find the job
-    let job = state.jobs.get_job(spec)
+    let job = state
+        .jobs
+        .get_job(spec)
         .ok_or_else(|| anyhow::anyhow!("bg: no such job: {}", spec))?;
 
     let pgid = job.pgid;
@@ -1815,7 +1889,9 @@ pub fn bg(state: &mut ShellState, job_spec: Option<&str>) -> Result<()> {
 /// Returns error if job does not exist or signal sending fails.
 pub fn kill_job(state: &mut ShellState, signal: Option<&str>, job_spec: &str) -> Result<()> {
     // Find the job
-    let job = state.jobs.get_job(job_spec)
+    let job = state
+        .jobs
+        .get_job(job_spec)
         .ok_or_else(|| anyhow::anyhow!("kill: no such job: {}", job_spec))?;
 
     let pgid = job.pgid;
@@ -1914,11 +1990,7 @@ fn parse_signal(sig_str: &str) -> Result<i32> {
 /// commands::hardware_erase(&mut state, "/dev/nvme0n1", Some("nvme-format"))?;
 /// # Ok::<(), anyhow::Error>(())
 /// ```
-pub fn hardware_erase(
-    state: &mut ShellState,
-    device: &str,
-    method: Option<&str>,
-) -> Result<()> {
+pub fn hardware_erase(state: &mut ShellState, device: &str, method: Option<&str>) -> Result<()> {
     use crate::confirmation::{confirm_destructive_operation, ConfirmationLevel};
     use crate::secure_erase::{
         ata_secure_erase, check_ata_secure_erase_support, check_nvme_sanitize_support,
@@ -1926,8 +1998,7 @@ pub fn hardware_erase(
     };
 
     // Detect drive type
-    let drive_type = detect_drive_type(device)
-        .context("Failed to detect drive type")?;
+    let drive_type = detect_drive_type(device).context("Failed to detect drive type")?;
 
     // Determine method
     let erase_method = match (drive_type, method) {
@@ -1950,11 +2021,7 @@ pub fn hardware_erase(
     };
 
     // CRITICAL: Get user confirmation with device-level warnings
-    let confirmed = confirm_destructive_operation(
-        ConfirmationLevel::Device,
-        device,
-        erase_method,
-    )?;
+    let confirmed = confirm_destructive_operation(ConfirmationLevel::Device, device, erase_method)?;
 
     if !confirmed {
         println!();
@@ -1979,7 +2046,10 @@ pub fn hardware_erase(
 
         "nvme-format" => {
             println!();
-            println!("{}", "🔥 Executing NVMe Format (Crypto Erase)...".bright_cyan());
+            println!(
+                "{}",
+                "🔥 Executing NVMe Format (Crypto Erase)...".bright_cyan()
+            );
             nvme_format_crypto(device)?;
             println!();
             println!("{}", "✓ Device securely erased".bright_green().bold());
@@ -1992,7 +2062,10 @@ pub fn hardware_erase(
             }
 
             println!();
-            println!("{}", "🔥 Executing NVMe Sanitize (this may take hours)...".bright_cyan());
+            println!(
+                "{}",
+                "🔥 Executing NVMe Sanitize (this may take hours)...".bright_cyan()
+            );
             nvme_sanitize(device, true)?;
             println!();
             println!("{}", "✓ Device securely erased".bright_green().bold());
@@ -2051,10 +2124,7 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
     use crate::proof_refs::ProofReference;
     use crate::state::OperationType;
 
-    println!(
-        "{}",
-        "═══ Proof-Annotated Dry Run ═══".bright_blue().bold()
-    );
+    println!("{}", "═══ Proof-Annotated Dry Run ═══".bright_blue().bold());
     println!();
 
     let desc = cmd.description();
@@ -2062,38 +2132,51 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
 
     // Get operation type and proof reference
     let (op_type, proof_ref) = match cmd {
-        crate::parser::Command::Mkdir { .. } => {
-            (Some(OperationType::Mkdir), Some(ProofReference::for_operation(OperationType::Mkdir)))
-        }
-        crate::parser::Command::Rmdir { .. } => {
-            (Some(OperationType::Rmdir), Some(ProofReference::for_operation(OperationType::Rmdir)))
-        }
-        crate::parser::Command::Touch { .. } => {
-            (Some(OperationType::CreateFile), Some(ProofReference::for_operation(OperationType::CreateFile)))
-        }
-        crate::parser::Command::Rm { .. } => {
-            (Some(OperationType::DeleteFile), Some(ProofReference::for_operation(OperationType::DeleteFile)))
-        }
-        crate::parser::Command::Cp { .. } => {
-            (Some(OperationType::CopyFile), Some(ProofReference::for_operation(OperationType::CopyFile)))
-        }
-        crate::parser::Command::Mv { .. } => {
-            (Some(OperationType::Move), Some(ProofReference::for_operation(OperationType::Move)))
-        }
-        crate::parser::Command::Ln { .. } => {
-            (Some(OperationType::Symlink), Some(ProofReference::for_operation(OperationType::Symlink)))
-        }
-        crate::parser::Command::Chmod { .. } => {
-            (Some(OperationType::Chmod), Some(ProofReference::for_operation(OperationType::Chmod)))
-        }
-        crate::parser::Command::Chown { .. } => {
-            (Some(OperationType::Chown), Some(ProofReference::for_operation(OperationType::Chown)))
-        }
+        crate::parser::Command::Mkdir { .. } => (
+            Some(OperationType::Mkdir),
+            Some(ProofReference::for_operation(OperationType::Mkdir)),
+        ),
+        crate::parser::Command::Rmdir { .. } => (
+            Some(OperationType::Rmdir),
+            Some(ProofReference::for_operation(OperationType::Rmdir)),
+        ),
+        crate::parser::Command::Touch { .. } => (
+            Some(OperationType::CreateFile),
+            Some(ProofReference::for_operation(OperationType::CreateFile)),
+        ),
+        crate::parser::Command::Rm { .. } => (
+            Some(OperationType::DeleteFile),
+            Some(ProofReference::for_operation(OperationType::DeleteFile)),
+        ),
+        crate::parser::Command::Cp { .. } => (
+            Some(OperationType::CopyFile),
+            Some(ProofReference::for_operation(OperationType::CopyFile)),
+        ),
+        crate::parser::Command::Mv { .. } => (
+            Some(OperationType::Move),
+            Some(ProofReference::for_operation(OperationType::Move)),
+        ),
+        crate::parser::Command::Ln { .. } => (
+            Some(OperationType::Symlink),
+            Some(ProofReference::for_operation(OperationType::Symlink)),
+        ),
+        crate::parser::Command::Chmod { .. } => (
+            Some(OperationType::Chmod),
+            Some(ProofReference::for_operation(OperationType::Chmod)),
+        ),
+        crate::parser::Command::Chown { .. } => (
+            Some(OperationType::Chown),
+            Some(ProofReference::for_operation(OperationType::Chown)),
+        ),
         _ => (None, None),
     };
 
     if let Some(ref proof) = proof_ref {
-        println!("  {}    {}", "Theorem:".bright_white().bold(), proof.theorem.bright_cyan());
+        println!(
+            "  {}    {}",
+            "Theorem:".bright_white().bold(),
+            proof.theorem.bright_cyan()
+        );
     }
     println!();
 
@@ -2108,12 +2191,20 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
             let path_free = !resolved.exists();
             println!(
                 "    {} Parent exists:       {}",
-                if parent_exists { "✓".bright_green() } else { "✗".bright_red() },
+                if parent_exists {
+                    "✓".bright_green()
+                } else {
+                    "✗".bright_red()
+                },
                 parent.map_or("(root)".to_string(), |p| p.display().to_string())
             );
             println!(
                 "    {} Path doesn't exist:  {}",
-                if path_free { "✓".bright_green() } else { "✗".bright_red() },
+                if path_free {
+                    "✓".bright_green()
+                } else {
+                    "✗".bright_red()
+                },
                 resolved.display()
             );
         }
@@ -2123,7 +2214,11 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
             let exists = resolved.exists();
             println!(
                 "    {} Path exists:         {}",
-                if exists { "✓".bright_green() } else { "✗".bright_red() },
+                if exists {
+                    "✓".bright_green()
+                } else {
+                    "✗".bright_red()
+                },
                 resolved.display()
             );
         }
@@ -2141,28 +2236,44 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
             let exists = resolved.exists();
             println!(
                 "    {} Path exists:         {}",
-                if exists { "✓".bright_green() } else { "✗".bright_red() },
+                if exists {
+                    "✓".bright_green()
+                } else {
+                    "✗".bright_red()
+                },
                 resolved.display()
             );
         }
-        crate::parser::Command::Cp { src, dst, .. } | crate::parser::Command::Mv { src, dst, .. } => {
+        crate::parser::Command::Cp { src, dst, .. }
+        | crate::parser::Command::Mv { src, dst, .. } => {
             let src_exp = crate::parser::expand_variables(src, state);
             let dst_exp = crate::parser::expand_variables(dst, state);
             let src_resolved = state.resolve_path(&src_exp);
             let dst_resolved = state.resolve_path(&dst_exp);
             println!(
                 "    {} Source exists:       {}",
-                if src_resolved.exists() { "✓".bright_green() } else { "✗".bright_red() },
+                if src_resolved.exists() {
+                    "✓".bright_green()
+                } else {
+                    "✗".bright_red()
+                },
                 src_resolved.display()
             );
             println!(
                 "    {} Dest doesn't exist:  {}",
-                if !dst_resolved.exists() { "✓".bright_green() } else { "✗".bright_red() },
+                if !dst_resolved.exists() {
+                    "✓".bright_green()
+                } else {
+                    "✗".bright_red()
+                },
                 dst_resolved.display()
             );
         }
         _ => {
-            println!("    {} No preconditions (non-filesystem command)", "○".bright_yellow());
+            println!(
+                "    {} No preconditions (non-filesystem command)",
+                "○".bright_yellow()
+            );
         }
     }
     println!();
@@ -2174,22 +2285,28 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
         println!(
             "    fs ─── {}({}) ───▶ fs'",
             format!("{}", ot).bright_green(),
-            desc.split_whitespace().skip(1).collect::<Vec<_>>().join(", ")
+            desc.split_whitespace()
+                .skip(1)
+                .collect::<Vec<_>>()
+                .join(", ")
         );
         if let Some(inv) = inverse {
             println!();
             println!("  {}", "Inverse operation:".bright_yellow().bold());
-            println!(
-                "    fs' ─── {} ───▶ fs",
-                format!("{}", inv).bright_red(),
-            );
+            println!("    fs' ─── {} ───▶ fs", format!("{}", inv).bright_red(),);
             println!(
                 "    Proof: {}  {}",
-                proof_ref.as_ref().map_or("(none)", |p| p.description).bright_white(),
+                proof_ref
+                    .as_ref()
+                    .map_or("(none)", |p| p.description)
+                    .bright_white(),
                 "[QED in 6 systems]".bright_green().bold()
             );
         } else {
-            println!("    {} This operation is self-inverse (restores previous value)", "↺".bright_cyan());
+            println!(
+                "    {} This operation is self-inverse (restores previous value)",
+                "↺".bright_cyan()
+            );
         }
     } else {
         println!("    (not a tracked filesystem operation)");
@@ -2286,14 +2403,14 @@ pub fn restore(state: &mut ShellState, name: &str) -> Result<()> {
 /// List all named checkpoints.
 pub fn list_checkpoints(state: &ShellState) -> Result<()> {
     if state.checkpoints.is_empty() {
-        println!("{}", "No checkpoints saved. Use 'checkpoint <name>' to create one.".bright_black());
+        println!(
+            "{}",
+            "No checkpoints saved. Use 'checkpoint <name>' to create one.".bright_black()
+        );
         return Ok(());
     }
 
-    println!(
-        "{}",
-        "═══ Checkpoints ═══".bright_blue().bold()
-    );
+    println!("{}", "═══ Checkpoints ═══".bright_blue().bold());
 
     let current = state.history.len();
     let mut sorted: Vec<_> = state.checkpoints.iter().collect();
@@ -2346,7 +2463,10 @@ pub fn diff_state(state: &ShellState, target_op: usize) -> Result<()> {
             let action;
 
             match op.op_type {
-                OperationType::Mkdir | OperationType::CreateFile | OperationType::CopyFile | OperationType::Symlink => {
+                OperationType::Mkdir
+                | OperationType::CreateFile
+                | OperationType::CopyFile
+                | OperationType::Symlink => {
                     symbol = "-";
                     color_fn = |s: &str| s.bright_red();
                     action = format!("would be removed — {} at op:{}", op.op_type, op_idx);
@@ -2358,7 +2478,9 @@ pub fn diff_state(state: &ShellState, target_op: usize) -> Result<()> {
                     action = format!("would be restored — {} at op:{}", op.op_type, op_idx);
                     deletions += 1; // counts as a change
                 }
-                OperationType::WriteFile | OperationType::FileTruncated | OperationType::FileAppended => {
+                OperationType::WriteFile
+                | OperationType::FileTruncated
+                | OperationType::FileAppended => {
                     symbol = "~";
                     color_fn = |s: &str| s.bright_yellow();
                     action = format!("content would revert — {} at op:{}", op.op_type, op_idx);
@@ -2457,7 +2579,11 @@ pub fn replay(state: &ShellState, start: usize, end: usize) -> Result<()> {
         );
         println!(
             "    State: fs{} ──▶ fs{}",
-            if idx == 0 { "₀".to_string() } else { format!("_{}", idx) },
+            if idx == 0 {
+                "₀".to_string()
+            } else {
+                format!("_{}", idx)
+            },
             format!("_{}", idx + 1)
         );
         println!(
@@ -2465,11 +2591,7 @@ pub fn replay(state: &ShellState, start: usize, end: usize) -> Result<()> {
             proof.theorem.bright_cyan(),
             "✓".bright_green()
         );
-        println!(
-            "    [{}] {}%",
-            bar.bright_green(),
-            (step * 100) / total
-        );
+        println!("    [{}] {}%", bar.bright_green(), (step * 100) / total);
         println!();
 
         // Brief pause for animation effect (50ms per step)
@@ -2495,12 +2617,11 @@ pub fn replay(state: &ShellState, start: usize, end: usize) -> Result<()> {
         println!("{}", "Full undo path:".bright_yellow());
         for idx in (start..end).rev() {
             let op = &state.history[idx];
-            let inv = op.op_type.inverse().map_or("(none)".to_string(), |t| format!("{}", t));
-            print!(
-                "  {} {}",
-                inv.bright_red(),
-                op.path
-            );
+            let inv = op
+                .op_type
+                .inverse()
+                .map_or("(none)".to_string(), |t| format!("{}", t));
+            print!("  {} {}", inv.bright_red(), op.path);
             if idx > start {
                 print!(" →");
             }

@@ -12,9 +12,9 @@
 mod e2e_script_execution {
     use std::fs;
     use tempfile::TempDir;
+    use vsh::commands::mkdir;
     use vsh::parser::parse_command;
     use vsh::state::ShellState;
-    use vsh::commands::mkdir;
 
     // ================================================================
     // Basic Script Constructs
@@ -25,7 +25,10 @@ mod e2e_script_execution {
         // Simulate: VAR=hello
         let result = parse_command("VAR=hello");
         // Just verify it parses without error
-        assert!(result.is_ok(), "Variable assignment should parse successfully");
+        assert!(
+            result.is_ok(),
+            "Variable assignment should parse successfully"
+        );
     }
 
     #[test]
@@ -49,7 +52,10 @@ mod e2e_script_execution {
     #[test]
     fn test_function_definition() {
         let result = parse_command("setup() { mkdir src; touch src/main.rs; }");
-        assert!(result.is_ok(), "function definition should parse successfully");
+        assert!(
+            result.is_ok(),
+            "function definition should parse successfully"
+        );
     }
 
     // ================================================================
@@ -59,11 +65,7 @@ mod e2e_script_execution {
     #[test]
     fn test_multicommand_sequence_parsing() {
         // Simulate a multi-command script
-        let commands = vec![
-            "mkdir project",
-            "cd project",
-            "touch file.txt",
-        ];
+        let commands = vec!["mkdir project", "cd project", "touch file.txt"];
 
         for cmd_str in commands {
             let result = parse_command(cmd_str);
@@ -101,10 +103,7 @@ mod e2e_script_execution {
     fn test_unclosed_quote_detection() {
         // Unclosed quotes should be detected
         let result = parse_command("echo \"unclosed");
-        assert!(
-            result.is_err(),
-            "Unclosed quote should fail"
-        );
+        assert!(result.is_err(), "Unclosed quote should fail");
     }
 
     #[test]
@@ -227,7 +226,10 @@ mkdir test_dir
         // Test the complete if statement as it would be parsed
         let script = "if [ -d project ]; then echo yes; else echo no; fi";
         let result = parse_command(script);
-        assert!(result.is_ok(), "Complete if/then/else/fi should parse successfully");
+        assert!(
+            result.is_ok(),
+            "Complete if/then/else/fi should parse successfully"
+        );
     }
 
     #[test]

@@ -10,7 +10,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use tempfile::tempdir;
-use vsh::commands::{mkdir, rmdir, rm, touch};
+use vsh::commands::{mkdir, rm, rmdir, touch};
 use vsh::state::ShellState;
 
 /// Benchmark: mkdir operation

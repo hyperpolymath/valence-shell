@@ -32,25 +32,17 @@ impl VshHighlighter {
     pub fn new() -> Self {
         let builtins = vec![
             // Navigation
-            "cd", "pwd", "pushd", "popd", "dirs",
-            // File operations
+            "cd", "pwd", "pushd", "popd", "dirs", // File operations
             "mkdir", "rmdir", "touch", "rm", "cp", "mv", "ln", "cat", "ls",
             // VSH-specific
-            "undo", "redo", "history",
-            // Transactions
-            "begin", "commit", "rollback",
-            // Utilities
-            "echo", "help", "exit", "eval", "source", "read", "true", "false",
-            // Test
-            "test", "[",
-            // Variables
-            "export", "unset", "set",
-            // Jobs
-            "jobs", "fg", "bg", "kill",
-            // Control structures
-            "if", "then", "elif", "else", "fi",
-            "while", "until", "for", "do", "done",
-            "case", "esac", "in",
+            "undo", "redo", "history", // Transactions
+            "begin", "commit", "rollback", // Utilities
+            "echo", "help", "exit", "eval", "source", "read", "true", "false", // Test
+            "test", "[", // Variables
+            "export", "unset", "set", // Jobs
+            "jobs", "fg", "bg", "kill", // Control structures
+            "if", "then", "elif", "else", "fi", "while", "until", "for", "do", "done", "case",
+            "esac", "in",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -275,13 +267,9 @@ impl VshHighlighter {
                 (token.to_string(), style)
             }
 
-            TokenType::Operator => {
-                (token.to_string(), Style::new().fg(Color::White).bold())
-            }
+            TokenType::Operator => (token.to_string(), Style::new().fg(Color::White).bold()),
 
-            TokenType::Comment => {
-                (token.to_string(), Style::new().fg(Color::DarkGray))
-            }
+            TokenType::Comment => (token.to_string(), Style::new().fg(Color::DarkGray)),
         }
     }
 }
@@ -319,7 +307,10 @@ impl Highlighter for VshHighlighter {
             if let Some(token_pos) = line[position..].find(&token) {
                 // Add any whitespace before token as unstyled
                 if token_pos > 0 {
-                    styled.push((Style::new(), line[position..position + token_pos].to_string()));
+                    styled.push((
+                        Style::new(),
+                        line[position..position + token_pos].to_string(),
+                    ));
                     position += token_pos;
                 }
             }

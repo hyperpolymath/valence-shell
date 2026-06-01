@@ -26,8 +26,8 @@
 //! assert_eq!(result, 15);
 //! ```
 
-use anyhow::{anyhow, Result};
 use crate::state::ShellState;
+use anyhow::{anyhow, Result};
 
 /// Arithmetic operators
 #[derive(Debug, Clone, PartialEq)]
@@ -144,7 +144,8 @@ impl Tokenizer {
             }
         }
 
-        num_str.parse::<i64>()
+        num_str
+            .parse::<i64>()
             .map_err(|_| anyhow!("Invalid number: {}", num_str))
     }
 
@@ -295,7 +296,10 @@ impl Tokenizer {
                 }
             }
 
-            Some(ch) => Err(anyhow!("Unexpected character in arithmetic expression: {}", ch)),
+            Some(ch) => Err(anyhow!(
+                "Unexpected character in arithmetic expression: {}",
+                ch
+            )),
         }
     }
 }
@@ -508,7 +512,11 @@ impl Parser {
         if matches!(self.peek(), Token::Op(ArithOp::Pow)) {
             self.advance();
             let right = self.parse_power()?; // Right-associative recursion
-            Ok(ArithExpr::BinaryOp(ArithOp::Pow, Box::new(left), Box::new(right)))
+            Ok(ArithExpr::BinaryOp(
+                ArithOp::Pow,
+                Box::new(left),
+                Box::new(right),
+            ))
         } else {
             Ok(left)
         }
@@ -554,7 +562,10 @@ impl Parser {
                 Ok(expr)
             }
 
-            token => Err(anyhow!("Unexpected token in arithmetic expression: {:?}", token)),
+            token => Err(anyhow!(
+                "Unexpected token in arithmetic expression: {:?}",
+                token
+            )),
         }
     }
 }
@@ -704,21 +715,48 @@ mod tests {
     fn test_arith_basic_ops() {
         let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("5 + 3").unwrap(), &state).unwrap(), 8);
-        assert_eq!(eval_arith(&parse_arithmetic("10 - 4").unwrap(), &state).unwrap(), 6);
-        assert_eq!(eval_arith(&parse_arithmetic("6 * 7").unwrap(), &state).unwrap(), 42);
-        assert_eq!(eval_arith(&parse_arithmetic("20 / 4").unwrap(), &state).unwrap(), 5);
-        assert_eq!(eval_arith(&parse_arithmetic("17 % 5").unwrap(), &state).unwrap(), 2);
+        assert_eq!(
+            eval_arith(&parse_arithmetic("5 + 3").unwrap(), &state).unwrap(),
+            8
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("10 - 4").unwrap(), &state).unwrap(),
+            6
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("6 * 7").unwrap(), &state).unwrap(),
+            42
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("20 / 4").unwrap(), &state).unwrap(),
+            5
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("17 % 5").unwrap(), &state).unwrap(),
+            2
+        );
     }
 
     #[test]
     fn test_arith_precedence() {
         let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("2 + 3 * 4").unwrap(), &state).unwrap(), 14);
-        assert_eq!(eval_arith(&parse_arithmetic("(2 + 3) * 4").unwrap(), &state).unwrap(), 20);
-        assert_eq!(eval_arith(&parse_arithmetic("2 ** 3 + 1").unwrap(), &state).unwrap(), 9);
-        assert_eq!(eval_arith(&parse_arithmetic("2 ** (3 + 1)").unwrap(), &state).unwrap(), 16);
+        assert_eq!(
+            eval_arith(&parse_arithmetic("2 + 3 * 4").unwrap(), &state).unwrap(),
+            14
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("(2 + 3) * 4").unwrap(), &state).unwrap(),
+            20
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("2 ** 3 + 1").unwrap(), &state).unwrap(),
+            9
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("2 ** (3 + 1)").unwrap(), &state).unwrap(),
+            16
+        );
     }
 
     #[test]
@@ -726,43 +764,100 @@ mod tests {
         let state = ShellState::new("/tmp").unwrap();
 
         // 2 ** 3 ** 2 = 2 ** (3 ** 2) = 2 ** 9 = 512
-        assert_eq!(eval_arith(&parse_arithmetic("2 ** 3 ** 2").unwrap(), &state).unwrap(), 512);
+        assert_eq!(
+            eval_arith(&parse_arithmetic("2 ** 3 ** 2").unwrap(), &state).unwrap(),
+            512
+        );
     }
 
     #[test]
     fn test_arith_comparison() {
         let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("5 > 3").unwrap(), &state).unwrap(), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("5 < 3").unwrap(), &state).unwrap(), 0);
-        assert_eq!(eval_arith(&parse_arithmetic("5 == 5").unwrap(), &state).unwrap(), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("5 != 3").unwrap(), &state).unwrap(), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("5 >= 5").unwrap(), &state).unwrap(), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("5 <= 4").unwrap(), &state).unwrap(), 0);
+        assert_eq!(
+            eval_arith(&parse_arithmetic("5 > 3").unwrap(), &state).unwrap(),
+            1
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("5 < 3").unwrap(), &state).unwrap(),
+            0
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("5 == 5").unwrap(), &state).unwrap(),
+            1
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("5 != 3").unwrap(), &state).unwrap(),
+            1
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("5 >= 5").unwrap(), &state).unwrap(),
+            1
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("5 <= 4").unwrap(), &state).unwrap(),
+            0
+        );
     }
 
     #[test]
     fn test_arith_logical() {
         let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("1 && 1").unwrap(), &state).unwrap(), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("1 && 0").unwrap(), &state).unwrap(), 0);
-        assert_eq!(eval_arith(&parse_arithmetic("1 || 0").unwrap(), &state).unwrap(), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("0 || 0").unwrap(), &state).unwrap(), 0);
-        assert_eq!(eval_arith(&parse_arithmetic("!0").unwrap(), &state).unwrap(), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("!5").unwrap(), &state).unwrap(), 0);
+        assert_eq!(
+            eval_arith(&parse_arithmetic("1 && 1").unwrap(), &state).unwrap(),
+            1
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("1 && 0").unwrap(), &state).unwrap(),
+            0
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("1 || 0").unwrap(), &state).unwrap(),
+            1
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("0 || 0").unwrap(), &state).unwrap(),
+            0
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("!0").unwrap(), &state).unwrap(),
+            1
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("!5").unwrap(), &state).unwrap(),
+            0
+        );
     }
 
     #[test]
     fn test_arith_bitwise() {
         let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("5 & 3").unwrap(), &state).unwrap(), 1);
-        assert_eq!(eval_arith(&parse_arithmetic("5 | 3").unwrap(), &state).unwrap(), 7);
-        assert_eq!(eval_arith(&parse_arithmetic("5 ^ 3").unwrap(), &state).unwrap(), 6);
-        assert_eq!(eval_arith(&parse_arithmetic("~5").unwrap(), &state).unwrap(), -6);
-        assert_eq!(eval_arith(&parse_arithmetic("8 << 2").unwrap(), &state).unwrap(), 32);
-        assert_eq!(eval_arith(&parse_arithmetic("8 >> 2").unwrap(), &state).unwrap(), 2);
+        assert_eq!(
+            eval_arith(&parse_arithmetic("5 & 3").unwrap(), &state).unwrap(),
+            1
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("5 | 3").unwrap(), &state).unwrap(),
+            7
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("5 ^ 3").unwrap(), &state).unwrap(),
+            6
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("~5").unwrap(), &state).unwrap(),
+            -6
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("8 << 2").unwrap(), &state).unwrap(),
+            32
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("8 >> 2").unwrap(), &state).unwrap(),
+            2
+        );
     }
 
     #[test]
@@ -771,8 +866,14 @@ mod tests {
         state.set_variable("x", "5");
         state.set_variable("y", "10");
 
-        assert_eq!(eval_arith(&parse_arithmetic("x + y").unwrap(), &state).unwrap(), 15);
-        assert_eq!(eval_arith(&parse_arithmetic("x * 2 + y").unwrap(), &state).unwrap(), 20);
+        assert_eq!(
+            eval_arith(&parse_arithmetic("x + y").unwrap(), &state).unwrap(),
+            15
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("x * 2 + y").unwrap(), &state).unwrap(),
+            20
+        );
     }
 
     #[test]
@@ -780,7 +881,10 @@ mod tests {
         let state = ShellState::new("/tmp").unwrap();
 
         // Undefined variables should be treated as 0
-        assert_eq!(eval_arith(&parse_arithmetic("undefined_var + 5").unwrap(), &state).unwrap(), 5);
+        assert_eq!(
+            eval_arith(&parse_arithmetic("undefined_var + 5").unwrap(), &state).unwrap(),
+            5
+        );
     }
 
     #[test]
@@ -795,24 +899,45 @@ mod tests {
     fn test_arith_nested() {
         let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("((5 + 3) * 2) + 1").unwrap(), &state).unwrap(), 17);
-        assert_eq!(eval_arith(&parse_arithmetic("2 ** (3 ** 2)").unwrap(), &state).unwrap(), 512);
+        assert_eq!(
+            eval_arith(&parse_arithmetic("((5 + 3) * 2) + 1").unwrap(), &state).unwrap(),
+            17
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("2 ** (3 ** 2)").unwrap(), &state).unwrap(),
+            512
+        );
     }
 
     #[test]
     fn test_arith_unary_minus() {
         let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("-5").unwrap(), &state).unwrap(), -5);
-        assert_eq!(eval_arith(&parse_arithmetic("-(5 + 3)").unwrap(), &state).unwrap(), -8);
-        assert_eq!(eval_arith(&parse_arithmetic("10 + -5").unwrap(), &state).unwrap(), 5);
+        assert_eq!(
+            eval_arith(&parse_arithmetic("-5").unwrap(), &state).unwrap(),
+            -5
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("-(5 + 3)").unwrap(), &state).unwrap(),
+            -8
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("10 + -5").unwrap(), &state).unwrap(),
+            5
+        );
     }
 
     #[test]
     fn test_arith_whitespace() {
         let state = ShellState::new("/tmp").unwrap();
 
-        assert_eq!(eval_arith(&parse_arithmetic("  5  +  3  ").unwrap(), &state).unwrap(), 8);
-        assert_eq!(eval_arith(&parse_arithmetic("( ( 5 + 3 ) * 2 )").unwrap(), &state).unwrap(), 16);
+        assert_eq!(
+            eval_arith(&parse_arithmetic("  5  +  3  ").unwrap(), &state).unwrap(),
+            8
+        );
+        assert_eq!(
+            eval_arith(&parse_arithmetic("( ( 5 + 3 ) * 2 )").unwrap(), &state).unwrap(),
+            16
+        );
     }
 }

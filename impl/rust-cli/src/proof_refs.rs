@@ -61,7 +61,9 @@ impl ProofReference {
             OperationType::Symlink | OperationType::Unlink => SYMLINK_UNLINK_REVERSIBLE,
             OperationType::Chmod => CHMOD_REVERSIBLE,
             OperationType::Chown => CHOWN_REVERSIBLE,
-            OperationType::SetVariable | OperationType::UnsetVariable => VARIABLE_ASSIGNMENT_REVERSIBLE,
+            OperationType::SetVariable | OperationType::UnsetVariable => {
+                VARIABLE_ASSIGNMENT_REVERSIBLE
+            }
             OperationType::HardwareErase => HARDWARE_ERASE_IRREVERSIBLE,
             OperationType::Obliterate => OBLITERATE_IRREVERSIBLE,
         }
@@ -275,18 +277,27 @@ pub fn all_proofs() -> Vec<ProofReference> {
 /// Displays proof count, verification systems, and coverage information
 /// with colored terminal output.
 pub fn print_verification_summary() {
-    println!("{}", "═══ Formal Verification Status ═══".bright_blue().bold());
+    println!(
+        "{}",
+        "═══ Formal Verification Status ═══".bright_blue().bold()
+    );
     println!();
     println!("{}: ~250+ theorems proven", "Total Proofs".bright_green());
     println!("{}: 6", "Proof Systems".bright_green());
     println!();
 
     println!("{}", "Verification Systems:".bright_yellow());
-    println!("  1. {} - Calculus of Inductive Constructions", "Coq".bright_cyan());
+    println!(
+        "  1. {} - Calculus of Inductive Constructions",
+        "Coq".bright_cyan()
+    );
     println!("  2. {} - Dependent Type Theory", "Lean 4".bright_cyan());
     println!("  3. {} - Intensional Type Theory", "Agda".bright_cyan());
     println!("  4. {} - Higher-Order Logic", "Isabelle/HOL".bright_cyan());
-    println!("  5. {} - Tarski-Grothendieck Set Theory", "Mizar".bright_cyan());
+    println!(
+        "  5. {} - Tarski-Grothendieck Set Theory",
+        "Mizar".bright_cyan()
+    );
     println!("  6. {} - SMT Automated Verification", "Z3".bright_cyan());
     println!();
 
@@ -298,10 +309,19 @@ pub fn print_verification_summary() {
     println!();
 
     println!("{}", "Trust Model:".bright_yellow());
-    println!("  {} Formal proofs verified by proof assistant kernels", "✓".bright_green());
-    println!("  {} Zig FFI layer checks preconditions", "✓".bright_green());
+    println!(
+        "  {} Formal proofs verified by proof assistant kernels",
+        "✓".bright_green()
+    );
+    println!(
+        "  {} Zig FFI layer checks preconditions",
+        "✓".bright_green()
+    );
     println!("  {} Rust CLI maintains undo stack", "✓".bright_green());
-    println!("  {} POSIX semantics assumed correct (OS trust)", "○".bright_yellow());
+    println!(
+        "  {} POSIX semantics assumed correct (OS trust)",
+        "○".bright_yellow()
+    );
     println!();
 
     println!("{}", "Verification Gap:".bright_red());

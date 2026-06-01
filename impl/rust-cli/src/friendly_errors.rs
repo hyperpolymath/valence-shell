@@ -56,7 +56,10 @@ pub fn display_friendly_error(error: &anyhow::Error) {
 }
 
 fn handle_not_found_error(error_msg: &str) {
-    eprintln!("{}: The file or directory does not exist.", "vsh".bright_red().bold());
+    eprintln!(
+        "{}: The file or directory does not exist.",
+        "vsh".bright_red().bold()
+    );
     eprintln!();
 
     // Try to extract path from error message
@@ -98,11 +101,20 @@ fn handle_permission_error(error_msg: &str) {
     eprintln!("  {} Run as superuser", "sudo vsh".bright_yellow());
     if let Some(path) = extract_path(error_msg) {
         if error_msg.contains("read") || error_msg.contains("open") {
-            eprintln!("  {} Make file readable", format!("chmod +r {}", path).bright_yellow());
+            eprintln!(
+                "  {} Make file readable",
+                format!("chmod +r {}", path).bright_yellow()
+            );
         } else if error_msg.contains("write") {
-            eprintln!("  {} Make file writable", format!("chmod +w {}", path).bright_yellow());
+            eprintln!(
+                "  {} Make file writable",
+                format!("chmod +w {}", path).bright_yellow()
+            );
         } else if error_msg.contains("execute") {
-            eprintln!("  {} Make file executable", format!("chmod +x {}", path).bright_yellow());
+            eprintln!(
+                "  {} Make file executable",
+                format!("chmod +x {}", path).bright_yellow()
+            );
         }
     }
 }
@@ -125,14 +137,23 @@ fn handle_command_not_found(error_msg: &str) {
 
         // Suggest package search
         eprintln!("Search for this command:");
-        eprintln!("  {} (Fedora)", format!("dnf search {}", cmd).bright_yellow());
-        eprintln!("  {} (Ubuntu/Debian)", format!("apt search {}", cmd).bright_yellow());
+        eprintln!(
+            "  {} (Fedora)",
+            format!("dnf search {}", cmd).bright_yellow()
+        );
+        eprintln!(
+            "  {} (Ubuntu/Debian)",
+            format!("apt search {}", cmd).bright_yellow()
+        );
         eprintln!("  {} (Arch)", format!("pacman -Ss {}", cmd).bright_yellow());
     }
 }
 
 fn handle_already_exists_error(error_msg: &str) {
-    eprintln!("{}: File or directory already exists.", "vsh".bright_red().bold());
+    eprintln!(
+        "{}: File or directory already exists.",
+        "vsh".bright_red().bold()
+    );
     eprintln!();
 
     if let Some(path) = extract_path(error_msg) {
@@ -140,7 +161,10 @@ fn handle_already_exists_error(error_msg: &str) {
         eprintln!();
 
         eprintln!("To replace it:");
-        eprintln!("  {} Remove first, then create", format!("rm {} && touch {}", path, path).bright_yellow());
+        eprintln!(
+            "  {} Remove first, then create",
+            format!("rm {} && touch {}", path, path).bright_yellow()
+        );
         eprintln!();
         eprintln!("Or use a different name:");
         eprintln!("  {} Add suffix", format!("{}.new", path).bright_yellow());
@@ -148,7 +172,10 @@ fn handle_already_exists_error(error_msg: &str) {
 }
 
 fn handle_is_directory_error(error_msg: &str) {
-    eprintln!("{}: Expected a file but found a directory.", "vsh".bright_red().bold());
+    eprintln!(
+        "{}: Expected a file but found a directory.",
+        "vsh".bright_red().bold()
+    );
     eprintln!();
 
     if let Some(path) = extract_path(error_msg) {
@@ -156,13 +183,22 @@ fn handle_is_directory_error(error_msg: &str) {
         eprintln!();
 
         eprintln!("To remove a directory:");
-        eprintln!("  {} Remove empty directory", format!("rmdir {}", path).bright_yellow());
-        eprintln!("  {} Remove directory and contents", format!("rm -r {}", path).bright_yellow());
+        eprintln!(
+            "  {} Remove empty directory",
+            format!("rmdir {}", path).bright_yellow()
+        );
+        eprintln!(
+            "  {} Remove directory and contents",
+            format!("rm -r {}", path).bright_yellow()
+        );
     }
 }
 
 fn handle_not_directory_error(error_msg: &str) {
-    eprintln!("{}: Expected a directory but found a file.", "vsh".bright_red().bold());
+    eprintln!(
+        "{}: Expected a directory but found a file.",
+        "vsh".bright_red().bold()
+    );
     eprintln!();
 
     if let Some(path) = extract_path(error_msg) {
@@ -170,8 +206,14 @@ fn handle_not_directory_error(error_msg: &str) {
         eprintln!();
 
         eprintln!("To create a directory:");
-        eprintln!("  {} Remove file first", format!("rm {}", path).bright_yellow());
-        eprintln!("  {} Then create directory", format!("mkdir {}", path).bright_yellow());
+        eprintln!(
+            "  {} Remove file first",
+            format!("rm {}", path).bright_yellow()
+        );
+        eprintln!(
+            "  {} Then create directory",
+            format!("mkdir {}", path).bright_yellow()
+        );
     }
 }
 
@@ -202,7 +244,9 @@ fn extract_path(error_msg: &str) -> Option<String> {
 
     // Try space-separated (find first thing that looks like a path)
     for word in error_msg.split_whitespace() {
-        let cleaned = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '/' && c != '.' && c != '_' && c != '-');
+        let cleaned = word.trim_matches(|c: char| {
+            !c.is_alphanumeric() && c != '/' && c != '.' && c != '_' && c != '-'
+        });
         if cleaned.starts_with('/') || cleaned.starts_with("./") || cleaned.starts_with("../") {
             return Some(cleaned.to_string());
         }
@@ -228,8 +272,7 @@ fn extract_command(error_msg: &str) -> Option<String> {
     if let Some(start) = error_msg.find("CommandNotFound(") {
         let after = &error_msg[start + 16..];
         if let Some(end) = after.find(')') {
-            let cmd = &after[..end]
-                .trim_matches(|c| c == '"' || c == '\'' || c == '(' || c == ')');
+            let cmd = &after[..end].trim_matches(|c| c == '"' || c == '\'' || c == '(' || c == ')');
             return Some(cmd.to_string());
         }
     }

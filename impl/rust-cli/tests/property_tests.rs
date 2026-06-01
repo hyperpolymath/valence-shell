@@ -43,7 +43,11 @@ impl FsSnapshot {
             for entry in fs::read_dir(current)? {
                 let entry = entry?;
                 let path = entry.path();
-                let rel_path = path.strip_prefix(base).unwrap().to_string_lossy().to_string();
+                let rel_path = path
+                    .strip_prefix(base)
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string();
 
                 if path.is_dir() {
                     dirs.push(rel_path.clone());
@@ -74,8 +78,7 @@ fn valid_path_strategy() -> impl Strategy<Value = String> {
 
 /// Valid nested path strategy
 fn valid_nested_path_strategy() -> impl Strategy<Value = String> {
-    prop::collection::vec(valid_path_strategy(), 1..=3)
-        .prop_map(|parts| parts.join("/"))
+    prop::collection::vec(valid_path_strategy(), 1..=3).prop_map(|parts| parts.join("/"))
 }
 
 // ============================================================
@@ -1038,10 +1041,10 @@ fn prop_quote_prevents_glob() {
 
     // Test various quoted glob patterns
     let test_cases = vec![
-        ("'*.txt'", true),  // Single quotes - no expansion
-        ("\"*.txt\"", true),  // Double quotes - no expansion
-        ("*.txt", false),   // Unquoted - should expand
-        ("'[abc]'", true),  // Bracket glob in quotes
+        ("'*.txt'", true),   // Single quotes - no expansion
+        ("\"*.txt\"", true), // Double quotes - no expansion
+        ("*.txt", false),    // Unquoted - should expand
+        ("'[abc]'", true),   // Bracket glob in quotes
         ("'{1,2,3}'", true), // Brace expansion in quotes
     ];
 
@@ -1050,9 +1053,9 @@ fn prop_quote_prevents_glob() {
 
         if should_be_quoted {
             // At least one segment should be quoted
-            let has_quoted = segments.iter().any(|seg| {
-                !matches!(seg.state, QuoteState::Unquoted)
-            });
+            let has_quoted = segments
+                .iter()
+                .any(|seg| !matches!(seg.state, QuoteState::Unquoted));
             assert!(has_quoted, "Pattern {} should have quoted segments", input);
         }
     }

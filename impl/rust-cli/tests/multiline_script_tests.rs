@@ -37,9 +37,12 @@ fn statement_splitter_splits_on_newline() {
 
 #[test]
 fn statement_splitter_keeps_multiline_if_together() {
-    let parts =
-        split_on_statement_separators("if true\nthen\n  mkdir d\nfi\necho after");
-    let segs: Vec<&str> = parts.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let parts = split_on_statement_separators("if true\nthen\n  mkdir d\nfi\necho after");
+    let segs: Vec<&str> = parts
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
     // The whole if/fi block is one segment, echo is a second.
     assert_eq!(segs.len(), 2);
     assert!(segs[0].starts_with("if") && segs[0].ends_with("fi"));
@@ -49,7 +52,11 @@ fn statement_splitter_keeps_multiline_if_together() {
 #[test]
 fn statement_splitter_keeps_function_def_together() {
     let parts = split_on_statement_separators("foo() { mkdir a; mkdir b; }\necho x");
-    let segs: Vec<&str> = parts.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let segs: Vec<&str> = parts
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
     assert_eq!(segs.len(), 2);
     assert_eq!(segs[0], "foo() { mkdir a; mkdir b; }");
     assert_eq!(segs[1], "echo x");
@@ -58,7 +65,11 @@ fn statement_splitter_keeps_function_def_together() {
 #[test]
 fn statement_splitter_ignores_newlines_inside_quotes() {
     let parts = split_on_statement_separators("echo 'a\nb'\necho c");
-    let segs: Vec<&str> = parts.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let segs: Vec<&str> = parts
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
     assert_eq!(segs.len(), 2);
     assert_eq!(segs[0], "echo 'a\nb'");
     assert_eq!(segs[1], "echo c");
@@ -104,10 +115,7 @@ fn sourced_script_defines_and_invokes_multiline_function() -> Result<()> {
     let mut state = ShellState::new(temp.path().to_str().unwrap())?;
 
     let script = temp.path().join("fns.sh");
-    fs::write(
-        &script,
-        "greet() { mkdir hi; }\n# a comment\ngreet\n",
-    )?;
+    fs::write(&script, "greet() { mkdir hi; }\n# a comment\ngreet\n")?;
 
     parse_command(&format!("source {}", script.display()))?.execute(&mut state)?;
 
