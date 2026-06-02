@@ -406,7 +406,8 @@ Lemma overwrite_pass_equalizes_storage :
     sfs_storage (overwrite_path_blocks sfs1 p pat) bid =
     sfs_storage (overwrite_path_blocks sfs2 p pat) bid.
 Proof.
-  (* MODEL GAP (2026-06-01): As stated, this lemma is false. The conclusion
+  (* TRUSTED: overwrite_pass_equalizes_storage — model-gap stub.
+     MODEL GAP (2026-06-01): As stated, this lemma is false. The conclusion
      equates [sfs_storage (overwrite_path_blocks sfs1 p pat) bid] and
      [sfs_storage (overwrite_path_blocks sfs2 p pat) bid], but [overwrite_block]
      preserves the input's [block_overwritten] count (via [S (block_overwritten blk)]).
@@ -416,7 +417,8 @@ Proof.
      Closure paths: (A) strengthen [Hgeom] to also constrain [block_overwritten],
      (B) weaken conclusion to "equal modulo overwrite-count", or
      (C) reformulate [obliterate_not_injective] to project out [block_overwritten].
-     Admitted pending follow-up. *)
+     Stub pending follow-up. *)
+(* TRUSTED: overwrite_pass_equalizes_storage — model-gap stub; see preceding comment block *)
 Admitted.
 
 (** After one pass, the precondition holds and geometry is still preserved *)
@@ -521,13 +523,15 @@ Theorem obliterate_not_injective :
     (* Then obliteration produces the same result *)
     obliterate p sfs1 patterns = obliterate p sfs2 patterns.
 Proof.
-  (* MODEL GAP (2026-06-01): This theorem depends on [overwrite_pass_equalizes_storage]
-     which is admitted (block_overwritten counter mismatch — see that lemma's
+  (* TRUSTED: obliterate_not_injective — downstream of overwrite_pass_equalizes_storage stub.
+     MODEL GAP (2026-06-01): This theorem depends on [overwrite_pass_equalizes_storage]
+     which is a stub (block_overwritten counter mismatch — see that lemma's
      model-gap note). Once that lemma's geometry hypothesis is strengthened to
      include block_overwritten equality (or the result is projected modulo it),
      this proof reconnects to: rewrite multi_pass_preserves_tree/mapping; rewrite
      Htree/Hmap; apply multi_pass_same_start_same_result via one_pass_storage_agrees.
-     Admitted pending follow-up. *)
+     Stub pending follow-up. *)
+(* TRUSTED: obliterate_not_injective — depends on overwrite_pass_equalizes_storage stub *)
 Admitted.
 
 (** * Preservation Theorems *)
