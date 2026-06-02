@@ -634,7 +634,7 @@ impl ShellState {
             return Ok(());
         }
 
-        let json = fs::read_to_string(&self.state_file)?;
+        let json = crate::fs_pure::read_to_string(&self.state_file)?;
         let state: SerializableState = serde_json::from_str(&json)?;
 
         self.history = state.history;

@@ -771,7 +771,7 @@ impl ExecutableCommand for Command {
                     state.resolve_path(&expanded_file)
                 };
 
-                let content = std::fs::read_to_string(&path)
+                let content = crate::fs_pure::read_to_string(&path)
                     .map_err(|e| anyhow::anyhow!("source: {}: {}", path.display(), e))?;
 
                 // Strip whole-line comments first, then feed the entire

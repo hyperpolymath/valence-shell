@@ -19,6 +19,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 === Added — 2026-06-02
 
+==== Implementation
+- `O_NOATIME` discipline for pure-read theorems (#94 Gap 9). New
+  `src/fs_pure.rs` module exposes `open_pure` / `read_to_end` /
+  `read_to_string` helpers that set `libc::O_NOATIME` on Linux (via
+  `OpenOptionsExt::custom_flags`) with a graceful `EPERM` fallback to
+  vanilla `File::open` when the calling process is not the file owner
+  and lacks `CAP_FOWNER`. Eight call sites converted: script load
+  (`main.rs`), `source` command (`executable.rs`), audit-log replay
+  (`audit_log.rs`), state load (`state.rs`), input redirection
+  (`redirection.rs` + `external.rs`), truncate-redirection backup read
+  (`redirection.rs`), pre-deletion undo backup (`commands.rs`). Reads
+  from character-special / sysfs paths (e.g. `/dev/urandom`,
+  `/sys/block/.../rotational`) are intentionally untouched — atime is
+  not tracked there and `O_NOATIME` may be rejected by those
+  subsystems. macOS / non-Linux paths transparently fall through to
+  `File::open` and rely on mount-level `noatime`/`relatime`. Six new
+  unit tests cover round-trip (`Vec<u8>` + `String`), open-position,
+  large-file (200 KB), missing-file, and EPERM-fallback parity. Test
+  total: 757 → 764 (+7 incl. doctest).
+
 ==== Proof work
 - Idris2: RMO theorem-shape redesigns landed via PR #105 — `secureDeleteNotInjective` (mirrors Coq `obliterate_not_injective`, closes #60) + `gdprDeletionCompliant` structural redesign (closes #61). New `removeEntryDeterminedByFilter` + `keepIfNotP` helpers in `Filesystem.Model`. Drive-by `DecEq Path` fix + `equivRefl` hole unblock the build past Model.
 - Idris2: 8 remaining `partial` markers in `Composition.idr` cleared via PR #109 — `applyOp` now calls underlying `addEntry`/`removeEntry`/`updateEntry` primitives directly. Theorem-shape fixes for `All` import, Maybe-monadic undo-redo chain, `LTE` length predicate, and reverseConcat hole. Closes #89.

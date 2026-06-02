@@ -18,6 +18,7 @@ pub mod enhanced_repl;
 pub mod executable;
 pub mod external;
 pub mod friendly_errors;
+pub mod fs_pure;
 pub mod functions;
 pub mod glob;
 pub mod help;
