@@ -175,29 +175,44 @@ rmTouchReversible :
   touch p (rm p fs) {prf = ?touchPrfAfterRm} = fs
 rmTouchReversible p fs = ?rmTouchReversibleProof
 
-||| writeFile is self-inverse with original content
+||| writeFile is self-inverse with original content.
+||| `old` is now explicit (was previously a free variable in the auto-implicit,
+||| leading to an unsolvable existential at the call site).
+||| `prfPreserved` is also explicit because `isFile p (writeFile p newContent fs)`
+||| is not a hypothesis in scope at the outer call; closes once we have a
+||| `writeFile_preserves_isFile` lemma (see follow-up).
 export
 writeFileReversible :
   (p : Path) ->
   (newContent : FileContent) ->
+  (old : FileContent) ->
   (fs : Filesystem) ->
   {auto prf : isFile p fs = True} ->
+  {auto prfPreserved : isFile p (writeFile p newContent fs) = True} ->
   {auto oldContent : getFileContent p fs = Just old} ->
   writeFile p old (writeFile p newContent fs) = fs
-writeFileReversible p newContent fs = ?writeFileReversibleProof
+writeFileReversible p newContent old fs = ?writeFileReversibleProof
 
 --------------------------------------------------------------------------------
 -- Operation Independence
 --------------------------------------------------------------------------------
 
-||| Operations on different paths don't interfere
+||| Operations on different paths don't interfere.
+||| `Not (p1 = p2)` replaces `(p1 /= p2)` — the latter is a `Bool` term and
+||| does not lift to a propositional precondition. The post-application
+||| preservation preconditions are explicit because mkdir does not
+||| automatically preserve `MkdirPrecondition` for sibling paths
+||| (closes once we have a `mkdir_preserves_mkdir_precondition_for_other`
+||| lemma; see follow-up).
 export
 operationIndependence :
   (p1, p2 : Path) ->
   (fs : Filesystem) ->
-  (p1 /= p2) ->
+  Not (p1 = p2) ->
   {auto prf1 : MkdirPrecondition p1 fs} ->
   {auto prf2 : MkdirPrecondition p2 fs} ->
+  {auto prf1after : MkdirPrecondition p1 (mkdir p2 fs)} ->
+  {auto prf2after : MkdirPrecondition p2 (mkdir p1 fs)} ->
   mkdir p1 (mkdir p2 fs) = mkdir p2 (mkdir p1 fs)
 operationIndependence p1 p2 fs neq = ?operationIndependenceProof
 
