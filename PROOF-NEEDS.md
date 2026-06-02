@@ -110,32 +110,51 @@ primitive-eq blocker as the Cat-B set above. Each requires showing
 that the post-operation precondition holds, which reduces to
 `(p == p) = True` on opaque `Path` — blocked.
 
-#### Priority 2 — primitive-eq groundwork (foundational, owner-decision required)
+#### Priority 2 — TWO blockers (primitive-eq UNBLOCKED; `all`/`foldMap` still blocked)
 
-Every remaining tractable hole reduces to a `(s == s) = True` step on
-opaque `String` or `Bits8` — Idris2 0.8.0 only reduces these on
-literals. `DecEq Path` does NOT help because it transitively depends
-on `DecEq String`, which itself depends on primitive `==`.
+Status as of the 2026-06-02 PM Q1-C pilot (PR #133):
 
-Three closure paths, each requiring owner sign-off:
+**Blocker 1 (primitive-eq) — UNBLOCKED.** The pilot adds
+`axStringEqRefl` + `axBits8EqRefl` in `Filesystem.Axioms` with a CI
+allow-list guard. `equivReflProof` closed as proof-of-concept. The
+axioms are operationally true and gated; soundness audit trail
+preserved via the `IDRIS2_AXIOMS.a2ml` registry.
 
-1. **Add `String` / `Bits8` reflexivity axioms** — `axStringEqRefl :
-   (s : String) -> (s == s) = True := believe_me Refl`, gated by CI
-   allow-list (per the Cat-D `believe_me` pattern). Smallest change,
-   but introduces `believe_me` into the proof system which prior
-   sessions explicitly avoided.
-2. **Migrate `Path` to a structural representation** — replace
-   `String`-component paths with `Nat`-encoded interned identifiers.
-   `Nat == Nat` IS reducible on opaque values. Bigger migration but
-   no `believe_me`.
-3. **Reformulate every blocked theorem to use `decEq`-style branches**
-   rather than `==`-style booleans. Avoids touching the `Eq` instance
-   but ripples through ~20 theorem statements.
+**Blocker 2 (`all`/`foldMap` reduction) — DISCOVERED.** Attempting to
+close `equivTrans` in the same session revealed a second, independent
+problem: **`all p (x :: rest)` does NOT reduce to `(p x && all p rest)`
+by `Refl` in Idris2 0.8.0.** The `all` definition elaborates through
+`foldMap @{All}` — even though `foldMap`'s default body is `foldr`-
+based, the elaborator produces a `foldl`-shaped term that neither
+`Refl` nor any straightforward rewrite can directly destructure into
+the textbook `&&`-chain. Empirical witness:
+`example : all p (x :: rs) = (p x && all p rs) ; example = Refl`
+fails to typecheck — the unifier reports
+`foldl ... (neutral <+> p x) rs` on one side, `p x && Delay (all p rs)`
+on the other.
 
-Until one path is chosen, the following holes are **frozen**:
+Consequently, **`equivTrans`, `cnoWriteSameContent`, and the 7
+reversibility theorems** are still blocked. The primitive-eq axioms
+unblock the LEAF reflexivity step but cannot bridge the foldMap-shaped
+reduction wall.
 
-- `equivReflProof` (Model.idr:216)
-- `equivTransProof` (Model.idr:244)
+Three closure paths for blocker 2 (owner-decision required):
+
+1. **Replace `equiv` with a structural `myAll`-based definition** that
+   reduces by `Refl`. Touches the `equiv` shape but contained to
+   `Model.idr`. Probably 1 PR.
+2. **Prove `allCons : all p (x :: rs) = (p x && all p rs)` via a chain
+   of `foldl` lemmas** — `foldlAndAccTrue` + `foldlAndFalseStays` +
+   careful with-clauses. Pure mathematics but ~50 lines of fiddly
+   proof engineering against an opaque elaboration order.
+3. **Migrate `equiv` to a propositional `All`-based shape** (via
+   `Data.List.Quantifiers.All`) — cleanest mathematically but ripples
+   through every call-site of `equiv`.
+
+Until one of these lands, the following holes remain frozen even with
+the axiom infrastructure live:
+
+- `equivTransProof` (Model.idr:353)
 - `cnoWriteSameContentProof` (Operations.idr:254)
 - 4 `?XXXPrfAfter` sub-holes in Operations.idr
 - 7 reversibility theorems in Operations.idr (mkdirRmdir, rmdirMkdir,
@@ -143,9 +162,9 @@ Until one path is chosen, the following holes are **frozen**:
   cnoWriteSameContent)
 
 Separately, `undoRedoIdentityProof` and `undoRedoCompositionProof`
-need a Cat-A redesign (missing `isReversible op = True` precondition;
-provably refuted for non-reversible `op`) before primitive-eq is even
-relevant.
+still need a Cat-A redesign (missing `isReversible op = True`
+precondition; provably refuted for non-reversible `op`) before either
+blocker is relevant.
 
 #### Priority 3 — Tier-S foundational (research-level)
 
