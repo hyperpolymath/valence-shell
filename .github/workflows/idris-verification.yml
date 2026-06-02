@@ -36,6 +36,23 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y chezscheme
+          # Ubuntu's chezscheme package installs the binary as `scheme` (not
+          # `chez`) and ships boot files keyed on that name: `scheme.boot`,
+          # `petite.boot`, `chezscheme.boot` at /usr/lib/csv<ver>/<arch>/.
+          # Chez Scheme picks its boot file from argv[0]: a binary invoked
+          # as `chez` searches for `chez.boot`, which Ubuntu does not ship.
+          # So we need BOTH:
+          #   (a) a `chez` binary in PATH, AND
+          #   (b) a matching `chez.boot` next to the other boot files.
+          # Symlinking both keeps SCHEME=chez consistent with upstream docs.
+          if ! command -v chez >/dev/null 2>&1; then
+            sudo ln -s "$(command -v scheme)" /usr/local/bin/chez
+          fi
+          BOOT_DIR=$(dirname "$(dpkg -L chezscheme | grep -m1 'scheme\.boot$')")
+          if [ -n "$BOOT_DIR" ] && [ ! -e "$BOOT_DIR/chez.boot" ]; then
+            sudo ln -s "$BOOT_DIR/scheme.boot" "$BOOT_DIR/chez.boot"
+          fi
+          chez --version || true
 
       - name: Cache Idris2 install
         id: idris2-cache
