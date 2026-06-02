@@ -231,12 +231,24 @@ cnoMkdirExisting :
   fs = fs
 cnoMkdirExisting p fs exists isDir = Refl
 
-||| Overwriting file with same content is identity
+||| Overwriting file with same content is **observationally** identity.
+|||
+||| Uses `equiv` (set-of-entries equality, order-independent) rather
+||| than propositional `=` because `writeFile` rebinds the entry at
+||| the head of the entries list — same set of entries, possibly
+||| different order. The original signature `writeFile p c fs = fs`
+||| was a non-theorem in the current ordered-list model (it would
+||| force the rebound entry to land at its original position, which
+||| `addEntry . removeEntry` does not preserve).
+|||
+||| Proof body is a hole pending the `equiv`-membership lemma chain
+||| (see issue #119 Category B for the inventory). Restating the
+||| signature unblocks future closure without `believe_me`.
 export
 cnoWriteSameContent :
   (p : Path) ->
   (fs : Filesystem) ->
   {auto prf : isFile p fs = True} ->
   {auto content : getFileContent p fs = Just c} ->
-  writeFile p c fs = fs
+  equiv (writeFile p c fs) fs = True
 cnoWriteSameContent p fs = ?cnoWriteSameContentProof

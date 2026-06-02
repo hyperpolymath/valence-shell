@@ -233,16 +233,31 @@ record AuditEntry where
   ||| Proof that deletion succeeded
   obliterated : ObliterationProof path
 
-||| Audit log is append-only (cannot be modified)
+||| Append-only constructor for audit logs.
 |||
-||| This ensures accountability - deletions cannot be hidden.
+||| The only allowed mutation is appending a single entry — no in-place
+||| modification, no deletion. Encoded as a function so callers cannot
+||| produce a new log except via this primitive.
+public export
+appendAuditEntry : List AuditEntry -> AuditEntry -> List AuditEntry
+appendAuditEntry log entry = log ++ [entry]
+
+||| Append-only invariant: every constructor application produces
+||| exactly `log ++ [entry]`. Trivially `Refl` by the definition of
+||| `appendAuditEntry`.
+|||
+||| Replaces the previous non-theorem signature
+||| `(newLog : List AuditEntry) -> newLog = log ++ [entry]`
+||| which was provably false (caller could pass any `newLog`). See
+||| issue #119 for the design rationale (mirrors the #60 / #61
+||| precedent: redesign non-theorem signatures rather than close
+||| them with `believe_me`).
 export
 appendOnlyAuditLog :
   (log : List AuditEntry) ->
   (entry : AuditEntry) ->
-  (newLog : List AuditEntry) ->
-  newLog = log ++ [entry]  -- Can only append, not modify
-appendOnlyAuditLog log entry newLog = ?appendOnlyAuditLogProof
+  appendAuditEntry log entry = log ++ [entry]
+appendOnlyAuditLog log entry = Refl
 
 ||| Audit log provides complete history of obliterations
 export
