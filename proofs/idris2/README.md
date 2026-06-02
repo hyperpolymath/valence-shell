@@ -53,7 +53,7 @@ Holes are placeholders for proofs that need to be completed:
 13. `undoRedoIdentityProof` - Undo/redo identity
 14. `undoRedoCompositionProof` - Multiple undo/redo
 15. `secureDeleteNotInjective` - Secure deletion is not injective (closed; was `secureDeleteIrreversibleProof`, redesigned per #60)
-16. `overwriteIrreversibleProof` - Overwrite destroys original
+16. `overwriteIrreversible` - No universal recovery function exists for overwrite (closed; was `overwriteIrreversibleProof`, redesigned per #129 — prior signature `recovery randomData = Nothing` refuted by `recovery = Just`)
 17. `gdprDeletionCompliant` - GDPR Article 17 compliance witness (closed; was `gdprDeletionCompliantProof`, redesigned per #61)
 18. `hardwareEraseIrreversibleProof` - Hardware erase absolute
 19. `appendOnlyAuditLogProof` - Audit log append-only
