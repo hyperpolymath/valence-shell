@@ -27,12 +27,12 @@ This directory contains **executable specifications** of filesystem operations w
 
 | Module | Purpose | Status | Holes |
 |--------|---------|--------|-------|
-| `Filesystem.Model` | Core types: Path, Filesystem, FSEntry | ✅ Implemented | 2 (equivalence) |
-| `Filesystem.Operations` | mkdir, rmdir, touch, rm, writeFile | ✅ Implemented | 8 (reversibility) |
+| `Filesystem.Model` | Core types: Path, Filesystem, FSEntry | ✅ Implemented | 3 (equivalence) |
+| `Filesystem.Operations` | mkdir, rmdir, touch, rm, writeFile | ✅ Implemented | 11 (reversibility) |
 | `Filesystem.Composition` | Operation sequences, undo/redo | ✅ Implemented | 5 (composition) |
-| `Filesystem.RMO` | Irreversible operations (GDPR) | ✅ Implemented | 6 (irreversibility) |
+| `Filesystem.RMO` | Irreversible operations (GDPR) | ✅ Implemented | 4 (irreversibility) |
 
-**Total**: 4 modules, 21 proof holes to fill
+**Total**: 4 modules, 23 proof holes to fill, 0 `partial` annotations (cleared 2026-06-02 via PRs #108 + #109)
 
 ### Proof Holes (TODO)
 
@@ -105,13 +105,13 @@ just build-idris2    # cd proofs/idris2 && idris2 --build valence-shell.ipkg
 just verify-idris2   # build + count distinct ?holes for regression tracking
 ```
 
-#### Known oracle status (2026-06-01)
+#### Known oracle status (2026-06-02)
 
-`build-idris2` currently fails on pre-existing issues outside #60/#61's scope:
+`build-idris2` currently fails on pre-existing issues outside the #60/#61/#89 scope:
 
-- `Filesystem/Model.idr` — `equivSym` / `equivTrans` are deliberate `?holes`; trivial closure when needed.
-- `Filesystem/RMO.idr` — `hardwareEraseIrreversible`'s `() -> Filesystem` parameter has a parse issue under Idris2 0.8.0 (tracked as part of #94 alongside the 10 partial markers).
-- `Filesystem/Composition.idr` — multiple holes pending Coq/Lean port.
+- `Filesystem/Model.idr` — `equivSym` / `equivTrans` / `equivReflProof` are deliberate `?holes`; trivial closure when needed.
+- `Filesystem/RMO.idr` — `hardwareEraseIrreversible`'s `() -> Filesystem` parameter has a parse issue under Idris2 0.8.0 (tracked as part of #94, the remaining practice gaps under #45). The 10 `partial` annotations previously listed in this bullet were cleared 2026-06-02 by PRs #108 + #109 (closing #89).
+- `Filesystem/Composition.idr` — 5 remaining holes pending Coq/Lean port.
 
 The CI job is configured non-blocking until the pre-existing parse/typecheck
 issues land. Once green, flip the final `exit 0` in `idris-verification.yml`
@@ -285,7 +285,7 @@ pub extern "C" fn vsh_mkdir_wrapper(path: *const c_char) -> c_int {
 
 ### Phase 1: Complete Proofs (Weeks 1-2)
 
-- [ ] Fill all 21 proof holes
+- [ ] Fill all 23 proof holes
 - [ ] Verify totality of all functions
 - [ ] Add property tests
 

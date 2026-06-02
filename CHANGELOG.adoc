@@ -17,6 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full POSIX shell compliance (subset)
 - RMO (Remove-Match-Obliterate) proofs for GDPR compliance
 
+=== Added — 2026-06-02
+
+==== Proof work
+- Idris2: RMO theorem-shape redesigns landed via PR #105 — `secureDeleteNotInjective` (mirrors Coq `obliterate_not_injective`, closes #60) + `gdprDeletionCompliant` structural redesign (closes #61). New `removeEntryDeterminedByFilter` + `keepIfNotP` helpers in `Filesystem.Model`. Drive-by `DecEq Path` fix + `equivRefl` hole unblock the build past Model.
+- Idris2: 8 remaining `partial` markers in `Composition.idr` cleared via PR #109 — `applyOp` now calls underlying `addEntry`/`removeEntry`/`updateEntry` primitives directly. Theorem-shape fixes for `All` import, Maybe-monadic undo-redo chain, `LTE` length predicate, and reverseConcat hole. Closes #89.
+- Idris2: 2 misleading `partial` markers in `RMO.idr` (secureDelete + gdprDelete IO computations) dropped via PR #108 — IO does not introduce partiality.
+- **Total Idris2 `partial` count is now zero**, down from 10 at the start of the session.
+
+==== CI/CD hardening
+- Idris2 build oracle merged via PR #106 — `idris-verification.yml` workflow + Justfile recipes (`build-idris2`, `verify-idris2`). Non-blocking initially (pre-existing build issues at `hardwareEraseIrreversible`). Closes #70.
+
+==== Doc + housekeeping
+- Stale sweep: 4 `claude/issue-*` branches deleted post-merge (#105/#106/#108/#109 squash-merge cleanup) + 1 orphan `claude/safedom-res-stale-sweep` branch removed (PR #34 merged 2026-05-27; 3 subsequent campaign commits were superseded). Salvaged `.github/copilot/coding-agent.yml` decision filed as #111.
+- PROOF-NEEDS.md + `proofs/idris2/README.md` + ROADMAP.adoc refreshed to reflect zero `partial` count + 3-admit Coq state.
+
 === Added — 2026-06-01
 
 ==== Proof work

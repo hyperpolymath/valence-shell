@@ -2,7 +2,7 @@
 <!-- SPDX-License-Identifier: MPL-2.0 -->
 <!-- Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk> -->
 
-> **Reconciled 2026-06-01.** This file used to list 7 open Agda postulates
+> **Reconciled 2026-06-02.** This file used to list 7 open Agda postulates
 > from a pre-2026-04-03 snapshot — all 7 were closed during that session
 > (see `docs/PROOF_HOLES_AUDIT.md`). The actual current state below.
 >
@@ -11,7 +11,7 @@
 > **[docs/PROOF-OPEN-FRONTIER.adoc](docs/PROOF-OPEN-FRONTIER.adoc)**
 > (every valuable but unproven theorem, with tractability classification).
 
-## Current State (2026-06-01)
+## Current State (2026-06-02)
 
 - **LOC**: ~11,000 lines of formal proof (Coq 4,500 + Lean 4 2,400 + Agda 2,250 + Isabelle 1,800)
 - **Languages**: Rust, ReScript, Agda, Idris2, Lean 4, Coq, Isabelle/HOL, Mizar, Z3, Zig
@@ -23,17 +23,19 @@
 | Layer | Item | Location | Nature |
 |---|---|---|---|
 | Agda | `postulate funext` | `proofs/agda/FilesystemModel.agda:161-162` | Standard intensional-TT axiom; provable under `--cubical` |
-| Coq | `admit.` mid-`single_op_reversible`, OpRmdir branch | `proofs/coq/filesystem_composition.v:199` | Model gap — `mkdir` writes `default_perms`, original may have had non-default |
+| Coq | `Admitted` — `mkdir_two_dirs_reversible` (non-LIFO sequence reversal) | `proofs/coq/filesystem_composition.v:697` | Tracked as #56 — needs LIFO-sequence restatement |
+| Coq | `Admitted` — `overwrite_pass_equalizes_storage` (model gap) | `proofs/coq/rmo_operations.v:422` | Tracked as #57 — needs `Hgeom` strengthening or conclusion relaxation |
+| Coq | `Admitted` — `obliterate_not_injective` (downstream of #57) | `proofs/coq/rmo_operations.v:535` | Tracked as #58 — reconnects once #57 closes |
 | Coq | `Axiom is_empty_dir_dec` (justified) | `proofs/coq/posix_errors.v` | Infinite-domain universal quantification |
-| Idris2 | 23 `?holes` + 8 `partial` annotations across 4 files | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged; `partial` is the Idris2 totality escape hatch |
+| Idris2 | 23 `?holes` across 4 files (zero `partial` annotations) | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged; all `partial` markers cleared 2026-06-02 (PRs #108 + #109) |
 
-Idris2 holes + `partial` markers by file:
+Idris2 holes by file (counts as of 2026-06-02):
 - `proofs/idris2/src/Filesystem/Operations.idr`: 11 holes (mkdir/rmdir, touch/rm, write, op-independence, CNO)
-- `proofs/idris2/src/Filesystem/RMO.idr`: 6 holes + 1 `partial` at line 138 (secureDelete, overwrite, GDPR, hardwareErase, audit log)
-- `proofs/idris2/src/Filesystem/Composition.idr`: 4 holes + 7 `partial` annotations at lines 84, 94, 109, 185, 192, 200, 208, 217 (sequence + composition + undo/redo; preconditions checked externally pending precondition lemmas)
-- `proofs/idris2/src/Filesystem/Model.idr`: 2 holes (equivalence sym + trans)
+- `proofs/idris2/src/Filesystem/RMO.idr`: 4 holes (overwrite, audit log; secureDelete + gdprDelete CLOSED via PRs #105+#108)
+- `proofs/idris2/src/Filesystem/Composition.idr`: 5 holes (reverseConcat + Operations.idr drive-by holes; the prior 7 `partial` markers were cleared by direct-primitive refactor in PR #109)
+- `proofs/idris2/src/Filesystem/Model.idr`: 3 holes (equivSym + equivTrans + equivReflProof; the last added when DecEq Path fix landed via PR #105)
 
-The `partial` annotations above are recognised by `standards/scripts/check-trusted-base.sh` as Idris2 totality escape hatches. They are enumerated here (full paths) so the trusted-base check finds them documented per estate policy (`docs/TRUSTED-BASE-REDUCTION-POLICY.adoc`). Closure path: discharge the corresponding `?hole` with the precondition lemma, then drop the `partial` annotation.
+All `partial` markers in `proofs/idris2/src/Filesystem/*.idr` were cleared 2026-06-02 (PRs #108 + #109, closing #89). The total `partial` count is now zero. Closure path for the remaining 23 holes: discharge with the precondition lemma per theorem.
 
 ### Foundational Closure (history)
 
@@ -46,6 +48,10 @@ The `partial` annotations above are recognised by `standards/scripts/check-trust
 | 2026-04-03 | ReScript closure | All 24 `Obj.magic` in `impl/mcp/src/Server.res` replaced with `toolResultToJson` |
 | 2026-04-12 | Coq well-formedness | `well_formed_ancestor_exists`, `mkdir_preserves_well_formed`, 5/6 decidability axioms proven |
 | 2026-06-01 | Narrative reconciliation | `obliterate_overwrites_all_blocks` (which PROOF_HOLES_AUDIT listed as the gap) confirmed closed; actual gap identified as model-perm gap in composition.v |
+| 2026-06-01 | `single_op_reversible` OpRmdir branch | Closed Qed via `OpMkdirWithPerms` + `OpCreateFileWithPerms` constructor-variant approach (PR #67); zero new axioms |
+| 2026-06-02 | Idris2 RMO theorem-shape redesigns | `secureDeleteNotInjective` (closes #60) + `gdprDeletionCompliant` structural redesign (closes #61) via PR #105 |
+| 2026-06-02 | Idris2 partial-marker sweep | All 10 `partial` annotations on `RMO.idr` + `Composition.idr` cleared (PRs #108 + #109, closing #89) |
+| 2026-06-02 | Idris2 build oracle | `idris-verification.yml` workflow + Justfile recipes shipped (PR #106, closes #70) |
 
 ### What Needs Proving (current, prioritised)
 
@@ -54,7 +60,7 @@ Highlights:
 
 **Tier S (foundational)**:
 1. Lean → Rust mechanised refinement
-2. Close the `single_op_reversible` admit (Coq) — Tier A overlap; tractable
+2. Close the 3 remaining Coq `Admitted` markers (#56 / #57 / #58 — design-gap follow-ups of the #55 build-oracle closure)
 3. Crash-consistency for begin/commit/rollback
 4. Concurrency safety (two `vsh` invocations on shared filesystem)
 
@@ -82,15 +88,16 @@ Highlights:
 
 ### Priority
 
-**HIGH** — Single Coq admit + 23 Idris2 holes are visible and closeable;
-the bigger frontier (Lean→Rust refinement, crash-consistency, concurrency)
-is real research-level work.
+**HIGH** — 3 Coq `Admitted` markers (#56/#57/#58) + 23 Idris2 holes are
+visible and closeable; the bigger frontier (Lean→Rust refinement,
+crash-consistency, concurrency) is real research-level work.
 
 `secureDeleteNotInjective` (closes #60) and `gdprDeletionCompliant`
-(closes #61) shipped 2026-06-01 with corrected theorem shapes: the prior
-`?secureDeleteIrreversibleProof` / `?gdprDeletionCompliantProof` holes
-had non-theorem signatures (refutable by `recovery = id` / `recovery =
-const empty` respectively) and have been redesigned. The MAA/GDPR claims
-now rest on these closed theorems plus `?overwriteIrreversibleProof`
-(still open) and axiomatic NIST SP 800-88 / Shannon-entropy / physical-
-world assumptions which should be made explicit (see narrative §10).
+(closes #61) shipped 2026-06-02 via PR #105 with corrected theorem
+shapes: the prior `?secureDeleteIrreversibleProof` /
+`?gdprDeletionCompliantProof` holes had non-theorem signatures
+(refutable by `recovery = id` / `recovery = const empty` respectively)
+and have been redesigned. The MAA/GDPR claims now rest on these closed
+theorems plus `?overwriteIrreversibleProof` (still open) and axiomatic
+NIST SP 800-88 / Shannon-entropy / physical-world assumptions which
+should be made explicit (see narrative §10).
