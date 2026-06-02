@@ -1,0 +1,54 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+//
+// Registry of `believe_me`-backed axioms in the Idris2 proof layer.
+//
+// Any `believe_me` occurrence in `proofs/idris2/**/*.idr` that is NOT
+// listed here will be rejected by the CI guard at
+// `.github/scripts/check-idris2-believe-me.sh`.
+//
+// Adding a new axiom requires:
+//   1. Implementing it in `proofs/idris2/src/Filesystem/Axioms.idr`.
+//   2. Adding an entry to this file with:
+//      - axiom name (matches the Idris2 identifier)
+//      - location (file:line)
+//      - justification (operational reason it is true)
+//      - scope (which downstream proofs depend on it)
+
+@a2ml-version: "0.1"
+@registry-kind: idris2-axioms
+@updated: "2026-06-02"
+@policy: "Q1-C pilot, soft believe_me policy with named + gated axioms"
+
+axioms:
+  - name: axStringEqRefl
+    location: proofs/idris2/src/Filesystem/Axioms.idr:42
+    type: "(s : String) -> (s == s) = True"
+    justification: |
+      Every Idris2 backend (Chez, Node, Racket) evaluates prim__strEq s s
+      to True for any String s. The type-checker cannot reduce primitive
+      String equality on opaque (non-literal) s, so we register the
+      operational fact as a named axiom.
+    morally-equivalent-to:
+      - Agda postulate funext (FilesystemModel.agda:161)
+      - Coq Axiom is_empty_dir_dec (posix_errors.v)
+    used-by:
+      - Filesystem.Model.pathEqRefl
+      - Filesystem.Model.entryEqRefl
+      - Filesystem.Model.equivRefl
+
+  - name: axBits8EqRefl
+    location: proofs/idris2/src/Filesystem/Axioms.idr:55
+    type: "(b : Bits8) -> (b == b) = True"
+    justification: |
+      Every Idris2 backend evaluates prim__eqBits8 b b to True for any
+      Bits8 b. Same operational reasoning as axStringEqRefl applied to
+      the byte-level primitive.
+    morally-equivalent-to:
+      - Agda postulate funext (FilesystemModel.agda:161)
+      - Coq Axiom is_empty_dir_dec (posix_errors.v)
+    used-by:
+      - Filesystem.Axioms.fileContentEqRefl
+      - Filesystem.Model.fsEntryEqRefl
+      - Filesystem.Model.entryEqRefl
+      - Filesystem.Model.equivRefl
