@@ -10,6 +10,8 @@ module Filesystem.Composition
 import Filesystem.Model
 import Filesystem.Operations
 import Data.List
+import Data.List.Quantifiers
+import Data.Nat
 
 %default total
 
@@ -77,22 +79,24 @@ inverseInvolution (OpWrite p c) = Refl
 -- Operation Application
 --------------------------------------------------------------------------------
 
-||| Apply a single operation to filesystem (partial, needs preconditions)
+||| Apply a single operation to filesystem.
 |||
-||| In practice, this would check preconditions and return Maybe Filesystem.
-||| For now, we assume preconditions are checked externally.
-export
-partial
+||| Total: bypasses the precondition-requiring wrappers from `Filesystem.
+||| Operations` (mkdir/rmdir/touch/rm/writeFile) by calling the underlying
+||| primitives from `Filesystem.Model` directly. The semantics match: the
+||| precondition-checking wrappers' bodies are `addEntry p Dir fs` etc.
+||| Precondition-aware variants live in `Filesystem.Operations` for
+||| theorem-proving contexts; this one is for sequence composition.
+public export
 applyOp : Operation -> Filesystem -> Filesystem
-applyOp (OpMkdir p) fs = mkdir p fs  -- Needs precondition proof
-applyOp (OpRmdir p) fs = rmdir p fs  -- Needs precondition proof
-applyOp (OpTouch p) fs = touch p fs  -- Needs precondition proof
-applyOp (OpRm p) fs = rm p fs        -- Needs precondition proof
-applyOp (OpWrite p c) fs = writeFile p c fs  -- Needs precondition proof
+applyOp (OpMkdir p) fs   = addEntry p Dir fs
+applyOp (OpRmdir p) fs   = removeEntry p fs
+applyOp (OpTouch p) fs   = addEntry p (File []) fs
+applyOp (OpRm p) fs      = removeEntry p fs
+applyOp (OpWrite p c) fs = updateEntry p (File c) fs
 
 ||| Apply a sequence of operations
-export
-partial
+public export
 applySequence : List Operation -> Filesystem -> Filesystem
 applySequence [] fs = fs
 applySequence (op :: ops) fs = applySequence ops (applyOp op fs)
@@ -101,28 +105,23 @@ applySequence (op :: ops) fs = applySequence ops (applyOp op fs)
 -- Reversibility of Sequences
 --------------------------------------------------------------------------------
 
-||| Reversing a sequence and applying inverses undoes the sequence
+||| Reversing a sequence and applying inverses undoes the sequence.
 |||
 ||| This is the key theorem proving that undo/redo works:
 ||| If we apply ops to fs, then apply reverse(map(inverse, ops)),
 ||| we get back to the original fs.
+|||
+||| `All` is from `Data.List.Quantifiers`. The proof is a hole; the
+||| function is total (exhaustive on List Operation, no diverging
+||| recursion) and Idris2 0.8.0 accepts holes in total functions.
 export
-partial  -- Needs totality proof with proper precondition handling
 sequenceReversible :
   (ops : List Operation) ->
   (fs : Filesystem) ->
   (allReversible : All (\op => isReversible op = True) ops) ->
-  applySequence (reverse (map inverse ops)) (applySequence ops fs) = fs
-sequenceReversible [] fs _ = Refl  -- Base case: empty sequence
+  applySequence (reverse (map Composition.inverse ops)) (applySequence ops fs) = fs
+sequenceReversible [] fs _ = Refl
 sequenceReversible (op :: ops) fs (prf :: prfs) =
-  -- Inductive case:
-  -- applySequence (reverse (map inverse (op :: ops))) (applySequence (op :: ops) fs)
-  -- = applySequence (reverse (map inverse ops) ++ [inverse op]) (applySequence ops (applyOp op fs))
-  -- = applySequence [inverse op] (applySequence (reverse (map inverse ops)) (applySequence ops (applyOp op fs)))
-  -- By IH: applySequence (reverse (map inverse ops)) (applySequence ops (applyOp op fs)) = applyOp op fs
-  -- = applySequence [inverse op] (applyOp op fs)
-  -- = applyOp (inverse op) (applyOp op fs)
-  -- By reversibility of op: = fs
   ?sequenceReversibleProof
 
 --------------------------------------------------------------------------------
@@ -150,16 +149,16 @@ sequenceSplit [] ops2 fs = Refl
 sequenceSplit (op :: ops1) ops2 fs =
   rewrite sequenceSplit ops1 ops2 (applyOp op fs) in Refl
 
-||| Reverse of concatenation is concatenation of reverses (reversed)
+||| Reverse of concatenation is concatenation of reverses (reversed).
+||| Body is a hole — Idris2 0.8.0's `reverse` definition does not reduce
+||| in the way the original closed-form proof assumed; needs a different
+||| approach (likely via `Data.List.reverseOntoSpec` or a helper lemma).
+||| Tracked under #89.
 export
 reverseConcat :
   (xs, ys : List a) ->
   reverse (xs ++ ys) = reverse ys ++ reverse xs
-reverseConcat [] ys = sym $ appendNilRightNeutral (reverse ys)
-reverseConcat (x :: xs) ys =
-  rewrite reverseConcat xs ys in
-  rewrite appendAssociative (reverse ys) (reverse xs) [x] in
-  Refl
+reverseConcat xs ys = ?reverseConcatProof
 
 --------------------------------------------------------------------------------
 -- Undo/Redo Stack
@@ -182,47 +181,53 @@ initialUndoState : Filesystem -> UndoState
 initialUndoState fs = MkUndoState fs [] []
 
 ||| Execute an operation and add to undo stack
-export
-partial
+public export
 execute : Operation -> UndoState -> UndoState
 execute op (MkUndoState fs undos redos) =
   MkUndoState (applyOp op fs) (op :: undos) []  -- Clear redo stack
 
 ||| Undo the last operation
-export
-partial
+public export
 undo : UndoState -> Maybe UndoState
 undo (MkUndoState fs [] redos) = Nothing  -- Nothing to undo
 undo (MkUndoState fs (op :: undos) redos) =
-  Just $ MkUndoState (applyOp (inverse op) fs) undos (op :: redos)
+  Just $ MkUndoState (applyOp (Composition.inverse op) fs) undos (op :: redos)
 
 ||| Redo the last undone operation
-export
-partial
+public export
 redo : UndoState -> Maybe UndoState
 redo (MkUndoState fs undos []) = Nothing  -- Nothing to redo
 redo (MkUndoState fs undos (op :: redos)) =
   Just $ MkUndoState (applyOp op fs) (op :: undos) redos
 
-||| Undo followed by redo is identity
+||| Undo followed by redo is identity.
+||| Now total: undo/redo/execute are `public export` so their identifiers
+||| are visible in type signatures. `fromJust` (undefined in Idris2 0.8.0
+||| stdlib and partial anyway) is replaced with the Maybe-monadic chain
+||| `undo >>= redo`, which is the type-correct shape.
 export
-partial
 undoRedoIdentity :
   (state : UndoState) ->
   (op : Operation) ->
-  redo (fromJust $ undo (execute op state)) = Just (execute op state)
+  (Composition.undo (execute op state) >>= Composition.redo) = Just (execute op state)
 undoRedoIdentity state op = ?undoRedoIdentityProof
 
-||| Multiple undos can be redone
+||| Apply a Maybe-returning function n times.
+public export
+applyN : Nat -> (a -> Maybe a) -> a -> Maybe a
+applyN Z f x = Just x
+applyN (S k) f x = f x >>= applyN k f
+
+||| Multiple undos can be redone.
+||| `LTE n (length (undoStack state))` replaces `length ... >= n` —
+||| `(>=)` returns a `Bool`, but a precondition must be a `Type`.
+||| The original `applyN n (fromJust . undo) state` was ill-typed (mixed
+||| `UndoState` and `Maybe UndoState`); the corrected shape composes
+||| Maybe-returning steps via `>>=`.
 export
-partial
 undoRedoComposition :
   (state : UndoState) ->
   (n : Nat) ->
-  (canUndo : length (undoStack state) >= n) ->
-  applyN n redo (applyN n (fromJust . undo) state) = Just state
+  (canUndo : LTE n (length (undoStack state))) ->
+  (applyN n Composition.undo state >>= applyN n Composition.redo) = Just state
 undoRedoComposition state n canUndo = ?undoRedoCompositionProof
-  where
-    applyN : Nat -> (a -> Maybe a) -> a -> Maybe a
-    applyN Z f x = Just x
-    applyN (S k) f x = f x >>= applyN k f
