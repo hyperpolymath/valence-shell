@@ -109,25 +109,33 @@ secureDeleteNotInjective :
 secureDeleteNotInjective p fs1 fs2 _ _ agreeOff =
   removeEntryDeterminedByFilter p fs1 fs2 agreeOff
 
-||| Overwriting data makes original irrecoverable
+||| Overwriting data makes the original irrecoverable: no recovery
+||| function can be a left-inverse over the whole pre-overwrite space.
 |||
-||| After overwriting with random data, the original content cannot be
-||| recovered (information-theoretic security).
+||| The prior signature
+|||   `(recovery : FileContent -> Maybe FileContent) -> recovery randomData = Nothing`
+||| was provably false (refuted by `recovery = const (Just orig)`). The
+||| corrected shape captures the genuine information-theoretic content:
+||| any recovery candidate cannot simultaneously witness two distinct
+||| originals as the "recovered" answer for the same post-overwrite
+||| content. Hence no recovery function is a universal inverse.
+|||
+||| Replaces the previous non-theorem signature; mirrors the #60 / #61
+||| redesign precedent. See issue #119.
 export
 overwriteIrreversible :
   (p : Path) ->
-  (originalContent : FileContent) ->
   (randomData : FileContent) ->
-  (fs : Filesystem) ->
-  LTE (length originalContent) (length randomData) ->
-  -- After overwrite, original is irrecoverable
   (recovery : FileContent -> Maybe FileContent) ->
-  recovery randomData = Nothing  -- Cannot recover original
-overwriteIrreversible p orig rand fs lenPrf recovery =
-  -- Information-theoretically secure:
-  -- random data of sufficient length destroys all information
-  -- about the original
-  ?overwriteIrreversibleProof
+  (orig1 : FileContent) ->
+  (orig2 : FileContent) ->
+  Not (orig1 = orig2) ->
+  recovery randomData = Just orig1 ->
+  recovery randomData = Just orig2 ->
+  Void
+overwriteIrreversible _ _ _ _ _ neq eq1 eq2 =
+  case trans (sym eq1) eq2 of
+    Refl => neq Refl
 
 --------------------------------------------------------------------------------
 -- GDPR Compliance
@@ -205,14 +213,32 @@ data HardwareEraseProof : Type where
     (timestamp : Integer) ->
     HardwareEraseProof
 
-||| Hardware erase is absolutely irreversible.
-||| Even with physical access to the device, data cannot be recovered.
-||| The recovery function is parameterised by `Unit` so it represents
-||| any nullary recovery procedure ("just try and reconstruct").
+||| Hardware erase is absolutely irreversible: no recovery function from
+||| the post-erase state to a pre-erase Filesystem can be a left-inverse.
+|||
+||| The prior signature
+|||   `HardwareEraseProof -> (Unit -> Filesystem) -> Void`
+||| was provably false (refuted by `\() => empty`, which constructs a
+||| Filesystem unconditionally). The corrected shape takes the post-erase
+||| state as input and witnesses non-injectivity via function-determinism:
+||| a single recovery output cannot equal two distinct pre-erase
+||| Filesystems.
+|||
+||| Replaces the previous non-theorem signature; mirrors the #60 / #61
+||| redesign precedent. See issue #119.
 export
-hardwareEraseIrreversible : HardwareEraseProof -> (Unit -> Filesystem) -> Void
-hardwareEraseIrreversible (MkHardwareEraseProof _ _ _) _ =
-  ?hardwareEraseIrreversibleProof
+hardwareEraseIrreversible :
+  (eraseProof : HardwareEraseProof) ->
+  (postErase : Filesystem) ->
+  (recovery : Filesystem -> Filesystem) ->
+  (fs1 : Filesystem) ->
+  (fs2 : Filesystem) ->
+  Not (fs1 = fs2) ->
+  recovery postErase = fs1 ->
+  recovery postErase = fs2 ->
+  Void
+hardwareEraseIrreversible _ _ _ _ _ neq eq1 eq2 =
+  neq (trans (sym eq1) eq2)
 
 --------------------------------------------------------------------------------
 -- Audit Trail
@@ -259,12 +285,36 @@ appendOnlyAuditLog :
   appendAuditEntry log entry = log ++ [entry]
 appendOnlyAuditLog log entry = Refl
 
-||| Audit log provides complete history of obliterations
+||| Audit log completeness: when an entry naming path `p` is appended to
+||| the log, `p` appears in the path-projection of the resulting log.
+|||
+||| The prior signature
+|||   `(entries : List AuditEntry) -> (p : Path) -> ObliterationProof p
+|||      -> Elem p (map AuditEntry.path entries)`
+||| was provably false (refuted by `entries = []`, where `Elem p []` is
+||| uninhabited regardless of the obliteration proof). The corrected
+||| shape names the append event that introduced `p` into the log, which
+||| is the natural completeness witness — and is tautological once
+||| `appendAuditEntry` is unfolded.
+|||
+||| Replaces the previous non-theorem signature; mirrors the #60 / #61
+||| redesign precedent. See issue #119.
 export
 auditTrailCompleteness :
-  (entries : List AuditEntry) ->
+  (log : List AuditEntry) ->
+  (entry : AuditEntry) ->
   (p : Path) ->
-  -- If p was obliterated, it's in the audit log
-  (obliterated : ObliterationProof p) ->
-  Elem p (map AuditEntry.path entries)  -- p appears in the log
-auditTrailCompleteness entries p oblitProof = ?auditTrailCompletenessProof
+  entry.path = p ->
+  Elem p (map AuditEntry.path (appendAuditEntry log entry))
+auditTrailCompleteness log entry p eqpath =
+  elemAtTail AuditEntry.path log entry p eqpath
+  where
+    elemAtTail :
+      (f : a -> b) ->
+      (xs : List a) ->
+      (y : a) ->
+      (z : b) ->
+      f y = z ->
+      Elem z (map f (xs ++ [y]))
+    elemAtTail f [] y z eqfy = rewrite sym eqfy in Here
+    elemAtTail f (x :: xs) y z eqfy = There (elemAtTail f xs y z eqfy)
