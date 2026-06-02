@@ -235,7 +235,7 @@ record AuditEntry where
   ||| Deletion level
   level : SecureDeleteLevel
   ||| Proof that deletion succeeded
-  proof : ObliterationProof path
+  obliterated : ObliterationProof path
 
 ||| Audit log is append-only (cannot be modified)
 |||
