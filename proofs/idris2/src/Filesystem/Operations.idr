@@ -233,22 +233,31 @@ cnoMkdirExisting p fs exists isDir = Refl
 
 ||| Overwriting file with same content is **observationally** identity.
 |||
-||| Uses `equiv` (set-of-entries equality, order-independent) rather
-||| than propositional `=` because `writeFile` rebinds the entry at
-||| the head of the entries list — same set of entries, possibly
-||| different order. The original signature `writeFile p c fs = fs`
-||| was a non-theorem in the current ordered-list model (it would
-||| force the rebound entry to land at its original position, which
-||| `addEntry . removeEntry` does not preserve).
+||| Uses propositional `Equiv` (set-of-entries equality, order-
+||| independent) rather than `=` because `writeFile` rebinds the entry
+||| at the head of the entries list — same set of entries, possibly
+||| different order. The original `=` signature was a non-theorem in
+||| the ordered-list model.
 |||
-||| Proof body is a hole pending the `equiv`-membership lemma chain
-||| (see issue #119 Category B for the inventory). Restating the
-||| signature unblocks future closure without `believe_me`.
+||| Migrated 2026-06-03 from boolean `equiv (...) = True` to
+||| propositional `Equiv` (Q5 option 3, PR #133's follow-up). The
+||| `foldl`-doesn't-reduce wall that blocked the boolean form is gone.
+|||
+||| HOWEVER: closure now exposes a second model issue. The precondition
+||| `content : getFileContent p fs = Just c` only constrains the FIRST
+||| entry at `p` (because `lookup` returns the first match). If
+||| `entries fs` contains a *later* `(p, File c')` with `c' \= c`, then
+||| `writeFile p c fs` strips it (via `keepIfNotP p` in
+||| `removeEntry`), and the BACKWARD `All` witness fails for that
+||| entry. The theorem is refutable under a duplicate-keyed model
+||| without a "no duplicate keys" or "all-(p,_) entries agree" invariant.
+||| Hole remains open pending that invariant; see PROOF-NEEDS.md
+||| "Priority 2" finding (2026-06-03).
 export
 cnoWriteSameContent :
   (p : Path) ->
   (fs : Filesystem) ->
   {auto prf : isFile p fs = True} ->
   {auto content : getFileContent p fs = Just c} ->
-  equiv (writeFile p c fs) fs = True
+  Equiv (writeFile p c fs) fs
 cnoWriteSameContent p fs = ?cnoWriteSameContentProof

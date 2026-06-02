@@ -11,6 +11,7 @@ module Filesystem.Model
 import Data.Bool
 import Data.List
 import Data.List.Elem
+import Data.List.Quantifiers
 import Data.Maybe
 import Data.String
 import Decidable.Equality
@@ -202,19 +203,11 @@ updateEntry p entry fs =
   addEntry p entry (removeEntry p fs)
 
 --------------------------------------------------------------------------------
--- Filesystem Equivalence
---------------------------------------------------------------------------------
-
-||| Two filesystems are equivalent if they have the same entries
-||| (ignoring order)
-export
-equiv : Filesystem -> Filesystem -> Bool
-equiv (MkFS entries1) (MkFS entries2) =
-  all (\e => elem e entries2) entries1 &&
-  all (\e => elem e entries1) entries2
-
---------------------------------------------------------------------------------
 -- Primitive-eq reflexivity (lifted from Filesystem.Axioms)
+--
+-- Kept after the 2026-06-03 Q5-option-3 migration: `Equiv` no longer
+-- consumes these derived lemmas, but they remain available for future
+-- proofs that genuinely need leaf-level `(==) = True` shape.
 --------------------------------------------------------------------------------
 
 ||| `Path` equality is reflexive — proved by structural induction over
@@ -244,110 +237,72 @@ entryEqRefl (p, fe) =
   Refl
 
 --------------------------------------------------------------------------------
--- Internal helpers for `elem` / `all` reflexivity
+-- Filesystem Equivalence (Q5 option 3: propositional `All` / `Elem`)
 --
--- Idris2 0.8.0's `elem` desugars through the `Foldable` interface to
--- `foldl (\acc, e => acc || Delay (x == e)) False xs`, not the textbook
--- `(x == y) || elem x ys` recursion. So the proofs below pattern-match
--- the foldl form directly.
+-- 2026-06-03 migration: the previous `equiv : Filesystem -> Filesystem
+-- -> Bool` used `Foldable.all` which does NOT reduce on `(x :: xs)`
+-- under Idris2 0.8.0's elaboration — `all p (x :: xs) = (p x && all p
+-- xs)` fails by `Refl`. That blocked `equivTrans` and
+-- `cnoWriteSameContent`. Replacing with the propositional `All` /
+-- `Elem` view from `Data.List.Quantifiers` makes every reasoning step
+-- structural and pattern-matchable. Equivalence is now a proof object,
+-- not a boolean computation.
+--
+-- Decidability bridge below for callers that genuinely need `Bool`.
 --------------------------------------------------------------------------------
 
-||| Once the foldl accumulator hits `True`, the result is `True`
-||| regardless of the remaining list. `True || _` reduces by the first
-||| pattern of `Prelude.Bool.||` without forcing the lazy argument.
-private
-foldlOrTrueIdempotent : (xs : List a) -> (g : a -> Lazy Bool) ->
-                        foldl (\acc, e => acc || g e) True xs = True
-foldlOrTrueIdempotent []        _ = Refl
-foldlOrTrueIdempotent (_ :: ys) g = foldlOrTrueIdempotent ys g
+||| Two filesystems are equivalent if every entry of one is an `Elem`
+||| of the other and vice versa (set-of-entries equality ignoring
+||| order). Stored as two `All`-witnesses — one per direction.
+public export
+data Equiv : Filesystem -> Filesystem -> Type where
+  MkEquiv :
+    {0 fs1, fs2 : Filesystem} ->
+    All (\e => Elem e (entries fs2)) (entries fs1) ->
+    All (\e => Elem e (entries fs1)) (entries fs2) ->
+    Equiv fs1 fs2
 
-||| `elem x (x :: ys) = True` given `x == x = True`.
-||| Threads the accumulator from `False || (x == x)` to `True`, then
-||| relies on `foldlOrTrueIdempotent` for the tail.
-private
-elemHere : Eq a => (x : a) -> (refl : (x == x) = True) -> (ys : List a) ->
-           elem x (x :: ys) = True
-elemHere x refl ys =
-  rewrite refl in foldlOrTrueIdempotent ys (\e => x == e)
+--------------------------------------------------------------------------------
+-- Equivalence laws
+--------------------------------------------------------------------------------
 
-||| If the accumulator starts `True` instead of `False`, the foldl
-||| stays `True` regardless of the list / element comparisons. This is
-||| the structural lift used by `elemWeaken`.
+||| `mapProperty`-shape helper: weaken each `Elem e xs` witness in an
+||| `All`-list to `Elem e (y :: xs)` by `There`.
 private
-foldlOrAccTrueStays : (xs : List a) -> (g : a -> Lazy Bool) -> (b : Bool) ->
-                      foldl (\acc, e => acc || g e) b xs = True ->
-                      foldl (\acc, e => acc || g e) (b || True) xs = True
-foldlOrAccTrueStays xs g True  prf = prf
-foldlOrAccTrueStays xs g False prf = foldlOrTrueIdempotent xs g
+allThere :
+  {0 ys : List (Path, FSEntry)} -> {0 y : (Path, FSEntry)} ->
+  All (\e => Elem e ys) xs ->
+  All (\e => Elem e (y :: ys)) xs
+allThere []        = []
+allThere (p :: ps) = There p :: allThere ps
 
-||| `elem` weakens on the right via the foldl form: an extra cons in
-||| front does not change the result once the accumulator has been
-||| forced True somewhere in the tail.
-private
-elemWeaken : Eq a => (x, y : a) -> (ys : List a) ->
-             elem x ys = True -> elem x (y :: ys) = True
-elemWeaken x y ys prf with (x == y)
-  elemWeaken x y ys prf | True  = foldlOrTrueIdempotent ys (\e => x == e)
-  elemWeaken x y ys prf | False = prf
-
-||| For a list of entries where `==` is reflexive on the element type,
-||| every element is `elem` of the list (with `Elem` witness).
-private
-allElemSelfHelper :
-  (xs, fullList : List (Path, FSEntry)) ->
-  ((e : (Path, FSEntry)) -> Elem e xs -> elem e fullList = True) ->
-  all (\e => elem e fullList) xs = True
-allElemSelfHelper []        _        _   = Refl
-allElemSelfHelper (x :: rs) fullList prf =
-  rewrite prf x Here in
-  allElemSelfHelper rs fullList (\e, isIn => prf e (There isIn))
-
-||| Every element of an entries list is `elem` of itself.
-private
-allElemSelf :
-  (xs : List (Path, FSEntry)) -> all (\e => elem e xs) xs = True
-allElemSelf xs = allElemSelfHelper xs xs (\e, isIn => elemSelfWitness e xs isIn)
-  where
-    elemSelfWitness :
-      (e : (Path, FSEntry)) -> (ys : List (Path, FSEntry)) ->
-      Elem e ys -> elem e ys = True
-    elemSelfWitness e (e :: rest)  Here          =
-      elemHere e (entryEqRefl e) rest
-    elemSelfWitness e (y :: rest) (There later) =
-      elemWeaken e y rest (elemSelfWitness e rest later)
-
-||| Reflexivity of equivalence. Closure path (Q1-C pilot, 2026-06-02 PM):
-||| structural induction over the entries list using the primitive-eq
-||| axioms registered in `Filesystem.Axioms`.
+||| Reflexivity of equivalence. Structural induction on the entries
+||| list: every entry is at `Here`, and the recursive hypothesis weakens
+||| via `allThere`. No primitive-eq axioms, no `believe_me`.
 export
-equivRefl : (fs : Filesystem) -> equiv fs fs = True
-equivRefl (MkFS entries) =
-  rewrite allElemSelf entries in Refl
+equivRefl : (fs : Filesystem) -> Equiv fs fs
+equivRefl (MkFS [])         = MkEquiv [] []
+equivRefl (MkFS (e :: rest)) =
+  let MkEquiv fwd bwd = equivRefl (MkFS rest)
+  in MkEquiv (Here :: allThere fwd) (Here :: allThere bwd)
 
-||| Symmetry of equivalence.
+||| Symmetry of equivalence. Constructor reorder — the two `All`
+||| witnesses just swap. (Replaces the boolean-form `andCommutative`
+||| rewrite, which was the same idea expressed via `&&`.)
+export
+equivSym : Equiv fs1 fs2 -> Equiv fs2 fs1
+equivSym (MkEquiv fwd bwd) = MkEquiv bwd fwd
+
+||| Transitivity of equivalence. Each entry of `fs1` has an `Elem`
+||| witness in `entries fs2` (via `fwd12`); use that witness to index
+||| into `fwd23`, which gives an `Elem` witness in `entries fs3`.
+||| `mapProperty` lifts this pointwise step to the whole `All`. The
+||| backward direction is symmetric.
 |||
-||| Closed via `Data.Bool.andCommutative` from Idris2 0.8.0's base
-||| stdlib. The two `all`-predicates inside `equiv` are conjoined; the
-||| reverse-direction goal is the same conjunction commuted, so a
-||| single rewrite by `andCommutative` collapses it to the premise.
-|||
-||| Does NOT need primitive String/Bits8 `==` reflexivity — this is
-||| pure boolean algebra over the already-evaluated predicate values.
-||| Contrast with `equivRefl` / `equivTrans`, which DO require leaf-
-||| level eq-reflexivity (tracked separately under issue #119).
+||| Closes #119 Cat-B `equivTransProof` cleanly without the foldl
+||| destructuring problem that blocked the boolean form.
 export
-equivSym : (fs1, fs2 : Filesystem) ->
-           equiv fs1 fs2 = True ->
-           equiv fs2 fs1 = True
-equivSym (MkFS e1) (MkFS e2) prf =
-  rewrite andCommutative (all (\e => elem e e1) e2)
-                         (all (\e => elem e e2) e1)
-  in prf
-
-||| Transitivity of equivalence
-export
-equivTrans : (fs1, fs2, fs3 : Filesystem) ->
-             equiv fs1 fs2 = True ->
-             equiv fs2 fs3 = True ->
-             equiv fs1 fs3 = True
-equivTrans fs1 fs2 fs3 prf1 prf2 = ?equivTransProof
+equivTrans : Equiv fs1 fs2 -> Equiv fs2 fs3 -> Equiv fs1 fs3
+equivTrans (MkEquiv fwd12 bwd12) (MkEquiv fwd23 bwd23) =
+  MkEquiv (mapProperty (\elemIn2 => indexAll elemIn2 fwd23) fwd12)
+          (mapProperty (\elemIn1 => indexAll elemIn1 bwd12) bwd23)
