@@ -36,6 +36,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y chezscheme
+          # Ubuntu's chezscheme package installs the binary as `scheme`, not
+          # `chez`. Idris2's bootstrap-stage1-chez.sh hardcodes the executable
+          # name from $SCHEME, so we either pass SCHEME=scheme below OR provide
+          # a `chez` symlink. Symlink is simpler — keeps SCHEME=chez everywhere.
+          if ! command -v chez >/dev/null 2>&1; then
+            sudo ln -s "$(command -v scheme)" /usr/local/bin/chez
+          fi
+          chez --version || true
 
       - name: Cache Idris2 install
         id: idris2-cache
