@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: MPL-2.0
+# Echo Types / Ochrance Bridge for Valence Shell
+#
+# Machine-readable companion to docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc.
+# Agents should treat both files as the canonical bridge entry points.
+
+[bridge]
+name = "echo-types-ochrance-for-valence-shell"
+status = "documentation-and-orientation-only"
+mechanised = false
+doc = "docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc"
+
+[layers]
+shell      = "valence-shell"
+semantics  = "echo-types"
+receipts   = "ochrance"
+
+[upstream-repos]
+echo-types = "https://github.com/hyperpolymath/echo-types"
+ochrance   = "https://github.com/hyperpolymath/ochrance"
+
+[echo-types-required-reading]
+readme         = "README.md"
+identity-suite = "proofs/agda/EchoCanonicalIdentitySuite.agda"
+map            = "docs/echo-types/MAP.adoc"
+bridge-status  = "docs/bridge-status.md"
+claude         = "CLAUDE.md"
+
+[echo-types-key-concepts]
+fibre-object        = "Echo f y := Σ (x : A) , (f x ≡ y)"
+canonical-totality  = "A ≃ Σ B (Echo f)"
+residue-forms       = ["epistemic", "indexed", "search", "cost", "observational"]
+collapsing-map      = "no-section results; right mental model for irreversible/obliterative actions"
+honesty-rule        = "bridges can be useful while still not affecting Echo Types' core theorems"
+
+[valence-shell-cases]
+
+[valence-shell-cases.rmr]
+name = "Remove-Match-Reverse (reversible)"
+echo-reading = "fibre is singleton-like or equivalence-like under stated preconditions"
+do-not-claim = "all shell operations are reversible"
+
+[valence-shell-cases.lossy]
+name = "Ordinary lossy operation"
+echo-reading = "prev state not fully recoverable but residue constrains what could have happened"
+do-not-claim = "total erasure"
+
+[valence-shell-cases.rmo]
+name = "Remove-Match-Obliterate (irreversible + audit residue)"
+echo-reading = "proof-relevant certificate of elimination with permitted audit residue"
+do-not-claim = "undoable deletion"
+current-status = "stubs only"
+
+[valence-shell-cases.narration]
+name = "explain / checkpoint / restore / diff / replay"
+echo-reading = "human-facing projections over transitions, residues, and evidence trails"
+do-not-claim = "narration is proof without backing artefacts or receipts"
+
+[ochrance-roles]
+state-evidence         = "A2ML manifests and validators"
+snapshot-integrity     = "verified Merkle structure (once cryptographic hashing is no longer placeholder)"
+repair-evidence        = "linear repair operations and proof witnesses"
+trust-boundary         = "receipts consumable by humans, CI, future Echidna-style validators"
+
+[ochrance-current-gaps]
+hash-attestation = "placeholder XOR hashes"
+crypto-coverage  = "incomplete; production cryptographic guarantees not yet closed upstream"
+linear-repair    = "ongoing work"
+
+[agent-rules]
+
+[agent-rules.required-framing]
+language = ["bridge", "semantic framing", "architecture dependency"]
+rmr-vs-rmo = "keep distinct — RMR reversible-under-preconditions; RMO irreversible-with-audit-residue"
+echo-types-usage = "name residues and loss modes; do not inflate proof status"
+ochrance-usage = "name receipts and attestation surfaces; do not claim crypto guarantees while upstream gaps remain"
+
+[agent-rules.forbidden-moves]
+production-ready = "do not claim valence-shell is production-ready"
+lean-rust-mechanised = "do not claim the Lean-to-Rust correspondence is mechanised"
+rmo-gdpr-beyond-stubs = "do not claim RMO/GDPR support exists beyond stubs"
+echo-proves-implementation = "do not claim Echo Types proves Valence Shell implementation correctness"
+ochrance-crypto = "do not claim Ochrance cryptographic integrity while hash/attestation gaps remain"
+exploratory-as-core = "do not merge exploratory Echo bridges into core claims without checking echo-types/docs/bridge-status.md"
+
+[future-mechanised-shell-event-shape]
+fields = [
+  "pre_state_commitment",
+  "command",
+  "post_state_commitment",
+  "valence_proof_ref",
+  "echo_residue_class",
+  "ochrance_receipt_ref",
+  "trust_boundary",
+]
+status = "design-shape-only"
+becomes-implementation-after = [
+  "valence-shell has concrete machine-readable event/receipt format",
+  "ochrance has compatible A2ML/Merkle/attestation object for that event",
+  "echo-types has stable classification target for the residue class",
+  "bridge is labelled honestly (exploratory / partial / mechanised)",
+]

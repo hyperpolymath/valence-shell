@@ -1,0 +1,182 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Echo Types / Ochrance Bridge for Valence Shell
+:toc:
+:icons: font
+
+== Purpose
+
+This document tells humans and LLM agents how to relate Valence Shell to `hyperpolymath/echo-types` and `hyperpolymath/ochrance` without overstating the current implementation.
+
+Valence Shell is the operational shell: it executes filesystem and shell actions, tracks history, supports undo/redo, and proves a substantial reversible-operation core across multiple proof systems.
+
+Echo Types is the semantic theory of structured loss: irreversible computations are not treated as blank erasure, but as maps with proof-relevant residues. Its foundation is:
+
+[source,agda]
+----
+Echo f y := Σ (x : A) , (f x ≡ y)
+----
+
+Ochrance is the receipt and attestation layer: A2ML manifests, verified Merkle structure, linear repair, and subsystem verification give concrete evidence that a filesystem state or repair claim can be checked.
+
+The bridge is not currently a mechanised dependency. It is an architecture and documentation obligation: agents must preserve the distinction between proven Valence Shell claims, Echo Types semantic framing, and Ochrance receipt evidence.
+
+== One-sentence placement
+
+Valence Shell supplies the shell operations; Echo Types supplies the language for what information is preserved, lost, recoverable, or merely constrained by those operations; Ochrance supplies the receipts that make state and repair claims auditable.
+
+== Why Valence Shell needs Echo Types
+
+Valence Shell already has RMR and RMO vocabulary:
+
+* RMR: Remove-Match-Reverse, reversible transactions with undo/redo proof.
+* RMO: Remove-Match-Obliterate, irreversible deletion with proof of complete removal; currently stubs only.
+
+Without Echo Types, these can be misread as only implementation features. With Echo Types, they become cases in a broader theory of information change.
+
+For a shell operation modeled as a map:
+
+[source,text]
+----
+f : PreState -> PostState
+----
+
+`Echo f y` is the proof-relevant space of pre-states that could have produced the observed post-state `y`. This lets Valence Shell say more precise things:
+
+[cols="1,2,2"]
+|===
+| Valence Shell case | Echo Types reading | What not to claim
+
+| Reversible operation / RMR
+| The relevant fibre should be singleton-like, equivalence-like, or otherwise controlled enough to reconstruct the previous state under stated preconditions.
+| Do not claim all shell operations are reversible.
+
+| Ordinary lossy operation
+| The previous state is not fully recoverable, but the residue still constrains what could have happened.
+| Do not collapse this into total erasure.
+
+| RMO / obliteration
+| The point is not recovery. The point is a proof-relevant certificate that the target information has been eliminated while permitted audit residue remains.
+| Do not describe RMO as undoable deletion.
+
+| `explain`, `checkpoint`, `restore`, `diff`, `replay`
+| Human-facing projections over state transitions, residues, and evidence trails.
+| Do not present narration as proof unless backed by proof artefacts or receipts.
+|===
+
+== The specific Echo Types material Claude must know
+
+Read these from `hyperpolymath/echo-types` before changing this bridge:
+
+* `README.md` — canonical foundation, recommended reading order, and the current identity-layer story.
+* `proofs/agda/EchoCanonicalIdentitySuite.agda` — curated proof entry point for the load-bearing Echo identity layer.
+* `docs/echo-types/MAP.adoc` — status-tagged master map.
+* `docs/bridge-status.md` — distinguishes exploratory bridges from core results.
+* `CLAUDE.md` — session ledger and working rules.
+
+The concepts that matter most for Valence Shell are:
+
+* `Echo f y := Σ (x : A) , (f x ≡ y)` as the fibre/residue object.
+* Canonical total completion: `A ≃ Σ B (Echo f)`.
+* Classification of loss/residue forms, especially epistemic, indexed, search, cost, and observational residues.
+* No-section / collapsing-map results as the right mental model for irreversible or obliterative shell actions.
+* The honesty rule: bridges can be useful while still not affecting Echo Types' core theorems.
+
+== Why Valence Shell needs Ochrance
+
+Ochrance is the natural place for concrete filesystem receipts.
+
+Valence Shell can prove that a modeled operation has a property. Ochrance can help package filesystem evidence that a particular state, manifest, repair, or attestation was checked. In bridge terms:
+
+[cols="1,2"]
+|===
+| Concern | Ochrance role
+
+| Filesystem state evidence
+| A2ML manifests and validators.
+
+| Integrity of snapshots/checkpoints
+| Verified Merkle-tree structure, once cryptographic hashing is no longer a placeholder.
+
+| Repair / rollback evidence
+| Linear repair operations and proof witnesses.
+
+| Cross-tool trust boundary
+| Receipts that can be consumed by humans, CI, or future Echidna-style validators.
+|===
+
+Ochrance has its own limitations. Current docs note placeholder XOR hashes, incomplete cryptographic attestation, and ongoing linear-repair work. Therefore Valence Shell must not imply that Ochrance already closes all production trust gaps.
+
+== Three-layer architecture
+
+[source,text]
+----
+Layer 1: Valence Shell
+  Executes commands; tracks operation history; exposes explain/checkpoint/diff/replay;
+  proves reversible-operation properties in the project proof stack.
+
+Layer 2: Echo Types
+  Interprets operations as maps with fibres/residues; classifies what is
+  recoverable, constrained, observationally equivalent, or genuinely lost.
+
+Layer 3: Ochrance
+  Emits/checks receipts: A2ML manifests, Merkle-backed state commitments, repair
+  witnesses, and future attestation evidence.
+----
+
+The key rule is separation of concerns:
+
+* Valence Shell should not absorb Echo Types as shell implementation machinery.
+* Echo Types should not become a dumping ground for shell-specific engineering.
+* Ochrance should not be used as a magic proof oracle; it is an evidence and verification framework with its own trust boundaries.
+
+== Claude / LLM instructions
+
+When working in Valence Shell, Claude and similar agents must observe these rules.
+
+=== Required framing
+
+* Treat this document and `.machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml` as the bridge entry points.
+* Say "bridge", "semantic framing", or "architecture dependency" unless a real code/proof dependency has been added.
+* Keep RMR and RMO distinct:
+  ** RMR: reversible under preconditions.
+  ** RMO: irreversible/obliterative with audit residue, not undo.
+* Use Echo Types to name residues and loss modes, not to inflate the Valence Shell proof status.
+* Use Ochrance to name receipts and attestation surfaces, not to claim production cryptographic guarantees until those gaps are closed upstream.
+
+=== Forbidden moves
+
+* Do not claim Valence Shell is production-ready.
+* Do not claim the Lean-to-Rust correspondence is mechanised.
+* Do not claim RMO/GDPR support exists beyond stubs.
+* Do not claim Echo Types proves Valence Shell implementation correctness.
+* Do not claim Ochrance cryptographic integrity while its hash/attestation gaps remain open.
+* Do not merge exploratory Echo bridges into core claims without checking `docs/bridge-status.md` in echo-types.
+
+== Minimal future implementation shape
+
+A future mechanised bridge could define a typed event like:
+
+[source,text]
+----
+ShellEvent := {
+  pre_state_commitment,
+  command,
+  post_state_commitment,
+  valence_proof_ref,
+  echo_residue_class,
+  ochrance_receipt_ref,
+  trust_boundary
+}
+----
+
+For now this is only a design shape. It becomes implementation work only after:
+
+. Valence Shell has a concrete machine-readable event/receipt format.
+. Ochrance has a compatible A2ML/Merkle/attestation object for that event.
+. Echo Types has a suitable stable classification target for the residue class.
+. The bridge is labelled honestly as exploratory, partial, or mechanised.
+
+== Bottom line
+
+Valence Shell should use Echo Types as its theory of accountable information loss and Ochrance as its evidence substrate. The immediate action is documentation and agent-orientation, not pretending that a mechanised three-repo theorem already exists.
