@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MPL-2.0
 # STATE.a2ml — Project state checkpoint
 # Last updated: 2026-06-02 (afternoon sweep — PRs #110/#112/#113/#114/#115/#116/#121/#123/#124 landed; LICENSE SPDX + 4 admits annotated; #119 Cat-A non-theorems redesigned)
+#                Evening: bridge added — docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc + .machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml (PR #125)
 
 [metadata]
 project = "valence-shell"
@@ -12,6 +13,9 @@ status = "active"
 name = "valence-shell"
 completion-percentage = 78
 phase = "advanced-research-prototype"
+bridge-status = "documentation-and-orientation-only (echo-types + ochrance; NOT mechanised)"
+bridge-doc = "docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc"
+bridge-a2ml = ".machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml"
 
 [recent-work-2026-06-02]
 session = "2026-06-02 morning + afternoon sweep — inbox cleanup + root-cause main fixes"

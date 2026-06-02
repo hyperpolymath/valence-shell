@@ -88,6 +88,7 @@
     ("Reversibility predicate is conditional — theorems are of the form `precondition p fs -> reverse(op(p, fs)) = fs`; never weaken to unconditional reversibility")
     ("Proof-hole audit is authoritative — `docs/PROOF_HOLES_AUDIT.md` is the single source of truth for remaining gaps; CLAUDE.md and README MUST be kept in sync with it")
     ("Six-tool boundary policy is in force — Zig for APIs/FFIs, Idris2 for ABIs, SNIFs for BEAM↔native, typed-wasm for compile targets, Groove Protocol for cross-system service discovery; bash/POSIX is the user surface, not an internal interop layer")
+    ("Three-layer architecture is fixed — Valence Shell (this repo) is the operational layer; echo-types is the semantic-loss theory; ochrance is the receipt/attestation substrate. The bridge between them is documentation-and-orientation-only, NOT a mechanised dependency. Canonical reference: docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc + .machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml. Forbidden-moves (production-ready / mechanised Lean-Rust / RMO beyond stubs / Echo-proves-implementation / Ochrance crypto / merging exploratory bridges into core claims) are codified in MUST.contractile.")
   )
 
   ; === Sensitive Areas (if in doubt, ask) ===
@@ -100,6 +101,7 @@
     "impl/rust-cli/src/commands/secure_deletion.rs and proofs/idris2/RMO.idr — RMO/GDPR claims; the entire compliance story rides on these"
     "EXPLAINME.adoc — the per-claim-caveat scaffold; do not delete or 'simplify' without owner sign-off"
     "LICENSE + LICENSES/ — REUSE-format SPDX; the project migrated PMPL-1.0 → MPL-2.0 in commit 990b147 and must not regress"
+    "docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc + .machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml — bridge entry points; do not reframe the bridge as mechanised, or merge exploratory Echo/Ochrance claims into core scope, without owner sign-off"
   )
 
   ; === Ecosystem Position ===
@@ -130,6 +132,13 @@
       "NONE_AT_V0_9_0 — no known downstream consumers; this is a standalone research prototype"
       ; Conceptual / aspirational relationships (NOT current code dependencies):
       "absolute-zero (conceptual ancestor) — CNO composition theory predates this project; vsh implements it for filesystem ops"
+    )
+
+    (bridges-with
+      ; The three-layer bridge: documentation-and-orientation-only, NOT
+      ; mechanised. Canonical doc: docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc.
+      "hyperpolymath/echo-types — semantic theory of structured loss; provides Echo f y := Σ (x : A) , (f x ≡ y) as the fibre/residue object"
+      "hyperpolymath/ochrance — receipt + attestation substrate (A2ML manifests, Merkle-backed state commitments, repair witnesses)"
     )
   )
 )
