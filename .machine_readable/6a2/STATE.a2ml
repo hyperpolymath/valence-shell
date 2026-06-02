@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: MPL-2.0
 # STATE.a2ml — Project state checkpoint
-# Last updated: 2026-04-19 (CRG-AUDIT-2026-04-18 closure pass: items 1+2+3+4+5+7+9+10c + FIFO race fix)
+# Last updated: 2026-06-02 (post-merge sweep — PRs #105/#106/#108/#109 closed #60/#61/#70/#89)
 
 [metadata]
 project = "valence-shell"
 version = "0.9.0"
-last-updated = "2026-04-19"
+last-updated = "2026-06-02"
 status = "active"
 
 [project-context]
@@ -31,9 +31,25 @@ tasks-completed = [
 ]
 
 [coq-proof-status]
-admitted = 1
+admitted = 3
 axioms-justified = 1
-admitted-detail = "single_op_reversible OpRmdir branch (proofs/coq/filesystem_composition.v:199): mkdir restores with default_perms, but the original directory may have had different permissions, so mkdir(rmdir(fs)) ≠ fs in general. Full reversibility requires the undo stack to preserve original node data. Known limitation of the Filesystem = Path -> option FSNode model. Pre-existing model gap, flagged in CRG-AUDIT-2026-04-18; the in-source comment at line 195-198 acknowledges it. Declaring honestly here corrects the prior `admitted = 0` claim."
+admitted-detail = """
+3 Admitted markers as of 2026-06-02 post-PR #55 design-gap surfacing:
+
+  1. mkdir_two_dirs_reversible (filesystem_composition.v:697) — non-LIFO
+     sequence reversal; not derivable from two_op_sequence_reversible as
+     stated. Tracked as #56 (restate as LIFO sequence).
+
+  2. overwrite_pass_equalizes_storage (rmo_operations.v:422) — model gap.
+     Needs Hgeom strengthening or conclusion relaxation. Tracked as #57.
+
+  3. obliterate_not_injective (rmo_operations.v:535) — downstream of #57;
+     reconnects once #57 closes. Tracked as #58.
+
+The prior single_op_reversible OpRmdir admit (declared 2026-04-19) was
+Qed-closed by PR #67 (2026-06-01) via OpMkdirWithPerms +
+OpCreateFileWithPerms constructor-variant approach — zero new axioms.
+"""
 axiom-detail = "is_empty_dir_dec: Filesystem = Path -> option FSNode is infinite-domain; universal quantification over all paths is not constructively decidable. Migration: switch to FMaps.t FSNode."
 proof-debt-items-closed = [1, 2]
 proof-debt-open = [3]
@@ -59,6 +75,8 @@ note = "Promotion to C-grade dogfooding evidence requires real daily-driver use 
 # 2026-04-04: CRG-C blitz — 59 new tests, benchmarks, E2E, Zig, Elixir
 # 2026-04-12: P0 sweep — Coq layer: 1 justified Axiom (was 3 Axiom + structural bugs); Admitted not yet declared
 # 2026-04-19: .expect("TODO") anti-pattern sweep CLOSED (~512 sites); admitted=0 → admitted=1 declared; [dogfooding-status] section added; impl/rust-ffi/ deleted as duplicate; 19 per-directory READMEs landed (coverage 23% → all originally-missing addressed); Phase 4C Lean-extraction docs archived; FIFO-path race fixed; ROADMAP populated; ANCHOR + alkahest email drift fixed
+# 2026-06-01: Three-phase day — foundation (#59-#73), full sweep (#40 #47 #48 #52-#55), Option-2 (#74-#75) + license-batch SPDX sweep (#95-#102) + governance SHA-pin (#103) + changelog (#104). single_op_reversible Qed-closed (PR #67). Coq build oracle re-enabled (#55). 3 new Admitted markers surfaced → tracked as #56/#57/#58. 757 tests passing.
+# 2026-06-02: Post-merge sweep — Idris2 layer cleanup. PR #105 (RMO theorem-shape redesign, closes #60+#61), PR #106 (Idris2 build oracle, closes #70), PR #108 + #109 (10 partial markers cleared, closes #89). PR #107 dropped codeql.yml. Branches cleaned to main-only; safedom orphan branch deleted with #111 salvage decision filed.
 
 [crg]
 grade = "C"

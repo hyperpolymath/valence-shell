@@ -10,7 +10,7 @@ project = "valence-shell"
 version = "0.9.0"
 status = "Advanced research prototype — NOT production-ready"
 license = "MPL-2.0"
-last-updated = "2026-06-01"
+last-updated = "2026-06-02"
 
 # What this project IS — one-line summary; for the full statement read
 # .machine_readable/INTENT.contractile (the load-bearing artefact).
@@ -38,13 +38,16 @@ deep-audit-log-dir   = "docs/audits/"
 latest-deep-audit    = "docs/audits/2026-06-01-deep-audit.adoc"
 
 [counts-as-of-last-audit]
-# Per docs/audits/2026-06-01-deep-audit.adoc + issue #42.
+# Per docs/audits/2026-06-01-deep-audit.adoc + issue #42 + 2026-06-02 sweep.
 theorem-candidates       = 478
 proof-systems            = 6
-proof-holes-remaining    = 3       # 1 real gap + 1 justified axiom + 1 structural axiom
+coq-admits-remaining     = 3       # #56 + #57 + #58 (3 surfaced post-#55)
+coq-axioms-justified     = 1       # is_empty_dir_dec
+idris2-holes-remaining   = 23      # was 21 + 8 partial; now 23 holes + 0 partial post-PRs #105/#108/#109
+idris2-partial-markers   = 0       # cleared 2026-06-02
 rust-source-files        = 32
 rust-loc                 = 21331
-tests-passing            = 736
+tests-passing            = 757     # +21 via PR #72 (2026-06-01)
 tests-ignored            = 14
 tests-failing            = 0
 fuzz-targets             = 7

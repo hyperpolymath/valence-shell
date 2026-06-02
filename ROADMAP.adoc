@@ -16,7 +16,7 @@ replacement for bash/zsh.
 For the full honest status see `CLAUDE.md`; for caveats per claim see
 `EXPLAINME.adoc`; for proof-debt see `docs/PROOF_HOLES_AUDIT.md`.
 
-_Last refreshed: 2026-06-01 (maintenance sweep M2/M3/M4)._
+_Last refreshed: 2026-06-02 (post-merge sweep: PRs #105 #106 #108 #109 — closes #60 / #61 / #70 / #89; PR #107 dropped codeql.yml)._
 
 == v0.9.x — Stabilisation (D → C per CRG v2.0)
 
