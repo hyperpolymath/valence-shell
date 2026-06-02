@@ -203,19 +203,13 @@ data HardwareEraseProof : Type where
     (timestamp : Integer) ->
     HardwareEraseProof
 
-||| Hardware erase is absolutely irreversible
-|||
+||| Hardware erase is absolutely irreversible.
 ||| Even with physical access to the device, data cannot be recovered.
+||| The recovery function is parameterised by `Unit` so it represents
+||| any nullary recovery procedure ("just try and reconstruct").
 export
-hardwareEraseIrreversible :
-  (proof : HardwareEraseProof) ->
-  -- No recovery function exists
-  (recovery : () -> Filesystem) ->
-  Void
-hardwareEraseIrreversible (MkHardwareEraseProof device method ts) recovery =
-  -- Physical impossibility: data is gone at the hardware level
-  -- Magnetic domains/flash cells are reset
-  -- This is guaranteed by hardware specifications (NIST SP 800-88 Purge/Destroy)
+hardwareEraseIrreversible : HardwareEraseProof -> (Unit -> Filesystem) -> Void
+hardwareEraseIrreversible (MkHardwareEraseProof _ _ _) _ =
   ?hardwareEraseIrreversibleProof
 
 --------------------------------------------------------------------------------
