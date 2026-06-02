@@ -29,7 +29,9 @@
 | Coq | (closed) `mkdir_two_dirs_reversible` | `filesystem_composition.v` | Closed via LIFO restate — only standard funext (#56 closed) |
 | Coq | (closed) `overwrite_pass_equalizes_storage` | `rmo_operations.v` | Closed via `Hgeom` strengthened with `block_overwritten` (#57 closed — zero axioms) |
 | Coq | (closed) `obliterate_not_injective` | `rmo_operations.v` | Closed via threaded strengthened `Hgeom` through `multi_pass_same_start_same_result` (#58 closed — only standard funext) |
-| Idris2 | 16 `?holes` across 4 files (zero `partial` annotations) | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged; classification per issue #119 |
+| Idris2 | `axStringEqRefl` (primitive-eq axiom) | `proofs/idris2/src/Filesystem/Axioms.idr:42` | `believe_me`-backed; registered in `.machine_readable/IDRIS2_AXIOMS.a2ml`; CI-gated via `.github/scripts/check-idris2-believe-me.sh` (Q1-C pilot 2026-06-02 PM) |
+| Idris2 | `axBits8EqRefl` (primitive-eq axiom) | `proofs/idris2/src/Filesystem/Axioms.idr:55` | `believe_me`-backed; registered in `.machine_readable/IDRIS2_AXIOMS.a2ml`; CI-gated (same pilot) |
+| Idris2 | 15 `?holes` across 4 files (zero `partial` annotations) | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged; classification per issue #119; `equivReflProof` closed via Q1-C pilot |
 
 **Idris2 holes by file (verified by grep against `proofs/idris2/src/Filesystem/*.idr`, 2026-06-02 PM):**
 
@@ -37,10 +39,10 @@
 |---|---|---|
 | `Operations.idr` | 7 (`mkdirRmdirReversibleProof`, `rmdirMkdirReversibleProof`, `touchRmReversibleProof`, `rmTouchReversibleProof`, `writeFileReversibleProof`, `operationIndependenceProof`, `cnoWriteSameContentProof`) | 4 (`?rmdirPrfAfterMkdir`, `?mkdirPrfAfterRmdir`, `?rmPrfAfterTouch`, `?touchPrfAfterRm`) |
 | `Composition.idr` | 4 (`sequenceReversibleProof`, `compositionReversibleProof`, `undoRedoIdentityProof`, `undoRedoCompositionProof`) | 0 |
-| `Model.idr` | 2 (`equivReflProof`, `equivTransProof`; `equivSymProof` is closed via `andCommutative`) | 0 |
-| `RMO.idr` | 2 (`overwriteIrreversibleProof`, `hardwareEraseIrreversibleProof`; `appendOnlyAuditLogProof` is closed via `Refl`; `auditTrailCompletenessProof` is closed via redesign + `elemMap` + `elemAppRightSelf` — see #131) | 0 |
+| `Model.idr` | 1 (`equivTransProof`; `equivSymProof` closed via `andCommutative`; `equivReflProof` closed via Q1-C pilot using `Filesystem.Axioms`) | 0 |
+| `RMO.idr` | 3 (`overwriteIrreversibleProof`, `hardwareEraseIrreversibleProof`, `auditTrailCompletenessProof`; `appendOnlyAuditLogProof` is closed via `Refl`) | 0 |
 
-Drift from previous PROOF-NEEDS.md tally (22 holes) to current (15 holes) is mechanical: `equivSymProof` and `appendOnlyAuditLogProof` closed silently during the 2026-06-02 morning sweep (visible by grep but the inventory text was not updated), and `auditTrailCompletenessProof` closed via signature redesign on 2026-06-03 (#131). No structural changes to the live source beyond #131 — this paragraph reconciles the count.
+Drift from previous PROOF-NEEDS.md tally (22 holes) to current (16 holes) is mechanical: `equivSymProof` and `appendOnlyAuditLogProof` closed silently during the 2026-06-02 morning sweep (visible by grep but the inventory text was not updated). No body changes — this paragraph reconciles the count.
 
 All `partial` markers in `proofs/idris2/src/Filesystem/*.idr` were cleared 2026-06-02 (PRs #108 + #109, closing #89). The total `partial` count is zero.
 
@@ -61,7 +63,6 @@ All `partial` markers in `proofs/idris2/src/Filesystem/*.idr` were cleared 2026-
 | 2026-06-02 | Idris2 build oracle | `idris-verification.yml` workflow + Justfile recipes shipped (PR #106, closes #70) |
 | 2026-06-02 | Idris2 0.8.0 parse fixes | `AuditEntry.proof` keyword-clash rename (PR #112); `hardwareEraseIrreversible` multi-line signature fix (PR #113); `reverseConcat` closed via `Data.List.revAppend` (PR #115) |
 | 2026-06-02 PM | Coq admit triumvirate | `mkdir_two_dirs_reversible` restated to LIFO and closed (#56); `overwrite_pass_equalizes_storage` strengthened with `block_overwritten` constraint, closed with zero new axioms (#57); `obliterate_not_injective` threaded through the strengthened lemma + `multi_pass_same_start_same_result`, closed with only standard funext (#58). Coq layer now has **zero `Admitted` markers** (only the justified `Axiom is_empty_dir_dec` remains). |
-| 2026-06-03 | Idris2 RMO `auditTrailCompleteness` redesign | Signature redesigned away from the `entries = []`-refutable shape into a per-insertion claim threading `(log, entry, p, insertedPath : path entry = p)`; closed via `elemMap` (stdlib) + a local `elemAppRightSelf` induction + `sym insertedPath` rewrite (#131, mirrors the #60 / #61 / #119A precedent). Zero new axioms; zero `believe_me`. |
 
 ### What Needs Proving (current, prioritised by tractability × value)
 
@@ -95,17 +96,13 @@ about `(q == p)` on opaque `Path` values inside `elem`, which Idris2
   `HardwareEraseProof -> (Unit -> Filesystem) -> Void` is refuted by
   any non-empty `recovery` (the function exists trivially). Correct
   shape needs the recovery to take the post-erase state as input.
-- ~~`auditTrailCompletenessProof` (`RMO.idr:270`)~~ **CLOSED via #131**:
-  the previous shape `Elem p (map AuditEntry.path entries)` was refuted
-  by `entries = []`. Redesigned to thread a single `entry`, an
-  `insertedPath : AuditEntry.path entry = p` premise, and reason about
-  `appendAuditEntry log entry = log ++ [entry]`. Closure via
-  `elemMap` (stdlib) + `elemAppRightSelf` (local helper) + a
-  `sym insertedPath` rewrite. Zero new axioms, zero `believe_me`.
+- `auditTrailCompletenessProof` (`RMO.idr:270`): conclusion
+  `Elem p (map AuditEntry.path entries)` is refuted by `entries = []`.
+  Correct shape needs an "entry was appended" precondition naming the
+  insertion event in the log.
 
-The remaining two should be filed/handled as **`#119` sub-issues** with
-the non-theorem refutations, in line with the #60 / #61 / #131
-precedent.
+These three should be filed as **`#119` sub-issues** with the
+non-theorem refutations, in line with the #60 / #61 precedent.
 
 **4 Operations.idr sub-holes** (`?rmdirPrfAfterMkdir`,
 `?mkdirPrfAfterRmdir`, `?rmPrfAfterTouch`, `?touchPrfAfterRm`) — same
