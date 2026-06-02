@@ -220,7 +220,7 @@ impl AuditLog {
     /// ```
     pub fn read_all(&self) -> Result<Vec<AuditEntry>> {
         let content =
-            std::fs::read_to_string(&self.log_path).context("Failed to read audit log")?;
+            crate::fs_pure::read_to_string(&self.log_path).context("Failed to read audit log")?;
 
         let mut entries = Vec::new();
         for (line_num, line) in content.lines().enumerate() {

@@ -283,8 +283,9 @@ pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
         anyhow::bail!("Path is a directory - use rmdir (EISDIR)");
     }
 
-    // Store content for undo
-    let content = fs::read(&full_path).unwrap_or_default();
+    // Store content for undo (pure read of the soon-to-be-deleted file;
+    // routed through fs_pure to honour the noatime discipline).
+    let content = crate::fs_pure::read_to_end(&full_path).unwrap_or_default();
 
     fs::remove_file(&full_path).context("rm failed")?;
 

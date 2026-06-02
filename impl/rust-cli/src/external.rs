@@ -377,7 +377,7 @@ fn stdio_config_from_redirects(
 
             Redirection::Input { file } => {
                 let target = state.resolve_path(file);
-                let file_handle = File::open(&target)
+                let file_handle = crate::fs_pure::open_pure(&target)
                     .with_context(|| format!("Failed to open input file: {}", target.display()))?;
                 stdin_cfg = Stdio::from(file_handle);
             }

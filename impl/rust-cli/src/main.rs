@@ -159,7 +159,7 @@ fn main() -> Result<()> {
     // Mode 2: Execute a script file (vsh script.sh [args...])
     if let Some(ref script_path) = cli.script {
         // Check for shebang or just execute
-        let script_content = std::fs::read_to_string(script_path)
+        let script_content = vsh::fs_pure::read_to_string(std::path::Path::new(script_path))
             .context(format!("Cannot read script: {}", script_path))?;
 
         // Set positional parameters: $0 = script_path, $1.. = script_args

@@ -327,8 +327,9 @@ impl RedirectSetup {
                     original_size: metadata.len(),
                 });
             } else {
-                // Truncate - save original content
-                let original_content = fs::read(&path).with_context(|| {
+                // Truncate - save original content (pure read for undo backup;
+                // routed through fs_pure to honour the noatime discipline).
+                let original_content = crate::fs_pure::read_to_end(&path).with_context(|| {
                     format!("Failed to read file for backup: {}", path.display())
                 })?;
 
@@ -383,8 +384,9 @@ impl RedirectSetup {
             anyhow::bail!("Input redirection target is not a file: {}", path.display());
         }
 
-        // Open for reading
-        let file = File::open(&path)
+        // Open for reading via the noatime-aware helper so input
+        // redirections (`<` operator) do not mutate atime when permitted.
+        let file = crate::fs_pure::open_pure(&path)
             .with_context(|| format!("Failed to open input file: {}", path.display()))?;
 
         self.opened_files.push(file);
