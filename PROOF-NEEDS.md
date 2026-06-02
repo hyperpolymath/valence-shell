@@ -27,12 +27,12 @@
 | Coq | `Admitted` — `overwrite_pass_equalizes_storage` (model gap) | `proofs/coq/rmo_operations.v:422` | Tracked as #57 — needs `Hgeom` strengthening or conclusion relaxation |
 | Coq | `Admitted` — `obliterate_not_injective` (downstream of #57) | `proofs/coq/rmo_operations.v:535` | Tracked as #58 — reconnects once #57 closes |
 | Coq | `Axiom is_empty_dir_dec` (justified) | `proofs/coq/posix_errors.v` | Infinite-domain universal quantification |
-| Idris2 | 23 `?holes` across 4 files (zero `partial` annotations) | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged; all `partial` markers cleared 2026-06-02 (PRs #108 + #109) |
+| Idris2 | 22 `?holes` across 4 files (zero `partial` annotations) | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged; all `partial` markers cleared 2026-06-02 (PRs #108 + #109); reverseConcat closed via PR #115 |
 
-Idris2 holes by file (counts as of 2026-06-02):
+Idris2 holes by file (counts as of 2026-06-02, post-#115):
 - `proofs/idris2/src/Filesystem/Operations.idr`: 11 holes (mkdir/rmdir, touch/rm, write, op-independence, CNO)
-- `proofs/idris2/src/Filesystem/RMO.idr`: 4 holes (overwrite, audit log; secureDelete + gdprDelete CLOSED via PRs #105+#108)
-- `proofs/idris2/src/Filesystem/Composition.idr`: 5 holes (reverseConcat + Operations.idr drive-by holes; the prior 7 `partial` markers were cleared by direct-primitive refactor in PR #109)
+- `proofs/idris2/src/Filesystem/RMO.idr`: 4 holes (overwrite, audit log; secureDelete + gdprDelete CLOSED via PRs #105+#108; parse fixes via #112 + #113)
+- `proofs/idris2/src/Filesystem/Composition.idr`: 4 holes (Operations.idr drive-by holes; the prior 7 `partial` markers cleared via PR #109; reverseConcat closed via PR #115)
 - `proofs/idris2/src/Filesystem/Model.idr`: 3 holes (equivSym + equivTrans + equivReflProof; the last added when DecEq Path fix landed via PR #105)
 
 All `partial` markers in `proofs/idris2/src/Filesystem/*.idr` were cleared 2026-06-02 (PRs #108 + #109, closing #89). The total `partial` count is now zero. Closure path for the remaining 23 holes: discharge with the precondition lemma per theorem.
@@ -52,6 +52,7 @@ All `partial` markers in `proofs/idris2/src/Filesystem/*.idr` were cleared 2026-
 | 2026-06-02 | Idris2 RMO theorem-shape redesigns | `secureDeleteNotInjective` (closes #60) + `gdprDeletionCompliant` structural redesign (closes #61) via PR #105 |
 | 2026-06-02 | Idris2 partial-marker sweep | All 10 `partial` annotations on `RMO.idr` + `Composition.idr` cleared (PRs #108 + #109, closing #89) |
 | 2026-06-02 | Idris2 build oracle | `idris-verification.yml` workflow + Justfile recipes shipped (PR #106, closes #70) |
+| 2026-06-02 | Idris2 0.8.0 parse fixes | `AuditEntry.proof` keyword-clash rename (PR #112); `hardwareEraseIrreversible` multi-line signature fix (PR #113); `reverseConcat` closed via `Data.List.revAppend` (PR #115) |
 
 ### What Needs Proving (current, prioritised)
 

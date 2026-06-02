@@ -29,10 +29,10 @@ This directory contains **executable specifications** of filesystem operations w
 |--------|---------|--------|-------|
 | `Filesystem.Model` | Core types: Path, Filesystem, FSEntry | ✅ Implemented | 3 (equivalence) |
 | `Filesystem.Operations` | mkdir, rmdir, touch, rm, writeFile | ✅ Implemented | 11 (reversibility) |
-| `Filesystem.Composition` | Operation sequences, undo/redo | ✅ Implemented | 5 (composition) |
+| `Filesystem.Composition` | Operation sequences, undo/redo | ✅ Implemented | 4 (composition) |
 | `Filesystem.RMO` | Irreversible operations (GDPR) | ✅ Implemented | 4 (irreversibility) |
 
-**Total**: 4 modules, 23 proof holes to fill, 0 `partial` annotations (cleared 2026-06-02 via PRs #108 + #109)
+**Total**: 4 modules, 22 proof holes to fill, 0 `partial` annotations (cleared 2026-06-02 via PRs #108 + #109; reverseConcat closed via PR #115)
 
 ### Proof Holes (TODO)
 
@@ -110,8 +110,8 @@ just verify-idris2   # build + count distinct ?holes for regression tracking
 `build-idris2` currently fails on pre-existing issues outside the #60/#61/#89 scope:
 
 - `Filesystem/Model.idr` — `equivSym` / `equivTrans` / `equivReflProof` are deliberate `?holes`; trivial closure when needed.
-- `Filesystem/RMO.idr` — `hardwareEraseIrreversible`'s `() -> Filesystem` parameter has a parse issue under Idris2 0.8.0 (tracked as part of #94, the remaining practice gaps under #45). The 10 `partial` annotations previously listed in this bullet were cleared 2026-06-02 by PRs #108 + #109 (closing #89).
-- `Filesystem/Composition.idr` — 5 remaining holes pending Coq/Lean port.
+- `Filesystem/RMO.idr` — `hardwareEraseIrreversible` parse issue under Idris2 0.8.0 fixed 2026-06-02 via PR #113 (multi-line → single-line signature using `Unit`); `AuditEntry.proof` keyword-clash fixed via PR #112. The 10 `partial` annotations previously listed in this bullet were cleared 2026-06-02 by PRs #108 + #109 (closing #89).
+- `Filesystem/Composition.idr` — 4 remaining holes pending Coq/Lean port (reverseConcat closed 2026-06-02 via PR #115 using `Data.List.revAppend`).
 
 The CI job is configured non-blocking until the pre-existing parse/typecheck
 issues land. Once green, flip the final `exit 0` in `idris-verification.yml`
@@ -285,7 +285,7 @@ pub extern "C" fn vsh_mkdir_wrapper(path: *const c_char) -> c_int {
 
 ### Phase 1: Complete Proofs (Weeks 1-2)
 
-- [ ] Fill all 23 proof holes
+- [ ] Fill all 22 proof holes
 - [ ] Verify totality of all functions
 - [ ] Add property tests
 
