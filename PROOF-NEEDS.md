@@ -2,9 +2,11 @@
 <!-- SPDX-License-Identifier: MPL-2.0 -->
 <!-- Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk> -->
 
-> **Reconciled 2026-06-02.** This file used to list 7 open Agda postulates
-> from a pre-2026-04-03 snapshot — all 7 were closed during that session
-> (see `docs/PROOF_HOLES_AUDIT.md`). The actual current state below.
+> **Reconciled 2026-06-02 (afternoon).** Earlier sweeps closed the
+> Agda postulates (2026-04-03). This pass closed the remaining 3 Coq
+> admits (#56 / #57 / #58 — see "Foundational Closure" below) and
+> reconciled the Idris2-hole inventory against the live source. The
+> actual current state below.
 >
 > Canonical detail: **[docs/PROOF-NARRATIVE.adoc](docs/PROOF-NARRATIVE.adoc)**
 > (assumption registry, cross-system witness matrix) and
@@ -23,19 +25,24 @@
 | Layer | Item | Location | Nature |
 |---|---|---|---|
 | Agda | `postulate funext` | `proofs/agda/FilesystemModel.agda:161-162` | Standard intensional-TT axiom; provable under `--cubical` |
-| Coq | `Admitted` — `mkdir_two_dirs_reversible` (non-LIFO sequence reversal) | `proofs/coq/filesystem_composition.v:697` | Tracked as #56 — needs LIFO-sequence restatement |
-| Coq | `Admitted` — `overwrite_pass_equalizes_storage` (model gap) | `proofs/coq/rmo_operations.v:422` | Tracked as #57 — needs `Hgeom` strengthening or conclusion relaxation |
-| Coq | `Admitted` — `obliterate_not_injective` (downstream of #57) | `proofs/coq/rmo_operations.v:535` | Tracked as #58 — reconnects once #57 closes |
 | Coq | `Axiom is_empty_dir_dec` (justified) | `proofs/coq/posix_errors.v` | Infinite-domain universal quantification |
-| Idris2 | 22 `?holes` across 4 files (zero `partial` annotations) | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged; all `partial` markers cleared 2026-06-02 (PRs #108 + #109); reverseConcat closed via PR #115 |
+| Coq | (closed) `mkdir_two_dirs_reversible` | `filesystem_composition.v` | Closed via LIFO restate — only standard funext (#56 closed) |
+| Coq | (closed) `overwrite_pass_equalizes_storage` | `rmo_operations.v` | Closed via `Hgeom` strengthened with `block_overwritten` (#57 closed — zero axioms) |
+| Coq | (closed) `obliterate_not_injective` | `rmo_operations.v` | Closed via threaded strengthened `Hgeom` through `multi_pass_same_start_same_result` (#58 closed — only standard funext) |
+| Idris2 | 16 `?holes` across 4 files (zero `partial` annotations) | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged; classification per issue #119 |
 
-Idris2 holes by file (counts as of 2026-06-02, post-#115):
-- `proofs/idris2/src/Filesystem/Operations.idr`: 11 holes (mkdir/rmdir, touch/rm, write, op-independence, CNO)
-- `proofs/idris2/src/Filesystem/RMO.idr`: 4 holes (overwrite, audit log; secureDelete + gdprDelete CLOSED via PRs #105+#108; parse fixes via #112 + #113)
-- `proofs/idris2/src/Filesystem/Composition.idr`: 4 holes (Operations.idr drive-by holes; the prior 7 `partial` markers cleared via PR #109; reverseConcat closed via PR #115)
-- `proofs/idris2/src/Filesystem/Model.idr`: 3 holes (equivSym + equivTrans + equivReflProof; the last added when DecEq Path fix landed via PR #105)
+**Idris2 holes by file (verified by grep against `proofs/idris2/src/Filesystem/*.idr`, 2026-06-02 PM):**
 
-All `partial` markers in `proofs/idris2/src/Filesystem/*.idr` were cleared 2026-06-02 (PRs #108 + #109, closing #89). The total `partial` count is now zero. Closure path for the remaining 23 holes: discharge with the precondition lemma per theorem.
+| File | Top-level proof holes | Sub-holes (clause `prf` args) |
+|---|---|---|
+| `Operations.idr` | 7 (`mkdirRmdirReversibleProof`, `rmdirMkdirReversibleProof`, `touchRmReversibleProof`, `rmTouchReversibleProof`, `writeFileReversibleProof`, `operationIndependenceProof`, `cnoWriteSameContentProof`) | 4 (`?rmdirPrfAfterMkdir`, `?mkdirPrfAfterRmdir`, `?rmPrfAfterTouch`, `?touchPrfAfterRm`) |
+| `Composition.idr` | 4 (`sequenceReversibleProof`, `compositionReversibleProof`, `undoRedoIdentityProof`, `undoRedoCompositionProof`) | 0 |
+| `Model.idr` | 2 (`equivReflProof`, `equivTransProof`; `equivSymProof` is closed via `andCommutative`) | 0 |
+| `RMO.idr` | 3 (`overwriteIrreversibleProof`, `hardwareEraseIrreversibleProof`, `auditTrailCompletenessProof`; `appendOnlyAuditLogProof` is closed via `Refl`) | 0 |
+
+Drift from previous PROOF-NEEDS.md tally (22 holes) to current (16 holes) is mechanical: `equivSymProof` and `appendOnlyAuditLogProof` closed silently during the 2026-06-02 morning sweep (visible by grep but the inventory text was not updated). No body changes — this paragraph reconciles the count.
+
+All `partial` markers in `proofs/idris2/src/Filesystem/*.idr` were cleared 2026-06-02 (PRs #108 + #109, closing #89). The total `partial` count is zero.
 
 ### Foundational Closure (history)
 
@@ -53,29 +60,84 @@ All `partial` markers in `proofs/idris2/src/Filesystem/*.idr` were cleared 2026-
 | 2026-06-02 | Idris2 partial-marker sweep | All 10 `partial` annotations on `RMO.idr` + `Composition.idr` cleared (PRs #108 + #109, closing #89) |
 | 2026-06-02 | Idris2 build oracle | `idris-verification.yml` workflow + Justfile recipes shipped (PR #106, closes #70) |
 | 2026-06-02 | Idris2 0.8.0 parse fixes | `AuditEntry.proof` keyword-clash rename (PR #112); `hardwareEraseIrreversible` multi-line signature fix (PR #113); `reverseConcat` closed via `Data.List.revAppend` (PR #115) |
+| 2026-06-02 PM | Coq admit triumvirate | `mkdir_two_dirs_reversible` restated to LIFO and closed (#56); `overwrite_pass_equalizes_storage` strengthened with `block_overwritten` constraint, closed with zero new axioms (#57); `obliterate_not_injective` threaded through the strengthened lemma + `multi_pass_same_start_same_result`, closed with only standard funext (#58). Coq layer now has **zero `Admitted` markers** (only the justified `Axiom is_empty_dir_dec` remains). |
 
-### What Needs Proving (current, prioritised)
+### What Needs Proving (current, prioritised by tractability × value)
 
-See `docs/PROOF-OPEN-FRONTIER.adoc` for the full Tier-S/A/B/C/D catalogue.
-Highlights:
+See `docs/PROOF-OPEN-FRONTIER.adoc` for the full Tier-S/A/B/C/D
+catalogue. The list below is the **session-2026-06-02 PM** prioritised
+attack-list, reconciled against actual file state and ranked against
+prior-session findings (memory: `feedback_proven_overly_cautious_owed_pattern`
++ `reference_idris2_0_8_0_reduction_map` indicate that several
+ostensibly-tractable holes are blocked on primitive eq-reflexivity).
 
-**Tier S (foundational)**:
-1. Lean → Rust mechanised refinement
-2. Close the 3 remaining Coq `Admitted` markers (#56 / #57 / #58 — design-gap follow-ups of the #55 build-oracle closure)
-3. Crash-consistency for begin/commit/rollback
-4. Concurrency safety (two `vsh` invocations on shared filesystem)
+#### Priority 1 — visible, tractable in 1-2 PRs
 
-**Tier A (single-PR, <1 day each)**:
-- Idris2: 11 of the 23 holes are purely-structural and could land in one porting PR
-- Glob expansion termination + complexity bound
-- Pratt-style precedence test corpus (POSIX shell `&&`/`||`/`!`)
-- Path-traversal containment proof (`resolve_path` cannot escape sandbox)
+1. **Idris2 Cat-A theorem-shape redesigns** (per issue #119 Category A):
+   - `cnoWriteSameContentProof` (`Operations.idr:254`) — restate to `equiv (writeFile p c fs) fs = True` rather than `=`, since `writeFile` re-heads the entries list (`addEntry ∘ removeEntry`). Refuted-as-stated.
+   - The remaining `appendOnlyAuditLogProof` from issue #119 Cat A is already closed via `Refl` in the live source — verify and remove from inventory if not done.
+2. **Idris2 Cat-D documented axioms** (per issue #119 Cat D, RMO physical claims): mark `overwriteIrreversibleProof` + `hardwareEraseIrreversibleProof` as explicit axiomatic placeholders (NIST SP 800-88 + Shannon entropy; physical hardware claims). Idris2 0.8.0 has no `postulate` keyword, so use a labelled-`believe_me` with the axiom name embedded + CI explicit-list gate. Recommended single PR.
+3. **Idris2 `auditTrailCompletenessProof`** (`RMO.idr:270`) — tractable AFTER (1) lands, since closure follows from the audit-log invariant (`isAppendOnly` chain ⇒ membership).
 
-**Tier B (multi-day)**:
-- POSIX 2024 conformance proofs per M-feature
-- Subshell `(...)` scoping
-- Word splitting under quote-context
-- Audit log HMAC signing + verification (impl + proof)
+#### Priority 2 — known-blocked, need primitive-eq groundwork first
+
+These were initially classified Cat-B (gap-per-PR) in issue #119 but the
+2026-06-02 AM session found that **primitive String/Bits8 eq-reflexivity
+in Idris2 0.8.0 only reduces on literals**, not opaque variables.
+Closure requires either:
+(a) a hand-rolled `Path` equality reflexivity lemma threaded through
+`all`/`elem`, or (b) migration to a structural set-of-paths model that
+sidesteps `==` on primitives:
+
+- `equivReflProof` (Model.idr:216)
+- `equivTransProof` (Model.idr:244)
+- `undoRedoIdentityProof` (Composition.idr:215) — also missing the
+  `isReversible op = True` precondition: provably refuted for
+  non-reversible `op` since `applyOp (inverse op) (applyOp op fs) ≠ fs`.
+  **Cat-A redesign required, not Cat-B.**
+- `undoRedoCompositionProof` (Composition.idr:235) — same shape issue.
+
+These are tracked under issue #119 with the corrected classification.
+
+#### Priority 3 — Tier-S foundational (research-level)
+
+1. **Lean → Rust mechanised refinement** (F-1) — biggest verification
+   gap; today's link is property tests at ~85% confidence. Tractable
+   slice: `mkdir` + `rmdir` only, ~1 week.
+2. **Crash-consistency for begin/commit/rollback** (F-3) — gated on
+   modelling `Filesystem × UndoLog` first.
+3. **Concurrency safety** (F-4) — Iris-in-Coq is the strongest match.
+
+#### Priority 4 — Tier-A single-PR proofs from the frontier
+
+These are independent of the proof-hole inventory and can land any time:
+
+- Glob expansion termination + complexity bound (A-6)
+- Pratt-style short-circuit `&&`/`||` precedence proof (A-8)
+- Quote-context preservation matrix (A-11)
+- Path traversal containment lemma (A-12, regression-guard for the
+  2026-02-12 audit fix)
+- Pipe associativity property test → Lean lemma (A-9)
+
+#### Priority 5 — Tier-B multi-day
+
+POSIX-2024 per-M-feature (B-1), Subshell scoping (B-2), Word splitting
+under quote-context (B-3), Pipeline data-flow (B-4), Job-control state
+machine (B-5), Symlink-loop detection (B-6), Audit-log HMAC (B-7),
+MCP-response conformance (B-8).
+
+#### Priority 6 — Tier-C marginal-but-named
+
+Ten items in `docs/PROOF-OPEN-FRONTIER.adoc§Tier-C`. Each is minutes to
+state and seconds to check; cumulative effect is a much harder system
+to regress.
+
+#### Priority 7 — Tier-D tooling
+
+`Print Assumptions` CI guard (D-1, load-bearing — without it any
+re-introduced admit is silent drift), Idris2 `--check-hole` CI (D-2),
+cross-system theorem-name alignment (D-3), proof-narrative
+auto-generation (D-4), witness-coverage compile-time test (D-5).
 
 ### Recommended Provers
 
@@ -87,18 +149,35 @@ Highlights:
 - **Mizar** — set-theoretic third opinion
 - **Z3 SMT** — counterexample search for non-existent recovery functions
 
-### Priority
+### Priority Summary
 
-**HIGH** — 3 Coq `Admitted` markers (#56/#57/#58) + 23 Idris2 holes are
-visible and closeable; the bigger frontier (Lean→Rust refinement,
-crash-consistency, concurrency) is real research-level work.
+**HIGH (closeable now)** — Idris2 Cat-A redesigns (`cnoWriteSameContentProof`)
++ Cat-D axiomatic markers (3 RMO physical claims) — both are
+single-PR.
+
+**MEDIUM (needs infrastructure)** — the 4 ostensibly-Cat-B holes
+(equivRefl/Trans + undoRedoIdentity/Composition) are blocked on
+primitive-eq reflexivity OR theorem-shape redesign. Closure needs (a)
+a `Path`-equality reflexivity lemma + threading, or (b) a model
+migration sidestepping primitive `==`. Filing under #119 reclassified.
+
+**LOW BUT BLOCKING THE BIG CLAIMS** — Lean→Rust mechanised refinement,
+crash-consistency under WAL/undo-log model, concurrency safety. These
+are research-level work; the bigger frontier is real.
 
 `secureDeleteNotInjective` (closes #60) and `gdprDeletionCompliant`
 (closes #61) shipped 2026-06-02 via PR #105 with corrected theorem
-shapes: the prior `?secureDeleteIrreversibleProof` /
-`?gdprDeletionCompliantProof` holes had non-theorem signatures
-(refutable by `recovery = id` / `recovery = const empty` respectively)
-and have been redesigned. The MAA/GDPR claims now rest on these closed
-theorems plus `?overwriteIrreversibleProof` (still open) and axiomatic
-NIST SP 800-88 / Shannon-entropy / physical-world assumptions which
-should be made explicit (see narrative §10).
+shapes (the prior holes had non-theorem signatures refutable by
+`recovery = id` / `recovery = const empty`). The MAA/GDPR claims now
+rest on these closed theorems plus `?overwriteIrreversibleProof`
+(still open as Cat-D placeholder) and axiomatic NIST SP 800-88 /
+Shannon-entropy / physical-world assumptions which should be made
+explicit (see narrative §10).
+
+The three Coq admits (#56 / #57 / #58) closed in the 2026-06-02 PM
+session bring the Coq layer to **zero `Admitted` markers** — only the
+single justified `Axiom is_empty_dir_dec` remains. `obliterate_not_injective`
+— the formal grounding for the "mathematically irreversible secure
+deletion" marketing claim — is now soundly proven (under the
+strengthened `block_overwritten`-aware geometry hypothesis, which is
+trivially satisfied for first-time obliteration).
