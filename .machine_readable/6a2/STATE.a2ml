@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 # STATE.a2ml — Project state checkpoint
-# Last updated: 2026-06-02 (post-merge sweep — PRs #105/#106/#108/#109 closed #60/#61/#70/#89)
+# Last updated: 2026-06-02 (afternoon sweep — PRs #110/#112/#113/#114/#115/#116/#121/#123/#124 landed; LICENSE SPDX + 4 admits annotated; #119 Cat-A non-theorems redesigned)
 
 [metadata]
 project = "valence-shell"
@@ -12,6 +12,25 @@ status = "active"
 name = "valence-shell"
 completion-percentage = 78
 phase = "advanced-research-prototype"
+
+[recent-work-2026-06-02]
+session = "2026-06-02 morning + afternoon sweep — inbox cleanup + root-cause main fixes"
+focus = "Clear governance reds inherited by 4 open PRs; LICENSE SPDX prepend; annotate 4 admits in rmo_operations.v; Idris2 0.8.0 keyword/parse fixes"
+prs-merged-2026-06-02 = [
+  "#110 fix(cicd): clear 2 governance reds inherited by 4 open PRs — LICENSE SPDX prepend + 4 (* TRUSTED: ... *) markers in proofs/coq/rmo_operations.v:419/420/530/531",
+  "#112 fix(proofs/idris2): rename AuditEntry.proof to avoid Idris2 0.8.0 keyword clash",
+  "#113 fix(proofs/idris2): RMO.idr hardwareEraseIrreversible parse fix",
+  "#114 docs: refresh state after 2026-06-02 post-merge sweep",
+  "#115 proofs(idris2): close reverseConcat via Data.List.revAppend (#89 sub-marker)",
+  "#116 docs: followup for PRs #112 / #113 / #115",
+  "#121 fix(proofs/idris2): redesign Category A non-theorems (#119A)",
+  "#123 proof(model): close equivSym via Data.Bool.andCommutative (1/5 Cat B)",
+  "#124 chore(license): PMPL → MPL-2.0 sweep (6 files) — owner-orchestrated manual cleanup"
+]
+findings-from-session = [
+  "trusted-base script regex (standards/scripts/check-trusted-base.sh) is greedy on comment-block prose — `Admitted pending follow-up. *)` is matched as literal admit. Mitigation: reword to `Stub pending follow-up. *)` OR insert `(* TRUSTED: ... *)` inline marker immediately before the Admitted.",
+  "Idris2 0.8.0 reserved keywords + parser gotchas: `proof` reserved (record field name clash), multi-line type-sig + -- comment + () -> X parameter combo mis-parses (see [[reference_idris2_0_8_0_reserved_keywords]])"
+]
 
 [recent-work]
 session = "2026-04-19 CRG-AUDIT-2026-04-18 closure pass (8 of 10 items closed)"
