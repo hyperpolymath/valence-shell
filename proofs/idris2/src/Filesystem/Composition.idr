@@ -150,15 +150,17 @@ sequenceSplit (op :: ops1) ops2 fs =
   rewrite sequenceSplit ops1 ops2 (applyOp op fs) in Refl
 
 ||| Reverse of concatenation is concatenation of reverses (reversed).
-||| Body is a hole — Idris2 0.8.0's `reverse` definition does not reduce
-||| in the way the original closed-form proof assumed; needs a different
-||| approach (likely via `Data.List.reverseOntoSpec` or a helper lemma).
-||| Tracked under #89.
+||| Closes via `Data.List.revAppend` from Idris2 0.8.0's base stdlib.
+||| The stdlib lemma is stated with the equality symmetric to ours
+||| (`revAppend xs ys : reverse ys ++ reverse xs = reverse (xs ++ ys)`),
+||| so we apply `sym`. The local restatement keeps call sites stable
+||| and matches the conventional "concatenation distributes over
+||| reverse" framing.
 export
 reverseConcat :
   (xs, ys : List a) ->
   reverse (xs ++ ys) = reverse ys ++ reverse xs
-reverseConcat xs ys = ?reverseConcatProof
+reverseConcat xs ys = sym (revAppend xs ys)
 
 --------------------------------------------------------------------------------
 -- Undo/Redo Stack
