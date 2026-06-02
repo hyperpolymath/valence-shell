@@ -8,6 +8,7 @@
 
 module Filesystem.Model
 
+import Data.Bool
 import Data.List
 import Data.Maybe
 import Data.String
@@ -214,12 +215,25 @@ export
 equivRefl : (fs : Filesystem) -> equiv fs fs = True
 equivRefl (MkFS entries) = ?equivReflProof
 
-||| Symmetry of equivalence
+||| Symmetry of equivalence.
+|||
+||| Closed via `Data.Bool.andCommutative` from Idris2 0.8.0's base
+||| stdlib. The two `all`-predicates inside `equiv` are conjoined; the
+||| reverse-direction goal is the same conjunction commuted, so a
+||| single rewrite by `andCommutative` collapses it to the premise.
+|||
+||| Does NOT need primitive String/Bits8 `==` reflexivity — this is
+||| pure boolean algebra over the already-evaluated predicate values.
+||| Contrast with `equivRefl` / `equivTrans`, which DO require leaf-
+||| level eq-reflexivity (tracked separately under issue #119).
 export
 equivSym : (fs1, fs2 : Filesystem) ->
            equiv fs1 fs2 = True ->
            equiv fs2 fs1 = True
-equivSym (MkFS e1) (MkFS e2) prf = ?equivSymProof
+equivSym (MkFS e1) (MkFS e2) prf =
+  rewrite andCommutative (all (\e => elem e e1) e2)
+                         (all (\e => elem e e2) e1)
+  in prf
 
 ||| Transitivity of equivalence
 export
