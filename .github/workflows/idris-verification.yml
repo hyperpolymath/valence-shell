@@ -1,0 +1,121 @@
+# SPDX-License-Identifier: MPL-2.0
+name: Idris2 Verification Build
+
+# Idris2 build oracle for proofs/idris2/. Mirrors the Coq verify-proofs job in
+# validation.yml and the lean-verification.yml structure. Closes #70.
+#
+# Strategy: build Idris2 0.8.0 from source on first run, cache the install for
+# subsequent runs. Runs `idris2 --build valence-shell.ipkg` against the ipkg
+# manifest. Hole inventory is surfaced to the job summary as a regression signal
+# (not a gate — holes are tracked as honest debt; see #94).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'proofs/idris2/**'
+      - '.github/workflows/idris-verification.yml'
+  pull_request:
+    paths:
+      - 'proofs/idris2/**'
+      - '.github/workflows/idris-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-idris2:
+    name: verify-idris2 (Idris2 build oracle)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
+
+      - name: Install Chez Scheme (Idris2 runtime dependency)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chezscheme
+
+      - name: Cache Idris2 install
+        id: idris2-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
+        with:
+          path: ~/.idris2
+          key: idris2-0.8.0-${{ runner.os }}-v1
+
+      - name: Build Idris2 0.8.0 from source
+        if: steps.idris2-cache.outputs.cache-hit != 'true'
+        run: |
+          # v0.8.0 release tag. Bootstrap via Chez Scheme — the only fully-
+          # supported backend for self-hosting per upstream README.
+          git clone --branch v0.8.0 --depth 1 https://github.com/idris-lang/Idris2.git /tmp/idris2-src
+          cd /tmp/idris2-src
+          make bootstrap SCHEME=chez
+          make install
+          # Install the stdlib packages bundled with the source tree. These
+          # are required by valence-shell.ipkg's `depends = base, contrib`.
+          make install-libs
+
+      - name: Configure PATH + IDRIS2_PREFIX
+        run: |
+          echo "$HOME/.idris2/bin" >> $GITHUB_PATH
+          echo "IDRIS2_PREFIX=$HOME/.idris2" >> $GITHUB_ENV
+
+      - name: Show Idris2 version
+        run: idris2 --version
+
+      - name: List installed Idris2 packages
+        run: idris2 --list-packages
+
+      - name: Build Idris2 proofs (oracle)
+        id: idris2-build
+        working-directory: proofs/idris2
+        run: |
+          set +e
+          idris2 --build valence-shell.ipkg 2>&1 | tee idris2-build.log
+          echo "build_exit=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+          # Surface result without failing the step — the post-step explicitly
+          # decides gate behaviour. Allows hole inventory to always run.
+          exit 0
+
+      - name: Idris2 hole inventory
+        if: always()
+        working-directory: proofs/idris2
+        run: |
+          echo "## Idris2 build oracle (#70)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          # Holes are Idris2 `?identifier` lexemes. Count distinct names.
+          holes=$(grep -rohE "\\?[a-zA-Z_][a-zA-Z0-9_']*" src/ 2>/dev/null | sort -u | wc -l)
+          echo "Distinct \`?holes\`: **$holes**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ steps.idris2-build.outputs.build_exit }}" == "0" ]]; then
+            echo "Build status: **PASS**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Build status: **FAIL** (exit ${{ steps.idris2-build.outputs.build_exit }})" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "See pre-existing debt in #94 (10 Idris2 partial markers + Model.idr/RMO.idr/Composition.idr typecheck gaps)." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "<details><summary>Build log (last 60 lines)</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -60 idris2-build.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: idris2-build-log
+          path: proofs/idris2/idris2-build.log
+
+      - name: Gate on build status
+        if: steps.idris2-build.outputs.build_exit != '0'
+        run: |
+          echo "::warning::Idris2 build oracle FAILED (exit ${{ steps.idris2-build.outputs.build_exit }}). Tracked as pre-existing debt in #94."
+          # Non-blocking by default. To make this a required gate once pre-
+          # existing issues are fixed, change `exit 0` to `exit 1` below and
+          # add to branch protection's required checks list.
+          exit 0

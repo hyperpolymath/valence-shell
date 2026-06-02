@@ -94,6 +94,29 @@ idris2 --build valence-shell.ipkg
 idris2 --codegen chez --output vsh-core src/Main.idr
 ```
 
+### Build oracle (Justfile)
+
+The `build-idris2` and `verify-idris2` recipes in the top-level `Justfile`
+wrap the above. They are mirrored by the `idris-verification.yml` CI job.
+
+```bash
+# From repo root:
+just build-idris2    # cd proofs/idris2 && idris2 --build valence-shell.ipkg
+just verify-idris2   # build + count distinct ?holes for regression tracking
+```
+
+#### Known oracle status (2026-06-01)
+
+`build-idris2` currently fails on pre-existing issues outside #60/#61's scope:
+
+- `Filesystem/Model.idr` — `equivSym` / `equivTrans` are deliberate `?holes`; trivial closure when needed.
+- `Filesystem/RMO.idr` — `hardwareEraseIrreversible`'s `() -> Filesystem` parameter has a parse issue under Idris2 0.8.0 (tracked as part of #94 alongside the 10 partial markers).
+- `Filesystem/Composition.idr` — multiple holes pending Coq/Lean port.
+
+The CI job is configured non-blocking until the pre-existing parse/typecheck
+issues land. Once green, flip the final `exit 0` in `idris-verification.yml`
+to `exit 1` and add the job to branch protection's required checks.
+
 ### Run Tests
 
 ```bash
