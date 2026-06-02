@@ -22,3 +22,23 @@ can-create-files = true
 # - Never use banned languages (TypeScript, Python, Go, etc.)
 # - Never place state files in repository root (must be in .machine_readable/)
 # - Never use AGPL license (use MPL-2.0)
+# - Never violate the Echo Types / Ochrance bridge forbidden-moves:
+#     no "production-ready", no "mechanised Lean-to-Rust", no "RMO/GDPR beyond stubs",
+#     no "Echo Types proves Valence Shell implementation correctness",
+#     no "Ochrance cryptographic integrity" while upstream gaps remain.
+#   See docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc + MUST.contractile invariants-bridge.
+#   CI-enforced via .github/scripts/check-bridge-forbidden-phrases.sh.
+
+[bridge-aware-rules]
+# Bridge entry points agents must read before changing related code/docs.
+read-first = "docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc"
+manifest = ".machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml"
+status = "documentation-and-orientation-only"
+mechanised = false
+# When working on Lean→Rust correspondence, RMR/RMO vocabulary, or
+# Ochrance attestation surfaces, the bridge doc's forbidden-moves
+# section MUST be re-checked. Cross-doc echo-types audit obligation
+# also applies (per estate memory feedback_proofs_must_check_and_cross_doc_echo_types).
+echo-types-audit-required = true
+ci-enforcement-script = ".github/scripts/check-bridge-forbidden-phrases.sh"
+ci-workflow = ".github/workflows/bridge-forbidden-phrases.yml"
