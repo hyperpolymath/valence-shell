@@ -50,8 +50,10 @@ data ObliterationProof : Path -> Type where
 |||
 ||| This is DELIBERATELY irreversible. Once called, data is permanently destroyed.
 ||| Returns a proof that data was obliterated.
+|||
+||| Total: 3 exhaustive cases on SecureDeleteLevel, no recursion. The `IO`
+||| wrapper does not introduce partiality — IO computations can be total.
 export
-partial  -- Partial because it performs I/O
 secureDelete :
   (p : Path) ->
   (level : SecureDeleteLevel) ->
@@ -148,8 +150,10 @@ record GDPRDeletionProof where
   auditLog : String
 
 ||| GDPR-compliant delete operation
+|||
+||| Total: do-block with case-split on Either, calls only total functions
+||| (secureDelete is now total). IO does not introduce partiality.
 export
-partial
 gdprDelete :
   (p : Path) ->
   (requestTime : Integer) ->
