@@ -11,7 +11,8 @@ readme = "README.md"
 sourcedir = "src"
 
 -- Core modules
-modules = Filesystem.Model
+modules = Filesystem.Axioms
+        , Filesystem.Model
         , Filesystem.Operations
         , Filesystem.Composition
         , Filesystem.RMO

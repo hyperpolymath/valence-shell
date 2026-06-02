@@ -10,9 +10,12 @@ module Filesystem.Model
 
 import Data.Bool
 import Data.List
+import Data.List.Elem
 import Data.Maybe
 import Data.String
 import Decidable.Equality
+
+import Filesystem.Axioms
 
 %default total
 
@@ -210,10 +213,116 @@ equiv (MkFS entries1) (MkFS entries2) =
   all (\e => elem e entries2) entries1 &&
   all (\e => elem e entries1) entries2
 
-||| Reflexivity of equivalence
+--------------------------------------------------------------------------------
+-- Primitive-eq reflexivity (lifted from Filesystem.Axioms)
+--------------------------------------------------------------------------------
+
+||| `Path` equality is reflexive — proved by structural induction over
+||| `Path`, using `axStringEqRefl` at the leaf for each `String` component.
+export
+pathEqRefl : (p : Path) -> (p == p) = True
+pathEqRefl Root = Refl
+pathEqRefl (Cons s rest) =
+  rewrite axStringEqRefl s in
+  rewrite pathEqRefl rest in
+  Refl
+
+||| `FSEntry` equality is reflexive — `Dir == Dir = True` by definition,
+||| `File c == File c = c == c = True` via `fileContentEqRefl`.
+export
+fsEntryEqRefl : (e : FSEntry) -> (e == e) = True
+fsEntryEqRefl Dir = Refl
+fsEntryEqRefl (File c) = fileContentEqRefl c
+
+||| Tuple `(Path, FSEntry)` equality reflexivity — combines `pathEqRefl`
+||| and `fsEntryEqRefl` through the derived `Eq` instance.
+export
+entryEqRefl : (e : (Path, FSEntry)) -> (e == e) = True
+entryEqRefl (p, fe) =
+  rewrite pathEqRefl p in
+  rewrite fsEntryEqRefl fe in
+  Refl
+
+--------------------------------------------------------------------------------
+-- Internal helpers for `elem` / `all` reflexivity
+--
+-- Idris2 0.8.0's `elem` desugars through the `Foldable` interface to
+-- `foldl (\acc, e => acc || Delay (x == e)) False xs`, not the textbook
+-- `(x == y) || elem x ys` recursion. So the proofs below pattern-match
+-- the foldl form directly.
+--------------------------------------------------------------------------------
+
+||| Once the foldl accumulator hits `True`, the result is `True`
+||| regardless of the remaining list. `True || _` reduces by the first
+||| pattern of `Prelude.Bool.||` without forcing the lazy argument.
+private
+foldlOrTrueIdempotent : (xs : List a) -> (g : a -> Lazy Bool) ->
+                        foldl (\acc, e => acc || g e) True xs = True
+foldlOrTrueIdempotent []        _ = Refl
+foldlOrTrueIdempotent (_ :: ys) g = foldlOrTrueIdempotent ys g
+
+||| `elem x (x :: ys) = True` given `x == x = True`.
+||| Threads the accumulator from `False || (x == x)` to `True`, then
+||| relies on `foldlOrTrueIdempotent` for the tail.
+private
+elemHere : Eq a => (x : a) -> (refl : (x == x) = True) -> (ys : List a) ->
+           elem x (x :: ys) = True
+elemHere x refl ys =
+  rewrite refl in foldlOrTrueIdempotent ys (\e => x == e)
+
+||| If the accumulator starts `True` instead of `False`, the foldl
+||| stays `True` regardless of the list / element comparisons. This is
+||| the structural lift used by `elemWeaken`.
+private
+foldlOrAccTrueStays : (xs : List a) -> (g : a -> Lazy Bool) -> (b : Bool) ->
+                      foldl (\acc, e => acc || g e) b xs = True ->
+                      foldl (\acc, e => acc || g e) (b || True) xs = True
+foldlOrAccTrueStays xs g True  prf = prf
+foldlOrAccTrueStays xs g False prf = foldlOrTrueIdempotent xs g
+
+||| `elem` weakens on the right via the foldl form: an extra cons in
+||| front does not change the result once the accumulator has been
+||| forced True somewhere in the tail.
+private
+elemWeaken : Eq a => (x, y : a) -> (ys : List a) ->
+             elem x ys = True -> elem x (y :: ys) = True
+elemWeaken x y ys prf with (x == y)
+  elemWeaken x y ys prf | True  = foldlOrTrueIdempotent ys (\e => x == e)
+  elemWeaken x y ys prf | False = prf
+
+||| For a list of entries where `==` is reflexive on the element type,
+||| every element is `elem` of the list (with `Elem` witness).
+private
+allElemSelfHelper :
+  (xs, fullList : List (Path, FSEntry)) ->
+  ((e : (Path, FSEntry)) -> Elem e xs -> elem e fullList = True) ->
+  all (\e => elem e fullList) xs = True
+allElemSelfHelper []        _        _   = Refl
+allElemSelfHelper (x :: rs) fullList prf =
+  rewrite prf x Here in
+  allElemSelfHelper rs fullList (\e, isIn => prf e (There isIn))
+
+||| Every element of an entries list is `elem` of itself.
+private
+allElemSelf :
+  (xs : List (Path, FSEntry)) -> all (\e => elem e xs) xs = True
+allElemSelf xs = allElemSelfHelper xs xs (\e, isIn => elemSelfWitness e xs isIn)
+  where
+    elemSelfWitness :
+      (e : (Path, FSEntry)) -> (ys : List (Path, FSEntry)) ->
+      Elem e ys -> elem e ys = True
+    elemSelfWitness e (e :: rest)  Here          =
+      elemHere e (entryEqRefl e) rest
+    elemSelfWitness e (y :: rest) (There later) =
+      elemWeaken e y rest (elemSelfWitness e rest later)
+
+||| Reflexivity of equivalence. Closure path (Q1-C pilot, 2026-06-02 PM):
+||| structural induction over the entries list using the primitive-eq
+||| axioms registered in `Filesystem.Axioms`.
 export
 equivRefl : (fs : Filesystem) -> equiv fs fs = True
-equivRefl (MkFS entries) = ?equivReflProof
+equivRefl (MkFS entries) =
+  rewrite allElemSelf entries in Refl
 
 ||| Symmetry of equivalence.
 |||

@@ -29,7 +29,9 @@
 | Coq | (closed) `mkdir_two_dirs_reversible` | `filesystem_composition.v` | Closed via LIFO restate — only standard funext (#56 closed) |
 | Coq | (closed) `overwrite_pass_equalizes_storage` | `rmo_operations.v` | Closed via `Hgeom` strengthened with `block_overwritten` (#57 closed — zero axioms) |
 | Coq | (closed) `obliterate_not_injective` | `rmo_operations.v` | Closed via threaded strengthened `Hgeom` through `multi_pass_same_start_same_result` (#58 closed — only standard funext) |
-| Idris2 | 16 `?holes` across 4 files (zero `partial` annotations) | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged; classification per issue #119 |
+| Idris2 | `axStringEqRefl` (primitive-eq axiom) | `proofs/idris2/src/Filesystem/Axioms.idr:42` | `believe_me`-backed; registered in `.machine_readable/IDRIS2_AXIOMS.a2ml`; CI-gated via `.github/scripts/check-idris2-believe-me.sh` (Q1-C pilot 2026-06-02 PM) |
+| Idris2 | `axBits8EqRefl` (primitive-eq axiom) | `proofs/idris2/src/Filesystem/Axioms.idr:55` | `believe_me`-backed; registered in `.machine_readable/IDRIS2_AXIOMS.a2ml`; CI-gated (same pilot) |
+| Idris2 | 15 `?holes` across 4 files (zero `partial` annotations) | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged; classification per issue #119; `equivReflProof` closed via Q1-C pilot |
 
 **Idris2 holes by file (verified by grep against `proofs/idris2/src/Filesystem/*.idr`, 2026-06-02 PM):**
 
@@ -37,7 +39,7 @@
 |---|---|---|
 | `Operations.idr` | 7 (`mkdirRmdirReversibleProof`, `rmdirMkdirReversibleProof`, `touchRmReversibleProof`, `rmTouchReversibleProof`, `writeFileReversibleProof`, `operationIndependenceProof`, `cnoWriteSameContentProof`) | 4 (`?rmdirPrfAfterMkdir`, `?mkdirPrfAfterRmdir`, `?rmPrfAfterTouch`, `?touchPrfAfterRm`) |
 | `Composition.idr` | 4 (`sequenceReversibleProof`, `compositionReversibleProof`, `undoRedoIdentityProof`, `undoRedoCompositionProof`) | 0 |
-| `Model.idr` | 2 (`equivReflProof`, `equivTransProof`; `equivSymProof` is closed via `andCommutative`) | 0 |
+| `Model.idr` | 1 (`equivTransProof`; `equivSymProof` closed via `andCommutative`; `equivReflProof` closed via Q1-C pilot using `Filesystem.Axioms`) | 0 |
 | `RMO.idr` | 3 (`overwriteIrreversibleProof`, `hardwareEraseIrreversibleProof`, `auditTrailCompletenessProof`; `appendOnlyAuditLogProof` is closed via `Refl`) | 0 |
 
 Drift from previous PROOF-NEEDS.md tally (22 holes) to current (16 holes) is mechanical: `equivSymProof` and `appendOnlyAuditLogProof` closed silently during the 2026-06-02 morning sweep (visible by grep but the inventory text was not updated). No body changes — this paragraph reconciles the count.
