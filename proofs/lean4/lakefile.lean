@@ -48,3 +48,6 @@ lean_lib PermissionOperations where
 
 lean_lib CrashConsistency where
   srcDir := "."
+
+lean_lib PathTraversal where
+  srcDir := "."
