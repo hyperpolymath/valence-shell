@@ -124,7 +124,19 @@ All share: *Multiple proof systems for cross-validation, honest status reporting
 | `docs/POSIX_COMPLIANCE.md` | Detailed POSIX compliance roadmap: M1-M11 milestones, current status (M1-M9 complete, M10-11 partial)
 
 | `CLAUDE.md` | Comprehensive AI context: honest status (v0.9.0, ~72% complete), architecture, test results, critical issues
+
+| `docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc` | Three-layer architecture (Valence Shell / Echo Types / Ochrance) + forbidden-moves rules for agents and reviewers.
 |===
+
+== Architectural Bridge
+
+Valence Shell does not stand alone. It sits in a three-layer architecture:
+
+* **Valence Shell** (this repo) — shell operations, history, undo/redo, in-model reversibility proofs.
+* **`hyperpolymath/echo-types`** — semantic theory of structured loss; names what is recoverable, constrained, or genuinely lost.
+* **`hyperpolymath/ochrance`** — receipt + attestation substrate (A2ML manifests, Merkle-backed state commitments, repair witnesses).
+
+The bridge is **documentation-and-orientation-only**, not a mechanised dependency. See link:docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc[ECHO-TYPES-OCHRANCE-BRIDGE.adoc] for the canonical forbidden-moves list (no claiming production-readiness, mechanised Lean→Rust correspondence, RMO/GDPR beyond stubs, or Ochrance cryptographic integrity).
 
 == Status
 

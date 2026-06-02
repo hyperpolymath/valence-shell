@@ -81,11 +81,42 @@
   )
 
   ; === Project-Specific Invariants ===
-  ; *REMINDER: Add invariants specific to this repo*
-  ; (must "# Add project-specific invariants here")
+
+  ; Echo Types / Ochrance bridge forbidden-moves (codified from
+  ; docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc — load-bearing for the honesty
+  ; rule about the three-layer architecture).
+  (invariants-bridge
+    (must "no claim that valence-shell is production-ready")
+    (must "no claim that the Lean-to-Rust correspondence is mechanised")
+    (must "no claim that RMO/GDPR support exists beyond stubs")
+    (must "no claim that Echo Types proves valence-shell implementation correctness")
+    (must "no claim of Ochrance cryptographic integrity while hash/attestation gaps remain upstream")
+    (must "no merging of exploratory Echo bridges into core claims without checking echo-types/docs/bridge-status.md")
+    (must "docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc and .machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml MUST both exist")
+    (must "keep RMR (reversible) and RMO (irreversible + audit residue) terminologically distinct")
+  )
 
   (enforcement
     (k9-validator "contractiles/k9/must-check.k9.ncl")
+    (forbidden-phrases-validator
+      ; CI scans README.adoc / EXPLAINME.adoc / CHANGELOG.* / docs/*.adoc /
+      ; docs/*.md for the forbidden phrases below. Match is case-insensitive
+      ; and respects the "no claim of …" framing — quoting them inside the
+      ; bridge doc itself is exempt (the doc is allowed to NAME the
+      ; forbidden moves in order to forbid them).
+      (scan
+        (files "README.adoc" "EXPLAINME.adoc" "CHANGELOG.adoc"
+               "docs/*.adoc" "docs/*.md" ".machine_readable/*.contractile")
+        (exempt-paths "docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc"
+                      ".machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml"
+                      ".machine_readable/MUST.contractile"))
+      (phrases
+        "production-ready"
+        "mechanised lean-to-rust"
+        "mechanized lean-to-rust"
+        "production-grade"
+        "fully verified" )
+      (script ".github/scripts/check-bridge-forbidden-phrases.sh"))
     (ci "quality.yml runs must-check on every PR")
-  )
+    (ci "bridge-forbidden-phrases runs on every PR via governance workflow"))
 )

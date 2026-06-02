@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: MPL-2.0
+# bridge-forbidden-phrases.yml — enforce the Echo Types / Ochrance
+# bridge "forbidden moves" rules on user-facing docs.
+#
+# Per docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc + .machine_readable/
+# ECHO_TYPES_OCHRANCE_BRIDGE.a2ml: the bridge is documentation-and-
+# orientation-only. Claims of production-readiness, mechanised
+# Lean↔Rust correspondence, RMO beyond stubs, Echo-proves-implementation,
+# or Ochrance cryptographic integrity are forbidden in current claim
+# surfaces (README.adoc, EXPLAINME.adoc, CHANGELOG.adoc).
+#
+# The check runs locally too: bash .github/scripts/check-bridge-forbidden-phrases.sh
+#
+# Future estate-wide enforcement: hyperpolymath/standards governance-
+# reusable.yml should pick up this rule for all bridge-tagged repos.
+
+name: Bridge Forbidden Phrases
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: docs/ECHO-TYPES-OCHRANCE-BRIDGE forbidden-phrases
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
+      - name: Run forbidden-phrases checker
+        run: bash .github/scripts/check-bridge-forbidden-phrases.sh

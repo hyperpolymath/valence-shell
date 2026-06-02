@@ -61,7 +61,7 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 * [x] 736 Tests Passing: Unit, correspondence, integration, property, security, doctests (0 failures, 14 ignored)
 
 == Implementation
-* [x] Production-Ready Rust CLI: 95% complete, fully functional shell
+* [x] Advanced-prototype Rust CLI: 95% feature-complete shell (NOT production-ready — see <<_verification_status>>)
 * [x] Offline-First: All proofs verifiable air-gapped
 * [x] Fuzzing: 7 fuzz targets with `cargo-fuzz` integration (parser, arith, job-spec, signal-parse, path-ops, glob-expansion, state-machine)
 
@@ -311,6 +311,26 @@ Valence Shell uses **polyglot verification** across 6 proof systems:
 To reach production: Close extraction gap (Coq → OCaml verification).
 ====
 
+== Bridge to Echo Types + Ochrance
+
+Valence Shell sits inside a three-layer architecture; the other two layers are upstream theory repositories:
+
+[cols="1,2"]
+|===
+| Layer | Role
+
+| **Valence Shell** (this repo)
+| Executes commands; tracks operation history; exposes `explain`/`checkpoint`/`diff`/`replay`; proves reversible-operation properties across the proof stack.
+
+| `hyperpolymath/echo-types`
+| Semantic theory of structured loss. Interprets shell operations as maps `f : Pre -> Post` with proof-relevant residues `Echo f y := Σ (x : A) , (f x ≡ y)`. Names what is recoverable, constrained, observationally equivalent, or genuinely lost.
+
+| `hyperpolymath/ochrance`
+| Receipt + attestation substrate (A2ML manifests, Merkle-backed state commitments, repair witnesses).
+|===
+
+**Status**: the bridge is *documentation-and-orientation-only* — not a mechanised dependency. Read link:docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc[the bridge doc] before claiming production-readiness, mechanised Lean-to-Rust correspondence, RMO/GDPR beyond stubs, or Ochrance cryptographic integrity. Machine-readable companion at link:.machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml[ECHO_TYPES_OCHRANCE_BRIDGE.a2ml].
+
 == Verification Status
 
 === ✅ What IS Guaranteed (by proofs)
@@ -487,7 +507,7 @@ See link:RSR_COMPLIANCE.md[RSR_COMPLIANCE.md] for full report.
 
 Different logical foundations increase confidence. If all 6 systems prove the same theorem, it's highly unlikely all have the same bug.
 
-=== Is this production-ready?
+=== Is this ready to put in production?
 
 **No.** Version 0.9.0 is an advanced research prototype with a working shell (~78% complete), but the extraction gap (Lean → Rust → POSIX) is not formally verified. The Rust CLI is functional and extensively tested (736 tests passing, 0 failures), but lacks a mechanised proof of correspondence to the Lean theorems (~85% confidence via property testing). Use for research, education, and experimentation only.
 

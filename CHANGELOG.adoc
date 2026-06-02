@@ -158,7 +158,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 === Statistics
 - Phase 6 progress: 11/14 milestones complete (78%)
 - Overall completion: 82%
-- Rust CLI: 95% complete, production-ready
+- Rust CLI: 95% feature-complete (advanced research prototype — NOT production-ready; extraction gap not formally closed)
 
 === Documentation
 - PHASE6_M10_DESIGN.md (job control)
@@ -423,7 +423,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Formal proofs stable
   - Implementation unstable
 
-- **1.0.0**: Production-ready (future)
+- **1.0.0**: Production-grade target (future — not yet attempted)
   - Extraction gap closed
   - FFI verified
   - Security audit complete

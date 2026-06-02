@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MPL-2.0
 # ECOSYSTEM.a2ml — Ecosystem position
 # Converted from ECOSYSTEM.scm on 2026-03-15
+# Bridge section added 2026-06-02 alongside docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc
 
 [metadata]
 project = "valence-shell"
@@ -8,3 +9,49 @@ ecosystem = "hyperpolymath"
 
 [position]
 type = "component"
+role = "operational-shell-layer"
+
+# Three-layer architecture (canonical: docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc).
+# The bridge is documentation-and-orientation-only — NOT a mechanised
+# dependency. Forbidden-moves codified in .machine_readable/MUST.contractile.
+[architecture]
+layer = 1
+layer-name = "operational-shell"
+semantics-layer = "echo-types"
+receipts-layer = "ochrance"
+
+[bridges]
+
+[bridges.echo-types]
+repo = "hyperpolymath/echo-types"
+role = "semantic theory of structured loss"
+foundation = "Echo f y := Σ (x : A) , (f x ≡ y)"
+status = "documentation-and-orientation-only"
+mechanised = false
+required-reading = [
+  "README.md",
+  "proofs/agda/EchoCanonicalIdentitySuite.agda",
+  "docs/echo-types/MAP.adoc",
+  "docs/bridge-status.md",
+  "CLAUDE.md",
+]
+
+[bridges.ochrance]
+repo = "hyperpolymath/ochrance"
+role = "receipt + attestation substrate"
+provides = [
+  "A2ML manifests + validators",
+  "Verified Merkle structure (once cryptographic hashing is no longer placeholder)",
+  "Linear repair operations + proof witnesses",
+]
+status = "documentation-and-orientation-only"
+mechanised = false
+current-gaps = [
+  "placeholder XOR hashes",
+  "incomplete cryptographic attestation",
+  "ongoing linear-repair work",
+]
+
+[bridge-entry-points]
+prose = "docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc"
+machine-readable = ".machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml"

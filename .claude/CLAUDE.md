@@ -2,10 +2,20 @@
 SPDX-License-Identifier: MPL-2.0
 Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
+## Canonical bridge — READ FIRST
+
+Before making claims about reversibility, obliteration, Lean↔Rust mechanisation, or cryptographic attestation, read both:
+
+- `docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc` — three-layer architecture (Valence Shell / Echo Types / Ochrance) + forbidden-moves rules
+- `.machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml` — machine-readable companion
+
+The bridge is **documentation-and-orientation-only**, not a mechanised dependency. Keep RMR (reversible) and RMO (irreversible + audit residue) distinct.
+
 ## Machine-Readable Artefacts
 
 The following files in `.machine_readable/` contain structured project metadata:
 
+- `.machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml` - Bridge to echo-types + ochrance (READ FIRST)
 - `.machine_readable/6a2/STATE.a2ml` - Current project state and progress
 - `.machine_readable/6a2/META.a2ml` - Architecture decisions and development practices
 - `.machine_readable/6a2/ECOSYSTEM.a2ml` - Position in the ecosystem and related projects
