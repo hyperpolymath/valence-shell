@@ -114,8 +114,14 @@ jobs:
       - name: Gate on build status
         if: steps.idris2-build.outputs.build_exit != '0'
         run: |
-          echo "::warning::Idris2 build oracle FAILED (exit ${{ steps.idris2-build.outputs.build_exit }}). Tracked as pre-existing debt in #94."
-          # Non-blocking by default. To make this a required gate once pre-
-          # existing issues are fixed, change `exit 0` to `exit 1` below and
-          # add to branch protection's required checks list.
-          exit 0
+          echo "::error::Idris2 build oracle FAILED (exit ${{ steps.idris2-build.outputs.build_exit }})."
+          # Strict gate as of 2026-06-02. All four Idris2 modules
+          # (Model, RMO, Operations, Composition) now build cleanly via:
+          #   * #105 (Model.idr DecEq impossible-pattern + equivRefl hole)
+          #   * #109 (Composition.idr applyOp via Model primitives + cascade)
+          #   * #112 (RMO AuditEntry.proof rename — Idris2 0.8.0 reserved keyword)
+          #   * #113 (RMO hardwareEraseIrreversible single-line signature)
+          #   * #117 (RMO overwriteIrreversible LTE + auditTrailCompleteness Elem import)
+          # Add this job to branch protection's required checks list to
+          # propagate strict-gating to merge.
+          exit 1
