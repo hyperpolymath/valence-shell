@@ -101,15 +101,13 @@ fn security_path_traversal_protection() {
 
         // Should either fail OR resolve to a safe path within sandbox
         if result.is_ok() {
-            // If successful, verify the resolved path is within the sandbox.
+            // If successful, verify the resolved path is within temp dir
             let resolved = state.resolve_path(attempt);
             let canonical = fs::canonicalize(&resolved).unwrap();
 
-            // ShellState canonicalizes the root. On macOS, raw temp paths under
-            // /var canonicalize to /private/var, so use the same root identity
-            // as the implementation.
+            // Canonical path must start with temp.path()
             assert!(
-                canonical.starts_with(&state.root),
+                canonical.starts_with(temp.path()),
                 "Path traversal detected: {:?} escaped sandbox",
                 canonical
             );
@@ -146,10 +144,7 @@ fn component_strategy() -> impl Strategy<Value = String> {
 /// Build a path string from a sequence of components, with optional
 /// leading slash to exercise the absolute-path strip.
 fn path_strategy() -> impl Strategy<Value = String> {
-    (
-        any::<bool>(),
-        prop::collection::vec(component_strategy(), 0..20),
-    )
+    (any::<bool>(), prop::collection::vec(component_strategy(), 0..20))
         .prop_map(|(absolute, parts)| {
             let joined = parts.join("/");
             if absolute {
@@ -174,7 +169,7 @@ proptest! {
         // path-prefix (not canonical-realpath) because the resolved
         // path may not physically exist; the Lean theorem is about
         // structural prefix, not filesystem realpath.
-        let root = &state.root;
+        let root = temp.path();
         prop_assert!(
             resolved.starts_with(root),
             "resolve_path({:?}) returned {:?}, which does not start with sandbox root {:?}",
@@ -198,7 +193,7 @@ proptest! {
         let temp = TempDir::new().unwrap();
         let state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
         let resolved = state.resolve_path(&path);
-        let root = &state.root;
+        let root = temp.path();
         prop_assert!(
             resolved.starts_with(root),
             "..-heavy path {:?} escaped sandbox: resolved={:?}, root={:?}",
@@ -221,9 +216,10 @@ fn security_absolute_path_handling() {
 
     // For safety, we should reject absolute paths in sandboxed mode
     if result.is_ok() {
-        let created_path = state.resolve_path("/tmp/escape");
+        #[allow(clippy::join_absolute_paths)]
+        let created_path = state.root.join("/tmp/escape");
         assert!(
-            created_path.starts_with(&state.root),
+            created_path.starts_with(temp.path()),
             "Absolute path should not escape sandbox"
         );
     }
