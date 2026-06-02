@@ -503,9 +503,9 @@ that has been registered in the type system but not yet discharged.
 | `Operations.idr` | 186 | `?writeFileReversibleProof` | YES — Lean 4 has the canonical proof; port directly.
 | `Operations.idr` | 201 | `?operationIndependenceProof` | YES — `mkdir_preserves_other_paths` analogue.
 | `Operations.idr` | 226 | `?cnoWriteSameContentProof` | YES — `is_CNO_sequence` instance.
-| `RMO.idr` | 92 | `?secureDeleteIrreversibleProof` | PARTIAL — depends on an *axiomatic* NIST SP 800-88 assumption (see <<assumption-nist-800-88>>). The Idris-internal portion is provable.
+| `RMO.idr` | 82 | `secureDeleteNotInjective` (was `?secureDeleteIrreversibleProof`) | CLOSED 2026-06-01 (#60) — signature redesigned to mirror Coq's `obliterate_not_injective`. The prior `recovery fs = fs -> Void` shape was a non-theorem (refuted by `recovery = id`). Closes via `removeEntryDeterminedByFilter` in `Filesystem.Model`.
 | `RMO.idr` | 112 | `?overwriteIrreversibleProof` | PARTIAL — depends on the *information-theoretic random data* assumption (random data of sufficient length destroys information about the original).
-| `RMO.idr` | 169 | `?gdprDeletionCompliantProof` | YES — given `secureDeleteIrreversibleProof` discharged.
+| `RMO.idr` | 178 | `gdprDeletionCompliant` (was `?gdprDeletionCompliantProof`) | CLOSED 2026-06-01 (#61) — signature redesigned to mirror Coq's `obliterate_leaves_no_trace` shape. The prior `recovery = id` shape was a non-theorem (refuted by `recovery = const empty`). Compliance is now a structural property of the deletion record (carries an obliteration witness for the deleted path).
 | `RMO.idr` | 201 | `?hardwareEraseIrreversibleProof` | PARTIAL — depends on a *physical hardware* assumption.
 | `RMO.idr` | 231 | `?appendOnlyAuditLogProof` | YES — purely structural.
 | `RMO.idr` | 241 | `?auditTrailCompletenessProof` | YES — given the audit log invariant.

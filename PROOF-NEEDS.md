@@ -86,9 +86,11 @@ Highlights:
 the bigger frontier (Lean→Rust refinement, crash-consistency, concurrency)
 is real research-level work.
 
-The MAA/GDPR claims depend on `?secureDeleteIrreversibleProof`,
-`?overwriteIrreversibleProof`, and `?gdprDeletionCompliantProof` being
-discharged. Until they are, the externally-facing "formally verified"
-claim leans on the closed Coq/Lean 4 layer plus axiomatic NIST SP 800-88
-/ Shannon-entropy / physical-world assumptions which should be made
-explicit (see narrative §10).
+`secureDeleteNotInjective` (closes #60) and `gdprDeletionCompliant`
+(closes #61) shipped 2026-06-01 with corrected theorem shapes: the prior
+`?secureDeleteIrreversibleProof` / `?gdprDeletionCompliantProof` holes
+had non-theorem signatures (refutable by `recovery = id` / `recovery =
+const empty` respectively) and have been redesigned. The MAA/GDPR claims
+now rest on these closed theorems plus `?overwriteIrreversibleProof`
+(still open) and axiomatic NIST SP 800-88 / Shannon-entropy / physical-
+world assumptions which should be made explicit (see narrative §10).

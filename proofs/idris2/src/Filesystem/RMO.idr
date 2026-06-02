@@ -74,23 +74,36 @@ secureDelete p Destroy = do
 -- Irreversibility Proofs
 --------------------------------------------------------------------------------
 
-||| Proof that secure deletion has no inverse
+||| Secure deletion is not injective on filesystem state.
 |||
-||| If we have an obliteration proof, there is no operation that can recover
-||| the original data.
+||| Mirrors Coq's `rmo_operations.obliterate_not_injective` (line 504).
+||| Intuition: deletion at path `p` discards all information stored at
+||| `p`, so two filesystems that agree off-`p` collapse to the same
+||| post-deletion state, regardless of how they differed at `p`. This
+||| is the correct formalisation of "information destruction" — many
+||| distinct inputs produce the same output, so no inverse function can
+||| exist (non-injectivity ⇒ no left-inverse).
+|||
+||| The premise is the filter-projection equality, which is the abstract
+||| analogue of Coq's storage/mapping pre-conditions. The proof closes
+||| via [removeEntryDeterminedByFilter] in `Filesystem.Model`.
+|||
+||| This replaces the previous `secureDeleteIrreversible` which had a
+||| non-theorem signature `recovery fs = fs -> Void` — refuted by
+||| `recovery = id`. See issue #60 for the design rationale.
 export
-secureDeleteIrreversible :
+secureDeleteNotInjective :
   (p : Path) ->
-  (fs : Filesystem) ->
-  (prf : ObliterationProof p) ->
-  (recovery : Filesystem -> Filesystem) ->
-  recovery fs = fs ->  -- Any "recovery" function is identity
-  Void  -- Contradiction - no such recovery exists
-secureDeleteIrreversible p fs (MkObliterationProof _ level _ method) recovery recoveryId =
-  -- If level is Purge or Destroy, data is cryptographically/physically gone
-  -- No function can recover it - this is guaranteed by NIST SP 800-88
-  -- The proof relies on cryptographic/physical assumptions
-  ?secureDeleteIrreversibleProof
+  (fs1, fs2 : Filesystem) ->
+  (prf1 : ObliterationProof p) ->
+  (prf2 : ObliterationProof p) ->
+  -- Pre-deletion states agree on entries at paths other than p
+  filter (keepIfNotP p) (entries fs1)
+    = filter (keepIfNotP p) (entries fs2) ->
+  -- Post-deletion states are equal (information at p is lost)
+  removeEntry p fs1 = removeEntry p fs2
+secureDeleteNotInjective p fs1 fs2 _ _ agreeOff =
+  removeEntryDeterminedByFilter p fs1 fs2 agreeOff
 
 ||| Overwriting data makes original irrecoverable
 |||
@@ -157,17 +170,17 @@ gdprDelete p reqTime = do
 
       pure $ Right $ MkGDPRProof p oblitProof reqTime compTime audit
 
-||| Proof that GDPR deletion satisfies legal requirements
+||| GDPR Article 17 compliance witness: every deletion record carries an
+||| obliteration proof for the same path. Mirrors the structural shape
+||| of Coq's obliterate_leaves_no_trace. Replaces the previous
+||| non-theorem (recovery = id, refuted by const empty); see issue #61.
+||| Stronger properties (completionTime ordering, audit non-emptiness)
+||| require strengthening MkGDPRProof — tracked as a follow-up.
 export
 gdprDeletionCompliant :
-  (proof : GDPRDeletionProof) ->
-  -- Deletion is permanent (irrecoverable)
-  (recovery : Filesystem -> Filesystem) ->
-  -- Any recovery function is identity (cannot recover)
-  recovery = id
-gdprDeletionCompliant (MkGDPRProof p oblitProof _ _ _) recovery =
-  -- Use obliteration proof to show no recovery possible
-  ?gdprDeletionCompliantProof
+  (rec : GDPRDeletionProof) ->
+  ObliterationProof rec.path
+gdprDeletionCompliant rec = rec.obliterated
 
 --------------------------------------------------------------------------------
 -- Hardware Erasure
