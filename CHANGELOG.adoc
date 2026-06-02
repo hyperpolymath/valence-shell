@@ -53,6 +53,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ==== Doc + housekeeping
 - Stale sweep: 4 `claude/issue-*` branches deleted post-merge (#105/#106/#108/#109 squash-merge cleanup) + 1 orphan `claude/safedom-res-stale-sweep` branch removed (PR #34 merged 2026-05-27; 3 subsequent campaign commits were superseded). Salvaged `.github/copilot/coding-agent.yml` decision filed as #111.
 - PROOF-NEEDS.md + `proofs/idris2/README.md` + ROADMAP.adoc refreshed to reflect zero `partial` count + 3-admit Coq state.
+- State refresh after the 2026-06-02 post-merge sweep (PR #114).
+- Doc followup gathering PRs #112 / #113 / #115 into a single coherent note (PR #116).
+
+==== CI follow-ups (later in the day)
+- Inherited governance reds cleared on 4 open PRs (PR #110).
+- RMO.idr `overwriteIrreversible` + `auditTrailCompleteness` type fixes (PR #117).
+- Idris2 build oracle flipped to strict (PR #118, closes #70 follow-up).
+- Implementation: `O_NOATIME` discipline landed via PR #120 (merge of the #94 Gap 9 work cited above).
+- Idris2 Category A non-theorem redesigns (PR #121, closes #119A).
+- CI: `idris-verification` install chez symlink for Ubuntu's chezscheme (PR #122).
+- Proof: `equivSym` closed via `Data.Bool.andCommutative` (PR #123, 1/5 Cat B).
+- 4 admits annotated in `rmo_operations.v` with explicit obligations; Idris2 keyword/parse fixes accompany.
 
 === Added — 2026-06-01
 
