@@ -29,7 +29,7 @@
 | Coq | (closed) `mkdir_two_dirs_reversible` | `filesystem_composition.v` | Closed via LIFO restate — only standard funext (#56 closed) |
 | Coq | (closed) `overwrite_pass_equalizes_storage` | `rmo_operations.v` | Closed via `Hgeom` strengthened with `block_overwritten` (#57 closed — zero axioms) |
 | Coq | (closed) `obliterate_not_injective` | `rmo_operations.v` | Closed via threaded strengthened `Hgeom` through `multi_pass_same_start_same_result` (#58 closed — only standard funext) |
-| Idris2 | 13 `?holes` across 3 files (zero `partial` annotations) | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged; classification per issue #119 |
+| Idris2 | 16 `?holes` across 4 files (zero `partial` annotations) | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged; classification per issue #119 |
 
 **Idris2 holes by file (verified by grep against `proofs/idris2/src/Filesystem/*.idr`, 2026-06-02 PM):**
 
@@ -38,9 +38,9 @@
 | `Operations.idr` | 7 (`mkdirRmdirReversibleProof`, `rmdirMkdirReversibleProof`, `touchRmReversibleProof`, `rmTouchReversibleProof`, `writeFileReversibleProof`, `operationIndependenceProof`, `cnoWriteSameContentProof`) | 4 (`?rmdirPrfAfterMkdir`, `?mkdirPrfAfterRmdir`, `?rmPrfAfterTouch`, `?touchPrfAfterRm`) |
 | `Composition.idr` | 4 (`sequenceReversibleProof`, `compositionReversibleProof`, `undoRedoIdentityProof`, `undoRedoCompositionProof`) | 0 |
 | `Model.idr` | 2 (`equivReflProof`, `equivTransProof`; `equivSymProof` is closed via `andCommutative`) | 0 |
-| `RMO.idr` | 0 (`overwriteIrreversibleProof`, `hardwareEraseIrreversibleProof`, `auditTrailCompletenessProof` Cat-A redesigned + closed in #119B; `appendOnlyAuditLogProof` is closed via `Refl`) | 0 |
+| `RMO.idr` | 3 (`overwriteIrreversibleProof`, `hardwareEraseIrreversibleProof`, `auditTrailCompletenessProof`; `appendOnlyAuditLogProof` is closed via `Refl`) | 0 |
 
-Drift from previous PROOF-NEEDS.md tally (16 holes) to current (13 holes) is the 3 Cat-A RMO redesigns closed in this session — each had a non-theorem signature (refutable by an explicit counter-witness; see Priority 1 notes below), and was restated to its correct shape and discharged in a single PR. The earlier 22 → 16 drift was the 2026-06-02 morning sweep silently closing `equivSymProof` + `appendOnlyAuditLogProof`.
+Drift from previous PROOF-NEEDS.md tally (22 holes) to current (16 holes) is mechanical: `equivSymProof` and `appendOnlyAuditLogProof` closed silently during the 2026-06-02 morning sweep (visible by grep but the inventory text was not updated). No body changes — this paragraph reconciles the count.
 
 All `partial` markers in `proofs/idris2/src/Filesystem/*.idr` were cleared 2026-06-02 (PRs #108 + #109, closing #89). The total `partial` count is zero.
 
@@ -61,7 +61,6 @@ All `partial` markers in `proofs/idris2/src/Filesystem/*.idr` were cleared 2026-
 | 2026-06-02 | Idris2 build oracle | `idris-verification.yml` workflow + Justfile recipes shipped (PR #106, closes #70) |
 | 2026-06-02 | Idris2 0.8.0 parse fixes | `AuditEntry.proof` keyword-clash rename (PR #112); `hardwareEraseIrreversible` multi-line signature fix (PR #113); `reverseConcat` closed via `Data.List.revAppend` (PR #115) |
 | 2026-06-02 PM | Coq admit triumvirate | `mkdir_two_dirs_reversible` restated to LIFO and closed (#56); `overwrite_pass_equalizes_storage` strengthened with `block_overwritten` constraint, closed with zero new axioms (#57); `obliterate_not_injective` threaded through the strengthened lemma + `multi_pass_same_start_same_result`, closed with only standard funext (#58). Coq layer now has **zero `Admitted` markers** (only the justified `Axiom is_empty_dir_dec` remains). |
-| 2026-06-03 | Idris2 RMO Cat-A redesigns (`#119B`) | `overwriteIrreversible` restated as "no left-inverse over the pre-overwrite space" (function-determinism + `Just` injection); `hardwareEraseIrreversible` restated to take the post-erase state as input (function-determinism on the recovery output); `auditTrailCompleteness` restated to name the append event introducing `p` (tautological via `appendAuditEntry` unfolding). All three closed inline (no new axioms, no `believe_me`). `RMO.idr` now at **zero holes**. Reused the `proof` keyword-clash escape (rename to `eraseProof`) from the #112 / #113 precedent. |
 
 ### What Needs Proving (current, prioritised by tractability × value)
 
@@ -72,83 +71,33 @@ prior-session findings (memory: `feedback_proven_overly_cautious_owed_pattern`
 + `reference_idris2_0_8_0_reduction_map` indicate that several
 ostensibly-tractable holes are blocked on primitive eq-reflexivity).
 
-#### Priority 1 — visible, tractable groundwork (no quick wins)
+#### Priority 1 — visible, tractable in 1-2 PRs
 
-**Reclassification finding (2026-06-02 PM)**: closer reading of every
-remaining hole showed there were **zero** "single-PR closeable" items
-left that don't require either (a) primitive-eq groundwork or (b)
-theorem-shape redesign. The original Cat-D classification of the 3 RMO
-holes was wrong — none of them were sound axiom shapes.
+1. **Idris2 Cat-A theorem-shape redesigns** (per issue #119 Category A):
+   - `cnoWriteSameContentProof` (`Operations.idr:254`) — restate to `equiv (writeFile p c fs) fs = True` rather than `=`, since `writeFile` re-heads the entries list (`addEntry ∘ removeEntry`). Refuted-as-stated.
+   - The remaining `appendOnlyAuditLogProof` from issue #119 Cat A is already closed via `Refl` in the live source — verify and remove from inventory if not done.
+2. **Idris2 Cat-D documented axioms** (per issue #119 Cat D, RMO physical claims): mark `overwriteIrreversibleProof` + `hardwareEraseIrreversibleProof` as explicit axiomatic placeholders (NIST SP 800-88 + Shannon entropy; physical hardware claims). Idris2 0.8.0 has no `postulate` keyword, so use a labelled-`believe_me` with the axiom name embedded + CI explicit-list gate. Recommended single PR.
+3. **Idris2 `auditTrailCompletenessProof`** (`RMO.idr:270`) — tractable AFTER (1) lands, since closure follows from the audit-log invariant (`isAppendOnly` chain ⇒ membership).
 
-**Update (2026-06-03)**: the 3 Cat-A RMO redesigns are now **CLOSED**
-(see Foundational Closure row). What follows in this Priority 1 section
-is preserved as a record of the analysis that drove the redesigns.
+#### Priority 2 — known-blocked, need primitive-eq groundwork first
 
-**`cnoWriteSameContent`** (`Operations.idr:254`) — the signature
-restate (`equiv` instead of `=`) was already landed in a prior pass.
-The body is still blocked by primitive-eq: closure needs reasoning
-about `(q == p)` on opaque `Path` values inside `elem`, which Idris2
-0.8.0 only reduces on literals.
-
-**3 ostensibly-Cat-D RMO holes are Cat-A non-theorems-as-stated**:
-- `overwriteIrreversibleProof` (`RMO.idr:130`): conclusion
-  `recovery randomData = Nothing` is refuted by `recovery = Just`.
-  Correct shape needs "no UNIVERSAL recovery" — quantifier flip into
-  a non-existence claim with an explicit counter-witness.
-- `hardwareEraseIrreversibleProof` (`RMO.idr:215`): type
-  `HardwareEraseProof -> (Unit -> Filesystem) -> Void` is refuted by
-  any non-empty `recovery` (the function exists trivially). Correct
-  shape needs the recovery to take the post-erase state as input.
-- `auditTrailCompletenessProof` (`RMO.idr:270`): conclusion
-  `Elem p (map AuditEntry.path entries)` is refuted by `entries = []`.
-  Correct shape needs an "entry was appended" precondition naming the
-  insertion event in the log.
-
-These three should be filed as **`#119` sub-issues** with the
-non-theorem refutations, in line with the #60 / #61 precedent.
-
-**4 Operations.idr sub-holes** (`?rmdirPrfAfterMkdir`,
-`?mkdirPrfAfterRmdir`, `?rmPrfAfterTouch`, `?touchPrfAfterRm`) — same
-primitive-eq blocker as the Cat-B set above. Each requires showing
-that the post-operation precondition holds, which reduces to
-`(p == p) = True` on opaque `Path` — blocked.
-
-#### Priority 2 — primitive-eq groundwork (foundational, owner-decision required)
-
-Every remaining tractable hole reduces to a `(s == s) = True` step on
-opaque `String` or `Bits8` — Idris2 0.8.0 only reduces these on
-literals. `DecEq Path` does NOT help because it transitively depends
-on `DecEq String`, which itself depends on primitive `==`.
-
-Three closure paths, each requiring owner sign-off:
-
-1. **Add `String` / `Bits8` reflexivity axioms** — `axStringEqRefl :
-   (s : String) -> (s == s) = True := believe_me Refl`, gated by CI
-   allow-list (per the Cat-D `believe_me` pattern). Smallest change,
-   but introduces `believe_me` into the proof system which prior
-   sessions explicitly avoided.
-2. **Migrate `Path` to a structural representation** — replace
-   `String`-component paths with `Nat`-encoded interned identifiers.
-   `Nat == Nat` IS reducible on opaque values. Bigger migration but
-   no `believe_me`.
-3. **Reformulate every blocked theorem to use `decEq`-style branches**
-   rather than `==`-style booleans. Avoids touching the `Eq` instance
-   but ripples through ~20 theorem statements.
-
-Until one path is chosen, the following holes are **frozen**:
+These were initially classified Cat-B (gap-per-PR) in issue #119 but the
+2026-06-02 AM session found that **primitive String/Bits8 eq-reflexivity
+in Idris2 0.8.0 only reduces on literals**, not opaque variables.
+Closure requires either:
+(a) a hand-rolled `Path` equality reflexivity lemma threaded through
+`all`/`elem`, or (b) migration to a structural set-of-paths model that
+sidesteps `==` on primitives:
 
 - `equivReflProof` (Model.idr:216)
 - `equivTransProof` (Model.idr:244)
-- `cnoWriteSameContentProof` (Operations.idr:254)
-- 4 `?XXXPrfAfter` sub-holes in Operations.idr
-- 7 reversibility theorems in Operations.idr (mkdirRmdir, rmdirMkdir,
-  touchRm, rmTouch, writeFile, operationIndependence,
-  cnoWriteSameContent)
+- `undoRedoIdentityProof` (Composition.idr:215) — also missing the
+  `isReversible op = True` precondition: provably refuted for
+  non-reversible `op` since `applyOp (inverse op) (applyOp op fs) ≠ fs`.
+  **Cat-A redesign required, not Cat-B.**
+- `undoRedoCompositionProof` (Composition.idr:235) — same shape issue.
 
-Separately, `undoRedoIdentityProof` and `undoRedoCompositionProof`
-need a Cat-A redesign (missing `isReversible op = True` precondition;
-provably refuted for non-reversible `op`) before primitive-eq is even
-relevant.
+These are tracked under issue #119 with the corrected classification.
 
 #### Priority 3 — Tier-S foundational (research-level)
 
@@ -202,10 +151,9 @@ auto-generation (D-4), witness-coverage compile-time test (D-5).
 
 ### Priority Summary
 
-**HIGH (closeable now)** — no remaining single-PR Idris2 closures
-without owner sign-off on the primitive-eq path. The 3 RMO Cat-A
-redesigns landed 2026-06-03 (`#119B`); `cnoWriteSameContentProof`
-is parked under primitive-eq groundwork (Priority 2).
+**HIGH (closeable now)** — Idris2 Cat-A redesigns (`cnoWriteSameContentProof`)
++ Cat-D axiomatic markers (3 RMO physical claims) — both are
+single-PR.
 
 **MEDIUM (needs infrastructure)** — the 4 ostensibly-Cat-B holes
 (equivRefl/Trans + undoRedoIdentity/Composition) are blocked on
@@ -221,11 +169,10 @@ are research-level work; the bigger frontier is real.
 (closes #61) shipped 2026-06-02 via PR #105 with corrected theorem
 shapes (the prior holes had non-theorem signatures refutable by
 `recovery = id` / `recovery = const empty`). The MAA/GDPR claims now
-rest on these closed theorems plus the 2026-06-03 RMO Cat-A redesigns
-(`overwriteIrreversible`, `hardwareEraseIrreversible`,
-`auditTrailCompleteness` — all soundly proven inline, no `believe_me`)
-plus axiomatic NIST SP 800-88 / Shannon-entropy / physical-world
-assumptions which should be made explicit (see narrative §10).
+rest on these closed theorems plus `?overwriteIrreversibleProof`
+(still open as Cat-D placeholder) and axiomatic NIST SP 800-88 /
+Shannon-entropy / physical-world assumptions which should be made
+explicit (see narrative §10).
 
 The three Coq admits (#56 / #57 / #58) closed in the 2026-06-02 PM
 session bring the Coq layer to **zero `Admitted` markers** — only the
