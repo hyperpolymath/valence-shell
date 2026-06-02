@@ -320,6 +320,7 @@ To reach production: Close extraction gap (Coq → OCaml verification).
 * Operations on `p1` don't affect `p2` (when `p1 ≠ p2`)
 * Composition: sequences of operations reverse correctly
 * ~478 theorem candidates proven across 6 verification systems (1 real gap + 2 axioms remain — see `docs/PROOF_HOLES_AUDIT.md`)
+* 2026-06-02 snapshot: 4 admits in `proofs/coq/rmo_operations.v` are annotated with explicit obligations; Idris2 0.8.0 keyword/parse fixes landed alongside (#112/#113/#115/#117) and the build oracle is strict (#118).
 
 === ❌ What Is NOT Guaranteed
 
