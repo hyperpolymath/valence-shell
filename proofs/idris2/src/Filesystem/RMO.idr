@@ -9,6 +9,8 @@ module Filesystem.RMO
 
 import Filesystem.Model
 import Data.List
+import Data.List.Elem
+import Data.Nat
 
 %default total
 
@@ -117,7 +119,7 @@ overwriteIrreversible :
   (originalContent : FileContent) ->
   (randomData : FileContent) ->
   (fs : Filesystem) ->
-  (length randomData >= length originalContent) ->
+  LTE (length originalContent) (length randomData) ->
   -- After overwrite, original is irrecoverable
   (recovery : FileContent -> Maybe FileContent) ->
   recovery randomData = Nothing  -- Cannot recover original
@@ -249,5 +251,5 @@ auditTrailCompleteness :
   (p : Path) ->
   -- If p was obliterated, it's in the audit log
   (obliterated : ObliterationProof p) ->
-  Elem p (map path entries)  -- p appears in the log
+  Elem p (map AuditEntry.path entries)  -- p appears in the log
 auditTrailCompleteness entries p oblitProof = ?auditTrailCompletenessProof
