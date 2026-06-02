@@ -71,33 +71,79 @@ prior-session findings (memory: `feedback_proven_overly_cautious_owed_pattern`
 + `reference_idris2_0_8_0_reduction_map` indicate that several
 ostensibly-tractable holes are blocked on primitive eq-reflexivity).
 
-#### Priority 1 — visible, tractable in 1-2 PRs
+#### Priority 1 — visible, tractable groundwork (no quick wins)
 
-1. **Idris2 Cat-A theorem-shape redesigns** (per issue #119 Category A):
-   - `cnoWriteSameContentProof` (`Operations.idr:254`) — restate to `equiv (writeFile p c fs) fs = True` rather than `=`, since `writeFile` re-heads the entries list (`addEntry ∘ removeEntry`). Refuted-as-stated.
-   - The remaining `appendOnlyAuditLogProof` from issue #119 Cat A is already closed via `Refl` in the live source — verify and remove from inventory if not done.
-2. **Idris2 Cat-D documented axioms** (per issue #119 Cat D, RMO physical claims): mark `overwriteIrreversibleProof` + `hardwareEraseIrreversibleProof` as explicit axiomatic placeholders (NIST SP 800-88 + Shannon entropy; physical hardware claims). Idris2 0.8.0 has no `postulate` keyword, so use a labelled-`believe_me` with the axiom name embedded + CI explicit-list gate. Recommended single PR.
-3. **Idris2 `auditTrailCompletenessProof`** (`RMO.idr:270`) — tractable AFTER (1) lands, since closure follows from the audit-log invariant (`isAppendOnly` chain ⇒ membership).
+**Reclassification finding (2026-06-02 PM)**: closer reading of every
+remaining hole shows there are **zero** "single-PR closeable" items left
+that don't require either (a) primitive-eq groundwork or (b)
+theorem-shape redesign. The original Cat-D classification of the 3 RMO
+holes was wrong — none of them are sound axiom shapes.
 
-#### Priority 2 — known-blocked, need primitive-eq groundwork first
+**`cnoWriteSameContent`** (`Operations.idr:254`) — the signature
+restate (`equiv` instead of `=`) was already landed in a prior pass.
+The body is still blocked by primitive-eq: closure needs reasoning
+about `(q == p)` on opaque `Path` values inside `elem`, which Idris2
+0.8.0 only reduces on literals.
 
-These were initially classified Cat-B (gap-per-PR) in issue #119 but the
-2026-06-02 AM session found that **primitive String/Bits8 eq-reflexivity
-in Idris2 0.8.0 only reduces on literals**, not opaque variables.
-Closure requires either:
-(a) a hand-rolled `Path` equality reflexivity lemma threaded through
-`all`/`elem`, or (b) migration to a structural set-of-paths model that
-sidesteps `==` on primitives:
+**3 ostensibly-Cat-D RMO holes are Cat-A non-theorems-as-stated**:
+- `overwriteIrreversibleProof` (`RMO.idr:130`): conclusion
+  `recovery randomData = Nothing` is refuted by `recovery = Just`.
+  Correct shape needs "no UNIVERSAL recovery" — quantifier flip into
+  a non-existence claim with an explicit counter-witness.
+- `hardwareEraseIrreversibleProof` (`RMO.idr:215`): type
+  `HardwareEraseProof -> (Unit -> Filesystem) -> Void` is refuted by
+  any non-empty `recovery` (the function exists trivially). Correct
+  shape needs the recovery to take the post-erase state as input.
+- `auditTrailCompletenessProof` (`RMO.idr:270`): conclusion
+  `Elem p (map AuditEntry.path entries)` is refuted by `entries = []`.
+  Correct shape needs an "entry was appended" precondition naming the
+  insertion event in the log.
+
+These three should be filed as **`#119` sub-issues** with the
+non-theorem refutations, in line with the #60 / #61 precedent.
+
+**4 Operations.idr sub-holes** (`?rmdirPrfAfterMkdir`,
+`?mkdirPrfAfterRmdir`, `?rmPrfAfterTouch`, `?touchPrfAfterRm`) — same
+primitive-eq blocker as the Cat-B set above. Each requires showing
+that the post-operation precondition holds, which reduces to
+`(p == p) = True` on opaque `Path` — blocked.
+
+#### Priority 2 — primitive-eq groundwork (foundational, owner-decision required)
+
+Every remaining tractable hole reduces to a `(s == s) = True` step on
+opaque `String` or `Bits8` — Idris2 0.8.0 only reduces these on
+literals. `DecEq Path` does NOT help because it transitively depends
+on `DecEq String`, which itself depends on primitive `==`.
+
+Three closure paths, each requiring owner sign-off:
+
+1. **Add `String` / `Bits8` reflexivity axioms** — `axStringEqRefl :
+   (s : String) -> (s == s) = True := believe_me Refl`, gated by CI
+   allow-list (per the Cat-D `believe_me` pattern). Smallest change,
+   but introduces `believe_me` into the proof system which prior
+   sessions explicitly avoided.
+2. **Migrate `Path` to a structural representation** — replace
+   `String`-component paths with `Nat`-encoded interned identifiers.
+   `Nat == Nat` IS reducible on opaque values. Bigger migration but
+   no `believe_me`.
+3. **Reformulate every blocked theorem to use `decEq`-style branches**
+   rather than `==`-style booleans. Avoids touching the `Eq` instance
+   but ripples through ~20 theorem statements.
+
+Until one path is chosen, the following holes are **frozen**:
 
 - `equivReflProof` (Model.idr:216)
 - `equivTransProof` (Model.idr:244)
-- `undoRedoIdentityProof` (Composition.idr:215) — also missing the
-  `isReversible op = True` precondition: provably refuted for
-  non-reversible `op` since `applyOp (inverse op) (applyOp op fs) ≠ fs`.
-  **Cat-A redesign required, not Cat-B.**
-- `undoRedoCompositionProof` (Composition.idr:235) — same shape issue.
+- `cnoWriteSameContentProof` (Operations.idr:254)
+- 4 `?XXXPrfAfter` sub-holes in Operations.idr
+- 7 reversibility theorems in Operations.idr (mkdirRmdir, rmdirMkdir,
+  touchRm, rmTouch, writeFile, operationIndependence,
+  cnoWriteSameContent)
 
-These are tracked under issue #119 with the corrected classification.
+Separately, `undoRedoIdentityProof` and `undoRedoCompositionProof`
+need a Cat-A redesign (missing `isReversible op = True` precondition;
+provably refuted for non-reversible `op`) before primitive-eq is even
+relevant.
 
 #### Priority 3 — Tier-S foundational (research-level)
 
