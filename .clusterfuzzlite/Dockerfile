@@ -3,8 +3,10 @@
 
 FROM gcr.io/oss-fuzz-base/base-builder-rust
 
-# Install Rust nightly (required for cargo-fuzz)
-RUN rustup default nightly
+# Install Rust nightly and its source tree, both required by cargo-fuzz's
+# sanitizer builds.
+RUN rustup default nightly && \
+    rustup component add rust-src --toolchain nightly
 
 # Copy project files
 COPY . $SRC/valence-shell
