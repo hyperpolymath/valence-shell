@@ -49,7 +49,7 @@ Cross-validation. The six systems sit on different logical foundations:
 If all six prove the same theorem, it is *extremely* unlikely that all six
 modelled the problem incorrectly in the same way. This is the same pattern
 seL4 and CompCert use, and it is the central technical commitment of the
-project — see `INTENT.contractile` and `.machine_readable/agent_instructions/methodology.a2ml`
+project — see `INTENT.contractile` and `.machine_readable/bot_directives/methodology.a2ml`
 for the architectural-invariant statement.
 
 == How do I trust the proofs?
