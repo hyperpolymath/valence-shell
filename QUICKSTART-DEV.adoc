@@ -108,7 +108,7 @@ Key invariants that must never be violated:
 * No new TypeScript / Python / Go files; no npm/bun/yarn/pnpm dependencies (Deno only)
 * No `believe_me` or `assert_total` (Idris2); no new `Admitted.` (Coq); no `sorry` (Lean); no `unsafeCoerce` (Haskell); no `Obj.magic` (OCaml)
 * No `unsafe {}` blocks without an inline safety comment (Rust)
-* No template placeholders (`{{...}}`, `<...>`) in shipped files — see `.machine_readable/agent_instructions/methodology.a2ml`
+* No template placeholders (`{{...}}`, `<...>`) in shipped files — see `.machine_readable/bot_directives/methodology.a2ml`
 * All commits MUST be GPG-signed
 * Full machine-checked list lives at `.machine_readable/MUST.contractile`; K9 validators in `contractiles/k9/` enforce it on every PR
 

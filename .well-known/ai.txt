@@ -15,5 +15,5 @@ Disallow-Generation: yes
 # For AI agent integration instructions, see:
 #   0-AI-MANIFEST.a2ml (lexicographic-first AI entry point)
 #   .machine_readable/INTENT.contractile (purpose + ecosystem)
-#   .machine_readable/agent_instructions/methodology.a2ml (mode/budget/invariants)
+#   .machine_readable/bot_directives/methodology.a2ml (mode/budget/invariants)
 #   docs/audits/ (drift-reconciliation audit log)

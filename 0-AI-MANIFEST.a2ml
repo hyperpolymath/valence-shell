@@ -3,7 +3,7 @@
 #
 # Lexicographic-first machine-readable file so any agent that does a
 # default-sorted directory walk discovers this first. Points at the
-# canonical contractile family and the agent_instructions/ tree.
+# canonical contractile family and the bot_directives/ tree.
 
 [manifest]
 project = "valence-shell"
@@ -22,9 +22,9 @@ contractile-purpose       = ".machine_readable/INTENT.contractile"
 contractile-must          = ".machine_readable/MUST.contractile"
 contractile-trust         = ".machine_readable/TRUST.contractile"
 contractile-adjust        = ".machine_readable/ADJUST.contractile"
-methodology               = ".machine_readable/agent_instructions/methodology.a2ml"
-coverage                  = ".machine_readable/agent_instructions/coverage.a2ml"
-debt                      = ".machine_readable/agent_instructions/debt.a2ml"
+methodology               = ".machine_readable/bot_directives/methodology.a2ml"
+coverage                  = ".machine_readable/bot_directives/coverage.a2ml"
+debt                      = ".machine_readable/bot_directives/debt.a2ml"
 human-claude-handbook     = "CLAUDE.md"
 human-readme              = "README.adoc"
 human-explainme           = "EXPLAINME.adoc"
