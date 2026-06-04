@@ -359,7 +359,7 @@ pub enum Command {
         elements: Vec<String>,
     },
 
-    /// Array element assignment (arr[index]=value)
+    /// Array element assignment (`arr[index]=value`)
     ///
     /// Sets a single array element at the specified index (supports sparse arrays)
     ArrayElementAssignment {

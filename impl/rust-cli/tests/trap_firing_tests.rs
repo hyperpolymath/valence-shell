@@ -15,6 +15,8 @@ use vsh::parser::parse_command;
 use vsh::posix_builtins::TrapSignal;
 use vsh::state::ShellState;
 
+static SIGNAL_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 // -------------------------------------------------------------------------
 // Trap registration
 // -------------------------------------------------------------------------
@@ -61,6 +63,9 @@ fn trap_set_int_handler() -> Result<()> {
 
 #[test]
 fn run_pending_traps_fires_int_handler() -> Result<()> {
+    let _signal_guard = SIGNAL_TEST_LOCK.lock().unwrap();
+    vsh::signals::clear_interrupt();
+
     let temp = tempdir()?;
     let mut state = ShellState::new(temp.path().to_str().unwrap())?;
 
@@ -76,11 +81,15 @@ fn run_pending_traps_fires_int_handler() -> Result<()> {
 
     // The trap handler should have executed
     assert!(state.resolve_path("trap_fired").exists());
+    vsh::signals::clear_interrupt();
     Ok(())
 }
 
 #[test]
 fn run_pending_traps_no_handler_clears_flag() -> Result<()> {
+    let _signal_guard = SIGNAL_TEST_LOCK.lock().unwrap();
+    vsh::signals::clear_interrupt();
+
     let temp = tempdir()?;
     let mut state = ShellState::new(temp.path().to_str().unwrap())?;
 
@@ -91,11 +100,15 @@ fn run_pending_traps_no_handler_clears_flag() -> Result<()> {
     // run_pending_traps should clear the flag even with no handler
     executable::run_pending_traps(&mut state);
     assert!(!vsh::signals::is_interrupt_requested());
+    vsh::signals::clear_interrupt();
     Ok(())
 }
 
 #[test]
 fn run_pending_traps_no_signal_is_noop() -> Result<()> {
+    let _signal_guard = SIGNAL_TEST_LOCK.lock().unwrap();
+    vsh::signals::clear_interrupt();
+
     let temp = tempdir()?;
     let mut state = ShellState::new(temp.path().to_str().unwrap())?;
 
@@ -106,6 +119,7 @@ fn run_pending_traps_no_signal_is_noop() -> Result<()> {
     executable::run_pending_traps(&mut state);
 
     assert!(!state.resolve_path("should_not_exist").exists());
+    vsh::signals::clear_interrupt();
     Ok(())
 }
 

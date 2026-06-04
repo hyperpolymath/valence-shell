@@ -15,6 +15,7 @@ on:
       - 'impl/rust-cli/**'
   schedule:
     - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,6 +23,10 @@ permissions:
 jobs:
   echidna-verify:
     name: ECHIDNA Proof Verification
+    # This job builds the external ECHIDNA repository from its current default
+    # branch. Keep that moving integration check out of required PR CI so
+    # valence-shell changes are not blocked by an unrelated upstream breakage.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
