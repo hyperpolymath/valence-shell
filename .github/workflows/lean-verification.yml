@@ -65,7 +65,16 @@ jobs:
         run: |
           source $HOME/.elan/env
           cd impl/ocaml
-          make build-c
+          lean_prefix="$(lean --print-prefix)"
+          lean_include="$lean_prefix/include"
+          lean_lib="$lean_prefix/lib/lean"
+          gcc -shared -fPIC -o liblean_vsh.so \
+            lean_wrapper.c \
+            ../../proofs/lean4/.lake/build/ir/Extraction.c \
+            -I"$lean_include" \
+            -L"$lean_lib" \
+            -lleanshared \
+            -Wl,-rpath,"$lean_lib"
 
       - name: Verify shared library
         run: |
