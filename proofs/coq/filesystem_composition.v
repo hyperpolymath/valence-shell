@@ -669,32 +669,41 @@ Proof.
       exists pqnode. exact Hpqnode.
 Qed.
 
-(** Two-directory creation example.
+(** Two-directory creation example — restated to LIFO sequence order.
 
-    NOTE (model gap, 2026-06-01): As stated, this example reverses
-    [mkdir p1; mkdir p2] with [rmdir p1] applied BEFORE [rmdir p2]
-    (reading the nested [apply_op] inside-out). That is not the LIFO
-    sequence-reversal that [operation_sequence_reversible] proves,
-    which would be [rmdir p2; rmdir p1]. The example as written is
-    not provable from [two_op_sequence_reversible] without further
-    well-formedness preservation lemmas on [rmdir]. Admitted pending
-    follow-up: either restate to LIFO order, or prove the non-LIFO
-    variant under stronger preconditions. See
-    [docs/PROOF-OPEN-FRONTIER.adoc] for closure paths. *)
+    The earlier statement reversed [mkdir p1; mkdir p2] with [rmdir p1]
+    applied BEFORE [rmdir p2] (FIFO order), which is not derivable from
+    [two_op_sequence_reversible] (which proves the LIFO case). Restated
+    here so the OUTER rmdir undoes the FIRST mkdir, matching the LIFO
+    discipline that the general theorem establishes.
+
+    Closes #56.  See [docs/PROOF-OPEN-FRONTIER.adoc] for context. *)
 Example mkdir_two_dirs_reversible :
   forall p1 p2 fs,
     p1 <> p2 ->
     well_formed fs ->
     mkdir_precondition p1 fs ->
     mkdir_precondition p2 (mkdir p1 fs) ->
-    apply_op (OpRmdir p2)
-      (apply_op (OpRmdir p1)
+    apply_op (OpRmdir p1)
+      (apply_op (OpRmdir p2)
         (apply_op (OpMkdir p2)
           (apply_op (OpMkdir p1) fs))) = fs.
 Proof.
-  (* Admitted: non-LIFO sequence-reversal — not derivable from
-     two_op_sequence_reversible as stated; needs design fix. *)
-Admitted.
+  intros p1 p2 fs Hneq Hwf Hpre1 Hpre2.
+  pose proof (two_op_sequence_reversible (OpMkdir p1) (OpMkdir p2) fs) as Hseq.
+  simpl in Hseq.
+  apply Hseq.
+  - (* reversible (OpMkdir p1) fs *)
+    unfold reversible. split.
+    + simpl. exact Hpre1.
+    + simpl. apply rmdir_precondition_after_mkdir; assumption.
+  - (* reversible (OpMkdir p2) (apply_op (OpMkdir p1) fs) *)
+    unfold reversible. split.
+    + simpl. exact Hpre2.
+    + simpl.
+      apply rmdir_precondition_after_mkdir;
+        [apply mkdir_preserves_well_formed; assumption | exact Hpre2].
+Qed.
 
 (** * Composition Preservation *)
 

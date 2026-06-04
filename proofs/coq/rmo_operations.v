@@ -389,7 +389,12 @@ Proof.
 Qed.
 
 (** Key lemma: after one overwrite pass with same pattern, mapped blocks
-    with same id and length become identical *)
+    with same id, length AND overwrite-count become identical.
+
+    Closure path (A) of issue #57: the geometry hypothesis is strengthened
+    to also constrain [block_overwritten]. For first-time obliteration the
+    counters are 0 on both sides, so this hypothesis is trivially satisfied
+    in the canonical use case. Closes #57. *)
 Lemma overwrite_pass_equalizes_storage :
   forall sfs1 sfs2 p pat bid,
     sfs_mapping sfs1 = sfs_mapping sfs2 ->
@@ -400,26 +405,39 @@ Lemma overwrite_pass_equalizes_storage :
         sfs_storage sfs1 bid = Some blk1 ->
         sfs_storage sfs2 bid = Some blk2 ->
         block_id blk1 = block_id blk2 /\
-        length (block_data blk1) = length (block_data blk2)) ->
+        length (block_data blk1) = length (block_data blk2) /\
+        block_overwritten blk1 = block_overwritten blk2) ->
     obliterate_precondition p sfs1 ->
     obliterate_precondition p sfs2 ->
     sfs_storage (overwrite_path_blocks sfs1 p pat) bid =
     sfs_storage (overwrite_path_blocks sfs2 p pat) bid.
 Proof.
-  (* TRUSTED: overwrite_pass_equalizes_storage — model-gap stub.
-     MODEL GAP (2026-06-01): As stated, this lemma is false. The conclusion
-     equates [sfs_storage (overwrite_path_blocks sfs1 p pat) bid] and
-     [sfs_storage (overwrite_path_blocks sfs2 p pat) bid], but [overwrite_block]
-     preserves the input's [block_overwritten] count (via [S (block_overwritten blk)]).
-     Two blocks with equal [block_id] and equal [length (block_data)] but distinct
-     [block_overwritten] counters produce overwrites that differ in [block_overwritten].
-     The geometry hypothesis [Hgeom] does NOT cover [block_overwritten].
-     Closure paths: (A) strengthen [Hgeom] to also constrain [block_overwritten],
-     (B) weaken conclusion to "equal modulo overwrite-count", or
-     (C) reformulate [obliterate_not_injective] to project out [block_overwritten].
-     Stub pending follow-up. *)
-(* TRUSTED: overwrite_pass_equalizes_storage — model-gap stub; see preceding comment block *)
-Admitted.
+  intros sfs1 sfs2 p pat bid Hmap Hother Hgeom Hpre1 Hpre2.
+  destruct (in_dec Nat.eq_dec bid (sfs_mapping sfs1 p)) as [Hin | Hnotin].
+  - (* bid is in the mapping — both sides overwrite the mapped block *)
+    destruct Hpre1 as [_ [_ [_ Hexist1]]].
+    destruct Hpre2 as [_ [_ [_ Hexist2]]].
+    destruct (Hexist1 bid Hin) as [blk1 Hblk1].
+    assert (Hin2 : In bid (sfs_mapping sfs2 p))
+      by (rewrite <- Hmap; assumption).
+    destruct (Hexist2 bid Hin2) as [blk2 Hblk2].
+    destruct (Hgeom bid Hin blk1 blk2 Hblk1 Hblk2) as [Hid [Hlen Hcnt]].
+    unfold overwrite_path_blocks. simpl.
+    rewrite Hblk1.
+    rewrite (In_existsb_Nat_eqb _ _ Hin).
+    rewrite Hblk2.
+    rewrite <- Hmap.
+    rewrite (In_existsb_Nat_eqb _ _ Hin).
+    f_equal.
+    unfold overwrite_block.
+    rewrite Hid, Hlen, Hcnt. reflexivity.
+  - (* bid is not in the mapping — storage is preserved on both sides *)
+    rewrite overwrite_path_blocks_non_mapped_preserved by assumption.
+    assert (Hnotin2 : ~ In bid (sfs_mapping sfs2 p))
+      by (rewrite <- Hmap; assumption).
+    rewrite overwrite_path_blocks_non_mapped_preserved by assumption.
+    apply Hother. assumption.
+Qed.
 
 (** After one pass, the precondition holds and geometry is still preserved *)
 Lemma overwrite_pass_preserves_geometry :
@@ -449,7 +467,9 @@ Proof.
   injection Hb2 as Hb2. subst. split; reflexivity.
 Qed.
 
-(** After one overwrite pass, storage agrees everywhere *)
+(** After one overwrite pass, storage agrees everywhere. Hypothesis
+    strengthened (closure (A) of issue #57) to include block_overwritten
+    so the lemma is sound. *)
 Lemma one_pass_storage_agrees :
   forall sfs1 sfs2 p pat,
     sfs_mapping sfs1 = sfs_mapping sfs2 ->
@@ -460,7 +480,8 @@ Lemma one_pass_storage_agrees :
         sfs_storage sfs1 bid = Some blk1 ->
         sfs_storage sfs2 bid = Some blk2 ->
         block_id blk1 = block_id blk2 /\
-        length (block_data blk1) = length (block_data blk2)) ->
+        length (block_data blk1) = length (block_data blk2) /\
+        block_overwritten blk1 = block_overwritten blk2) ->
     obliterate_precondition p sfs1 ->
     obliterate_precondition p sfs2 ->
     forall bid,
@@ -501,8 +522,11 @@ Qed.
 
     Requires at least one overwrite pattern (with 0 patterns, no overwriting
     occurs and different data remains different). Also requires that blocks
-    at the same block_id have the same geometry (id and length), which models
-    the physical constraint that disk blocks have fixed size. *)
+    at the same block_id have the same geometry (id, length, overwrite-count).
+    The first two model the physical constraint that disk blocks have fixed
+    size; the third (strengthening per issue #57) is trivially satisfied in
+    the canonical use case where both starting states have un-obliterated
+    blocks (block_overwritten = 0 on both sides). Closes #58. *)
 Theorem obliterate_not_injective :
   forall p sfs1 sfs2 patterns,
     obliterate_precondition p sfs1 ->
@@ -513,26 +537,59 @@ Theorem obliterate_not_injective :
     (* Storage differs only in blocks mapped to p *)
     (forall bid, ~ In bid (sfs_mapping sfs1 p) ->
       sfs_storage sfs1 bid = sfs_storage sfs2 bid) ->
-    (* Mapped blocks have the same geometry (id and length) *)
+    (* Mapped blocks have the same geometry (id, length, overwrite-count) *)
     (forall bid, In bid (sfs_mapping sfs1 p) ->
       forall blk1 blk2,
         sfs_storage sfs1 bid = Some blk1 ->
         sfs_storage sfs2 bid = Some blk2 ->
         block_id blk1 = block_id blk2 /\
-        length (block_data blk1) = length (block_data blk2)) ->
+        length (block_data blk1) = length (block_data blk2) /\
+        block_overwritten blk1 = block_overwritten blk2) ->
     (* Then obliteration produces the same result *)
     obliterate p sfs1 patterns = obliterate p sfs2 patterns.
 Proof.
-  (* TRUSTED: obliterate_not_injective — downstream of overwrite_pass_equalizes_storage stub.
-     MODEL GAP (2026-06-01): This theorem depends on [overwrite_pass_equalizes_storage]
-     which is a stub (block_overwritten counter mismatch — see that lemma's
-     model-gap note). Once that lemma's geometry hypothesis is strengthened to
-     include block_overwritten equality (or the result is projected modulo it),
-     this proof reconnects to: rewrite multi_pass_preserves_tree/mapping; rewrite
-     Htree/Hmap; apply multi_pass_same_start_same_result via one_pass_storage_agrees.
-     Stub pending follow-up. *)
-(* TRUSTED: obliterate_not_injective — depends on overwrite_pass_equalizes_storage stub *)
-Admitted.
+  intros p sfs1 sfs2 patterns Hpre1 Hpre2 Htree Hmap Hlen Hother Hgeom.
+  destruct patterns as [|pat rest]; [simpl in Hlen; lia|].
+  (* After the first pass, storage agrees pointwise on both sides. *)
+  pose proof (one_pass_storage_agrees sfs1 sfs2 p pat Hmap Hother Hgeom Hpre1 Hpre2)
+    as Hagree1.
+  (* And tree + mapping are preserved through the first pass on both sides. *)
+  assert (Htree1 :
+    sfs_tree (overwrite_path_blocks sfs1 p pat) =
+    sfs_tree (overwrite_path_blocks sfs2 p pat)).
+  { rewrite !overwrite_path_blocks_preserves_tree. assumption. }
+  assert (Hmap1 :
+    sfs_mapping (overwrite_path_blocks sfs1 p pat) =
+    sfs_mapping (overwrite_path_blocks sfs2 p pat)).
+  { rewrite !overwrite_path_blocks_preserves_mapping. assumption. }
+  (* Multi-pass starting from agreeing states stays agreeing. *)
+  pose proof (multi_pass_same_start_same_result rest
+    (overwrite_path_blocks sfs1 p pat) (overwrite_path_blocks sfs2 p pat) p
+    Htree1 Hmap1 Hagree1) as Hagree_all.
+  (* Tree and mapping agree pointwise after the full multi-pass. *)
+  assert (Htreeall :
+    sfs_tree (multi_pass_overwrite sfs1 p (pat :: rest)) =
+    sfs_tree (multi_pass_overwrite sfs2 p (pat :: rest))).
+  { rewrite !multi_pass_preserves_tree. assumption. }
+  assert (Hmapall :
+    sfs_mapping (multi_pass_overwrite sfs1 p (pat :: rest)) =
+    sfs_mapping (multi_pass_overwrite sfs2 p (pat :: rest))).
+  { rewrite !multi_pass_preserves_mapping. assumption. }
+  (* Reassemble the obliterate equation. Avoid [simpl] so the
+     [multi_pass_overwrite ... (pat :: rest)] subterm stays intact and
+     matches Htreeall / Hmapall / Hagree_all. *)
+  unfold obliterate, remove_block_mapping. cbn [sfs_tree sfs_storage sfs_mapping].
+  f_equal.
+  - (* sfs_tree side: delete_file on equal trees *)
+    f_equal. exact Htreeall.
+  - (* sfs_storage side: storage agreement at every bid, via funext *)
+    apply functional_extensionality. intros bid.
+    exact (Hagree_all bid).
+  - (* sfs_mapping side: same conditional on equal underlying mappings *)
+    apply functional_extensionality. intros p'.
+    destruct (list_eq_dec string_dec p p'); [reflexivity|].
+    rewrite Hmapall. reflexivity.
+Qed.
 
 (** * Preservation Theorems *)
 
