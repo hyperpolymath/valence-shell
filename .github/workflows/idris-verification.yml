@@ -15,10 +15,14 @@ on:
     paths:
       - 'proofs/idris2/**'
       - '.github/workflows/idris-verification.yml'
+      - '.github/scripts/check-idris2-believe-me.sh'
+      - '.machine_readable/IDRIS2_AXIOMS.a2ml'
   pull_request:
     paths:
       - 'proofs/idris2/**'
       - '.github/workflows/idris-verification.yml'
+      - '.github/scripts/check-idris2-believe-me.sh'
+      - '.machine_readable/IDRIS2_AXIOMS.a2ml'
   workflow_dispatch:
 
 permissions:
@@ -81,6 +85,13 @@ jobs:
 
       - name: Show Idris2 version
         run: idris2 --version
+
+      - name: believe_me policy gate (Q1-C axiom registry)
+        # Reject any `believe_me` in proofs/idris2/ that is not registered
+        # in .machine_readable/IDRIS2_AXIOMS.a2ml. The only allowed home
+        # for axiomatic believe_me is Filesystem.Axioms. See PROOF-NEEDS.md
+        # "Priority 2" and the Q1-C pilot rationale.
+        run: .github/scripts/check-idris2-believe-me.sh
 
       - name: List installed Idris2 packages
         run: idris2 --list-packages
