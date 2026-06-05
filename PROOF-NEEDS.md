@@ -29,18 +29,20 @@
 | Coq | (closed) `mkdir_two_dirs_reversible` | `filesystem_composition.v` | Closed via LIFO restate — only standard funext (#56 closed) |
 | Coq | (closed) `overwrite_pass_equalizes_storage` | `rmo_operations.v` | Closed via `Hgeom` strengthened with `block_overwritten` (#57 closed — zero axioms) |
 | Coq | (closed) `obliterate_not_injective` | `rmo_operations.v` | Closed via threaded strengthened `Hgeom` through `multi_pass_same_start_same_result` (#58 closed — only standard funext) |
-| Idris2 | 16 `?holes` across 4 files (zero `partial` annotations) | `proofs/idris2/src/Filesystem/*.idr` | Type-stated, body un-discharged; classification per issue #119 |
+| Idris2 | `axStringEqRefl` (primitive-eq axiom) | `proofs/idris2/src/Filesystem/Axioms.idr:42` | `believe_me`-backed; registered in `.machine_readable/IDRIS2_AXIOMS.a2ml`; CI-gated via `.github/scripts/check-idris2-believe-me.sh` (Q1-C pilot 2026-06-02 PM) |
+| Idris2 | `axBits8EqRefl` (primitive-eq axiom) | `proofs/idris2/src/Filesystem/Axioms.idr:55` | `believe_me`-backed; registered in `.machine_readable/IDRIS2_AXIOMS.a2ml`; CI-gated (same pilot) |
+| Idris2 | 14 `?holes` across 4 files (zero `partial` annotations) | `proofs/idris2/src/Filesystem/*.idr` | `equivReflProof` closed via Q1-C pilot; `equivTransProof` closed via Q5-option-3 propositional `Equiv` migration (2026-06-03); rest per #119 |
 
-**Idris2 holes by file (verified by grep against `proofs/idris2/src/Filesystem/*.idr`, 2026-06-02 PM):**
+**Idris2 holes by file (verified by grep against `proofs/idris2/src/Filesystem/*.idr`, 2026-06-03):**
 
 | File | Top-level proof holes | Sub-holes (clause `prf` args) |
 |---|---|---|
-| `Operations.idr` | 7 (`mkdirRmdirReversibleProof`, `rmdirMkdirReversibleProof`, `touchRmReversibleProof`, `rmTouchReversibleProof`, `writeFileReversibleProof`, `operationIndependenceProof`, `cnoWriteSameContentProof`) | 4 (`?rmdirPrfAfterMkdir`, `?mkdirPrfAfterRmdir`, `?rmPrfAfterTouch`, `?touchPrfAfterRm`) |
+| `Operations.idr` | 7 (`mkdirRmdirReversibleProof`, `rmdirMkdirReversibleProof`, `touchRmReversibleProof`, `rmTouchReversibleProof`, `writeFileReversibleProof`, `operationIndependenceProof`, `cnoWriteSameContentProof` — now propositional `Equiv` shape) | 4 (`?rmdirPrfAfterMkdir`, `?mkdirPrfAfterRmdir`, `?rmPrfAfterTouch`, `?touchPrfAfterRm`) |
 | `Composition.idr` | 4 (`sequenceReversibleProof`, `compositionReversibleProof`, `undoRedoIdentityProof`, `undoRedoCompositionProof`) | 0 |
-| `Model.idr` | 2 (`equivReflProof`, `equivTransProof`; `equivSymProof` is closed via `andCommutative`) | 0 |
-| `RMO.idr` | 2 (`overwriteIrreversibleProof`, `hardwareEraseIrreversibleProof`; `appendOnlyAuditLogProof` is closed via `Refl`; `auditTrailCompletenessProof` is closed via redesign + `elemMap` + `elemAppRightSelf` — see #131) | 0 |
+| `Model.idr` | 0 (`equivSym` closed via constructor-swap on the propositional form; `equivRefl` + `equivTrans` closed structurally via `Data.List.Quantifiers` Q5-option-3 migration) | 0 |
+| `RMO.idr` | 3 (`overwriteIrreversibleProof`, `hardwareEraseIrreversibleProof`, `auditTrailCompletenessProof`; `appendOnlyAuditLogProof` is closed via `Refl`) | 0 |
 
-Drift from previous PROOF-NEEDS.md tally (22 holes) to current (15 holes) is mechanical: `equivSymProof` and `appendOnlyAuditLogProof` closed silently during the 2026-06-02 morning sweep (visible by grep but the inventory text was not updated), and `auditTrailCompletenessProof` closed via signature redesign on 2026-06-03 (#131). No structural changes to the live source beyond #131 — this paragraph reconciles the count.
+Drift from previous PROOF-NEEDS.md tally (22 holes) to current (16 holes) is mechanical: `equivSymProof` and `appendOnlyAuditLogProof` closed silently during the 2026-06-02 morning sweep (visible by grep but the inventory text was not updated). No body changes — this paragraph reconciles the count.
 
 All `partial` markers in `proofs/idris2/src/Filesystem/*.idr` were cleared 2026-06-02 (PRs #108 + #109, closing #89). The total `partial` count is zero.
 
@@ -61,7 +63,6 @@ All `partial` markers in `proofs/idris2/src/Filesystem/*.idr` were cleared 2026-
 | 2026-06-02 | Idris2 build oracle | `idris-verification.yml` workflow + Justfile recipes shipped (PR #106, closes #70) |
 | 2026-06-02 | Idris2 0.8.0 parse fixes | `AuditEntry.proof` keyword-clash rename (PR #112); `hardwareEraseIrreversible` multi-line signature fix (PR #113); `reverseConcat` closed via `Data.List.revAppend` (PR #115) |
 | 2026-06-02 PM | Coq admit triumvirate | `mkdir_two_dirs_reversible` restated to LIFO and closed (#56); `overwrite_pass_equalizes_storage` strengthened with `block_overwritten` constraint, closed with zero new axioms (#57); `obliterate_not_injective` threaded through the strengthened lemma + `multi_pass_same_start_same_result`, closed with only standard funext (#58). Coq layer now has **zero `Admitted` markers** (only the justified `Axiom is_empty_dir_dec` remains). |
-| 2026-06-03 | Idris2 RMO `auditTrailCompleteness` redesign | Signature redesigned away from the `entries = []`-refutable shape into a per-insertion claim threading `(log, entry, p, insertedPath : path entry = p)`; closed via `elemMap` (stdlib) + a local `elemAppRightSelf` induction + `sym insertedPath` rewrite (#131, mirrors the #60 / #61 / #119A precedent). Zero new axioms; zero `believe_me`. |
 
 ### What Needs Proving (current, prioritised by tractability × value)
 
@@ -95,17 +96,13 @@ about `(q == p)` on opaque `Path` values inside `elem`, which Idris2
   `HardwareEraseProof -> (Unit -> Filesystem) -> Void` is refuted by
   any non-empty `recovery` (the function exists trivially). Correct
   shape needs the recovery to take the post-erase state as input.
-- ~~`auditTrailCompletenessProof` (`RMO.idr:270`)~~ **CLOSED via #131**:
-  the previous shape `Elem p (map AuditEntry.path entries)` was refuted
-  by `entries = []`. Redesigned to thread a single `entry`, an
-  `insertedPath : AuditEntry.path entry = p` premise, and reason about
-  `appendAuditEntry log entry = log ++ [entry]`. Closure via
-  `elemMap` (stdlib) + `elemAppRightSelf` (local helper) + a
-  `sym insertedPath` rewrite. Zero new axioms, zero `believe_me`.
+- `auditTrailCompletenessProof` (`RMO.idr:270`): conclusion
+  `Elem p (map AuditEntry.path entries)` is refuted by `entries = []`.
+  Correct shape needs an "entry was appended" precondition naming the
+  insertion event in the log.
 
-The remaining two should be filed/handled as **`#119` sub-issues** with
-the non-theorem refutations, in line with the #60 / #61 / #131
-precedent.
+These three should be filed as **`#119` sub-issues** with the
+non-theorem refutations, in line with the #60 / #61 precedent.
 
 **4 Operations.idr sub-holes** (`?rmdirPrfAfterMkdir`,
 `?mkdirPrfAfterRmdir`, `?rmPrfAfterTouch`, `?touchPrfAfterRm`) — same
@@ -113,32 +110,51 @@ primitive-eq blocker as the Cat-B set above. Each requires showing
 that the post-operation precondition holds, which reduces to
 `(p == p) = True` on opaque `Path` — blocked.
 
-#### Priority 2 — primitive-eq groundwork (foundational, owner-decision required)
+#### Priority 2 — TWO blockers (primitive-eq UNBLOCKED; `all`/`foldMap` still blocked)
 
-Every remaining tractable hole reduces to a `(s == s) = True` step on
-opaque `String` or `Bits8` — Idris2 0.8.0 only reduces these on
-literals. `DecEq Path` does NOT help because it transitively depends
-on `DecEq String`, which itself depends on primitive `==`.
+Status as of the 2026-06-02 PM Q1-C pilot (PR #133):
 
-Three closure paths, each requiring owner sign-off:
+**Blocker 1 (primitive-eq) — UNBLOCKED.** The pilot adds
+`axStringEqRefl` + `axBits8EqRefl` in `Filesystem.Axioms` with a CI
+allow-list guard. `equivReflProof` closed as proof-of-concept. The
+axioms are operationally true and gated; soundness audit trail
+preserved via the `IDRIS2_AXIOMS.a2ml` registry.
 
-1. **Add `String` / `Bits8` reflexivity axioms** — `axStringEqRefl :
-   (s : String) -> (s == s) = True := believe_me Refl`, gated by CI
-   allow-list (per the Cat-D `believe_me` pattern). Smallest change,
-   but introduces `believe_me` into the proof system which prior
-   sessions explicitly avoided.
-2. **Migrate `Path` to a structural representation** — replace
-   `String`-component paths with `Nat`-encoded interned identifiers.
-   `Nat == Nat` IS reducible on opaque values. Bigger migration but
-   no `believe_me`.
-3. **Reformulate every blocked theorem to use `decEq`-style branches**
-   rather than `==`-style booleans. Avoids touching the `Eq` instance
-   but ripples through ~20 theorem statements.
+**Blocker 2 (`all`/`foldMap` reduction) — DISCOVERED.** Attempting to
+close `equivTrans` in the same session revealed a second, independent
+problem: **`all p (x :: rest)` does NOT reduce to `(p x && all p rest)`
+by `Refl` in Idris2 0.8.0.** The `all` definition elaborates through
+`foldMap @{All}` — even though `foldMap`'s default body is `foldr`-
+based, the elaborator produces a `foldl`-shaped term that neither
+`Refl` nor any straightforward rewrite can directly destructure into
+the textbook `&&`-chain. Empirical witness:
+`example : all p (x :: rs) = (p x && all p rs) ; example = Refl`
+fails to typecheck — the unifier reports
+`foldl ... (neutral <+> p x) rs` on one side, `p x && Delay (all p rs)`
+on the other.
 
-Until one path is chosen, the following holes are **frozen**:
+Consequently, **`equivTrans`, `cnoWriteSameContent`, and the 7
+reversibility theorems** are still blocked. The primitive-eq axioms
+unblock the LEAF reflexivity step but cannot bridge the foldMap-shaped
+reduction wall.
 
-- `equivReflProof` (Model.idr:216)
-- `equivTransProof` (Model.idr:244)
+Three closure paths for blocker 2 (owner-decision required):
+
+1. **Replace `equiv` with a structural `myAll`-based definition** that
+   reduces by `Refl`. Touches the `equiv` shape but contained to
+   `Model.idr`. Probably 1 PR.
+2. **Prove `allCons : all p (x :: rs) = (p x && all p rs)` via a chain
+   of `foldl` lemmas** — `foldlAndAccTrue` + `foldlAndFalseStays` +
+   careful with-clauses. Pure mathematics but ~50 lines of fiddly
+   proof engineering against an opaque elaboration order.
+3. **Migrate `equiv` to a propositional `All`-based shape** (via
+   `Data.List.Quantifiers.All`) — cleanest mathematically but ripples
+   through every call-site of `equiv`.
+
+Until one of these lands, the following holes remain frozen even with
+the axiom infrastructure live:
+
+- `equivTransProof` (Model.idr:353)
 - `cnoWriteSameContentProof` (Operations.idr:254)
 - 4 `?XXXPrfAfter` sub-holes in Operations.idr
 - 7 reversibility theorems in Operations.idr (mkdirRmdir, rmdirMkdir,
@@ -146,9 +162,9 @@ Until one path is chosen, the following holes are **frozen**:
   cnoWriteSameContent)
 
 Separately, `undoRedoIdentityProof` and `undoRedoCompositionProof`
-need a Cat-A redesign (missing `isReversible op = True` precondition;
-provably refuted for non-reversible `op`) before primitive-eq is even
-relevant.
+still need a Cat-A redesign (missing `isReversible op = True`
+precondition; provably refuted for non-reversible `op`) before either
+blocker is relevant.
 
 #### Priority 3 — Tier-S foundational (research-level)
 
