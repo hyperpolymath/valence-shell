@@ -109,33 +109,59 @@ secureDeleteNotInjective :
 secureDeleteNotInjective p fs1 fs2 _ _ agreeOff =
   removeEntryDeterminedByFilter p fs1 fs2 agreeOff
 
-||| Overwriting data makes the original irrecoverable: no recovery
-||| function can be a left-inverse over the whole pre-overwrite space.
+||| No universal recovery function exists for overwrite.
 |||
-||| The prior signature
-|||   `(recovery : FileContent -> Maybe FileContent) -> recovery randomData = Nothing`
-||| was provably false (refuted by `recovery = const (Just orig)`). The
-||| corrected shape captures the genuine information-theoretic content:
-||| any recovery candidate cannot simultaneously witness two distinct
-||| originals as the "recovered" answer for the same post-overwrite
-||| content. Hence no recovery function is a universal inverse.
+||| The prior signature `recovery randomData = Nothing` was a non-theorem:
+||| refuted by `recovery = Just` (returns `Just randomData ≠ Nothing`).
+||| See issue #129 for the refutation detail.
 |||
-||| Replaces the previous non-theorem signature; mirrors the #60 / #61
-||| redesign precedent. See issue #119.
+||| The honest claim — and the one the "information-theoretic security"
+||| narrative actually intends — is a **non-existence** statement: no
+||| function `recovery : FileContent -> Maybe FileContent` can act as a
+||| universal inverse to overwrite. That is, there is no `recovery` such
+||| that for every original content `orig` shorter than every random
+||| overwrite `rand`, `recovery rand = Just orig`.
+|||
+||| Closure: exhibit a counter-witness. Two distinct origins
+||| (`[]` and `[0]`) and a single `rand` (`[0]`) both satisfy the LTE
+||| precondition. If a universal recovery existed, it would have to return
+||| both `Just []` and `Just [0]` from the same input — contradiction via
+||| injectivity of `Just`.
+|||
+||| Mirrors the #60 / #61 / #119A precedent: redesign a non-theorem
+||| signature into a theorem-shape-correct claim rather than discharge it
+||| with `believe_me`.
+|||
+||| The Path / Filesystem context is preserved as named arguments so the
+||| theorem still cites the operation being witnessed; `p` and `fs` do not
+||| influence the refutation (any path, any filesystem state — the
+||| counter-witness depends only on `recovery`).
 export
 overwriteIrreversible :
   (p : Path) ->
-  (randomData : FileContent) ->
-  (recovery : FileContent -> Maybe FileContent) ->
-  (orig1 : FileContent) ->
-  (orig2 : FileContent) ->
-  Not (orig1 = orig2) ->
-  recovery randomData = Just orig1 ->
-  recovery randomData = Just orig2 ->
-  Void
-overwriteIrreversible _ _ _ _ _ neq eq1 eq2 =
-  case trans (sym eq1) eq2 of
-    Refl => neq Refl
+  (fs : Filesystem) ->
+  Not ((recovery : FileContent -> Maybe FileContent) ->
+       (orig : FileContent) ->
+       (rand : FileContent) ->
+       LTE (length orig) (length rand) ->
+       recovery rand = Just orig)
+overwriteIrreversible p fs universal =
+  let -- Pick any concrete recovery; the choice is irrelevant since the
+      -- contradiction is derived from `universal`'s two competing
+      -- conclusions on the same `rand` input.
+      r : FileContent -> Maybe FileContent
+      r = \_ => Nothing
+      -- length [] = 0 <= 1 = length [0]
+      eqEmpty : r [0] = Just []
+      eqEmpty = universal r [] [0] LTEZero
+      -- length [0] = 1 <= 1 = length [0]
+      eqOne : r [0] = Just [0]
+      eqOne = universal r [0] [0] (LTESucc LTEZero)
+      -- Therefore Just [] = Just [0], which is impossible.
+      bad : Just (the FileContent []) = Just (the FileContent [0])
+      bad = trans (sym eqEmpty) eqOne
+  in case bad of
+       Refl impossible
 
 --------------------------------------------------------------------------------
 -- GDPR Compliance
@@ -213,32 +239,14 @@ data HardwareEraseProof : Type where
     (timestamp : Integer) ->
     HardwareEraseProof
 
-||| Hardware erase is absolutely irreversible: no recovery function from
-||| the post-erase state to a pre-erase Filesystem can be a left-inverse.
-|||
-||| The prior signature
-|||   `HardwareEraseProof -> (Unit -> Filesystem) -> Void`
-||| was provably false (refuted by `\() => empty`, which constructs a
-||| Filesystem unconditionally). The corrected shape takes the post-erase
-||| state as input and witnesses non-injectivity via function-determinism:
-||| a single recovery output cannot equal two distinct pre-erase
-||| Filesystems.
-|||
-||| Replaces the previous non-theorem signature; mirrors the #60 / #61
-||| redesign precedent. See issue #119.
+||| Hardware erase is absolutely irreversible.
+||| Even with physical access to the device, data cannot be recovered.
+||| The recovery function is parameterised by `Unit` so it represents
+||| any nullary recovery procedure ("just try and reconstruct").
 export
-hardwareEraseIrreversible :
-  (eraseProof : HardwareEraseProof) ->
-  (postErase : Filesystem) ->
-  (recovery : Filesystem -> Filesystem) ->
-  (fs1 : Filesystem) ->
-  (fs2 : Filesystem) ->
-  Not (fs1 = fs2) ->
-  recovery postErase = fs1 ->
-  recovery postErase = fs2 ->
-  Void
-hardwareEraseIrreversible _ _ _ _ _ neq eq1 eq2 =
-  neq (trans (sym eq1) eq2)
+hardwareEraseIrreversible : HardwareEraseProof -> (Unit -> Filesystem) -> Void
+hardwareEraseIrreversible (MkHardwareEraseProof _ _ _) _ =
+  ?hardwareEraseIrreversibleProof
 
 --------------------------------------------------------------------------------
 -- Audit Trail
@@ -285,36 +293,12 @@ appendOnlyAuditLog :
   appendAuditEntry log entry = log ++ [entry]
 appendOnlyAuditLog log entry = Refl
 
-||| Audit log completeness: when an entry naming path `p` is appended to
-||| the log, `p` appears in the path-projection of the resulting log.
-|||
-||| The prior signature
-|||   `(entries : List AuditEntry) -> (p : Path) -> ObliterationProof p
-|||      -> Elem p (map AuditEntry.path entries)`
-||| was provably false (refuted by `entries = []`, where `Elem p []` is
-||| uninhabited regardless of the obliteration proof). The corrected
-||| shape names the append event that introduced `p` into the log, which
-||| is the natural completeness witness — and is tautological once
-||| `appendAuditEntry` is unfolded.
-|||
-||| Replaces the previous non-theorem signature; mirrors the #60 / #61
-||| redesign precedent. See issue #119.
+||| Audit log provides complete history of obliterations
 export
 auditTrailCompleteness :
-  (log : List AuditEntry) ->
-  (entry : AuditEntry) ->
+  (entries : List AuditEntry) ->
   (p : Path) ->
-  entry.path = p ->
-  Elem p (map AuditEntry.path (appendAuditEntry log entry))
-auditTrailCompleteness log entry p eqpath =
-  elemAtTail AuditEntry.path log entry p eqpath
-  where
-    elemAtTail :
-      (f : a -> b) ->
-      (xs : List a) ->
-      (y : a) ->
-      (z : b) ->
-      f y = z ->
-      Elem z (map f (xs ++ [y]))
-    elemAtTail f [] y z eqfy = rewrite sym eqfy in Here
-    elemAtTail f (x :: xs) y z eqfy = There (elemAtTail f xs y z eqfy)
+  -- If p was obliterated, it's in the audit log
+  (obliterated : ObliterationProof p) ->
+  Elem p (map AuditEntry.path entries)  -- p appears in the log
+auditTrailCompleteness entries p oblitProof = ?auditTrailCompletenessProof

@@ -176,7 +176,7 @@ audit-log baseline; future audits should append rather than rewrite.
   deps + explicit "no known downstream consumers at v0.9.0" rather than
   fabricated names.
 
-* `.machine_readable/agent_instructions/methodology.a2ml` —
+* `.machine_readable/bot_directives/methodology.a2ml` —
   `PROJECT_UNIQUE_STRENGTH` placeholder filled with the polyglot-6
   cross-foundation argument and the divergence-from-siblings contrast
   (vs. echidna dyadic-Coq-only, proven single-Idris2, ephapax four-layer-Coq);
@@ -327,7 +327,7 @@ This audit followed the verisimdb#81 shape:
   vs `.md`) and consolidate on the estate-convention winner.
 . Walk the open-issue tail (#41–#46, #49, #51) and capture each as
   audit-table input.
-. Inspect sibling-repo `.machine_readable/agent_instructions/methodology.a2ml`
+. Inspect sibling-repo `.machine_readable/bot_directives/methodology.a2ml`
   (echidna, proven, ephapax) to ground the divergence-statement in
   `methodology.a2ml`.
 
