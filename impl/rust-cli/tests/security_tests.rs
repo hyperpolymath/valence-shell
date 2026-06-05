@@ -12,6 +12,7 @@
 mod fixtures;
 
 use fixtures::tempfile::TempDir;
+use proptest::prelude::*;
 use std::fs;
 use vsh::parser::parse_command;
 use vsh::state::ShellState;
@@ -100,17 +101,109 @@ fn security_path_traversal_protection() {
 
         // Should either fail OR resolve to a safe path within sandbox
         if result.is_ok() {
-            // If successful, verify the resolved path is within temp dir
+            // If successful, verify the resolved path is within the sandbox.
             let resolved = state.resolve_path(attempt);
             let canonical = fs::canonicalize(&resolved).unwrap();
 
-            // Canonical path must start with temp.path()
+            // ShellState canonicalizes the root. On macOS, raw temp paths under
+            // /var canonicalize to /private/var, so use the same root identity
+            // as the implementation.
             assert!(
-                canonical.starts_with(temp.path()),
+                canonical.starts_with(&state.root),
                 "Path traversal detected: {:?} escaped sandbox",
                 canonical
             );
         }
+    }
+}
+
+// ============================================================
+// Path traversal containment — property test for frontier A-12
+// ============================================================
+//
+// The headline theorem `PathTraversal.path_traversal_containment` in
+// `proofs/lean4/PathTraversal.lean` proves that the Rust normaliser's
+// loop-body invariant holds for arbitrary component sequences. This
+// property test is the Rust-side validation that the implementation
+// matches the Lean model: regardless of how many `..` / `.` / normal
+// components appear (or in what order), `resolve_path` always returns
+// a `PathBuf` that starts with the sandbox root.
+//
+// Regression-guard for the 2026-02-12 CVE-class audit fix
+// (`resolve_path("../../etc/passwd")` previously escaped the sandbox).
+
+/// Generate a single path component as a string fragment.
+/// Mix of `..`, `.`, and short normal names to exercise every branch
+/// of the normaliser loop.
+fn component_strategy() -> impl Strategy<Value = String> {
+    prop_oneof![
+        Just("..".to_string()),
+        Just(".".to_string()),
+        "[a-zA-Z0-9_-]{1,8}".prop_map(|s| s),
+    ]
+}
+
+/// Build a path string from a sequence of components, with optional
+/// leading slash to exercise the absolute-path strip.
+fn path_strategy() -> impl Strategy<Value = String> {
+    (
+        any::<bool>(),
+        prop::collection::vec(component_strategy(), 0..20),
+    )
+        .prop_map(|(absolute, parts)| {
+            let joined = parts.join("/");
+            if absolute {
+                format!("/{}", joined)
+            } else {
+                joined
+            }
+        })
+}
+
+proptest! {
+    /// `resolve_path(p)` is always a descendant of the sandbox root, for
+    /// any input `p` (any mix of `..`, `.`, normal components, with or
+    /// without leading slash). Mirrors `PathTraversal.path_traversal_containment`.
+    #[test]
+    fn property_resolve_path_stays_within_sandbox(path in path_strategy()) {
+        let temp = TempDir::new().unwrap();
+        let state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
+        let resolved = state.resolve_path(&path);
+
+        // The sandbox root as the implementation sees it. We compare
+        // path-prefix (not canonical-realpath) because the resolved
+        // path may not physically exist; the Lean theorem is about
+        // structural prefix, not filesystem realpath.
+        let root = &state.root;
+        prop_assert!(
+            resolved.starts_with(root),
+            "resolve_path({:?}) returned {:?}, which does not start with sandbox root {:?}",
+            path, resolved, root
+        );
+    }
+
+    /// Stronger variant: paths heavily stocked with `..` (10× more
+    /// likely than normal components) still stay contained. Targets
+    /// the specific 2026-02-12 audit failure mode.
+    #[test]
+    fn property_resolve_path_parent_dir_heavy_stays_within_sandbox(
+        path in prop::collection::vec(
+            prop_oneof![
+                10 => Just("..".to_string()),
+                1  => "[a-z]{1,4}".prop_map(|s| s),
+            ],
+            1..30,
+        ).prop_map(|parts| parts.join("/"))
+    ) {
+        let temp = TempDir::new().unwrap();
+        let state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
+        let resolved = state.resolve_path(&path);
+        let root = &state.root;
+        prop_assert!(
+            resolved.starts_with(root),
+            "..-heavy path {:?} escaped sandbox: resolved={:?}, root={:?}",
+            path, resolved, root
+        );
     }
 }
 
@@ -128,10 +221,9 @@ fn security_absolute_path_handling() {
 
     // For safety, we should reject absolute paths in sandboxed mode
     if result.is_ok() {
-        #[allow(clippy::join_absolute_paths)]
-        let created_path = state.root.join("/tmp/escape");
+        let created_path = state.resolve_path("/tmp/escape");
         assert!(
-            created_path.starts_with(temp.path()),
+            created_path.starts_with(&state.root),
             "Absolute path should not escape sandbox"
         );
     }

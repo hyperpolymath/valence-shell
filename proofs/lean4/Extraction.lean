@@ -228,7 +228,7 @@ cd proofs/lean4
 lake build Extraction
 ```
 
-This produces C code in .lake/build/lib/
+This produces C code in .lake/build/ir/
 
 Step 2: Create C wrapper library
 --------------------------------
@@ -242,7 +242,7 @@ Step 3: Compile shared library
 ```bash
 gcc -shared -o liblean_vsh.so \
     lean_wrapper.c \
-    .lake/build/lib/Extraction.c \
+    .lake/build/ir/Extraction.c \
     -I$(lean --print-prefix)/include \
     -L$(lean --print-prefix)/lib/lean \
     -lleanshared

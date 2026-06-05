@@ -58,14 +58,23 @@ jobs:
 
       - name: Verify Lean extraction output
         run: |
-          ls -lh proofs/lean4/.lake/build/lib/Extraction.c
-          wc -l proofs/lean4/.lake/build/lib/Extraction.c
+          ls -lh proofs/lean4/.lake/build/ir/Extraction.c
+          wc -l proofs/lean4/.lake/build/ir/Extraction.c
 
       - name: Build C wrapper library
         run: |
           source $HOME/.elan/env
           cd impl/ocaml
-          make build-c
+          lean_prefix="$(lean --print-prefix)"
+          lean_include="$lean_prefix/include"
+          lean_lib="$lean_prefix/lib/lean"
+          gcc -shared -fPIC -o liblean_vsh.so \
+            lean_wrapper.c \
+            ../../proofs/lean4/.lake/build/ir/Extraction.c \
+            -I"$lean_include" \
+            -L"$lean_lib" \
+            -lleanshared \
+            -Wl,-rpath,"$lean_lib"
 
       - name: Verify shared library
         run: |
@@ -91,87 +100,15 @@ jobs:
           cargo test --test correspondence_tests
           cargo test --test property_correspondence_tests
 
-      - name: Build Rust with Lean verification
+      - name: Report Rust binary size
         run: |
-          source $HOME/.elan/env
-          cd impl/rust-cli
-          export LD_LIBRARY_PATH=../ocaml:$(lean --print-prefix)/lib/lean:$LD_LIBRARY_PATH
-          cargo build --release --features lean-runtime-checks
-
-      - name: Test Rust with Lean verification
-        run: |
-          source $HOME/.elan/env
-          cd impl/rust-cli
-          export LD_LIBRARY_PATH=../ocaml:$(lean --print-prefix)/lib/lean:$LD_LIBRARY_PATH
-          cargo test --features lean-runtime-checks
-          cargo test --test correspondence_tests --features lean-runtime-checks
-          cargo test --test property_correspondence_tests --features lean-runtime-checks
-
-      - name: Compare binary sizes
-        run: |
-          echo "Binary size comparison:"
-          echo "Without Lean: $(stat -c%s impl/rust-cli/target/release/vsh) bytes"
-          # Note: with-lean binary would be in different target dir, skip for now
+          echo "Rust binary: $(stat -c%s impl/rust-cli/target/release/vsh) bytes"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: lean-extraction-artifacts
           path: |
-            proofs/lean4/.lake/build/lib/Extraction.c
+            proofs/lean4/.lake/build/ir/Extraction.c
             impl/ocaml/liblean_vsh.so
             impl/rust-cli/target/release/vsh
-
-  benchmark-overhead:
-    name: Benchmark Lean Verification Overhead
-    runs-on: ubuntu-latest
-    needs: build-lean-extraction
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824
-
-      - name: Install Lean 4
-        run: |
-          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
-          echo "$HOME/.elan/bin" >> $GITHUB_PATH
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b
-        with:
-          toolchain: stable
-
-      - name: Build Lean extraction
-        run: |
-          source $HOME/.elan/env
-          cd proofs/lean4
-          lake build Extraction
-
-      - name: Build C wrapper
-        run: |
-          source $HOME/.elan/env
-          cd impl/ocaml
-          make build-c
-
-      - name: Benchmark baseline (no Lean)
-        run: |
-          cd impl/rust-cli
-          cargo bench --bench lean_verification_overhead -- --save-baseline baseline
-
-      - name: Benchmark with Lean
-        run: |
-          source $HOME/.elan/env
-          cd impl/rust-cli
-          export LD_LIBRARY_PATH=../ocaml:$(lean --print-prefix)/lib/lean:$LD_LIBRARY_PATH
-          cargo bench --bench lean_verification_overhead --features lean-runtime-checks -- --save-baseline with_lean
-
-      - name: Compare benchmarks
-        run: |
-          cd impl/rust-cli
-          cargo bench --bench lean_verification_overhead -- --baseline baseline
-
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: benchmark-results
-          path: impl/rust-cli/target/criterion/

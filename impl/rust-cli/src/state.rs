@@ -334,6 +334,8 @@ impl ShellState {
             fs::create_dir_all(&root_path).context("Failed to create sandbox root")?;
         }
 
+        let root_path =
+            fs::canonicalize(&root_path).context("Failed to canonicalize sandbox root")?;
         let state_file = root_path.join(".vsh_state.json");
 
         let mut state = Self {
@@ -389,7 +391,7 @@ impl ShellState {
 
     /// Record an operation from a redo without clearing the redo stack.
     ///
-    /// Unlike [`record_operation`], this preserves remaining redo entries
+    /// Unlike [`Self::record_operation`], this preserves remaining redo entries
     /// so that multiple sequential redos work correctly.
     pub fn record_redo_operation(&mut self, mut op: Operation) {
         if let Some(ref mut txn) = self.active_transaction {
