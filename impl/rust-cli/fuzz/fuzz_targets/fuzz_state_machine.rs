@@ -51,7 +51,7 @@ fuzz_target!(|data: &[u8]| {
         Err(_) => return,
     };
 
-    let mut state = match ShellState::new(temp.path()) {
+    let mut state = match ShellState::new(temp.path().to_str().unwrap()) {
         Ok(s) => s,
         Err(_) => return,
     };
@@ -75,7 +75,7 @@ fuzz_target!(|data: &[u8]| {
                 let _ = rm(&mut state, &target, true);
             }
             Action::Undo => {
-                let _ = state.pop_undo();
+                let _ = state.pop_redo();
             }
             Action::Redo => {
                 let _ = state.pop_redo();
@@ -95,7 +95,7 @@ fuzz_target!(|data: &[u8]| {
         .map(|e| e.count())
         .unwrap_or(0);
 
-    while state.pop_undo().is_ok() {
+    while state.pop_redo().is_ok() {
         // Keep undoing
     }
 
