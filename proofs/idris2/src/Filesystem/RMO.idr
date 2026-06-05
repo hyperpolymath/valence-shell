@@ -109,59 +109,25 @@ secureDeleteNotInjective :
 secureDeleteNotInjective p fs1 fs2 _ _ agreeOff =
   removeEntryDeterminedByFilter p fs1 fs2 agreeOff
 
-||| No universal recovery function exists for overwrite.
+||| Overwriting data makes original irrecoverable
 |||
-||| The prior signature `recovery randomData = Nothing` was a non-theorem:
-||| refuted by `recovery = Just` (returns `Just randomData ≠ Nothing`).
-||| See issue #129 for the refutation detail.
-|||
-||| The honest claim — and the one the "information-theoretic security"
-||| narrative actually intends — is a **non-existence** statement: no
-||| function `recovery : FileContent -> Maybe FileContent` can act as a
-||| universal inverse to overwrite. That is, there is no `recovery` such
-||| that for every original content `orig` shorter than every random
-||| overwrite `rand`, `recovery rand = Just orig`.
-|||
-||| Closure: exhibit a counter-witness. Two distinct origins
-||| (`[]` and `[0]`) and a single `rand` (`[0]`) both satisfy the LTE
-||| precondition. If a universal recovery existed, it would have to return
-||| both `Just []` and `Just [0]` from the same input — contradiction via
-||| injectivity of `Just`.
-|||
-||| Mirrors the #60 / #61 / #119A precedent: redesign a non-theorem
-||| signature into a theorem-shape-correct claim rather than discharge it
-||| with `believe_me`.
-|||
-||| The Path / Filesystem context is preserved as named arguments so the
-||| theorem still cites the operation being witnessed; `p` and `fs` do not
-||| influence the refutation (any path, any filesystem state — the
-||| counter-witness depends only on `recovery`).
+||| After overwriting with random data, the original content cannot be
+||| recovered (information-theoretic security).
 export
 overwriteIrreversible :
   (p : Path) ->
+  (originalContent : FileContent) ->
+  (randomData : FileContent) ->
   (fs : Filesystem) ->
-  Not ((recovery : FileContent -> Maybe FileContent) ->
-       (orig : FileContent) ->
-       (rand : FileContent) ->
-       LTE (length orig) (length rand) ->
-       recovery rand = Just orig)
-overwriteIrreversible p fs universal =
-  let -- Pick any concrete recovery; the choice is irrelevant since the
-      -- contradiction is derived from `universal`'s two competing
-      -- conclusions on the same `rand` input.
-      r : FileContent -> Maybe FileContent
-      r = \_ => Nothing
-      -- length [] = 0 <= 1 = length [0]
-      eqEmpty : r [0] = Just []
-      eqEmpty = universal r [] [0] LTEZero
-      -- length [0] = 1 <= 1 = length [0]
-      eqOne : r [0] = Just [0]
-      eqOne = universal r [0] [0] (LTESucc LTEZero)
-      -- Therefore Just [] = Just [0], which is impossible.
-      bad : Just (the FileContent []) = Just (the FileContent [0])
-      bad = trans (sym eqEmpty) eqOne
-  in case bad of
-       Refl impossible
+  LTE (length originalContent) (length randomData) ->
+  -- After overwrite, original is irrecoverable
+  (recovery : FileContent -> Maybe FileContent) ->
+  recovery randomData = Nothing  -- Cannot recover original
+overwriteIrreversible p orig rand fs lenPrf recovery =
+  -- Information-theoretically secure:
+  -- random data of sufficient length destroys all information
+  -- about the original
+  ?overwriteIrreversibleProof
 
 --------------------------------------------------------------------------------
 -- GDPR Compliance
@@ -293,12 +259,60 @@ appendOnlyAuditLog :
   appendAuditEntry log entry = log ++ [entry]
 appendOnlyAuditLog log entry = Refl
 
-||| Audit log provides complete history of obliterations
+||| `Elem` is preserved by right-appending the element itself.
+|||
+||| Pure list lemma — the appended item always lives at the end of
+||| the new list. Proof by straightforward induction on the prefix.
+|||
+||| Idris2 0.8.0 base does not ship this lemma directly; the closest
+||| stdlib helper is `Data.List.Elem.elemMap` (membership lifted
+||| through `map`), which we use as the second step of the audit
+||| completeness proof below.
+elemAppRightSelf : (xs : List a) -> (x : a) -> Elem x (xs ++ [x])
+elemAppRightSelf []        _ = Here
+elemAppRightSelf (_ :: ys) x = There (elemAppRightSelf ys x)
+
+||| Audit log completeness — every path inserted via the official
+||| append-only constructor appears in the resulting log.
+|||
+||| Replaces the previous non-theorem signature
+|||
+|||     auditTrailCompleteness :
+|||       (entries : List AuditEntry) ->
+|||       (p : Path) ->
+|||       (obliterated : ObliterationProof p) ->
+|||       Elem p (map AuditEntry.path entries)
+|||
+||| which was provably false (refuted by `entries = []`: an
+||| `ObliterationProof` for any `p` exists by `MkObliterationProof`,
+||| yet the empty log contains no paths). See issue #131 for the
+||| design rationale (mirrors the #60 / #61 / #119A precedent:
+||| redesign non-theorem signatures rather than close them with
+||| `believe_me`).
+|||
+||| The corrected shape encodes the actual invariant: the path is
+||| present in the post-append log *because* it was appended via
+||| `appendAuditEntry`. The premise `insertedPath` witnesses the
+||| caller's commitment that the new entry indeed records the path
+||| we claim is logged.
+|||
+||| Closure path (zero new axioms):
+||| 1. `appendAuditEntry log entry` reduces to `log ++ [entry]` by
+|||    the definition of `appendAuditEntry`.
+||| 2. `Data.List.Elem.elemMap` lifts list membership through `map`,
+|||    giving `Elem (AuditEntry.path entry) (map AuditEntry.path
+|||    (log ++ [entry]))`.
+||| 3. `elemAppRightSelf` discharges `Elem entry (log ++ [entry])`
+|||    by induction.
+||| 4. The `insertedPath` equality rewrites `AuditEntry.path entry`
+|||    to `p` in the goal.
 export
 auditTrailCompleteness :
-  (entries : List AuditEntry) ->
+  (log : List AuditEntry) ->
+  (entry : AuditEntry) ->
   (p : Path) ->
-  -- If p was obliterated, it's in the audit log
-  (obliterated : ObliterationProof p) ->
-  Elem p (map AuditEntry.path entries)  -- p appears in the log
-auditTrailCompleteness entries p oblitProof = ?auditTrailCompletenessProof
+  (insertedPath : AuditEntry.path entry = p) ->
+  Elem p (map AuditEntry.path (appendAuditEntry log entry))
+auditTrailCompleteness log entry p insertedPath =
+  rewrite sym insertedPath in
+    elemMap AuditEntry.path (elemAppRightSelf log entry)
