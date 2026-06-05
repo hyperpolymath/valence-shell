@@ -35,7 +35,7 @@ fuzz_target!(|data: &[u8]| {
             Err(_) => return,
         };
 
-        let mut state = match ShellState::new(temp.path()) {
+        let mut state = match ShellState::new(temp.path().to_str().unwrap()) {
             Ok(s) => s,
             Err(_) => return,
         };
