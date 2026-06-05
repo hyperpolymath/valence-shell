@@ -1,10 +1,10 @@
 /- Valence Shell - Filesystem Model (Lean 4)
 
-   A formal model of POSIX-like filesystem operations for proving
-   MAA (Mutually Assured Accountability) properties.
+    A formal model of POSIX-like filesystem operations for proving
+    MAA (Mutually Assured Accountability) properties.
 
-   This model focuses on directory operations (mkdir/rmdir) with
-   the goal of proving reversibility and correctness properties.
+    This model focuses on directory operations (mkdir/rmdir) with
+    the goal of proving reversibility and correctness properties.
 -/
 
 -- Path Model
@@ -94,6 +94,7 @@ theorem nonempty_path_ne_parent (p : Path) (h : p ≠ []) :
     have hp2 : p.reverse = x :: rest := hp
     rw [heq] at hp2
     simp at hp2
+    contradiction
 
 theorem pathExists_emptyFS_root :
     pathExists rootPath emptyFS := by
