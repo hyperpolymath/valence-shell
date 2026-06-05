@@ -11,6 +11,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
+use tempfile::TempDir;
 use vsh::glob::expand_glob;
 
 fuzz_target!(|data: &[u8]| {
@@ -33,12 +34,18 @@ fuzz_target!(|data: &[u8]| {
             return;
         }
 
+        // Create temporary directory for glob expansion
+        let temp = match TempDir::new() {
+            Ok(t) => t,
+            Err(_) => return,
+        };
+
         // Expand glob (should complete quickly or return error)
         // Should NEVER:
         // - Hang (exponential backtracking)
         // - Panic
         // - Use excessive memory
-        let _ = expand_glob(pattern);
+        let _ = expand_glob(pattern, temp.path());
 
         // Test cases include:
         // - Simple wildcards: *.txt, file?.rs
