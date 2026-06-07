@@ -14,7 +14,7 @@ jobs:
   validate-correspondence:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v4
         with:
           fetch-depth: 0
 
@@ -49,7 +49,7 @@ jobs:
     name: verify-proofs (Coq build oracle)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v4
 
       - name: Install Coq via apt
         run: |
@@ -85,7 +85,7 @@ jobs:
   property-testing:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
