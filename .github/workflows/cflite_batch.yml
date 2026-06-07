@@ -6,6 +6,8 @@
 
 name: ClusterFuzzLite Batch Fuzzing
 
+timeout-minutes: 30
+
 on:
   schedule:
     # Every Sunday at 02:00 UTC

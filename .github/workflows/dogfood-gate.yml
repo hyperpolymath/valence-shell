@@ -6,6 +6,8 @@
 # Companion to static-analysis-gate.yml (security) — this is for format compliance.
 name: Dogfood Gate
 
+timeout-minutes: 30
+
 on:
   pull_request:
     branches: ['**']
