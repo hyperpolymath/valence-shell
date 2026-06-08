@@ -3,28 +3,30 @@
 
 root = true
 
+# ============
+# Default
+# ============
 [*]
 charset = utf-8
 end_of_line = lf
-indent_size = 2
 indent_style = space
 insert_final_newline = true
 trim_trailing_whitespace = true
 
+# ============
+# Documentation (preserve trailing whitespace)
+# ============
 [*.md]
 trim_trailing_whitespace = false
 
 [*.adoc]
 trim_trailing_whitespace = false
 
+# ============
+# Language-Specific: 4-space indent
+# ============
 [*.rs]
 indent_size = 4
-
-[*.ex]
-indent_size = 2
-
-[*.exs]
-indent_size = 2
 
 [*.zig]
 indent_size = 4
@@ -37,6 +39,21 @@ indent_size = 3
 
 [*.ads]
 indent_size = 3
+
+[Justfile]
+indent_size = 4
+
+[justfile]
+indent_size = 4
+
+# ============
+# Language-Specific: 2-space indent
+# ============
+[*.ex]
+indent_size = 2
+
+[*.exs]
+indent_size = 2
 
 [*.hs]
 indent_size = 2
@@ -58,11 +75,3 @@ indent_size = 2
 
 [*.nix]
 indent_size = 2
-
-[Justfile]
-indent_style = space
-indent_size = 4
-
-[justfile]
-indent_style = space
-indent_size = 4
