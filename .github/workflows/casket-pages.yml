@@ -1,41 +1,33 @@
 # SPDX-License-Identifier: MPL-2.0
 name: GitHub Pages
-
 timeout-minutes: 30
-
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
 permissions:
   contents: read
   pages: write
   id-token: write
-
 concurrency:
   group: "pages"
   cancel-in-progress: false
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
-
       - name: Checkout casket-ssg
         uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
         with:
           repository: hyperpolymath/casket-ssg
           path: .casket-ssg
-
       - name: Setup GHCup
         uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c # v2
         with:
           ghc-version: '9.8.2'
           cabal-version: '3.10'
-
       - name: Cache Cabal
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
         with:
@@ -44,11 +36,9 @@ jobs:
             ~/.cabal/store
             .casket-ssg/dist-newstyle
           key: ${{ runner.os }}-casket-${{ hashFiles('.casket-ssg/casket-ssg.cabal') }}
-
       - name: Build casket-ssg
         working-directory: .casket-ssg
         run: cabal build
-
       - name: Build site
         run: |
           mkdir -p site _site
@@ -79,15 +69,12 @@ jobs:
             fi
           fi
           cd .casket-ssg && cabal run casket-ssg -- build ../site ../_site
-
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-
       - name: Upload artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
         with:
           path: '_site'
-
   deploy:
     environment:
       name: github-pages

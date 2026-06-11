@@ -21,3 +21,6 @@ zig-lib:
 clean:
     rm -rf priv
     rm -f c_src/*.o
+
+secret-scan-trufflehog:
+    @command -v trufflehog >/dev/null && trufflehog filesystem . --only-verified || true

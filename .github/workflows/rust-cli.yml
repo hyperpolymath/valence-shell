@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
 name: Rust CLI Tests
-
 on:
   push:
     paths:
@@ -11,79 +10,63 @@ on:
     paths:
       - 'impl/rust-cli/**'
       - 'proofs/lean4/**'
-
 permissions:
   contents: read
-
 jobs:
   test:
     name: Test Rust CLI
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824  # v4
-
+        uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b  # stable
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
         with:
           components: rustfmt, clippy
-
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@8ba370a7908a18ecf2b2aa574dbfdf4e4e50514c  # v2
+        uses: Swatinem/rust-cache@8ba370a7908a18ecf2b2aa574dbfdf4e4e50514c # v2
         with:
           workspaces: impl/rust-cli
-
       - name: Check formatting
         working-directory: impl/rust-cli
         run: cargo fmt --check
-
       - name: Run clippy
         working-directory: impl/rust-cli
         run: cargo clippy --all-targets --all-features -- -D warnings
-
       - name: Run unit tests
         working-directory: impl/rust-cli
         run: cargo test --lib --verbose
-
       - name: Run integration tests
         working-directory: impl/rust-cli
         run: cargo test --test integration_test --verbose
-
       - name: Run property tests
         working-directory: impl/rust-cli
         run: cargo test --test property_tests --verbose
-
       - name: Build release binary
         working-directory: impl/rust-cli
         run: cargo build --release
-
       - name: Verify binary works
         working-directory: impl/rust-cli
         run: |
           ./target/release/vsh --version
           echo "mkdir test_ci" | ./target/release/vsh
-
   lean4:
     name: Verify Lean 4 Proofs
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824  # v4
-
+        uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
       - name: Install Lean 4
         run: |
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:v4.12.0
           echo "$HOME/.elan/bin" >> $GITHUB_PATH
-
       - name: Verify elan installation
         run: |
           lean --version
           lake --version
-
       - name: Build Lean proofs
         working-directory: proofs/lean4
         run: lake build
-
       - name: Check for proof completeness
         working-directory: proofs/lean4
         run: |

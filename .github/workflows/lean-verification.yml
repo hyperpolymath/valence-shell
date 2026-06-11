@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
 name: Lean Verification Build
-
 on:
   push:
     branches: [main]
@@ -14,53 +13,43 @@ on:
       - 'impl/ocaml/**'
       - 'impl/rust-cli/**'
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   build-lean-extraction:
     name: Build and Test Lean Extraction Pipeline
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
-        uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824  # v4
-
+        uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
       - name: Install Lean 4
         run: |
           curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
           echo "$HOME/.elan/bin" >> $GITHUB_PATH
-
       - name: Verify Lean installation
         run: |
           source $HOME/.elan/env
           lean --version
           lean --print-prefix
           ls -la $(lean --print-prefix)/lib/lean/libleanshared.so
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b
         with:
           toolchain: stable
-
       - name: Cache Lean build
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
         with:
           path: proofs/lean4/.lake
           key: ${{ runner.os }}-lean-${{ hashFiles('proofs/lean4/lakefile.lean', 'proofs/lean4/lean-toolchain') }}
-
       - name: Build Lean extraction
         run: |
           source $HOME/.elan/env
           cd proofs/lean4
           lake build Extraction
-
       - name: Verify Lean extraction output
         run: |
           ls -lh proofs/lean4/.lake/build/ir/Extraction.c
           wc -l proofs/lean4/.lake/build/ir/Extraction.c
-
       - name: Build C wrapper library
         run: |
           source $HOME/.elan/env
@@ -75,35 +64,29 @@ jobs:
             -L"$lean_lib" \
             -lleanshared \
             -Wl,-rpath,"$lean_lib"
-
       - name: Verify shared library
         run: |
           ls -lh impl/ocaml/liblean_vsh.so
           ldd impl/ocaml/liblean_vsh.so
           nm -D impl/ocaml/liblean_vsh.so | grep vsh_safe || echo "Warning: vsh_safe functions not exported"
-
       - name: Cache Rust build
-        uses: Swatinem/rust-cache@8ba370a7908a18ecf2b2aa574dbfdf4e4e50514c  # v2
+        uses: Swatinem/rust-cache@8ba370a7908a18ecf2b2aa574dbfdf4e4e50514c # v2
         with:
           workspaces: impl/rust-cli
-
       - name: Build Rust without Lean (baseline)
         run: |
           cd impl/rust-cli
           cargo build --release
           ls -lh target/release/vsh
-
       - name: Test Rust without Lean
         run: |
           cd impl/rust-cli
           cargo test
           cargo test --test correspondence_tests
           cargo test --test property_correspondence_tests
-
       - name: Report Rust binary size
         run: |
           echo "Rust binary: $(stat -c%s impl/rust-cli/target/release/vsh) bytes"
-
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

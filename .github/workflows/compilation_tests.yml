@@ -8,9 +8,7 @@
 # - Cross-compilation targets supported by cross on Linux
 
 name: Compilation Tests
-
 timeout-minutes: 30
-
 on:
   push:
     branches: [main, develop]
@@ -21,19 +19,15 @@ on:
     paths:
       - 'impl/rust-cli/**'
       - '.github/workflows/compilation_tests.yml'
-
 permissions:
   contents: read
-
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-
 jobs:
   # ============================================================
   # Matrix: Rust Versions × Platforms
   # ============================================================
-
   test_matrix:
     name: Test (${{ matrix.rust }} on ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -45,75 +39,60 @@ jobs:
         # Windows support should return as a dedicated porting track, not as a
         # required PR gate that cannot compile the current crate.
         os: [ubuntu-latest, macos-latest]
-
     steps:
       - name: Checkout code
         uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
-
       - name: Install Rust ${{ matrix.rust }}
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b
         with:
           toolchain: ${{ matrix.rust }}
-
       - name: Cache cargo registry
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
         with:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
       - name: Cache cargo index
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
         with:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-
       - name: Cache cargo build
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
         with:
           path: impl/rust-cli/target
           key: ${{ runner.os }}-cargo-build-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
-
       - name: Build (debug)
         working-directory: impl/rust-cli
         run: cargo build --verbose
-
       - name: Build (release)
         working-directory: impl/rust-cli
         run: cargo build --release --verbose
-
       - name: Run tests
         working-directory: impl/rust-cli
         run: cargo test --verbose
-
       - name: Run ignored tests (stress)
         working-directory: impl/rust-cli
         run: cargo test --test stress_tests -- --ignored --test-threads=1
-        continue-on-error: true  # Stress tests may timeout on slow runners
-
+        continue-on-error: true # Stress tests may timeout on slow runners
   # ============================================================
   # MSRV (Minimum Supported Rust Version)
   # ============================================================
-
   test_msrv:
     name: Test MSRV (1.88.0)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
-
       - name: Install Rust 1.88.0
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b
         with:
           toolchain: 1.88.0
-
       - name: Check MSRV compilation
         working-directory: impl/rust-cli
         run: cargo check --locked --verbose
-
   # ============================================================
   # Feature Combinations
   # ============================================================
-
   test_features:
     name: Test Features
     runs-on: ubuntu-latest
@@ -124,28 +103,22 @@ jobs:
           - "--no-default-features"
           - "--features echidna"
           - "--all-features"
-
     steps:
       - name: Checkout code
         uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b
         with:
           toolchain: stable
-
       - name: Build with features
         working-directory: impl/rust-cli
         run: cargo build ${{ matrix.features }} --verbose
-
       - name: Test with features
         working-directory: impl/rust-cli
         run: cargo test ${{ matrix.features }} --verbose
-
   # ============================================================
   # Cross-Compilation Targets
   # ============================================================
-
   cross_compile:
     name: Cross-compile (${{ matrix.target }})
     runs-on: ubuntu-latest
@@ -153,77 +126,62 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - x86_64-unknown-linux-musl      # Alpine Linux
-          - aarch64-unknown-linux-gnu      # ARM64 Linux
-
+          - x86_64-unknown-linux-musl # Alpine Linux
+          - aarch64-unknown-linux-gnu # ARM64 Linux
     steps:
       - name: Checkout code
         uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
-
       - name: Install cross
         run: cargo install cross --git https://github.com/cross-rs/cross
-
       - name: Cross-compile
         working-directory: impl/rust-cli
         run: cross build --target ${{ matrix.target }} --verbose
-
   # ============================================================
   # Clippy & Rustfmt
   # ============================================================
-
   lint:
     name: Lint (clippy + rustfmt)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
-
       - name: Install Rust stable with clippy & rustfmt
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b
         with:
           toolchain: stable
           components: clippy, rustfmt
-
       - name: Run clippy
         working-directory: impl/rust-cli
         run: cargo clippy --all-targets --all-features -- -D warnings
-
       - name: Check formatting
         working-directory: impl/rust-cli
         run: cargo fmt -- --check
-
   # ============================================================
   # Documentation Build
   # ============================================================
-
   docs:
     name: Build documentation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b
         with:
           toolchain: stable
-
       - name: Build docs
         working-directory: impl/rust-cli
         run: cargo doc --no-deps --all-features --verbose
         env:
           RUSTDOCFLAGS: -D warnings
-
   # ============================================================
   # Build Artifacts (Release)
   # ============================================================
-
   build_release:
     name: Build release artifacts
     runs-on: ${{ matrix.os }}
@@ -236,21 +194,17 @@ jobs:
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact: vsh-macos-x64
-
     steps:
       - name: Checkout code
         uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
-
       - name: Build release
         working-directory: impl/rust-cli
         run: cargo build --release --target ${{ matrix.target }}
-
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

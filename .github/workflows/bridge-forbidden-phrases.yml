@@ -15,22 +15,17 @@
 # reusable.yml should pick up this rule for all bridge-tagged repos.
 
 name: Bridge Forbidden Phrases
-
 timeout-minutes: 30
-
 on:
   push:
     branches: [main, master]
   pull_request:
   workflow_dispatch:
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 permissions:
   contents: read
-
 jobs:
   check:
     name: docs/ECHO-TYPES-OCHRANCE-BRIDGE forbidden-phrases

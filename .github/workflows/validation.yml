@@ -1,15 +1,12 @@
 # SPDX-License-Identifier: MPL-2.0
 name: Correspondence Validation
-
 on:
   push:
     branches: [main, develop]
   pull_request:
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   validate-correspondence:
     runs-on: ubuntu-latest
@@ -17,12 +14,10 @@ jobs:
       - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
         with:
           fetch-depth: 0
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@5b842231ba77f5c045dba54ac5560fed2db780e2 # nightly (2026-03-27)
         with:
           components: rustfmt, clippy
-
       - name: Cache Rust dependencies
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
         with:
@@ -33,32 +28,26 @@ jobs:
             ~/.cargo/git/db/
             impl/rust-cli/target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
       - name: Run correspondence validation
         run: bash scripts/validate-correspondence.sh
         working-directory: ${{ github.workspace }}
-
       - name: Upload validation report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: validation-report
           path: validation-report.md
-
   verify-proofs:
     name: verify-proofs (Coq build oracle)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
-
       - name: Install Coq via apt
         run: |
           sudo apt-get update
           sudo apt-get install -y coq
-
       - name: Show Coq version
         run: coqc --version
-
       - name: Build Coq proofs (oracle)
         working-directory: proofs/coq
         run: |
@@ -66,7 +55,6 @@ jobs:
           mkdir -p extracted
           coq_makefile -f _CoqProject -o Makefile
           make -j1
-
       - name: Print Assumptions for top-level theorems
         working-directory: proofs/coq
         run: |
@@ -81,22 +69,18 @@ jobs:
           EOF
           coqc -R . ValenceShell /tmp/print_assumptions.v 2>&1 | tee print_assumptions.log
           echo "=== Print Assumptions surfaced (see job log above) ==="
-
   property-testing:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
-
       - name: Run property-based tests
         run: |
           cd impl/rust-cli
           cargo test --lib -- --test-threads=1 prop_
         env:
-          PROPTEST_CASES: 1000  # More cases in CI
-
+          PROPTEST_CASES: 1000 # More cases in CI
       - name: Run correspondence tests
         run: |
           cd impl/rust-cli
