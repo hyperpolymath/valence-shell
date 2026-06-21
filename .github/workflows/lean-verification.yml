@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v4
 
       - name: Install Lean 4
         run: |
@@ -83,7 +83,7 @@ jobs:
           nm -D impl/ocaml/liblean_vsh.so | grep vsh_safe || echo "Warning: vsh_safe functions not exported"
 
       - name: Cache Rust build
-        uses: Swatinem/rust-cache@c106961feec855ef5a58494c5a2a31c9d80429a9  # v2
+        uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb  # v2
         with:
           workspaces: impl/rust-cli
 
