@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 // SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 = Deep Audit — 2026-06-01
 :toc: macro
@@ -264,7 +264,7 @@ here rather than the PR description (per protocol):
 . **`CHANGELOG.md` and `CHANGELOG.adoc` had structurally different
   histories** — the `.md` file ended at `0.14.0` (2026-01-29);
   the `.adoc` file includes the same history but at full detail
-  with proper `// SPDX-License-Identifier: MPL-2.0` header. The
+  with proper `// SPDX-License-Identifier: CC-BY-SA-4.0` header. The
   `.md` is also missing several entries that the `.adoc` has.
   Keeping `.adoc` (estate convention + more complete).
 
