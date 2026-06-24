@@ -1,5 +1,5 @@
 # PROOF-NEEDS.md
-<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 <!-- Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk> -->
 
 > **Reconciled 2026-06-02 (afternoon).** Earlier sweeps closed the

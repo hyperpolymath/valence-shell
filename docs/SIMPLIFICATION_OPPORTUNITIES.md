@@ -218,7 +218,7 @@ Create `scripts/new-operation-template.sh`:
 OPERATION_NAME=$1  # e.g., "chmod"
 
 cat > "impl/rust-cli/src/commands/${OPERATION_NAME}.rs" <<EOF
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! ${OPERATION_NAME^} operation
 //!
