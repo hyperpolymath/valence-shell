@@ -121,7 +121,7 @@ pub fn parse_command(input: &str) -> Result<Command> {
 **File**: `impl/rust-cli/src/external.rs` (NEW)
 
 ```rust
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! External Command Execution
 //!
