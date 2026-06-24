@@ -88,7 +88,7 @@ Implement POSIX-compliant filename globbing (wildcard expansion) for the Valence
 ### New File: `src/glob.rs`
 
 ```rust
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Glob pattern expansion (filename wildcards)
 //!
