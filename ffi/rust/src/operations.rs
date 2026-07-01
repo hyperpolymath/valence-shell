@@ -271,6 +271,10 @@ pub fn chown(path: &Path, uid: Option<u32>, gid: Option<u32>) -> FfiResult<()> {
     let uid = uid.map(|u| u as libc::uid_t).unwrap_or(u32::MAX as libc::uid_t);
     let gid = gid.map(|g| g as libc::gid_t).unwrap_or(u32::MAX as libc::gid_t);
 
+    // SAFETY: `path_cstr` is a valid, NUL-terminated `CString` that outlives
+    // this call, so `as_ptr()` is a live pointer for the call's duration;
+    // `uid`/`gid` are plain integers. `chown` only borrows the pointer and
+    // returns a status code we check below.
     let result = unsafe { libc::chown(path_cstr.as_ptr(), uid, gid) };
 
     if result != 0 {

@@ -5,5 +5,5 @@
 Contact: mailto:j.d.a.jewell@open.ac.uk
 Expires: 2027-03-08T23:59:59.000Z
 Preferred-Languages: en
-Canonical: https://github.com/hyperpolymath/valence-shell/.well-known/security.txt
+Canonical: https://raw.githubusercontent.com/hyperpolymath/valence-shell/main/.well-known/security.txt
 Policy: https://github.com/hyperpolymath/valence-shell/blob/main/SECURITY.md

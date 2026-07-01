@@ -134,6 +134,8 @@ impl AuditLog {
             hash: String::new(),
             pid: std::process::id(),
             #[cfg(unix)]
+            // SAFETY: `getuid` takes no arguments, cannot fail, and only reads
+            // the calling process's real UID — no pointers or invariants.
             uid: unsafe { libc::getuid() },
             result,
             proof_ref: proof_ref.map(String::from),

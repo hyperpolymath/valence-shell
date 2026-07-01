@@ -1000,6 +1000,10 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                     let gid: u32 = parts[1].parse().context("Invalid gid")?;
                     let c_path = std::ffi::CString::new(path.to_str().context("Invalid path")?)
                         .context("Path contains null bytes")?;
+                    // SAFETY: `c_path` is a valid, NUL-terminated `CString` that
+                    // outlives the call, so `as_ptr()` is live; `uid`/`gid` are
+                    // plain integers. `chown` only borrows the pointer and
+                    // returns a status code we check below.
                     let ret = unsafe { libc::chown(c_path.as_ptr(), uid, gid) };
                     if ret != 0 {
                         let err = std::io::Error::last_os_error();
@@ -1523,6 +1527,11 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                                 let gid: u32 = parts[1].parse().context("Invalid gid")?;
                                 let c_path = std::ffi::CString::new(path.to_str().unwrap_or(""))
                                     .context("Path contains null bytes")?;
+                                // SAFETY: `c_path` is a valid, NUL-terminated
+                                // `CString` that outlives the call, so `as_ptr()`
+                                // is live; `uid`/`gid` are plain integers. `chown`
+                                // only borrows the pointer and returns a status
+                                // code we check below.
                                 let ret = unsafe { libc::chown(c_path.as_ptr(), uid, gid) };
                                 if ret != 0 {
                                     Err(anyhow::anyhow!(

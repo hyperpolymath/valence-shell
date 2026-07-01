@@ -6,7 +6,7 @@
 [metadata]
 project = "valence-shell"
 version = "0.9.0"
-last-updated = "2026-06-02"
+last-updated = "2026-07-01"
 status = "active"
 
 [project-context]
@@ -16,6 +16,23 @@ phase = "advanced-research-prototype"
 bridge-status = "documentation-and-orientation-only (echo-types + ochrance; NOT mechanised)"
 bridge-doc = "docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc"
 bridge-a2ml = ".machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml"
+
+[recent-work-2026-07-01]
+session = "2026-07-01 — Idris2 proof-hole closure at the root + CI hardening + drift reconcile"
+focus = "Close all Idris2 ABI proof holes; harden CI workflows; reconcile machine-readable counts to measured reality"
+prs-merged-2026-07-01 = [
+  "#152 proofs(idris2): close ALL proof holes — 17 -> 0, zero new axioms, builds under --total (root of #151)",
+  "#153 ci: workflow hardening — timeout caps, pinned+SHA256-verified elan, CodeQL js/ts -> actions, presence-gate instant-sync dispatch"
+]
+idris2-holes = 0
+idris2-axioms = 2
+tests-passing = 766
+tests-ignored = 14
+tests-failing = 0
+ffi-rust-tests = 24
+rust-source-files = 33
+rust-loc = 22574
+note = "idris2-holes 22 -> 0 (via #152) supersedes the 2026-06-02 tallies below; older dated test totals (703/757/764) are historical snapshots, not current claims."
 
 [recent-work-2026-06-02]
 session = "2026-06-02 morning + afternoon sweep — inbox cleanup + root-cause main fixes"
