@@ -43,11 +43,13 @@ use crate::state::ShellState;
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn run(state: &mut ShellState) -> Result<()> {
-    // Install SIGINT handler for graceful Ctrl+C handling
-    ctrlc::set_handler(move || {
+    // Install SIGINT handler for graceful Ctrl+C handling; a failure only
+    // means Ctrl-C keeps its default behaviour, so warn and continue.
+    if let Err(e) = ctrlc::set_handler(move || {
         signals::request_interrupt();
-    })
-    .expect("Error setting Ctrl-C handler");
+    }) {
+        eprintln!("vsh: warning: could not install Ctrl-C handler ({e})");
+    }
 
     let stdin = io::stdin();
     let mut stdout = io::stdout();

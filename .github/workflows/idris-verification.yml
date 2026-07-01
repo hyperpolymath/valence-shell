@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 name: Idris2 Verification Build
+
 # Idris2 build oracle for proofs/idris2/. Mirrors the Coq verify-proofs job in
 # validation.yml and the lean-verification.yml structure. Closes #70.
 #
@@ -7,6 +8,7 @@ name: Idris2 Verification Build
 # subsequent runs. Runs `idris2 --build valence-shell.ipkg` against the ipkg
 # manifest. Hole inventory is surfaced to the job summary as a regression signal
 # (not a gate — holes are tracked as honest debt; see #94).
+
 on:
   push:
     branches: [main]
@@ -22,14 +24,21 @@ on:
       - '.github/scripts/check-idris2-believe-me.sh'
       - '.machine_readable/IDRIS2_AXIOMS.a2ml'
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   verify-idris2:
     name: verify-idris2 (Idris2 build oracle)
     runs-on: ubuntu-latest
+    # Warm cache builds in minutes; a cold cache bootstraps Idris2 0.8.0 from
+    # source (~20 min), so allow headroom above that.
+    timeout-minutes: 45
+
     steps:
-      - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
+
       - name: Install Chez Scheme (Idris2 runtime dependency)
         run: |
           sudo apt-get update
@@ -51,12 +60,14 @@ jobs:
             sudo ln -s "$BOOT_DIR/scheme.boot" "$BOOT_DIR/chez.boot"
           fi
           chez --version || true
+
       - name: Cache Idris2 install
         id: idris2-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.idris2
           key: idris2-0.8.0-${{ runner.os }}-v1
+
       - name: Build Idris2 0.8.0 from source
         if: steps.idris2-cache.outputs.cache-hit != 'true'
         run: |
@@ -69,20 +80,25 @@ jobs:
           # Install the stdlib packages bundled with the source tree. These
           # are required by valence-shell.ipkg's `depends = base, contrib`.
           make install-libs
+
       - name: Configure PATH + IDRIS2_PREFIX
         run: |
           echo "$HOME/.idris2/bin" >> $GITHUB_PATH
           echo "IDRIS2_PREFIX=$HOME/.idris2" >> $GITHUB_ENV
+
       - name: Show Idris2 version
         run: idris2 --version
+
       - name: believe_me policy gate (Q1-C axiom registry)
         # Reject any `believe_me` in proofs/idris2/ that is not registered
         # in .machine_readable/IDRIS2_AXIOMS.a2ml. The only allowed home
         # for axiomatic believe_me is Filesystem.Axioms. See PROOF-NEEDS.md
         # "Priority 2" and the Q1-C pilot rationale.
         run: .github/scripts/check-idris2-believe-me.sh
+
       - name: List installed Idris2 packages
         run: idris2 --list-packages
+
       - name: Build Idris2 proofs (oracle)
         id: idris2-build
         working-directory: proofs/idris2
@@ -93,6 +109,7 @@ jobs:
           # Surface result without failing the step — the post-step explicitly
           # decides gate behaviour. Allows hole inventory to always run.
           exit 0
+
       - name: Idris2 hole inventory
         if: always()
         working-directory: proofs/idris2
@@ -117,12 +134,14 @@ jobs:
           tail -60 idris2-build.log >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "</details>" >> $GITHUB_STEP_SUMMARY
+
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: idris2-build-log
           path: proofs/idris2/idris2-build.log
+
       - name: Gate on build status
         if: steps.idris2-build.outputs.build_exit != '0'
         run: |

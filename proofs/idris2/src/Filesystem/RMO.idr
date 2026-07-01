@@ -109,25 +109,35 @@ secureDeleteNotInjective :
 secureDeleteNotInjective p fs1 fs2 _ _ agreeOff =
   removeEntryDeterminedByFilter p fs1 fs2 agreeOff
 
-||| Overwriting data makes original irrecoverable
+||| Overwriting data makes the original irrecoverable.
 |||
-||| After overwriting with random data, the original content cannot be
-||| recovered (information-theoretic security).
+||| Formalised as NON-INJECTIVITY of the overwrite operation: overwriting
+||| the entry at `p` with `randomData` discards whatever content was there
+||| before, so any two filesystems that agree everywhere except at `p` —
+||| i.e. differ only in the original content being destroyed — collapse to
+||| the SAME state after the overwrite. Because many distinct inputs map to
+||| one output, no left inverse (recovery function) can exist. This is the
+||| information-theoretic irreversibility claim stated correctly, and it
+||| reuses the exact machinery of `secureDeleteNotInjective`
+||| (`updateEntryDeterminedByFilter` ⇐ `removeEntryDeterminedByFilter`),
+||| mirroring Lean/Coq `obliterate_not_injective`.
+|||
+||| Redesign closing the `overwriteIrreversibleProof` hole: the previous conclusion
+||| `recovery randomData = Nothing` was a non-theorem — refuted by
+||| `recovery = Just`. See PROOF-NEEDS.md Priority-1 (#129) and the
+||| #60/#61 theorem-shape-redesign precedent.
 export
 overwriteIrreversible :
   (p : Path) ->
-  (originalContent : FileContent) ->
   (randomData : FileContent) ->
-  (fs : Filesystem) ->
-  LTE (length originalContent) (length randomData) ->
-  -- After overwrite, original is irrecoverable
-  (recovery : FileContent -> Maybe FileContent) ->
-  recovery randomData = Nothing  -- Cannot recover original
-overwriteIrreversible p orig rand fs lenPrf recovery =
-  -- Information-theoretically secure:
-  -- random data of sufficient length destroys all information
-  -- about the original
-  ?overwriteIrreversibleProof
+  (fs1, fs2 : Filesystem) ->
+  -- The two states differ ONLY at p (the content about to be destroyed)
+  filter (keepIfNotP p) (entries fs1)
+    = filter (keepIfNotP p) (entries fs2) ->
+  -- After overwriting p with the same data, they are indistinguishable
+  updateEntry p (File randomData) fs1 = updateEntry p (File randomData) fs2
+overwriteIrreversible p randomData fs1 fs2 agreeOffP =
+  updateEntryDeterminedByFilter p (File randomData) fs1 fs2 agreeOffP
 
 --------------------------------------------------------------------------------
 -- GDPR Compliance
@@ -205,14 +215,29 @@ data HardwareEraseProof : Type where
     (timestamp : Integer) ->
     HardwareEraseProof
 
+||| Model of a hardware secure-erase: the whole device is wiped to the
+||| empty filesystem, regardless of what it previously held.
+public export
+hardwareErase : Filesystem -> Filesystem
+hardwareErase _ = empty
+
 ||| Hardware erase is absolutely irreversible.
-||| Even with physical access to the device, data cannot be recovered.
-||| The recovery function is parameterised by `Unit` so it represents
-||| any nullary recovery procedure ("just try and reconstruct").
+|||
+||| Formalised as NON-INJECTIVITY: every filesystem is mapped to the same
+||| wiped (empty) state, so no recovery function — even one handed the full
+||| post-erase state — can reconstruct the pre-erase contents. Distinct
+||| inputs, identical output ⇒ no left inverse. This is the strongest
+||| information-loss statement, in the same shape as
+||| `secureDeleteNotInjective`.
+|||
+||| Redesign closing the `hardwareEraseIrreversibleProof` hole: the previous type
+||| `HardwareEraseProof -> (Unit -> Filesystem) -> Void` was a non-theorem,
+||| trivially refuted by ANY total `recovery : Unit -> Filesystem` (such a
+||| function exists, e.g. `const empty`). See PROOF-NEEDS.md Priority-1.
 export
-hardwareEraseIrreversible : HardwareEraseProof -> (Unit -> Filesystem) -> Void
-hardwareEraseIrreversible (MkHardwareEraseProof _ _ _) _ =
-  ?hardwareEraseIrreversibleProof
+hardwareEraseIrreversible :
+  (fs1, fs2 : Filesystem) -> hardwareErase fs1 = hardwareErase fs2
+hardwareEraseIrreversible fs1 fs2 = Refl
 
 --------------------------------------------------------------------------------
 -- Audit Trail

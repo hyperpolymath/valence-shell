@@ -246,10 +246,6 @@ pub fn run(state: &mut ShellState) -> Result<()> {
         .unwrap_or_else(|| PathBuf::from("/tmp"))
         .join(".vsh_history");
 
-    let history = Box::new(
-        FileBackedHistory::with_file(1000, history_file).expect("Failed to initialize history"),
-    );
-
     // Set up completion menu
     let completion_menu = Box::new(ColumnarMenu::default().with_name("completion_menu"));
 
@@ -268,7 +264,6 @@ pub fn run(state: &mut ShellState) -> Result<()> {
 
     // Create reedline instance
     let mut line_editor = Reedline::create()
-        .with_history(history)
         .with_completer(Box::new(VshCompleter))
         .with_highlighter(Box::new(VshHighlighter::new()))
         .with_hinter(Box::new(
@@ -278,11 +273,20 @@ pub fn run(state: &mut ShellState) -> Result<()> {
         .with_edit_mode(edit_mode)
         .with_menu(ReedlineMenu::EngineCompleter(completion_menu));
 
-    // Install SIGINT handler
-    ctrlc::set_handler(move || {
+    // Attach a file-backed history if it opens; otherwise fall back to
+    // reedline's in-memory history instead of aborting the shell.
+    match FileBackedHistory::with_file(1000, history_file) {
+        Ok(h) => line_editor = line_editor.with_history(Box::new(h)),
+        Err(e) => eprintln!("vsh: warning: history disabled ({e}); using in-memory history"),
+    }
+
+    // Install SIGINT handler; a failure only means Ctrl-C keeps its default
+    // behaviour, so warn and continue rather than panicking.
+    if let Err(e) = ctrlc::set_handler(move || {
         signals::request_interrupt();
-    })
-    .expect("Error setting Ctrl-C handler");
+    }) {
+        eprintln!("vsh: warning: could not install Ctrl-C handler ({e})");
+    }
 
     let mut accumulated_input = String::new();
 

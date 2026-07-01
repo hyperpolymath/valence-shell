@@ -13,18 +13,23 @@
 
 permissions:
   contents: read
+
 name: SLSA generic generator
 on:
   workflow_dispatch:
   release:
     types: [created]
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       digests: ${{ steps.hash.outputs.digests }}
+
     steps:
-      - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
       # ========================================================
       #
       # Step 1: Build your artifacts.
@@ -32,9 +37,10 @@ jobs:
       # ========================================================
       - name: Build artifacts
         run: |
-          # These are some amazing artifacts.
-          echo "artifact1" > artifact1
-          echo "artifact2" > artifact2
+            # These are some amazing artifacts.
+            echo "artifact1" > artifact1
+            echo "artifact2" > artifact2
+
       # ========================================================
       #
       # Step 2: Add a step to generate the provenance subjects
@@ -52,10 +58,11 @@ jobs:
           files=$(ls artifact*)
           # Generate the subjects (base64 encoded).
           echo "hashes=$(sha256sum $files | base64 -w0)" >> "${GITHUB_OUTPUT}"
+
   provenance:
     needs: [build]
     permissions:
-      actions: read # To read the workflow path.
+      actions: read   # To read the workflow path.
       id-token: write # To sign the provenance.
       contents: write # To add assets to a release.
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0

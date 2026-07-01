@@ -30,7 +30,8 @@ jobs:
   check:
     name: docs/ECHO-TYPES-OCHRANCE-BRIDGE forbidden-phrases
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
       - name: Run forbidden-phrases checker
         run: bash .github/scripts/check-bridge-forbidden-phrases.sh

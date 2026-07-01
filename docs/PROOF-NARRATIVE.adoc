@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: CC-BY-SA-4.0
 // Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 = Valence Shell — Proof Narrative + Assumption Registry
 Jonathan Jewell (hyperpolymath)
@@ -484,43 +484,37 @@ the proof suite — type-stated in the dependently-typed sense, with the
 intent that the *function definition itself* carries the proof obligation
 (rather than the Coq/Lean style of separate `Proof. ... Qed.` blocks).
 
-In its current state, this layer is *stated, not proven*: 23 holes
-(`?proofname`) across 4 files. Each hole is a known proof obligation
-that has been registered in the type system but not yet discharged.
+As of *2026-07-01 (issue #151 root)* this layer is fully *proven, not just
+stated*: **0 holes** across the 4 files. `grep -rohE
+'\?[A-Za-z_][A-Za-z0-9_]*' proofs/idris2/src --include='*.idr'` returns 0, and
+the package builds under `--total`, so every function is a total, machine-checked
+proof. The closure added *no new axioms* — the two primitive-eq axioms in
+`Filesystem.Axioms` are the only assumptions.
 
-[cols="2,1,4,2",options="header"]
+[cols="2,4",options="header"]
 |===
-| File | Line | Hole name | Provable today?
+| Theorem | Closure
 
-| `Operations.idr` | 138 | `?rmdirPrfAfterMkdir` | YES — mirror of Coq's `mkdir_rmdir_reversible`; needs `funext` equivalent + case split.
-| `Operations.idr` | 143 | `?mkdirRmdirReversibleProof` | YES — same.
-| `Operations.idr` | 153 | `?mkdirPrfAfterRmdir` | NO — same model gap as <<assumption-rmdir-perms>>.
-| `Operations.idr` | 154 | `?rmdirMkdirReversibleProof` | NO — depends on the same model gap.
-| `Operations.idr` | 162 | `?rmPrfAfterTouch` | YES — file analogue of mkdir/rmdir; clean fact.
-| `Operations.idr` | 163 | `?touchRmReversibleProof` | YES.
-| `Operations.idr` | 174 | `?touchPrfAfterRm` | YES — but suffers the *file-perms* variant of the same model gap as rmdir/mkdir.
-| `Operations.idr` | 175 | `?rmTouchReversibleProof` | YES with caveat.
-| `Operations.idr` | 186 | `?writeFileReversibleProof` | YES — Lean 4 has the canonical proof; port directly.
-| `Operations.idr` | 201 | `?operationIndependenceProof` | YES — `mkdir_preserves_other_paths` analogue.
-| `Operations.idr` | 226 | `?cnoWriteSameContentProof` | YES — `is_CNO_sequence` instance.
-| `RMO.idr` | 82 | `secureDeleteNotInjective` (was `?secureDeleteIrreversibleProof`) | CLOSED 2026-06-01 (#60) — signature redesigned to mirror Coq's `obliterate_not_injective`. The prior `recovery fs = fs -> Void` shape was a non-theorem (refuted by `recovery = id`). Closes via `removeEntryDeterminedByFilter` in `Filesystem.Model`.
-| `RMO.idr` | 112 | `?overwriteIrreversibleProof` | PARTIAL — depends on the *information-theoretic random data* assumption (random data of sufficient length destroys information about the original).
-| `RMO.idr` | 178 | `gdprDeletionCompliant` (was `?gdprDeletionCompliantProof`) | CLOSED 2026-06-01 (#61) — signature redesigned to mirror Coq's `obliterate_leaves_no_trace` shape. The prior `recovery = id` shape was a non-theorem (refuted by `recovery = const empty`). Compliance is now a structural property of the deletion record (carries an obliteration witness for the deleted path).
-| `RMO.idr` | 201 | `?hardwareEraseIrreversibleProof` | PARTIAL — depends on a *physical hardware* assumption.
-| `RMO.idr` | 231 | `?appendOnlyAuditLogProof` | YES — purely structural.
-| `RMO.idr` | 241 | `?auditTrailCompletenessProof` | YES — given the audit log invariant.
-| `Composition.idr` | 125 | `?sequenceReversibleProof` | YES — direct port of Coq's `operation_sequence_reversible` (modulo the OpRmdir gap).
-| `Composition.idr` | 139 | `?compositionReversibleProof` | YES.
-| `Composition.idr` | 213 | `?undoRedoIdentityProof` | YES — undo/redo from `vsh::commands::undo` / `redo` is the user-facing instance.
-| `Model.idr` | 182 | `?equivSymProof` | YES — equivalence relation symmetry; trivial.
-| `Model.idr` | 190 | `?equivTransProof` | YES — equivalence relation transitivity; trivial.
+| `mkdirRmdirReversible` | `removeAddAbsent`; rmdir applicability made an explicit precondition (mkdir does not preclude orphan children).
+| `touchRmReversible` | `removeAddAbsent` + unconditional `RmPrecondition` after touch.
+| `rmdirMkdirReversible`, `rmTouchReversible` | canonical-form precondition + `cong MkFS` — the restore direction is not injective in general (a shadowed duplicate key would be lost).
+| `writeFileReversible` | `updateOverwrite` + `updateCanonicalId`.
+| `operationIndependence` | restated over `Equiv` (`equivAddSwap`); the `=` version was a non-theorem (list order differs).
+| `cnoWriteSameContent` | canonical-form precondition + `updateCanonicalId` + `equivRefl`.
+| `sequenceReversible` | induction over a `TraceReversible` witness (real per-step reversibility replaces the vacuous `isReversible = True`).
+| `compositionReversible` | genuine per-step reversibility hypotheses (the `isReversible = True` gates were vacuous).
+| `undoRedoIdentity` | `opInvOpId` + an `Applicable` precondition.
+| `undoRedoComposition` | induction over an `Undoable` witness + the `Maybe`-monad laws (`applyNSnoc`, `bindAssoc`, `bindCong`).
+| `overwriteIrreversible`, `hardwareEraseIrreversible` | redesigned to non-injectivity (information loss); the prior `recovery … = Nothing` / `… -> Void` shapes were refutable.
+| `secureDeleteNotInjective`, `gdprDeletionCompliant`, `appendOnlyAuditLog`, `auditTrailCompleteness`, `equivRefl/Sym/Trans` | closed in earlier sessions.
 |===
 
-Eleven of the 23 holes are *purely-structural* (case splits, equivalence-relation
-laws) and could land in one PR by porting from the Coq/Lean 4 canonical
-proofs. The other twelve depend on the model gap from
-<<assumption-rmdir-perms>> or on physical/cryptographic axioms from
-<<assumption-nist-800-88>>.
+Where a stated theorem was a genuine non-theorem in the ordered-list model
+(order-sensitive `=`, or a refutable "no recovery" shape), its *signature* was
+redesigned to the true statement rather than closed with `believe_me`, following
+the #60/#61/#119 precedent. The fully-general restore-cluster theorems (arbitrary
+in-list position with uniqueness) would need a `NoDupKeys` model strengthening;
+that remains the one honest frontier item for this layer.
 
 The Idris2 layer is the canonical *ABI-level* expression of the
 verification (per memory `[Zig=APIs+FFIs, Idris2=ABIs]`). Closing these

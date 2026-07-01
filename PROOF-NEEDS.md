@@ -1,5 +1,5 @@
 # PROOF-NEEDS.md
-<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 <!-- Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk> -->
 
 > **Reconciled 2026-06-02 (afternoon).** Earlier sweeps closed the
@@ -31,20 +31,46 @@
 | Coq | (closed) `obliterate_not_injective` | `rmo_operations.v` | Closed via threaded strengthened `Hgeom` through `multi_pass_same_start_same_result` (#58 closed — only standard funext) |
 | Idris2 | `axStringEqRefl` (primitive-eq axiom) | `proofs/idris2/src/Filesystem/Axioms.idr:42` | `believe_me`-backed; registered in `.machine_readable/IDRIS2_AXIOMS.a2ml`; CI-gated via `.github/scripts/check-idris2-believe-me.sh` (Q1-C pilot 2026-06-02 PM) |
 | Idris2 | `axBits8EqRefl` (primitive-eq axiom) | `proofs/idris2/src/Filesystem/Axioms.idr:55` | `believe_me`-backed; registered in `.machine_readable/IDRIS2_AXIOMS.a2ml`; CI-gated (same pilot) |
-| Idris2 | 14 `?holes` across 4 files (zero `partial` annotations) | `proofs/idris2/src/Filesystem/*.idr` | `equivReflProof` closed via Q1-C pilot; `equivTransProof` closed via Q5-option-3 propositional `Equiv` migration (2026-06-03); rest per #119 |
+| Idris2 | `axStringEqRefl`, `axBits8EqRefl` — **the only remaining assumptions** | `proofs/idris2/src/Filesystem/Axioms.idr` | Primitive-eq reflexivity; see "Idris2 layer fully closed" below |
 
-**Idris2 holes by file (verified by grep against `proofs/idris2/src/Filesystem/*.idr`, 2026-06-03):**
+**Idris2 holes by file — ALL CLOSED (grep against `proofs/idris2/src/Filesystem/*.idr`, 2026-07-01):**
 
 | File | Top-level proof holes | Sub-holes (clause `prf` args) |
 |---|---|---|
-| `Operations.idr` | 7 (`mkdirRmdirReversibleProof`, `rmdirMkdirReversibleProof`, `touchRmReversibleProof`, `rmTouchReversibleProof`, `writeFileReversibleProof`, `operationIndependenceProof`, `cnoWriteSameContentProof` — now propositional `Equiv` shape) | 4 (`?rmdirPrfAfterMkdir`, `?mkdirPrfAfterRmdir`, `?rmPrfAfterTouch`, `?touchPrfAfterRm`) |
-| `Composition.idr` | 4 (`sequenceReversibleProof`, `compositionReversibleProof`, `undoRedoIdentityProof`, `undoRedoCompositionProof`) | 0 |
-| `Model.idr` | 0 (`equivSym` closed via constructor-swap on the propositional form; `equivRefl` + `equivTrans` closed structurally via `Data.List.Quantifiers` Q5-option-3 migration) | 0 |
-| `RMO.idr` | 3 (`overwriteIrreversibleProof`, `hardwareEraseIrreversibleProof`, `auditTrailCompletenessProof`; `appendOnlyAuditLogProof` is closed via `Refl`) | 0 |
+| `Operations.idr` | 0 | 0 |
+| `Composition.idr` | 0 | 0 |
+| `Model.idr` | 0 | 0 |
+| `RMO.idr` | 0 | 0 |
 
-Drift from previous PROOF-NEEDS.md tally (22 holes) to current (16 holes) is mechanical: `equivSymProof` and `appendOnlyAuditLogProof` closed silently during the 2026-06-02 morning sweep (visible by grep but the inventory text was not updated). No body changes — this paragraph reconciles the count.
+**Idris2 layer fully closed (2026-07-01, issue #151 root).** The 17 distinct
+`?holes` (16 tallied here plus `equivSymProof`) are all discharged with real,
+`--total`-checked terms — `grep -rohE '\?[A-Za-z_][A-Za-z0-9_]*'
+proofs/idris2/src --include='*.idr'` returns **0**. Closure added **zero new
+axioms**: where a stated theorem was a non-theorem in the ordered-list model, its
+signature was redesigned to the true statement rather than closed with
+`believe_me` (following the #60/#61/#119 precedent) —
 
-All `partial` markers in `proofs/idris2/src/Filesystem/*.idr` were cleared 2026-06-02 (PRs #108 + #109, closing #89). The total `partial` count is zero.
+- `operationIndependence`: `=` → `Equiv` (pure permutation, `equivAddSwap`).
+- `overwriteIrreversible` / `hardwareEraseIrreversible`: redesigned to
+  non-injectivity (`updateEntryDeterminedByFilter`, `hardwareErase → empty`);
+  the prior `recovery … = Nothing` / `… -> Void` shapes were refutable.
+- `rmdirMkdir` / `rmTouch` / `writeFile` / `cnoWriteSameContent`: closed under an
+  honest canonical-form precondition (the general in-list-position version needs
+  a `NoDupKeys` model strengthening — tracked below).
+- `sequenceReversible` / `undoRedoIdentity` / `compositionReversible` /
+  `undoRedoComposition`: the vacuous `isReversible = True` / `LTE n …` premises
+  are replaced by genuine reversibility witnesses (`TraceReversible`, `Undoable`,
+  `Applicable`) and proved by induction + the `Maybe`-monad laws.
+
+The two `believe_me`-backed axioms in `Filesystem.Axioms` remain (gated by
+`.github/scripts/check-idris2-believe-me.sh`); they are the irreducible
+primitive-`String`/`Bits8` equality boundary — morally identical to Idris2's own
+`DecEq String` internals and to Agda's `postulate funext`. Eliminating them would
+require an inductive (non-primitive) component representation, which trades a
+standard axiom for unnatural encoding overhead; it is explicitly NOT done.
+
+All `partial` markers were already cleared 2026-06-02 (PRs #108 + #109). The
+total `partial` count is zero.
 
 ### Foundational Closure (history)
 

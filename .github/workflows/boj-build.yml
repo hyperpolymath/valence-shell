@@ -8,9 +8,10 @@ on:
 jobs:
   trigger-boj:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6.0.2
       - name: Trigger BoJ Server (Casket/ssg-mcp)
         run: |
           # Send a secure trigger to boj-server to build this repository

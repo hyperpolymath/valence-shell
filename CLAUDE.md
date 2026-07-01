@@ -1,5 +1,5 @@
 <!--
-SPDX-License-Identifier: MPL-2.0
+SPDX-License-Identifier: CC-BY-SA-4.0
 Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
 # Valence Shell (vsh)
@@ -87,7 +87,7 @@ The Rust CLI is a functional interactive shell with these features:
 - 21,331 lines of Rust across 32 source files (`find impl/rust-cli/src -name '*.rs' | wc -l`; `wc -l` aggregate, measured 2026-06-01)
 - ~478 theorem candidates across 6 proof systems + Idris2 ABI layer (per issue #42 deep-audit inventory, 2026-06-01)
 - 3 proof holes remaining: 1 real gap (Coq `obliterate_overwrites_all_blocks`), 1 justified axiom (Coq `is_empty_dir_dec` — infinite-domain decidability), 1 structural axiom (Agda `funext` — standard in intensional TT) — see `docs/PROOF_HOLES_AUDIT.md`
-- Idris2 ABI layer: ~22 theorems + 2 holes + 10 partial markers (per issue #42)
+- Idris2 ABI layer: **0 proof holes** (all closed 2026-07-01, issue #151 root — builds under `--total`), 0 `partial` markers, 2 registered primitive-eq axioms (`axStringEqRefl`, `axBits8EqRefl`; gated by `.github/scripts/check-idris2-believe-me.sh`)
 - 7 fuzz targets in `impl/rust-cli/fuzz/fuzz_targets/` (parser, arith, job-spec, signal-parse, path-ops, glob-expansion, state-machine)
 
 ## Critical Issues
@@ -196,7 +196,7 @@ valence-shell/
     isabelle/           # HOL proofs (76 theorems)
     mizar/              # Set theory proofs (63 theorems)
     z3/                 # SMT proofs (125 asserts)
-    idris2/             # ABI carrier (~22 theorems, 2 holes, 10 partials)
+    idris2/             # ABI carrier (0 holes, 0 partials, 2 primitive-eq axioms)
   docs/                 # Design docs, roadmaps, PROOF_HOLES_AUDIT.md
     audits/             # Deep-audit log (per estate standards)
   .machine_readable/    # INTENT/MUST/TRUST/ADJUST contractiles + a2ml agent state

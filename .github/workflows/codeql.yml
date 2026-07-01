@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 name: CodeQL Security Analysis
+
 on:
   push:
     branches: [main, master]
@@ -7,6 +8,7 @@ on:
     branches: [main, master]
   schedule:
     - cron: '0 6 * * 1'
+
 # Estate guardrail: cancel superseded runs so re-pushes / rebased PR
 # updates do not pile up queued runs against the shared account-wide
 # Actions concurrency pool. Applied only to read-only check workflows
@@ -14,8 +16,10 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
 permissions:
   contents: read
+
 jobs:
   analyze:
     runs-on: ubuntu-latest
@@ -27,19 +31,28 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - language: javascript-typescript
-            build-mode: none
+          # Only languages actually present in the tree. `javascript-typescript`
+          # was removed: the repo contains zero JS/TS sources (TypeScript/Node
+          # are banned by the language policy), so CodeQL's JS/TS extractor
+          # found no code and the job failed with a configuration error. `cpp`
+          # covers the real C sources (Elixir NIF, OCaml/Lean wrapper, Zig FFI);
+          # `actions` scans the GitHub Actions workflows themselves.
           - language: cpp
             build-mode: none
+          - language: actions
+            build-mode: none
+
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v3
+        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v3
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
+
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v3
+        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v3
         with:
           category: "/language:${{ matrix.language }}"

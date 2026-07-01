@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 name: ECHIDNA Validation
+
 on:
   push:
     paths:
@@ -13,10 +14,12 @@ on:
       - 'proofs/**'
       - 'impl/rust-cli/**'
   schedule:
-    - cron: '0 6 * * 1' # Weekly on Monday at 06:00 UTC
+    - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   echidna-verify:
     name: ECHIDNA Proof Verification
@@ -28,21 +31,25 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6.0.2
+
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7  # stable
         with:
           components: rustfmt, clippy
+
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@8ba370a7908a18ecf2b2aa574dbfdf4e4e50514c # v2
+        uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb  # v2
         with:
           workspaces: impl/rust-cli
+
       - name: Build ECHIDNA from source
         run: |
           git clone --depth 1 https://github.com/hyperpolymath/echidna.git /tmp/echidna
           cd /tmp/echidna
           cargo build --release --bin echidna
           echo "/tmp/echidna/target/release" >> $GITHUB_PATH
+
       - name: Install proof provers
         run: |
           set -euo pipefail
@@ -53,34 +60,43 @@ jobs:
             agda \
             isabelle \
             z3
+
       - name: Verify ECHIDNA available
         run: echidna list-provers
+
       - name: Run ECHIDNA validation pipeline
         run: bash scripts/validate-with-echidna.sh --verbose
         env:
           ECHIDNA_BIN: /tmp/echidna/target/release/echidna
+
   correspondence:
     name: Lean 4 ↔ Rust Correspondence
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@1cce3390c2bfda521930d01229c073c7ff920824 # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6.0.2
+
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7  # stable
+
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@8ba370a7908a18ecf2b2aa574dbfdf4e4e50514c # v2
+        uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb  # v2
         with:
           workspaces: impl/rust-cli
+
       - name: Run correspondence tests
         working-directory: impl/rust-cli
         run: cargo test --test correspondence_tests --verbose
+
       - name: Run property correspondence tests
         working-directory: impl/rust-cli
         run: cargo test --test property_tests --verbose
+
       - name: Run security tests
         working-directory: impl/rust-cli
         run: cargo test --test security_tests --verbose
+
       - name: Count proof holes
         run: |
           echo "=== Proof Hole Audit ==="
