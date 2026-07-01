@@ -32,6 +32,9 @@ jobs:
   verify-idris2:
     name: verify-idris2 (Idris2 build oracle)
     runs-on: ubuntu-latest
+    # Warm cache builds in minutes; a cold cache bootstraps Idris2 0.8.0 from
+    # source (~20 min), so allow headroom above that.
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4

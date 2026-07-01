@@ -18,6 +18,9 @@ permissions:
 jobs:
   batch_fuzzing:
     runs-on: ubuntu-latest
+    # 30 min fuzzing (fuzz-seconds: 1800) + build/upload overhead per sanitizer,
+    # so the cap must sit above the fuzz budget.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:

@@ -13,6 +13,7 @@ permissions:
 jobs:
   validate-correspondence:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
         with:
@@ -48,6 +49,7 @@ jobs:
   verify-proofs:
     name: verify-proofs (Coq build oracle)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
 
@@ -84,6 +86,7 @@ jobs:
 
   property-testing:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
 

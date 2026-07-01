@@ -31,8 +31,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - language: javascript-typescript
-            build-mode: none
+          # Only languages actually present in the tree. `javascript-typescript`
+          # was removed: the repo contains zero JS/TS sources (TypeScript/Node
+          # are banned by the language policy), so CodeQL's JS/TS extractor
+          # found no code and the job failed with a configuration error. `cpp`
+          # covers the real C sources (Elixir NIF, OCaml/Lean wrapper, Zig FFI).
           - language: cpp
             build-mode: none
 
