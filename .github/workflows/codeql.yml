@@ -35,8 +35,11 @@ jobs:
           # was removed: the repo contains zero JS/TS sources (TypeScript/Node
           # are banned by the language policy), so CodeQL's JS/TS extractor
           # found no code and the job failed with a configuration error. `cpp`
-          # covers the real C sources (Elixir NIF, OCaml/Lean wrapper, Zig FFI).
+          # covers the real C sources (Elixir NIF, OCaml/Lean wrapper, Zig FFI);
+          # `actions` scans the GitHub Actions workflows themselves.
           - language: cpp
+            build-mode: none
+          - language: actions
             build-mode: none
 
     steps:
