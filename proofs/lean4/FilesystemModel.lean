@@ -93,8 +93,10 @@ theorem nonempty_path_ne_parent (p : Path) (h : p ≠ []) :
     -- Which means rest = x :: rest (after reverse cancellation), impossible
     have hp2 : p.reverse = x :: rest := hp
     rw [heq] at hp2
+    -- `simp` derives `rest = x :: rest` in `hp2`, which is impossible, so it
+    -- closes the goal on its own; a trailing `contradiction` is dead here
+    -- (Lean 4.12 rejects it as "no goals to be solved").
     simp at hp2
-    contradiction
 
 theorem pathExists_emptyFS_root :
     pathExists rootPath emptyFS := by
