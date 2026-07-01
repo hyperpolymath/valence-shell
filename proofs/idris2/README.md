@@ -4,8 +4,8 @@ Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
 # Idris2 Proofs for Valence Shell
 
-**Status**: Initial Implementation (v0.14.0)
-**Totality**: All functions marked `total` (partial where I/O required)
+**Status**: Proofs complete — 0 holes, builds under `--total` (v0.14.0)
+**Totality**: All functions total (`%default total` + `--total`); no `partial`
 **Extraction**: Compiles to executable code via Idris2 compiler
 
 ---
@@ -27,38 +27,40 @@ This directory contains **executable specifications** of filesystem operations w
 
 | Module | Purpose | Status | Holes |
 |--------|---------|--------|-------|
-| `Filesystem.Model` | Core types: Path, Filesystem, FSEntry | ✅ Implemented | 3 (equivalence) |
-| `Filesystem.Operations` | mkdir, rmdir, touch, rm, writeFile | ✅ Implemented | 11 (reversibility) |
-| `Filesystem.Composition` | Operation sequences, undo/redo | ✅ Implemented | 4 (composition) |
-| `Filesystem.RMO` | Irreversible operations (GDPR) | ✅ Implemented | 4 (irreversibility) |
+| `Filesystem.Model` | Core types + structural lemmas | ✅ Proven | 0 |
+| `Filesystem.Operations` | mkdir, rmdir, touch, rm, writeFile | ✅ Proven | 0 |
+| `Filesystem.Composition` | Operation sequences, undo/redo | ✅ Proven | 0 |
+| `Filesystem.RMO` | Irreversible operations (GDPR) | ✅ Proven | 0 |
 
-**Total**: 4 modules, 22 proof holes to fill, 0 `partial` annotations (cleared 2026-06-02 via PRs #108 + #109; reverseConcat closed via PR #115)
+**Total**: 4 modules, **0 proof holes**, 0 `partial` annotations, 2 registered
+primitive-eq axioms (`axStringEqRefl`, `axBits8EqRefl` in `Filesystem.Axioms`).
+The whole package builds under `--total`, so every theorem is a total,
+machine-checked proof.
 
-### Proof Holes (TODO)
+### Proof Holes — ALL CLOSED (2026-07-01)
 
-Holes are placeholders for proofs that need to be completed:
+Every `?hole` that previously stood in for a proof is now discharged with a
+real, type-checked term. The closure landed **without adding any new axioms**;
+where a stated theorem was a genuine non-theorem in the ordered-list model, its
+signature was redesigned to the true statement (following the #60/#61/#119
+precedent) rather than closed with `believe_me`. Summary:
 
-1. `equivSymProof` - Symmetry of filesystem equivalence
-2. `equivTransProof` - Transitivity of filesystem equivalence
-3. `rmdirPrfAfterMkdir` - Precondition after mkdir
-4. `mkdirRmdirReversibleProof` - Main reversibility theorem
-5. `rmdirMkdirReversibleProof` - Inverse reversibility
-6. `touchRmReversibleProof` - File creation reversibility
-7. `rmTouchReversibleProof` - Inverse file creation
-8. `writeFileReversibleProof` - Write reversibility
-9. `operationIndependenceProof` - Path independence
-10. `cnoWriteSameContentProof` - CNO for same content
-11. `sequenceReversibleProof` - Sequence reversibility (key theorem)
-12. `compositionReversibleProof` - Composition of operations
-13. `undoRedoIdentityProof` - Undo/redo identity
-14. `undoRedoCompositionProof` - Multiple undo/redo
-15. `secureDeleteNotInjective` - Secure deletion is not injective (closed; was `secureDeleteIrreversibleProof`, redesigned per #60)
-16. `overwriteIrreversible` - No universal recovery function exists for overwrite (closed; was `overwriteIrreversibleProof`, redesigned per #129 — prior signature `recovery randomData = Nothing` refuted by `recovery = Just`)
-17. `gdprDeletionCompliant` - GDPR Article 17 compliance witness (closed; was `gdprDeletionCompliantProof`, redesigned per #61)
-18. `hardwareEraseIrreversibleProof` - Hardware erase absolute
-19. `appendOnlyAuditLogProof` - Audit log append-only
-20. `auditTrailCompletenessProof` - Audit trail completeness
-21. `allReversibleProof` - All operations reversible (helper)
+| Theorem | How it was closed |
+|---------|-------------------|
+| `mkdirRmdirReversible` | `removeAddAbsent`; rmdir applicability made an explicit precondition |
+| `touchRmReversible` | `removeAddAbsent` + unconditional `RmPrecondition` after touch |
+| `rmdirMkdirReversible` | canonical-form precondition + `cong MkFS` (restore direction is not injective in general) |
+| `rmTouchReversible` | canonical-form precondition + `cong MkFS` |
+| `writeFileReversible` | `updateOverwrite` + `updateCanonicalId` |
+| `operationIndependence` | restated over `Equiv` (order-independence) via `equivAddSwap` — `=` was a non-theorem |
+| `cnoWriteSameContent` | canonical-form precondition + `updateCanonicalId` + `equivRefl` |
+| `sequenceReversible` | induction over a `TraceReversible` witness (real per-step reversibility replaces the vacuous `isReversible = True`) |
+| `compositionReversible` | genuine per-step reversibility hypotheses (the `isReversible = True` gates were vacuous) |
+| `undoRedoIdentity` | `opInvOpId` + `Applicable` precondition |
+| `undoRedoComposition` | induction over an `Undoable` witness + `Maybe`-monad laws (`applyNSnoc`, `bindAssoc`, `bindCong`) |
+| `overwriteIrreversible` | redesigned to non-injectivity (`updateEntryDeterminedByFilter`); prior `recovery randomData = Nothing` was refuted by `recovery = Just` |
+| `hardwareEraseIrreversible` | redesigned to non-injectivity (`hardwareErase` wipes to `empty`); prior type refuted by any total recovery |
+| `secureDeleteNotInjective`, `gdprDeletionCompliant`, `appendOnlyAuditLog`, `auditTrailCompleteness`, `equivRefl/Sym/Trans` | already closed in earlier sessions |
 
 ---
 
@@ -105,17 +107,12 @@ just build-idris2    # cd proofs/idris2 && idris2 --build valence-shell.ipkg
 just verify-idris2   # build + count distinct ?holes for regression tracking
 ```
 
-#### Known oracle status (2026-06-02)
+#### Oracle status (2026-07-01)
 
-`build-idris2` currently fails on pre-existing issues outside the #60/#61/#89 scope:
-
-- `Filesystem/Model.idr` — `equivSym` / `equivTrans` / `equivReflProof` are deliberate `?holes`; trivial closure when needed.
-- `Filesystem/RMO.idr` — `hardwareEraseIrreversible` parse issue under Idris2 0.8.0 fixed 2026-06-02 via PR #113 (multi-line → single-line signature using `Unit`); `AuditEntry.proof` keyword-clash fixed via PR #112. The 10 `partial` annotations previously listed in this bullet were cleared 2026-06-02 by PRs #108 + #109 (closing #89).
-- `Filesystem/Composition.idr` — 4 remaining holes pending Coq/Lean port (reverseConcat closed 2026-06-02 via PR #115 using `Data.List.revAppend`).
-
-The CI job is configured non-blocking until the pre-existing parse/typecheck
-issues land. Once green, flip the final `exit 0` in `idris-verification.yml`
-to `exit 1` and add the job to branch protection's required checks.
+`build-idris2` **builds green** and `verify-idris2` reports **0 distinct
+`?holes`**. All four modules type-check under `--total`. The
+`idris-verification.yml` gate already flips to `exit 1` on build failure; with
+zero holes and a clean build the layer is a hard gate, not honest debt.
 
 ### Run Tests
 
@@ -171,15 +168,15 @@ deno run vsh-core.js
 
 | Lean 4 Theorem | Idris2 Function | Status |
 |----------------|-----------------|--------|
-| `mkdir_rmdir_reversible` | `mkdirRmdirReversible` | ⚠️ Hole |
-| `create_delete_file_reversible` | `touchRmReversible` | ⚠️ Hole |
-| `write_file_reversible` | `writeFileReversible` | ⚠️ Hole |
-| `operation_sequence_reversible` | `sequenceReversible` | ⚠️ Hole |
+| `mkdir_rmdir_reversible` | `mkdirRmdirReversible` | ✅ Proven |
+| `create_delete_file_reversible` | `touchRmReversible` | ✅ Proven |
+| `write_file_reversible` | `writeFileReversible` | ✅ Proven |
+| `operation_sequence_reversible` | `sequenceReversible` | ✅ Proven |
 | `fs_equiv_refl` | `equivRefl` | ✅ Proven |
-| `fs_equiv_sym` | `equivSym` | ⚠️ Hole |
-| `fs_equiv_trans` | `equivTrans` | ⚠️ Hole |
-| `cno_identity_element` | `cnoWriteSameContent` | ⚠️ Hole |
-| `hardware_erase_irreversible` | `hardwareEraseIrreversible` | ⚠️ Hole |
+| `fs_equiv_sym` | `equivSym` | ✅ Proven |
+| `fs_equiv_trans` | `equivTrans` | ✅ Proven |
+| `cno_identity_element` | `cnoWriteSameContent` | ✅ Proven |
+| `hardware_erase_irreversible` | `hardwareEraseIrreversible` | ✅ Proven |
 
 ### Coq ↔ Idris2 Mapping
 
@@ -191,7 +188,7 @@ Idris2 uses similar type theory to Coq (both based on Martin-Löf type theory), 
 
 ---
 
-## Key Theorems (To Be Proven)
+## Key Theorems (Proven)
 
 ### 1. Reversibility
 
@@ -200,11 +197,14 @@ mkdirRmdirReversible :
   (p : Path) ->
   (fs : Filesystem) ->
   {auto mkdirPrf : MkdirPrecondition p fs} ->
+  {auto rmdirPrf : RmdirPrecondition p (mkdir p fs)} ->
   rmdir p (mkdir p fs) = fs
 ```
 
-**Status**: Hole - needs proof
-**Approach**: Case analysis on filesystem structure
+**Status**: ✅ Proven via `removeAddAbsent`
+**Approach**: rmdir applicability is an explicit precondition (the mkdir
+precondition does not preclude orphan children); the equality itself is the
+exact-equality lemma `removeAddAbsent`.
 
 ### 2. Sequence Reversibility
 
@@ -212,12 +212,15 @@ mkdirRmdirReversible :
 sequenceReversible :
   (ops : List Operation) ->
   (fs : Filesystem) ->
-  (allReversible : All (\op => isReversible op = True) ops) ->
+  TraceReversible ops fs ->
   applySequence (reverse (map inverse ops)) (applySequence ops fs) = fs
 ```
 
-**Status**: Hole - needs proof by induction
-**Approach**: Induction on `ops`, use individual reversibility
+**Status**: ✅ Proven by induction on the `TraceReversible` witness
+**Approach**: the vacuous `All (isReversible op = True)` premise is replaced by
+`TraceReversible`, which records that each step genuinely inverts at its state;
+induction stitches head-cancellation to the inductive tail via `reverseCons` and
+`sequenceSplit`.
 
 ### 3. Non-Injectivity (Irreversibility)
 
@@ -285,8 +288,8 @@ pub extern "C" fn vsh_mkdir_wrapper(path: *const c_char) -> c_int {
 
 ### Phase 1: Complete Proofs (Weeks 1-2)
 
-- [ ] Fill all 22 proof holes
-- [ ] Verify totality of all functions
+- [x] Fill all proof holes (0 remaining as of 2026-07-01)
+- [x] Verify totality of all functions (builds under `--total`)
 - [ ] Add property tests
 
 ### Phase 2: Extraction (Week 3)
@@ -350,5 +353,6 @@ See main project `CONTRIBUTING.md`. For Idris2-specific:
 
 ---
 
-**Status**: Initial implementation complete, proofs pending
-**Next**: Fill proof holes, extract to executable, integrate with shell
+**Status**: All proofs complete — 0 holes, builds under `--total`, 2 registered
+primitive-eq axioms (`Filesystem.Axioms`).
+**Next**: extract to executable, integrate with shell

@@ -4,9 +4,16 @@ Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
 # Proof Holes Audit - Valence Shell
 
-**Date**: 2026-04-12 (updated after P0 believe_me sweep — Coq layer)
+**Date**: 2026-07-01 (Idris2 layer closed to 0 holes — issue #151 root; prior: 2026-04-12 believe_me sweep, Coq layer)
 **Auditor**: Opus (deep audit + proof closure)
-**Total Holes**: 6 across 4 proof systems (down from 31; -2 Coq axioms proved 2026-04-12)
+**Total Holes**: 6 across the 4 closed-core proof systems tracked here (down from 31; -2 Coq axioms proved 2026-04-12)
+
+> **Idris2 ABI layer (tracked separately in `PROOF-NEEDS.md` /
+> `proofs/idris2/README.md`): 0 holes as of 2026-07-01.** All 17 `?holes` were
+> discharged with total, `--total`-checked terms and **zero new axioms**; the two
+> primitive-eq axioms in `Filesystem.Axioms` are the only remaining assumptions
+> (gated by `.github/scripts/check-idris2-believe-me.sh`). Non-theorem signatures
+> were redesigned to true statements rather than closed with `believe_me`.
 
 ## Summary
 
