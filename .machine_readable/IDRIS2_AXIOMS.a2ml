@@ -17,8 +17,20 @@
 
 @a2ml-version: "0.1"
 @registry-kind: idris2-axioms
-@updated: "2026-06-02"
+@updated: "2026-07-01"
 @policy: "Q1-C pilot, soft believe_me policy with named + gated axioms"
+
+// 2026-07-01 (issue #151 root): the entire Idris2 proof layer was closed to
+// ZERO ?holes without adding any new axioms. This registry is unchanged at two
+// entries. These two are the irreducible primitive-String/Bits8 equality
+// boundary in intensional type theory — morally identical to Idris2's own
+// `DecEq String` internals (which also rest on `believe_me`) and to Agda's
+// `postulate funext`. Eliminating them would require representing path
+// components with a non-primitive inductive type, trading a standard axiom for
+// unnatural encoding overhead; that is deliberately NOT done. Note the restore-
+// direction reversibility theorems (rmdirMkdir/rmTouch/writeFile/cnoWrite) were
+// closed with canonical-form preconditions specifically so that NO `==`→`=`
+// soundness axiom was needed.
 
 axioms:
   - name: axStringEqRefl

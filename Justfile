@@ -63,8 +63,7 @@ build-idris2:
 # Verify Idris2: build then count remaining ?holes (regression signal).
 verify-idris2: build-idris2
     @echo "Counting Idris2 holes..."
-    @holes=$$(grep -rohE "\\?[a-zA-Z_][a-zA-Z0-9_']*" proofs/idris2/src/ 2>/dev/null | sort -u | wc -l); \
-        echo "  Distinct holes: $$holes"
+    @echo "  Distinct holes: $(grep -rohE --include='*.idr' '\?[a-zA-Z_][a-zA-Z0-9_]*' proofs/idris2/src 2>/dev/null | sort -u | wc -l)"
 
 # Extract Coq to OCaml
 extract:
