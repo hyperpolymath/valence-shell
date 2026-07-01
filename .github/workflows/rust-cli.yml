@@ -42,17 +42,13 @@ jobs:
         working-directory: impl/rust-cli
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Run unit tests
+      - name: Run all tests (unit + every integration suite + doctests)
         working-directory: impl/rust-cli
-        run: cargo test --lib --verbose
+        run: cargo test --verbose
 
-      - name: Run integration tests
-        working-directory: impl/rust-cli
-        run: cargo test --test integration_test --verbose
-
-      - name: Run property tests
-        working-directory: impl/rust-cli
-        run: cargo test --test property_tests --verbose
+      - name: Run ffi/rust tests
+        working-directory: ffi/rust
+        run: cargo test --verbose
 
       - name: Build release binary
         working-directory: impl/rust-cli
@@ -98,3 +94,44 @@ jobs:
           SORRY_COUNT=$(grep -r "sorry" *.lean | wc -l || echo "0")
           echo "Found $SORRY_COUNT sorry placeholders in proofs"
           # Note: Some sorry placeholders are expected during development
+
+  coverage:
+    name: Code coverage (llvm-cov)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b  # stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb  # v2
+        with:
+          workspaces: impl/rust-cli
+
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+
+      - name: Measure coverage (impl/rust-cli)
+        working-directory: impl/rust-cli
+        run: |
+          # Run the full suite once under instrumentation, then emit reports.
+          # Measured and surfaced as a regression signal — not a hard gate.
+          cargo llvm-cov --no-report
+          cargo llvm-cov report --lcov --output-path lcov.info
+          {
+            echo '### Coverage — impl/rust-cli'
+            echo '```'
+            cargo llvm-cov report --summary-only
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage (lcov)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: coverage-lcov
+          path: impl/rust-cli/lcov.info

@@ -117,7 +117,24 @@ Nix (recommended)
 
 === Installation
 
-==== With Nix (Recommended)
+==== Run the shell (Rust CLI) — the primary deliverable
+
+The interactive shell lives in `impl/rust-cli/` and only needs a Rust toolchain
+(1.88+). The proof systems below are optional — they are needed only to
+re-check the formal proofs, not to build or run the shell.
+
+[source,bash]
+----
+git clone https://github.com/Hyperpolymath/valence-shell.git
+cd valence-shell/impl/rust-cli
+
+cargo build --release           # builds the `vsh` binary
+cargo run                       # start the interactive shell
+./target/release/vsh --version  # or run the release binary directly
+cargo test                      # run the test suite (766 passing)
+----
+
+==== With Nix (proof systems)
 
 [source,bash]
 ----
