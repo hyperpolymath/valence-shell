@@ -41,3 +41,6 @@ clean:
 install: all
     sudo cp {{target}} /usr/local/lib/
     sudo ldconfig
+
+secret-scan-trufflehog:
+    @command -v trufflehog >/dev/null && trufflehog filesystem . --only-verified || true

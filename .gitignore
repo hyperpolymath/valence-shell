@@ -1,64 +1,50 @@
 # SPDX-License-Identifier: MPL-2.0
 # RSR-compliant .gitignore
 
-# OS & Editor
-.DS_Store
-Thumbs.db
-*.swp
-*.swo
-*~
-.idea/
-.vscode/
+# ============
+# Build Artifacts
+# ============
 
-# Build
+# Universal
 target/
 _build/
 build/
 dist/
 out/
+/tmp/
 
-# Dependencies (unanchored to match nested paths)
-node_modules/
-/vendor/
-deps/
-.elixir_ls/
-
-# BEAM compiled files
-*.beam
+# Zig
+.zig-cache/
+zig-out/
 
 # Rust
-# Cargo.lock  # Keep for binaries
+Cargo.lock
+impl/**/target/
 
 # Elixir
 /cover/
 /doc/
+/_deps/
+/erl_crash.dump
 *.ez
-erl_crash.dump
+*.beam
+.elixir_ls/
+/_plugs/
 
 # Julia
 *.jl.cov
 *.jl.mem
-/Manifest.toml
+Manifest.toml
 
 # ReScript
 /lib/bs/
-/.bsb.lock
-
-# Python (SaltStack only)
-__pycache__/
-*.py[cod]
-.venv/
-
-# Ada/SPARK
-*.ali
-/obj/
-/bin/
+/bsb.lock
 
 # Haskell
 /.stack-work/
 /dist-newstyle/
 
-# Proof system artifacts
+# Proof systems
 *.vo
 *.vok
 *.vos
@@ -69,46 +55,80 @@ __pycache__/
 # Chapel
 *.chpl.tmp.*
 
+# Ada/SPARK
+*.ali
+/obj/
+/bin/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# ============
+# Dependencies
+# ============
+
+node_modules/
+/vendor/
+deps/
+
+# ============
+# Editors & OS
+# ============
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# ============
+# Logs & Temp
+# ============
+
+*.log
+/logs/
+*.tmp
+*.bak
+
+# ============
 # Secrets
+# ============
+
 .env
 .env.*
 *.pem
 *.key
 secrets/
 
+# ============
 # Test/Coverage
+# ============
+
 /coverage/
 htmlcov/
 *.proptest-regressions
 
-# Logs
-*.log
-/logs/
+# ============
+# Crash/State
+# ============
 
-# Temp
-/tmp/
-*.tmp
-*.bak
+ai-cli-crash-capture/
+.cache/
+.vsh_state.json
 
-# Strategic analysis - local notes only
+# ============
+# Strategic
+# ============
+
 STRATEGIC_ANALYSIS.md
 docs/strategic/
 
-# Shared libraries and object files
-*.o
-*.so
-*.so.*
-*.dylib
-
-# Zig build artifacts
-.zig-cache/
-zig-out/
-
-# Crash recovery artifacts
-ai-cli-crash-capture/
-.cache/
-
-# vsh runtime state (sandbox transcript)
-.vsh_state.json
-# Accidental shell-redirect output from `> $FILE` testing
+# Accidental test output
 $FILE
