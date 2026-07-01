@@ -15,7 +15,6 @@
 # reusable.yml should pick up this rule for all bridge-tagged repos.
 
 name: Bridge Forbidden Phrases
-timeout-minutes: 30
 on:
   push:
     branches: [main, master]
