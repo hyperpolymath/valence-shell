@@ -95,7 +95,7 @@ fuzz_target!(|data: &[u8]| {
         .map(|e| e.count())
         .unwrap_or(0);
 
-    while state.pop_redo().is_ok() {
+    while state.pop_redo().is_some() {
         // Keep undoing
     }
 

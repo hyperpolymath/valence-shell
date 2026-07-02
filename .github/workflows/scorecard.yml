@@ -8,9 +8,18 @@ on:
   push:
     branches: [main]
 
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   analysis:
+    # Explicit least-privilege permissions for the OSSF Scorecard reusable
+    # workflow (the documented set), instead of relying on a broad
+    # workflow-level `read-all`:
+    permissions:
+      contents: read          # read the repository
+      actions: read           # inspect workflow runs (Token-Permissions, etc.)
+      security-events: write  # upload results to the code-scanning dashboard
+      id-token: write         # OIDC, to publish results / badge
     uses: hyperpolymath/standards/.github/workflows/scorecard-reusable.yml@d7c22711e830e1f383846472f6e9b99debdb201e
     secrets: inherit

@@ -6,7 +6,12 @@ Standalone Rust crate (`vsh-ffi`, library `vsh_ffi`) that exposes
 verified POSIX operations with precondition checking. Bridges the
 Coq/Lean filesystem proofs in `../../proofs/` to real POSIX syscalls.
 
-This is the **canonical** Rust FFI tree. The previous `impl/rust-ffi/`
+NOTE: "FFI" here means this crate _calls_ foreign functions (libc/POSIX). It is
+an internal Rust library — it exposes no `#[no_mangle]` / `extern "C"` C ABI and
+is not linked by other languages. The C-ABI boundary that other languages call
+is the Zig FFI in `../zig/`; see `../../docs/ABI-FFI-BOUNDARY.md`.
+
+This is the **canonical** Rust tree (among Rust helper trees). The previous `impl/rust-ffi/`
 duplicate was deleted on 2026-04-19 in commit `f43cfb5` after
 verification that 6 of 7 sibling files were byte-identical and that
 this tree is the superset (carries `verification.rs` plus richer
