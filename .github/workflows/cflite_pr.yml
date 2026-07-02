@@ -23,7 +23,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sanitizer: [address, undefined]
+        # cargo-fuzz hard-codes ASan for Rust, so only `address` yields a valid
+        # build (see .clusterfuzzlite/project.yaml for the full rationale).
+        sanitizer: [address]
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4

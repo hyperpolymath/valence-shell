@@ -5,6 +5,12 @@
 //! This crate provides the FFI (Foreign Function Interface) layer that bridges
 //! Coq-verified operations to real POSIX syscalls.
 //!
+//! > **Boundary note:** "FFI" here means this crate *calls* foreign functions
+//! > (libc/POSIX). It is an internal Rust library and does **not** export a C
+//! > ABI (`#[no_mangle]`/`extern "C"`), so it is not the C-ABI boundary that
+//! > other languages link against — that role belongs to the Zig FFI in
+//! > `ffi/zig/`. See `docs/ABI-FFI-BOUNDARY.md`.
+//!
 //! # Trust Boundaries
 //!
 //! ```text

@@ -197,12 +197,14 @@ zig build -Doptimize=ReleaseFast  # Build optimized
 zig build test                    # Run tests
 ```
 
-### Generate C Header from Idris2 ABI
+### C Header
 
-```bash
-cd src/abi
-idris2 --cg c-header Types.idr -o ../../generated/abi/valence_shell.h
-```
+The C header lives at **`ffi/zig/include/valence_shell.h`** and is
+**hand-maintained** to match the `export fn` signatures in
+`ffi/zig/src/main.zig`. Idris2 ships no `c-header` codegen (only
+chez/node/racket/refc), so the older `idris2 --cg c-header` step is aspirational
+— update the header by hand in the same commit as any FFI signature change.
+See [`docs/ABI-FFI-BOUNDARY.md`](docs/ABI-FFI-BOUNDARY.md).
 
 ### Cross-Compile
 
@@ -355,10 +357,8 @@ When modifying the ABI/FFI:
    - Update proofs
    - Ensure backward compatibility
 
-2. **Generate C header**
-   ```bash
-   idris2 --cg c-header src/abi/Types.idr -o generated/abi/valence_shell.h
-   ```
+2. **Update the C header by hand** (`ffi/zig/include/valence_shell.h`) to match
+   the new/changed `export fn` signatures — Idris2 has no `c-header` codegen.
 
 3. **Update FFI implementation** (`ffi/zig/src/main.zig`)
    - Implement new functions
@@ -380,6 +380,7 @@ MPL-2.0
 
 ## See Also
 
+- [ABI/FFI boundary decision record](docs/ABI-FFI-BOUNDARY.md)
 - [Idris2 Documentation](https://idris2.readthedocs.io)
 - [Zig Documentation](https://ziglang.org/documentation/master/)
 - [Rhodium Standard Repositories](https://github.com/hyperpolymath/rhodium-standard-repositories)

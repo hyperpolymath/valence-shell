@@ -7,10 +7,13 @@ primary_contact: "jonathan.jewell@open.ac.uk"
 auto_ccs:
   - "jonathan.jewell@open.ac.uk"
 
+# Rust fuzz targets are built by cargo-fuzz, which hard-codes AddressSanitizer
+# and ignores $SANITIZER. Advertising `undefined`/`memory` makes OSS-Fuzz's
+# bad_build_check fail ("UBSan build ... seems to be compiled with ASan"),
+# because the produced binary is always ASan. ASan already covers Rust's
+# relevant memory-safety classes here, so `address` is the supported set.
 sanitizers:
   - address
-  - undefined
-  - memory
 
 fuzzing_engines:
   - libfuzzer
