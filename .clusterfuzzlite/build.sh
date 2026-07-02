@@ -6,8 +6,16 @@ set -euo pipefail
 
 cd "$SRC"/valence-shell/impl/rust-cli
 
-# Install cargo-fuzz if not present
-cargo install cargo-fuzz --force
+# The OSS-Fuzz base-builder-rust image already ships cargo-fuzz. Reinstalling it
+# with `cargo install --force` rebuilds cargo-fuzz and its dependencies —
+# including the proc-macro crate `thiserror_impl` — under the image's sanitizer
+# RUSTFLAGS, which breaks the host build with:
+#   error[E0463]: can't find crate for `thiserror_impl`
+# So prefer the pre-installed cargo-fuzz, and only fall back to a clean install
+# (RUSTFLAGS cleared) if it is genuinely missing.
+if ! command -v cargo-fuzz >/dev/null 2>&1; then
+    RUSTFLAGS="" cargo install cargo-fuzz --locked
+fi
 
 # Build all fuzz targets
 cargo +nightly fuzz build
