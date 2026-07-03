@@ -5,8 +5,9 @@
 Project-level documentation tree. ~49 entries (subdirs + files);
 historically flat-organised — the 2026-04-18 audit flagged the lack of
 `docs/architecture/`, `docs/decisions/`, `docs/practice/`, `docs/wikis/`
-subtrees as a coverage gap, but the existing files are themselves
-well-maintained.
+subtrees as a coverage gap. The wiki gap is now closed by `wiki/` (an
+audience-segmented, GitHub-wiki-ready tree); the existing files are
+themselves well-maintained.
 
 This README provides orientation; individual files are self-describing.
 
@@ -15,6 +16,13 @@ This README provides orientation; individual files are self-describing.
 [cols="2,4"]
 |===
 | Path | Role
+
+| `wiki/`
+| In-repository source of truth for the GitHub wiki. Audience-segmented
+  tracks (lay people, users, developers, platform maintainers,
+  marketers/journalists) plus a shared honest-status page, routed from
+  `Home.md`. Uses GitHub-wiki naming so it can be published verbatim; see
+  `wiki/README.md` for the sync procedure.
 
 | `governance/`
 | Authoritative governance artefacts. Currently
