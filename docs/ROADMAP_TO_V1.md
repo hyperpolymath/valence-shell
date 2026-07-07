@@ -2,401 +2,111 @@
 SPDX-License-Identifier: CC-BY-SA-4.0
 Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
-# Valence Shell: Roadmap to v1.0.0
+# Valence Shell: Production Charter (Roadmap to v1.0.0)
 
-**Current Version**: 0.10.0 (Command Substitution)
-**Target**: v1.0.0 (Production-Ready Shell)
-**Date**: 2026-01-29
+**Current version**: 0.9.0 (advanced research prototype, ~78% complete)
+**Target**: v1.0.0 — definition pending owner decision D1 (below)
+**Charter date**: 2026-07-07 (supersedes the 2026-01-29 roadmap, which was
+written against v0.10-era plans; roughly half its milestones have since
+shipped and its claims were not audit-verified)
 
----
-
-## Current Status
-
-### ✅ Implemented (v0.1.0 - v0.10.0)
-
-| Feature | Version | Status |
-|---------|---------|--------|
-| Filesystem Operations | v0.1.0 | ✅ `mkdir`, `rmdir`, `touch`, `rm` |
-| Undo/Redo | v0.2.0 | ✅ Reversible operations |
-| History | v0.3.0 | ✅ Command history tracking |
-| Transactions | v0.4.0 | ✅ `begin`, `commit`, `rollback` |
-| Proof References | v0.5.0 | ✅ 256 theorems linked |
-| External Commands | v0.7.0 | ✅ Fork/exec with PATH |
-| I/O Redirections | v0.8.0 | ✅ `>`, `>>`, `<`, `2>`, `2>&1` |
-| Pipelines | v0.8.0 | ✅ Multi-stage `cmd1 | cmd2 | cmd3` |
-| Variables | v0.9.0 | ✅ `VAR=value`, `$VAR`, `${VAR}`, special vars |
-| Quote Parsing | v0.9.0 | ✅ Single/double quotes, escaping |
-| Command Substitution | v0.10.0 | ✅ `$(cmd)`, `` `cmd` `` |
-| Process Sub Parsing | v0.10.0 | ✅ `<(cmd)`, `>(cmd)` (execution deferred) |
-
-### 🚧 In Progress
-
-| Feature | Version | Status |
-|---------|---------|--------|
-| Process Substitution Execution | v0.11.0 | 🚧 Parsing done, FIFO execution pending |
+This charter is the working plan for an **orchestrated multi-agent project**:
+one coordinating session manages parallel worker lanes, with a fan-in review
+at the end of every phase. It is honest by construction — see `CLAUDE.md`
+"HONEST STATUS" and `docs/PROOF_HOLES_AUDIT.md` for the ground truth this
+plan builds on.
 
 ---
 
-## Roadmap to v1.0.0
+## Where we are (audit-verified, 2026-07-07)
 
-### Phase 6 Completion: Shell Features
-
-#### M7: Process Substitution Execution (v0.11.0)
-**Timeline**: 3-4 days
-**Complexity**: High (FIFO management, background processes)
-
-**Requirements**:
-- [ ] FIFO (named pipe) creation using `mkfifo()` syscall
-- [ ] Background process spawning with redirected file descriptors
-- [ ] Process management (track PIDs, wait for completion)
-- [ ] FIFO cleanup (remove after main command completes)
-- [ ] Error handling (deadlocks, broken pipes, process failures)
-- [ ] Platform support: Linux/macOS only (Windows has no FIFOs)
-
-**Success Criteria**:
-- `diff <(ls dir1) <(ls dir2)` executes correctly
-- `tee >(wc -l) >(grep pattern)` works
-- FIFOs cleaned up even on errors
-- No zombie processes or resource leaks
+- 736 tests passing, 0 failures (see CLAUDE.md test table)
+- 3 proof holes: 1 real gap (Coq `obliterate_overwrites_all_blocks`),
+  2 documented axioms; Idris2 ABI layer fully closed
+- Lean→Rust correspondence is **tested, not mechanized** (~85–95% confidence)
+- Not a full POSIX shell: word splitting in external args, `~user`,
+  subshell `(...)`, SIGCHLD/Ctrl+Z incomplete (`docs/POSIX_COMPLIANCE.md`)
+- RMO/secure deletion are stubs; GDPR claims not yet shippable
+- Backlog is decomposed fan-out-ready in Tier-S issues:
+  #41→(#86,#87,#88) seams, #42→(#76–#81) proofs, #43→(#82–#85) tests,
+  #45→(#63–#66, #90–#94) theory frontiers
 
 ---
 
-#### M8: Arithmetic Expansion (v0.12.0)
-**Timeline**: 2-3 days
-**Complexity**: Medium (expression parsing, overflow handling)
+## Pending owner decisions (phase gates)
 
-**Requirements**:
-- [ ] Parse `$((expr))` syntax
-- [ ] Evaluate arithmetic expressions: `+`, `-`, `*`, `/`, `%`, `**`
-- [ ] Handle precedence and parentheses
-- [ ] Bitwise operators: `&`, `|`, `^`, `~`, `<<`, `>>`
-- [ ] Comparison operators: `<`, `>`, `<=`, `>=`, `==`, `!=`
-- [ ] Variable expansion in expressions: `$((x + y))`
-- [ ] Overflow detection and safe math
-- [ ] Integer-only (POSIX behavior)
+These block the phases that depend on them. Recommendations are provisional
+defaults — vetoable, not ratified by merging this document.
 
-**Examples**:
-```bash
-echo $((2 + 3))        # 5
-echo $((10 / 3))       # 3 (integer division)
-VAR=5; echo $((VAR * 2))  # 10
-```
+| # | Decision | Options | Provisional recommendation |
+|---|----------|---------|---------------------------|
+| **D1** | What "production" / v1.0.0 means | (a) daily-drivable POSIX shell; (b) verified artifact with honest POSIX deltas; (c) both | (b) gates v1.0; (a) at "scripts run, deltas documented" |
+| **D2** | Correspondence approach (#93) | (i) hardened tested-correspondence for v1.0; (ii) verified-kernel architecture; (iii) full extraction pipeline | (i) for v1.0, (ii) chartered for v2.0. Cost ≈ 1× / 10× / unbounded |
+| **D3** | 47/58 commits authored `Test <test@example.com>` | history rewrite + force-push (estate-forbidden) vs `.mailmap` + documentation | `.mailmap` + document; force-push only on explicit owner sanction |
+| **D4** | RMO/GDPR scope for v1.0 (#92) | best-effort overwrite + proven audit residue + documented hardware boundary (per #66/#130) vs drop GDPR claims from v1.0 | the former — honest and matches the RMR/RMO bridge distinction |
+| **D5** | Orchestration budget & cadence | parallel-lane count, token appetite per phase, scheduled loops vs kicked-off sessions | owner call; phases below assume 3–5 concurrent lanes |
 
 ---
 
-#### M9: Here Documents (v0.13.0)
-**Timeline**: 2 days
-**Complexity**: Low (input buffering)
+## Workstream lanes
 
-**Requirements**:
-- [ ] Parse `<<EOF` syntax
-- [ ] Collect lines until delimiter
-- [ ] Feed to command stdin
-- [ ] Variable expansion in here-docs (unless `<<'EOF'`)
-- [ ] No expansion with quoted delimiter: `<<'EOF'`
+| Lane | Scope | Issues | Orchestration profile |
+|------|-------|--------|----------------------|
+| **A** | POSIX completeness: word splitting (quote-context threading), subshell `(...)`, `~user`, SIGCHLD/Ctrl+Z | #91, #94 | Keystone — one sustained agent; word splitting first |
+| **B** | Seam sealing: 3 prod `panic!`, 10 `unreachable!`, 28 TODOs | #86, #87, #88 | Pure fan-out, one PR per file |
+| **C** | Test/fuzz/bench expansion: 736→2000+ tests, 7→20 fuzz targets, 15→75 security tests, benches in CI | #82–#85 | Pure fan-out by category |
+| **D** | Proof expansion: 478 theorem candidates across 6 systems; close last Coq gap; restate #130 non-theorem | #76–#81, #130 | Fan-out by prover system |
+| **E** | Lean→Rust correspondence mechanization | #93 | Keystone — blocked on **D2** |
+| **F** | RMO/GDPR implementation (theory unblocked: #60/#61 closed) | #92 | Blocked on **D4**, then bounded single lane |
+| **G** | Ops hygiene: CI reds, charter, issue-state drift | — | Inline, done first |
 
-**Examples**:
-```bash
-cat <<EOF
-Hello $USER
-Current directory: $(pwd)
-EOF
+## Phases
 
-cat <<'EOF'
-Literal: $USER and $(pwd)
-EOF
-```
+**Phase 0 — hygiene + decisions** *(in progress)*
+Fix ECHIDNA red (isabelle not in noble) and Secret Scanner startup_failure
+(caller-side permissions); update #92 blocked-status; land this charter;
+obtain D1–D5.
 
----
+**Phase 1 — confidence floor** *(needs D5 only)*
+Lanes B + C fanned out wide (low-risk, mechanical verification), while one
+agent takes Lane A's word-splitting keystone. Exit: seams sealed, test count
+materially up, word splitting merged. Fan-in review closes the phase.
 
-#### M10: Job Control (v0.14.0)
-**Timeline**: 4-5 days
-**Complexity**: High (process groups, signals)
+**Phase 2 — verification core** *(needs D2)*
+Lane D fan-out by prover + Lane E keystone per the D2 choice. Exit: 0 real
+proof holes, foundation-pack theorems across all six systems, correspondence
+story at its D2-ratified strength.
 
-**Requirements**:
-- [ ] Background jobs: `cmd &`
-- [ ] Job list: `jobs`
-- [ ] Foreground: `fg %1`
-- [ ] Background: `bg %1`
-- [ ] Process group management
-- [ ] Signal handling (SIGTSTP, SIGCONT, SIGCHLD)
-- [ ] Terminal control (tcsetpgrp)
+**Phase 3 — production hardening** *(needs D1, D4)*
+Lane F (RMO per D4) + release engineering: 24h fuzz soak, leak checks,
+perf gates in CI, user docs, `.mailmap` per D3, release notes. Exit:
+v1.0.0 tag per the D1 definition.
 
-**Deferred** (not required for v1.0):
-- Job control on Windows (no POSIX signals)
-- Advanced job features (disown, wait)
+Every fan-out phase ends with an explicit fan-in review before the next
+phase opens — no orphaned parallel work.
 
 ---
 
-### Phase 7: Scripting Support
+## Quality gates for v1.0.0 (carried from prior roadmap, still valid)
 
-#### M11: Conditionals (v0.15.0)
-**Timeline**: 3-4 days
-**Complexity**: Medium (AST for conditionals)
+- 100% of tests passing; no known critical bugs
+- Fuzzing: 24+ hours without crashes; no resource leaks
+- All reversible operations proven across the six proof systems
+- Correspondence at D2-ratified strength, stated honestly in docs
+- Zero known security vulnerabilities; security test suite ≥75 cases
+- Documentation: user guide, proof reference, MAA guide, man page
 
-**Requirements**:
-- [ ] `if` / `then` / `elif` / `else` / `fi`
-- [ ] Exit code checking: `if cmd; then ...`
-- [ ] Test command: `if [ -f file ]; then ...`
-- [ ] Built-in `test` / `[` command
-- [ ] String comparisons: `=`, `!=`
-- [ ] Integer comparisons: `-eq`, `-ne`, `-lt`, `-le`, `-gt`, `-ge`
-- [ ] File tests: `-f`, `-d`, `-e`, `-r`, `-w`, `-x`
-- [ ] Boolean operators: `-a` (and), `-o` (or), `!` (not)
+## Non-goals for v1.0 (unless D1 says otherwise)
 
-**Examples**:
-```bash
-if [ -f config.txt ]; then
-    echo "Config exists"
-else
-    echo "No config"
-fi
-```
+- Full bash/zsh replacement parity
+- Windows job control / FIFOs
+- BEAM daemon, Elixir NIF revival
+- Hardware-level erasure guarantees (non-theorems per #66/#130 — the
+  documented modelling boundary stands)
 
 ---
 
-#### M12: Loops (v0.16.0)
-**Timeline**: 3 days
-**Complexity**: Medium (control flow)
-
-**Requirements**:
-- [ ] `for` loops: `for var in list; do ...; done`
-- [ ] `while` loops: `while condition; do ...; done`
-- [ ] `until` loops: `until condition; do ...; done`
-- [ ] `break` and `continue`
-- [ ] C-style for: `for ((i=0; i<10; i++)); do ...; done`
-
-**Examples**:
-```bash
-for file in *.txt; do
-    echo "Processing $file"
-done
-
-i=0
-while [ $i -lt 5 ]; do
-    echo $i
-    i=$((i + 1))
-done
-```
-
----
-
-#### M13: Functions (v0.17.0)
-**Timeline**: 3-4 days
-**Complexity**: Medium (scope, local variables)
-
-**Requirements**:
-- [ ] Function definition: `func() { ...; }`
-- [ ] Function calls
-- [ ] Positional parameters: `$1`, `$2`, etc.
-- [ ] `local` keyword for function-scoped variables
-- [ ] `return` statement with exit code
-- [ ] `$@` and `$*` for all arguments
-
-**Examples**:
-```bash
-greet() {
-    local name=$1
-    echo "Hello, $name!"
-}
-
-greet "World"
-```
-
----
-
-### Phase 8: MAA Framework Integration
-
-#### M14: Provenance Tracking (v0.18.0)
-**Timeline**: 5-6 days
-**Complexity**: High (cryptographic hashing, audit trails)
-
-**Requirements**:
-- [ ] Hash-chained audit log for all operations
-- [ ] Operation metadata: user, timestamp, command, exit code
-- [ ] Before/after filesystem state hashing
-- [ ] Tamper-evident log storage
-- [ ] Log verification command
-- [ ] Integration with proven's `SafeProvenance` (Idris2)
-
-**MAA Guarantees**:
-- Every operation creates an audit entry
-- Entries are cryptographically chained (hash of previous)
-- Tampering with any entry breaks the chain
-- GDPR compliance: immutable proof of data operations
-
----
-
-#### M15: Capability-Based Security (v0.19.0)
-**Timeline**: 4-5 days
-**Complexity**: High (permission modeling)
-
-**Requirements**:
-- [ ] Capability tokens for file access
-- [ ] Least-privilege enforcement
-- [ ] Delegation and revocation
-- [ ] Integration with proven's `SafeCapability` (Idris2)
-
-**Deferred** (post-v1.0):
-- Network capabilities
-- Time-limited capabilities
-
----
-
-### Phase 9: Production Readiness
-
-#### M16: Error Handling & Robustness (v0.20.0)
-**Timeline**: 3-4 days
-
-**Requirements**:
-- [ ] Comprehensive error messages
-- [ ] Graceful degradation (missing commands)
-- [ ] Resource limit handling (max file descriptors, memory)
-- [ ] SIGINT handling (Ctrl+C in external commands)
-- [ ] SIGTERM handling (graceful shutdown)
-- [ ] Cleanup on abnormal exit
-- [ ] Fuzzing integration (OSS-Fuzz or ClusterFuzzLite)
-
----
-
-#### M17: Configuration & Customization (v0.21.0)
-**Timeline**: 2-3 days
-
-**Requirements**:
-- [ ] Config file: `~/.vshrc`
-- [ ] Prompt customization
-- [ ] Aliases
-- [ ] Environment variable persistence
-- [ ] History file: `~/.vsh_history`
-- [ ] History size limits
-
----
-
-#### M18: Documentation & Examples (v0.22.0)
-**Timeline**: 3-4 days
-
-**Requirements**:
-- [ ] User manual (AsciiDoc)
-- [ ] Tutorial: Getting Started
-- [ ] Example scripts
-- [ ] Proof reference guide
-- [ ] MAA framework guide
-- [ ] API documentation (rustdoc)
-- [ ] Man page: `man vsh`
-
----
-
-#### M19: Performance Optimization (v0.23.0)
-**Timeline**: 2-3 days
-
-**Requirements**:
-- [ ] Benchmarking suite
-- [ ] Command lookup caching
-- [ ] Fork overhead reduction
-- [ ] Memory usage optimization
-- [ ] Startup time optimization (< 50ms)
-
----
-
-#### M20: v1.0.0 Release Candidate (v0.24.0)
-**Timeline**: 1 week
-
-**Requirements**:
-- [ ] All critical features complete
-- [ ] All tests passing (unit, integration, property)
-- [ ] Security audit (manual + automated)
-- [ ] Performance regression tests
-- [ ] User acceptance testing
-- [ ] Release notes
-- [ ] Migration guide (from bash/zsh)
-
----
-
-## v1.0.0 Release Criteria
-
-### Must-Have Features
-- ✅ All Phase 6 milestones (shell features)
-- ✅ All Phase 7 milestones (scripting)
-- ✅ MAA Framework (provenance tracking)
-- ✅ Error handling and robustness
-- ✅ Documentation complete
-
-### Quality Gates
-- [ ] 100% of critical tests passing
-- [ ] No known critical bugs
-- [ ] No resource leaks (valgrind clean)
-- [ ] Fuzzing: 24+ hours without crashes
-- [ ] Startup time < 50ms (cold start)
-- [ ] Memory usage < 10MB (idle)
-
-### Platform Support
-- ✅ Linux (x86_64, aarch64)
-- ✅ macOS (Intel, Apple Silicon)
-- ⚠️ Windows: Limited (no FIFOs, no job control)
-
-### Proof Coverage
-- [ ] All reversible operations proven in 6 systems
-- [ ] Extraction verified (Coq → OCaml, Lean → Rust correspondence)
-- [ ] MAA framework mathematically verified
-
----
-
-## Timeline Estimate
-
-| Phase | Milestones | Estimated Time |
-|-------|-----------|----------------|
-| Phase 6 (Shell Features) | M7-M10 | 11-14 days |
-| Phase 7 (Scripting) | M11-M13 | 9-11 days |
-| Phase 8 (MAA Framework) | M14-M15 | 9-11 days |
-| Phase 9 (Production) | M16-M20 | 11-14 days |
-| **Total** | **M7-M20** | **40-50 days** |
-
-**Target v1.0.0 Release**: ~6-8 weeks from now
-
----
-
-## Proven Library Integration
-
-### Applicable Modules (Idris2 only)
-
-| Proven Module | Use Case | Integration Point |
-|---------------|----------|-------------------|
-| `SafeFile.idr` | File operations | Replace Rust file I/O with proven calls |
-| `SafePath.idr` | Path manipulation | Validate paths before operations |
-| `SafeStateMachine.idr` | Shell state transitions | Model REPL state machine |
-| `SafeProvenance.idr` | MAA audit trails | Hash-chained operation log |
-| `SafeCapability.idr` | Permission modeling | Capability-based security |
-
-### Integration Strategy
-
-1. **Compile Idris2 modules** to shared library
-2. **Create minimal FFI wrapper** in valence-shell Rust code
-3. **Ignore all bindings directories** in proven repo (contaminated)
-4. **Direct Zig FFI if needed**, or use Idris2's native FFI
-
----
-
-## Post-v1.0 Features (v1.1+)
-
-- Command-line editing (readline-like)
-- Tab completion
-- Syntax highlighting (via rustyline)
-- vi/emacs keybindings
-- Advanced job control (disown, wait)
-- Shell scripts with shebang: `#!/usr/bin/vsh`
-- Plugin system
-- Remote shell execution (SSH integration)
-
----
-
-## Success Metrics for v1.0.0
-
-- [ ] Can run basic shell scripts (bash compatibility: 80%+)
-- [ ] Undo works for all reversible operations
-- [ ] MAA audit log verifiable
-- [ ] Zero known security vulnerabilities
-- [ ] Production deployment by 1+ user
-
----
-
-**Co-Authored-By**: Claude Sonnet 4.5 <noreply@anthropic.com>
+**Status**: Charter pending owner ratification of D1–D5.
+**History**: v1 of this file (2026-01-29) is preserved in git history; it
+described Phase 6–9 milestones M7–M20, of which M7–M13 and much of M16
+have since shipped.
