@@ -51,6 +51,10 @@ jobs:
           echo "/tmp/echidna/target/release" >> $GITHUB_PATH
 
       - name: Install proof provers
+        # `isabelle` is not packaged in Ubuntu 24.04 (noble); requesting it
+        # fails the whole job with apt exit 100. validate-with-echidna.sh
+        # reports SKIP for absent provers, so Isabelle proofs are skipped
+        # rather than blocking the pipeline.
         run: |
           set -euo pipefail
           sudo apt-get update
@@ -58,7 +62,6 @@ jobs:
             lean \
             coq \
             agda \
-            isabelle \
             z3
 
       - name: Verify ECHIDNA available
