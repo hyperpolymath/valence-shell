@@ -51,18 +51,20 @@ jobs:
           echo "/tmp/echidna/target/release" >> $GITHUB_PATH
 
       - name: Install proof provers
-        # `isabelle` is not packaged in Ubuntu 24.04 (noble); requesting it
-        # fails the whole job with apt exit 100. validate-with-echidna.sh
-        # reports SKIP for absent provers, so Isabelle proofs are skipped
-        # rather than blocking the pipeline.
+        # Ubuntu 24.04 (noble) packages neither `lean` nor `isabelle`, and
+        # apt-get exits 100 on any unknown package. Lean 4 comes via elan
+        # (pinned + checksum-verified, same as lean-verification.yml).
+        # Isabelle stays uninstalled; validate-with-echidna.sh reports SKIP
+        # for absent provers rather than failing.
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            lean \
-            coq \
-            agda \
-            z3
+          sudo apt-get install -y --no-install-recommends coq agda z3
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/v3.1.1/elan-init.sh -o elan-init.sh
+          echo "f5d473c923c093759ae3839073bec2a58e82cb8bc0e4083930e76090da75b310  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y
+          rm -f elan-init.sh
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
 
       - name: Verify ECHIDNA available
         run: echidna list-provers
