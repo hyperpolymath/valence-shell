@@ -106,8 +106,9 @@ Hard requirements before any v1.0 claim:
 
 * [ ] Mechanized Lean → Rust correspondence (currently property testing
   only, ~85% confidence).
-* [ ] Close all real gaps in `docs/PROOF_HOLES_AUDIT.md` (post-2026-04
-  sweep: 1 real gap, 1 justified axiom, 1 structural).
+* [x] Close all real gaps in `docs/PROOF_HOLES_AUDIT.md` — **DONE**
+  (re-verified 2026-07-16 under Coq 8.18.0): 0 real gaps; 1 justified axiom
+  (`is_empty_dir_dec`) + 1 structural (`funext`) remain.
 * [ ] CRG v2.0 grade B: 6+ diverse external targets, issues fed back.
   See audit `=== External validation` section for the proposed diverse-6
   shape.

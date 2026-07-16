@@ -98,7 +98,7 @@ constraints = [
   "Lean -> Rust correspondence is property-tested only (~85% confidence), NOT mechanised — closing this is the critical-path blocker to v1.0.0",
   "Elixir NIF build is broken — impl/elixir/ is reference-only; do not block work on it",
   "BEAM daemon is designed but not implemented — no current SNIF carrier",
-  "Coq has 1 remaining real proof gap: obliterate_overwrites_all_blocks (mechanical induction over overwrite passes) — see docs/PROOF_HOLES_AUDIT.md",
+  "Coq has 0 remaining real proof gaps: obliterate_overwrites_all_blocks is CLOSED (Print Assumptions: Closed under the global context, re-verified 2026-07-16 under Coq 8.18.0) — see docs/PROOF_HOLES_AUDIT.md",
   "Agda has 1 structural axiom (funext) — provable in cubical Agda, intentional in intensional TT",
   "Coq has 1 justified decidability axiom (is_empty_dir_dec) — infinite-domain Filesystem = Path -> option FSNode; switching to FMaps.t FSNode is the documented migration",
   "RMO (GDPR / secure deletion) primitives are stubs in impl/rust-cli/src/commands/secure_deletion.rs — proofs exist for the model, runtime does not yet bind to them",

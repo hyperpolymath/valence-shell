@@ -86,7 +86,7 @@ The Rust CLI is a functional interactive shell with these features:
 
 - 21,331 lines of Rust across 32 source files (`find impl/rust-cli/src -name '*.rs' | wc -l`; `wc -l` aggregate, measured 2026-06-01)
 - ~478 theorem candidates across 6 proof systems + Idris2 ABI layer (per issue #42 deep-audit inventory, 2026-06-01)
-- 3 proof holes remaining: 1 real gap (Coq `obliterate_overwrites_all_blocks`), 1 justified axiom (Coq `is_empty_dir_dec` — infinite-domain decidability), 1 structural axiom (Agda `funext` — standard in intensional TT) — see `docs/PROOF_HOLES_AUDIT.md`
+- 2 proof holes remaining, **0 real gaps**: 1 justified axiom (Coq `is_empty_dir_dec` — infinite-domain decidability), 1 structural axiom (Agda `funext` — standard in intensional TT). The former real gap (Coq `obliterate_overwrites_all_blocks`) is CLOSED — re-verified 2026-07-16 via `Print Assumptions` (*Closed under the global context*) under Coq 8.18.0 — see `docs/PROOF_HOLES_AUDIT.md`
 - Idris2 ABI layer: **0 proof holes** (all closed 2026-07-01, issue #151 root — builds under `--total`), 0 `partial` markers, 2 registered primitive-eq axioms (`axStringEqRefl`, `axBits8EqRefl`; gated by `.github/scripts/check-idris2-believe-me.sh`)
 - 7 fuzz targets in `impl/rust-cli/fuzz/fuzz_targets/` (parser, arith, job-spec, signal-parse, path-ops, glob-expansion, state-machine)
 
@@ -95,7 +95,7 @@ The Rust CLI is a functional interactive shell with these features:
 ### Critical Priority
 
 1. **No mechanized Lean -> Rust correspondence** — testing only, ~85% confidence
-2. **1 real proof gap** remaining (Coq `obliterate_overwrites_all_blocks` — mechanical induction over overwrite passes), plus 2 documented axioms (1 justified decidability + 1 structural funext) — see `docs/PROOF_HOLES_AUDIT.md`
+2. **0 real proof gaps** — the former Coq `obliterate_overwrites_all_blocks` gap is CLOSED (re-verified 2026-07-16, *Closed under the global context*); 2 documented axioms remain (1 justified decidability + 1 structural funext) — see `docs/PROOF_HOLES_AUDIT.md`
 3. **NOT production-ready** — research prototype only
 
 ### High Priority
@@ -191,7 +191,7 @@ valence-shell/
     mcp/                # MCP server bindings
   proofs/
     lean4/              # Primary proof source (101 theorems)
-    coq/                # CIC proofs + extraction (131 theorems, 3 admits in extraction.v)
+    coq/                # CIC proofs + extraction (131 theorems, 0 admits — re-verified 2026-07-16, Coq 8.18.0)
     agda/               # Type theory proofs (85 theorems, 3 postulates including funext)
     isabelle/           # HOL proofs (76 theorems)
     mizar/              # Set theory proofs (63 theorems)
@@ -326,7 +326,7 @@ MPL-2.0 (Palimpsest License)
 
 ---
 
-**Last Updated**: 2026-06-01 (drift reconcile: 32 src files / 21,331 LoC, 3 proof holes per audit, 478 theorem candidates, 7 fuzz targets)
+**Last Updated**: 2026-07-16 (Coq proof-debt re-verified: 0 admits / 0 real gaps under Coq 8.18.0; 2 justified/structural axioms remain. Prior 2026-06-01 drift reconcile: 32 src files / 21,331 LoC, 478 theorem candidates, 7 fuzz targets)
 **Version**: see `CHANGELOG.md` (release history) and `impl/rust-cli/Cargo.toml` `[package].version` (semver pin)
 **Status**: Advanced research prototype — NOT production-ready
 **Tests**: 736 passing, 0 failures, 14 ignored

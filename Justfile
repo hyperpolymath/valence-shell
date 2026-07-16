@@ -15,13 +15,22 @@ build-all: build-coq build-lean4 build-agda build-isabelle build-mizar build-idr
 verify-all:
     @./scripts/verify-proofs.sh
 
-# Build Coq proofs
+# Build Coq proofs (full _CoqProject chain, in dependency order)
 build-coq:
     @echo "Building Coq proofs..."
-    cd proofs/coq && coqc filesystem_model.v
-    cd proofs/coq && coqc file_operations.v
-    cd proofs/coq && coqc posix_errors.v
-    cd proofs/coq && coqc extraction.v
+    # extraction.v writes to extracted/filesystem.ml; the dir is gitignored, so create it.
+    cd proofs/coq && mkdir -p extracted
+    cd proofs/coq && coqc -R . ValenceShell filesystem_model.v
+    cd proofs/coq && coqc -R . ValenceShell file_operations.v
+    cd proofs/coq && coqc -R . ValenceShell file_content_operations.v
+    cd proofs/coq && coqc -R . ValenceShell copy_move_operations.v
+    cd proofs/coq && coqc -R . ValenceShell symlink_operations.v
+    cd proofs/coq && coqc -R . ValenceShell permission_operations.v
+    cd proofs/coq && coqc -R . ValenceShell filesystem_composition.v
+    cd proofs/coq && coqc -R . ValenceShell filesystem_equivalence.v
+    cd proofs/coq && coqc -R . ValenceShell posix_errors.v
+    cd proofs/coq && coqc -R . ValenceShell rmo_operations.v
+    cd proofs/coq && coqc -R . ValenceShell extraction.v
     @echo "✓ Coq proofs compiled"
 
 # Build Lean 4 proofs
@@ -68,7 +77,8 @@ verify-idris2: build-idris2
 # Extract Coq to OCaml
 extract:
     @echo "Extracting Coq to OCaml..."
-    cd proofs/coq && coqc extraction.v
+    # extraction.v writes to extracted/filesystem.ml; the dir is gitignored, so create it.
+    cd proofs/coq && mkdir -p extracted && coqc extraction.v
     @echo "✓ OCaml code extracted"
 
 # Build OCaml FFI (legacy)

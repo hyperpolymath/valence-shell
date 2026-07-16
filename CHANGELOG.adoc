@@ -17,6 +17,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full POSIX shell compliance (subset)
 - RMO (Remove-Match-Obliterate) proofs for GDPR compliance
 
+=== Verified — 2026-07-16
+
+==== Proofs
+- Coq proof-debt re-verified to **0 admits / 0 real gaps** under Coq
+  8.18.0. The full `_CoqProject` (11 files) compiles with no
+  `admit`/`Admitted`/`Axiom` markers. `Print Assumptions` on the
+  load-bearing theorems: `obliterate_overwrites_all_blocks` and
+  `overwrite_pass_equalizes_storage` are *Closed under the global
+  context* (zero axioms); `single_op_reversible`,
+  `operation_sequence_reversible`, `copy_file_reversible`,
+  `mkdir_two_dirs_reversible`, `obliterate_not_injective` depend only on
+  the standard `functional_extensionality_dep`. The historically-tracked
+  "1 real gap" (`obliterate_overwrites_all_blocks`) and the three
+  2026-06-02 admits (#56/#57/#58) are all closed. Remaining assumptions
+  are standard/justified: Coq `functional_extensionality` (stdlib) +
+  `is_empty_dir_dec` (justified classical), Agda `funext` (structural).
+  Docs reconciled: `PROOF_HOLES_AUDIT.md`, `README.adoc`, `FAQ.adoc`,
+  `CLAUDE.md`, `docs/wiki/`, `ROADMAP*.{adoc,md}`,
+  `.machine_readable/6a2/STATE.a2ml`, `bot_directives/methodology.a2ml`.
+
+=== Fixed — 2026-07-16
+
+==== Build / tooling
+- `just build-coq` and `scripts/verify-proofs.sh` now succeed from a
+  clean checkout. Both previously compiled an incomplete file subset
+  (missing `filesystem_composition.v` and others), so `posix_errors.v`
+  failed with "Cannot find a physical path bound to logical path
+  filesystem_composition"; both now compile the full `_CoqProject`
+  chain in dependency order and `mkdir -p extracted` before
+  `extraction.v` (the gitignored output dir), matching the CI oracle in
+  `validation.yml`.
+- `scripts/verify-proofs.sh`: fixed two latent `set -e` bugs that
+  aborted the script before any test ran — `((VAR++))` counters
+  (post-increment returns the pre-value, so the first bump from 0
+  yields exit status 1) replaced with assignment form; and per-test
+  `cd` side effects that leaked between tests are now isolated by
+  running each test command in a subshell.
+
 === Added — 2026-06-02
 
 ==== Implementation

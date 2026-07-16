@@ -65,9 +65,11 @@ is very high — the seL4/CompCert pattern.
 **Read the honest status first:** the project maintains a single source of truth
 for open proof holes —
 [`docs/PROOF_HOLES_AUDIT.md`](https://github.com/hyperpolymath/valence-shell/blob/main/docs/PROOF_HOLES_AUDIT.md).
-As of this writing: 1 real gap (Coq `obliterate_overwrites_all_blocks`), 1
-justified decidability axiom, and 1 structural `funext` axiom (Agda). The Idris2
-ABI layer is **hole-free** (closed under `--total`) with 2 registered
+As of this writing: **0 real gaps** (the former Coq `obliterate_overwrites_all_blocks`
+gap is CLOSED — re-verified 2026-07-16 via `Print Assumptions` as *Closed under
+the global context* under Coq 8.18.0), plus 2 documented axioms: 1 justified
+decidability axiom (`is_empty_dir_dec`) and 1 structural `funext` axiom (Agda).
+The Idris2 ABI layer is **hole-free** (closed under `--total`) with 2 registered
 primitive-equality axioms gated by CI.
 
 ## Contributing
