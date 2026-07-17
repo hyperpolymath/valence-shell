@@ -19,6 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 === Added — 2026-07-17
 
+==== RMO / secure deletion (runtime)
+- `obliterate` is now **wired into the shell** and reachable from the REPL and
+  scripts. It was previously implemented in `commands/secure_deletion.rs` but
+  never dispatched (no `Command` variant, parser case, or executor arm), so it
+  was unreachable dead code. Added `Command::Obliterate { path, force, .. }`, the
+  `"obliterate"` parser case (with `--force`/`-f`), and the executor arm routing
+  to `secure_deletion::obliterate_path` (file/dir dispatch). Proof reference:
+  `OBLITERATE_IRREVERSIBLE`.
+- **Audit residue**: obliterate now appends an append-only record to
+  `<sandbox-root>/.vsh-audit.log` — the MAA attestation that survives the data
+  destruction (GDPR Article 17 evidence). Data is destroyed; proof-of-deletion
+  persists.
+- Tests: `impl/rust-cli/tests/obliterate_rmo_tests.rs` (6 tests) — dispatch
+  wiring, missing-operand error, end-to-end destruction, audit residue,
+  irreversibility (undo cannot resurrect), and no-old-plaintext-remains. Full
+  suite green; verified through the real binary in script mode.
+- **Honest scope**: best-effort 3-pass overwrite (random/0x00/0xFF + fsync) on
+  in-place filesystems only. CoW (btrfs/ZFS/APFS)/SSD FTL defeat overwrite (use
+  `secure_erase` for hardware NIST SP 800-88 Purge); audit-log HMAC signing is
+  still pending. NOT a complete GDPR compliance framework. Status docs
+  reconciled from "RMO stubs only" accordingly.
+
 ==== Correspondence (mechanized differential oracle)
 - `proofs/lean4/ModelOracle.lean` + `lean_exe model_oracle` — compiles the
   **proven** Lean model definitions (`mkdir`/`rmdir`/`createFile`/`deleteFile`/

@@ -210,6 +210,14 @@ pub enum Command {
         path: String,
         redirects: Vec<Redirection>,
     },
+    /// Securely obliterate a file/dir (RMO — irreversible; multi-pass overwrite +
+    /// unlink + audit residue). Proven in `proofs/coq/rmo_operations.v`
+    /// (`obliterate_overwrites_all_blocks`, `obliterate_not_injective`).
+    Obliterate {
+        path: String,
+        force: bool,
+        redirects: Vec<Redirection>,
+    },
     /// Copy file (reversible — proven in CopyMoveOperations.lean)
     Cp {
         src: String,
@@ -3288,6 +3296,19 @@ fn parse_base_command(
                 path: args[0].clone(),
                 redirects,
             })
+        }
+        "obliterate" => {
+            // GDPR-style secure deletion. `--force`/`-f` skips confirmation.
+            let force = args.iter().any(|a| a == "--force" || a == "-f");
+            let path = args.iter().find(|a| !a.starts_with('-')).cloned();
+            match path {
+                Some(path) => Ok(Command::Obliterate {
+                    path,
+                    force,
+                    redirects,
+                }),
+                None => Err(anyhow!("obliterate: missing operand")),
+            }
         }
         "cp" => {
             if args.len() < 2 {

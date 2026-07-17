@@ -101,7 +101,7 @@ constraints = [
   "Coq has 0 remaining real proof gaps: obliterate_overwrites_all_blocks is CLOSED (Print Assumptions: Closed under the global context, re-verified 2026-07-16 under Coq 8.18.0) — see docs/PROOF_HOLES_AUDIT.md",
   "Agda has 1 structural axiom (funext) — provable in cubical Agda, intentional in intensional TT",
   "Coq has 1 justified decidability axiom (is_empty_dir_dec) — infinite-domain Filesystem = Path -> option FSNode; switching to FMaps.t FSNode is the documented migration",
-  "RMO (GDPR / secure deletion) primitives are stubs in impl/rust-cli/src/commands/secure_deletion.rs — proofs exist for the model, runtime does not yet bind to them",
+  "RMO (GDPR / secure deletion): the obliterate command IS implemented and wired (parser+executor -> commands::secure_deletion::obliterate_path; 3-pass overwrite + unlink + append-only audit residue at <root>/.vsh-audit.log; tests/obliterate_rmo_tests.rs). Best-effort on in-place filesystems only; CoW/SSD need hardware secure_erase; audit HMAC signing still pending. Do NOT claim a full GDPR compliance framework.",
   "OCaml extraction path exists in proofs/coq/extraction.v but the extracted code is not wired into a build target",
   "Idris2 ABI carrier has 2 holes + 10 partial markers per the 2026-06-01 deep audit (issue #42) — these are the FFI boundary obligations",
 ]

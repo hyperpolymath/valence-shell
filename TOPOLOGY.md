@@ -72,7 +72,7 @@ FORMAL VERIFICATION
   Reversibility Proofs             ██████████ 100%    All 8 ops proven in all 6 systems
   Permission Proofs (chmod/chown)  ██████████ 100%    NEW — 42 theorems across 6 systems
   MAA Framework (RMR)              ██████████ 100%    Reversible ops with audit trails
-  MAA Framework (RMO)              ██░░░░░░░░  20%    Irreversibility proofs, stubs only
+  MAA Framework (RMO)              ████░░░░░░  40%    Proofs + wired `obliterate` (best-effort + audit residue); no HW erase/HMAC
   Extraction Gap (Lean → Rust)     ██████░░░░  60%    ~95% confidence via property testing
 
 IMPLEMENTATION LAYERS

@@ -97,8 +97,10 @@ What is **not** solid enough for production:
 
 * The link from the proven model to the Rust runtime is *property-tested*
   (~85% confidence), not *mechanically proven*. This is the v1.0.0 blocker.
-* RMO (secure deletion / GDPR) primitives are stubs in the runtime even where
-  the model is proved.
+* RMO (secure deletion / GDPR): the `obliterate` command is implemented and
+  wired (`obliterate <file> --force` → 3-pass overwrite + unlink + append-only
+  audit residue), but it is best-effort on in-place filesystems only (CoW/SSD
+  need hardware erase via `secure_erase`) and is not a complete GDPR framework.
 * POSIX coverage is a strict subset; word-splitting in external command args,
   full subshell `(...)` syntax, and `~user` tilde expansion are not implemented.
 

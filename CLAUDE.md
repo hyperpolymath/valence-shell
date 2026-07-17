@@ -53,8 +53,8 @@ The Rust CLI is a functional interactive shell with these features:
 - NOT a full POSIX shell (word splitting in external command args, $IFS in all contexts, full function nesting still incomplete)
 - NOT formally verified end-to-end (Lean -> Rust is ~95% confidence via property testing, not proven)
 - NOT a replacement for bash/zsh in current state
-- No GDPR compliance (RMO/secure deletion are stubs)
-- No mechanized correspondence proof (property testing only)
+- Partial GDPR/RMO: the `obliterate` secure-deletion command is implemented and wired (3-pass overwrite + unlink + append-only audit residue), best-effort on in-place filesystems only — CoW/SSD need hardware erase and audit HMAC signing is still pending, so this is NOT a full GDPR compliance framework
+- No mechanized correspondence proof (property testing only; a compiled-Lean-model differential oracle now backstops it — see `docs/LEAN4_RUST_CORRESPONDENCE.md`)
 - Elixir NIF build broken (low priority)
 - BEAM daemon not implemented (planned, not built)
 
@@ -111,7 +111,7 @@ deep-audit session). The corresponding Phase 4C design docs under
 ### Medium Priority
 
 1. Full POSIX compliance incomplete (see `docs/POSIX_COMPLIANCE.md`)
-2. No GDPR compliance (RMO/secure deletion are stubs)
+2. Partial GDPR/RMO: `obliterate` implemented (best-effort secure deletion + audit residue); full GDPR framework incomplete (HW erase for CoW/SSD, HMAC signing)
 3. Elixir NIF build broken (low priority)
 
 ### Low Priority
@@ -303,9 +303,18 @@ cargo run
 - Working in Rust CLI
 
 ### RMO (Remove-Match-Obliterate)
-- Irreversible deletion with proof of complete removal
-- Stubs only — NOT implemented
-- Needed for GDPR compliance
+- Irreversible deletion with proof of complete removal (model proven in
+  `proofs/coq/rmo_operations.v`: `obliterate_overwrites_all_blocks`,
+  `obliterate_not_injective`)
+- **Implemented and wired** in the CLI: `obliterate <file> [--force]` does a
+  3-pass overwrite (random/0x00/0xFF, fsync) + unlink, records an irreversible
+  `Obliterate` op, and appends an **audit residue** to `<root>/.vsh-audit.log`
+  (the MAA attestation that survives the deletion). Parser+executor →
+  `commands::secure_deletion::obliterate_path`. Tests:
+  `tests/obliterate_rmo_tests.rs`.
+- **Honest limits** (still not full GDPR): best-effort on in-place filesystems
+  only — CoW (btrfs/ZFS/APFS)/SSD FTL defeat overwrite (use `secure_erase` for
+  hardware NIST SP 800-88 Purge); audit-log HMAC signing is still a TODO.
 
 ## License
 
