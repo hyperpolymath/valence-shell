@@ -129,7 +129,12 @@ impl ExecutableCommand for Command {
             } => {
                 let expanded_path = crate::parser::expand_variables(path, state);
                 if redirects.is_empty() {
-                    commands::secure_deletion::obliterate_path(state, &expanded_path, false, *force)?;
+                    commands::secure_deletion::obliterate_path(
+                        state,
+                        &expanded_path,
+                        false,
+                        *force,
+                    )?;
                 } else {
                     redirection::capture_and_redirect(redirects, state, |s| {
                         commands::secure_deletion::obliterate_path(s, &expanded_path, false, *force)

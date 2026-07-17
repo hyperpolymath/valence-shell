@@ -33,7 +33,10 @@ fn obliterate_is_wired_into_dispatch() {
     }
 
     // --force before or after the path both work.
-    for input in ["obliterate --force secret.txt", "obliterate secret.txt --force"] {
+    for input in [
+        "obliterate --force secret.txt",
+        "obliterate secret.txt --force",
+    ] {
         match parse_command(input).expect("parse") {
             Command::Obliterate { path, force, .. } => {
                 assert_eq!(path, "secret.txt", "input: {input}");
@@ -79,7 +82,10 @@ fn obliterate_writes_rmo_audit_residue() {
         .expect("execute");
 
     let audit = temp.path().join(".vsh-audit.log");
-    assert!(audit.exists(), "RMO audit residue must be written to the sandbox");
+    assert!(
+        audit.exists(),
+        "RMO audit residue must be written to the sandbox"
+    );
     let contents = fs::read_to_string(&audit).expect("read audit");
     assert!(
         contents.contains("Obliterate"),
@@ -130,5 +136,8 @@ fn obliterate_then_recreate_has_no_old_content() {
     fs::write(&p, b"fresh").expect("rewrite");
     let back = fs::read(&p).expect("read");
     assert_eq!(back, b"fresh");
-    assert!(!back.windows(4).any(|w| w == b"4111"), "no old plaintext remains");
+    assert!(
+        !back.windows(4).any(|w| w == b"4111"),
+        "no old plaintext remains"
+    );
 }

@@ -2264,10 +2264,9 @@ fn apply_expansion(expansion: &ParameterExpansion, state: &crate::state::ShellSt
             // TODO: Assignment not implemented - requires mutable state
             // For v1.1.0, just return default without assigning (like Default)
             if is_unset || (*check_null && is_null) {
-                let default_expanded = expand_variables(value, state);
-                // Note: In bash, this would also assign to VAR
+                // Note: In bash, this would also assign to VAR.
                 // Requires signature change: &mut ShellState
-                default_expanded
+                expand_variables(value, state)
             } else {
                 // var_value is Some by construction here: the surrounding
                 // `if is_unset || ...` branch is the unset/null path; this
@@ -4346,7 +4345,7 @@ mod tests {
         // Test using $1 in a command
         let cmd = parse_command("touch $1").unwrap();
         match cmd {
-            Command::External { args: _, .. } | Command::Touch { path: _, .. } => {
+            Command::External { .. } | Command::Touch { .. } => {
                 // After parsing, before execution, $1 should still be present
                 // Expansion happens during execution
             }

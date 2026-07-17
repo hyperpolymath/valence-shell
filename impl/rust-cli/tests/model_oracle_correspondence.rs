@@ -131,7 +131,10 @@ fn gen_sequence(rng: &mut Rng, max_ops: usize) -> (Vec<Op>, Vec<String>) {
             }
             shadow.insert(p.clone(), Kind::Dir);
             touched.insert(p.clone(), ());
-            ops.push(Op { verb: "MKDIR", path: p });
+            ops.push(Op {
+                verb: "MKDIR",
+                path: p,
+            });
         } else if roll < 8 {
             // TOUCH under an existing directory
             let ds = dirs(&shadow);
@@ -143,7 +146,10 @@ fn gen_sequence(rng: &mut Rng, max_ops: usize) -> (Vec<Op>, Vec<String>) {
             }
             shadow.insert(p.clone(), Kind::File);
             touched.insert(p.clone(), ());
-            ops.push(Op { verb: "TOUCH", path: p });
+            ops.push(Op {
+                verb: "TOUCH",
+                path: p,
+            });
         } else if roll < 9 {
             // RM an existing file
             let files: Vec<String> = shadow
@@ -157,7 +163,10 @@ fn gen_sequence(rng: &mut Rng, max_ops: usize) -> (Vec<Op>, Vec<String>) {
             let p = files[rng.below(files.len())].clone();
             shadow.remove(&p);
             touched.insert(p.clone(), ());
-            ops.push(Op { verb: "RM", path: p });
+            ops.push(Op {
+                verb: "RM",
+                path: p,
+            });
         } else {
             // RMDIR an empty directory
             let empties: Vec<String> = shadow
@@ -171,7 +180,10 @@ fn gen_sequence(rng: &mut Rng, max_ops: usize) -> (Vec<Op>, Vec<String>) {
             let p = empties[rng.below(empties.len())].clone();
             shadow.remove(&p);
             touched.insert(p.clone(), ());
-            ops.push(Op { verb: "RMDIR", path: p });
+            ops.push(Op {
+                verb: "RMDIR",
+                path: p,
+            });
         }
     }
 
@@ -260,7 +272,10 @@ fn rust_matches_proven_lean_model() {
                 _ => unreachable!(),
             };
             r.unwrap_or_else(|e| {
-                panic!("seq {seq}: generated op {} {} rejected by impl: {e}", op.verb, op.path)
+                panic!(
+                    "seq {seq}: generated op {} {} rejected by impl: {e}",
+                    op.verb, op.path
+                )
             });
         }
 
@@ -278,11 +293,14 @@ fn rust_matches_proven_lean_model() {
         for (probe, model_kind) in probes.iter().zip(model.iter()) {
             let impl_kind = rust_kind(temp.path(), probe);
             assert_eq!(
-                model_kind, impl_kind,
+                model_kind,
+                impl_kind,
                 "CORRESPONDENCE DIVERGENCE (seq {seq}) at '{probe}': \
                  proven Lean model says {model_kind}, Rust impl says {impl_kind}.\n\
                  ops: {:?}",
-                ops.iter().map(|o| format!("{} {}", o.verb, o.path)).collect::<Vec<_>>()
+                ops.iter()
+                    .map(|o| format!("{} {}", o.verb, o.path))
+                    .collect::<Vec<_>>()
             );
             checked_probes += 1;
         }
@@ -292,5 +310,7 @@ fn rust_matches_proven_lean_model() {
         checked_probes > 0,
         "no probes were checked — generator produced only empty sequences"
     );
-    eprintln!("model_oracle_correspondence: {checked_probes} probes agreed across {SEQUENCES} sequences");
+    eprintln!(
+        "model_oracle_correspondence: {checked_probes} probes agreed across {SEQUENCES} sequences"
+    );
 }
