@@ -51,3 +51,9 @@ lean_lib CrashConsistency where
 
 lean_lib PathTraversal where
   srcDir := "."
+
+-- Executable model oracle: drives the proven model for differential testing
+-- against the Rust implementation. Build: `lake build model_oracle`.
+lean_exe model_oracle where
+  root := `ModelOracle
+  srcDir := "."

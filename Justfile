@@ -43,6 +43,18 @@ build-lean4:
     cd proofs/lean4 && lean FileOperations.lean
     @echo "✓ Lean 4 proofs checked"
 
+# Build the executable model oracle (the compiled proven Lean model) used by the
+# differential correspondence test impl/rust-cli/tests/model_oracle_correspondence.rs
+build-model-oracle:
+    @echo "Building Lean model oracle..."
+    cd proofs/lean4 && lake build model_oracle
+    @echo "✓ model oracle -> proofs/lean4/.lake/build/bin/model_oracle"
+
+# Run the differential correspondence test (proven Lean model vs Rust impl).
+# Builds the oracle first so the test does not skip.
+test-correspondence-model: build-model-oracle
+    cd impl/rust-cli && cargo test --test model_oracle_correspondence -- --nocapture
+
 # Build Agda proofs
 build-agda:
     @echo "Building Agda proofs..."

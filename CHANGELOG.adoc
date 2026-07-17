@@ -19,6 +19,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 === Added — 2026-07-17
 
+==== Correspondence (mechanized differential oracle)
+- `proofs/lean4/ModelOracle.lean` + `lean_exe model_oracle` — compiles the
+  **proven** Lean model definitions (`mkdir`/`rmdir`/`createFile`/`deleteFile`/
+  `fsUpdate`) into a standalone oracle that reports the node type at probe paths.
+- `impl/rust-cli/tests/model_oracle_correspondence.rs` — differential test that
+  generates precondition-respecting operation sequences, applies them to the real
+  Rust `ShellState`, runs the same sequence through the compiled Lean model, and
+  asserts they agree at every touched path. **1218 probes agree across 200
+  sequences.** This makes the proof artifact itself the test oracle (stronger
+  than hand-transcribed property tests); it remains differential testing, not a
+  full refinement proof — the latter is still the v1.0 blocker. The test skips
+  cleanly when the oracle is not built.
+- `just build-model-oracle` / `just test-correspondence-model`; wired into
+  `lean-verification.yml` CI.
+- `docs/LEAN4_RUST_CORRESPONDENCE.md` documents the harness, why the Coq
+  extraction is not executable (function-typed filesystem + classical axioms;
+  needs `FMaps.t FSNode` migration), and the roadmap to full mechanization.
+
 ==== Launcher (E-Grade Launcher Standard)
 - `launch.sh` — a standard-conformant launcher implementing the Hyperpolymath
   E-Grade Launcher Standard mode surface: `--auto` (default), `--start`,
