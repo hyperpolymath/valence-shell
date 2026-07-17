@@ -49,7 +49,7 @@ do-not-claim = "total erasure"
 name = "Remove-Match-Obliterate (irreversible + audit residue)"
 echo-reading = "proof-relevant certificate of elimination with permitted audit residue"
 do-not-claim = "undoable deletion"
-current-status = "stubs only"
+current-status = "best-effort obliterate implemented + wired (3-pass overwrite + unlink + append-only audit residue); full RMO/GDPR framework incomplete (no hardware erase for CoW/SSD, no HMAC-signed audit)"
 
 [valence-shell-cases.narration]
 name = "explain / checkpoint / restore / diff / replay"
@@ -78,7 +78,7 @@ ochrance-usage = "name receipts and attestation surfaces; do not claim crypto gu
 [agent-rules.forbidden-moves]
 production-ready = "do not claim valence-shell is production-ready"
 lean-rust-mechanised = "do not claim the Lean-to-Rust correspondence is mechanised"
-rmo-gdpr-beyond-stubs = "do not claim RMO/GDPR support exists beyond stubs"
+rmo-gdpr-beyond-stubs = "do not claim RMO/GDPR beyond the implemented best-effort obliterate (in-place FS only, no hardware erase, no HMAC-signed audit); do not claim a complete GDPR compliance framework"
 echo-proves-implementation = "do not claim Echo Types proves Valence Shell implementation correctness"
 ochrance-crypto = "do not claim Ochrance cryptographic integrity while hash/attestation gaps remain"
 exploratory-as-core = "do not merge exploratory Echo bridges into core claims without checking echo-types/docs/bridge-status.md"

@@ -210,6 +210,14 @@ pub enum Command {
         path: String,
         redirects: Vec<Redirection>,
     },
+    /// Securely obliterate a file/dir (RMO — irreversible; multi-pass overwrite +
+    /// unlink + audit residue). Proven in `proofs/coq/rmo_operations.v`
+    /// (`obliterate_overwrites_all_blocks`, `obliterate_not_injective`).
+    Obliterate {
+        path: String,
+        force: bool,
+        redirects: Vec<Redirection>,
+    },
     /// Copy file (reversible — proven in CopyMoveOperations.lean)
     Cp {
         src: String,
@@ -2256,10 +2264,9 @@ fn apply_expansion(expansion: &ParameterExpansion, state: &crate::state::ShellSt
             // TODO: Assignment not implemented - requires mutable state
             // For v1.1.0, just return default without assigning (like Default)
             if is_unset || (*check_null && is_null) {
-                let default_expanded = expand_variables(value, state);
-                // Note: In bash, this would also assign to VAR
+                // Note: In bash, this would also assign to VAR.
                 // Requires signature change: &mut ShellState
-                default_expanded
+                expand_variables(value, state)
             } else {
                 // var_value is Some by construction here: the surrounding
                 // `if is_unset || ...` branch is the unset/null path; this
@@ -3288,6 +3295,19 @@ fn parse_base_command(
                 path: args[0].clone(),
                 redirects,
             })
+        }
+        "obliterate" => {
+            // GDPR-style secure deletion. `--force`/`-f` skips confirmation.
+            let force = args.iter().any(|a| a == "--force" || a == "-f");
+            let path = args.iter().find(|a| !a.starts_with('-')).cloned();
+            match path {
+                Some(path) => Ok(Command::Obliterate {
+                    path,
+                    force,
+                    redirects,
+                }),
+                None => Err(anyhow!("obliterate: missing operand")),
+            }
         }
         "cp" => {
             if args.len() < 2 {
@@ -4325,7 +4345,7 @@ mod tests {
         // Test using $1 in a command
         let cmd = parse_command("touch $1").unwrap();
         match cmd {
-            Command::External { args: _, .. } | Command::Touch { path: _, .. } => {
+            Command::External { .. } | Command::Touch { .. } => {
                 // After parsing, before execution, $1 should still be present
                 // Expansion happens during execution
             }

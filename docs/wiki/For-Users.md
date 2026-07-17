@@ -70,8 +70,11 @@ and worked examples in
 - It is **not a full POSIX/bash replacement.** Word-splitting in external command
   arguments, full subshell `(...)` syntax, and `~user` tilde expansion are not
   implemented.
-- **Secure deletion / GDPR (`obliterate`)** is a stub — designed and proven in
-  the model, but not usable in the runtime.
+- **Secure deletion (`obliterate`)** is implemented: `obliterate <file> --force`
+  does a 3-pass overwrite (random/0x00/0xFF) + unlink and writes an append-only
+  audit record. It is **best-effort on in-place filesystems** (CoW like
+  btrfs/ZFS/APFS and SSDs need hardware erase) and is **not a full GDPR
+  framework** (audit HMAC signing still pending).
 - The proof-to-code correspondence is **property-tested (~85% confidence)**, not
   mechanically proven.
 

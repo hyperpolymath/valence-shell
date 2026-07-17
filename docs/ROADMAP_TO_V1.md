@@ -27,7 +27,7 @@ plan builds on.
 - Lean→Rust correspondence is **tested, not mechanized** (~85–95% confidence)
 - Not a full POSIX shell: word splitting in external args, `~user`,
   subshell `(...)`, SIGCHLD/Ctrl+Z incomplete (`docs/POSIX_COMPLIANCE.md`)
-- RMO/secure deletion are stubs; GDPR claims not yet shippable
+- RMO `obliterate` implemented + wired (best-effort overwrite + unlink + audit residue); full GDPR not yet shippable (HW erase for CoW/SSD, HMAC signing pending)
 - Backlog is decomposed fan-out-ready in Tier-S issues:
   #41→(#86,#87,#88) seams, #42→(#76–#81) proofs, #43→(#82–#85) tests,
   #45→(#63–#66, #90–#94) theory frontiers

@@ -106,6 +106,18 @@ jobs:
           cargo test --test correspondence_tests
           cargo test --test property_correspondence_tests
 
+      - name: Build Lean model oracle (proof artifact as test oracle)
+        run: |
+          source $HOME/.elan/env
+          cd proofs/lean4
+          lake build model_oracle
+          ls -lh .lake/build/bin/model_oracle
+
+      - name: Differential correspondence (proven Lean model vs Rust impl)
+        run: |
+          cd impl/rust-cli
+          cargo test --test model_oracle_correspondence -- --nocapture
+
       - name: Report Rust binary size
         run: |
           echo "Rust binary: $(stat -c%s impl/rust-cli/target/release/vsh) bytes"

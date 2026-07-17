@@ -122,6 +122,27 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::Success)
             }
 
+            Command::Obliterate {
+                path,
+                force,
+                redirects,
+            } => {
+                let expanded_path = crate::parser::expand_variables(path, state);
+                if redirects.is_empty() {
+                    commands::secure_deletion::obliterate_path(
+                        state,
+                        &expanded_path,
+                        false,
+                        *force,
+                    )?;
+                } else {
+                    redirection::capture_and_redirect(redirects, state, |s| {
+                        commands::secure_deletion::obliterate_path(s, &expanded_path, false, *force)
+                    })?;
+                }
+                Ok(ExecutionResult::Success)
+            }
+
             Command::Cp {
                 src,
                 dst,
@@ -1220,7 +1241,8 @@ impl ExecutableCommand for Command {
     fn proof_reference(&self) -> Option<ProofReference> {
         use crate::proof_refs::{
             CHMOD_REVERSIBLE, CHOWN_REVERSIBLE, COPY_FILE_REVERSIBLE, CREATE_DELETE_REVERSIBLE,
-            MKDIR_RMDIR_REVERSIBLE, MOVE_REVERSIBLE, SYMLINK_UNLINK_REVERSIBLE,
+            MKDIR_RMDIR_REVERSIBLE, MOVE_REVERSIBLE, OBLITERATE_IRREVERSIBLE,
+            SYMLINK_UNLINK_REVERSIBLE,
         };
 
         match self {
@@ -1231,6 +1253,8 @@ impl ExecutableCommand for Command {
             Command::Ln { .. } => Some(SYMLINK_UNLINK_REVERSIBLE),
             Command::Chmod { .. } => Some(CHMOD_REVERSIBLE),
             Command::Chown { .. } => Some(CHOWN_REVERSIBLE),
+            // RMO: irreversible by design — the proof is of information loss.
+            Command::Obliterate { .. } => Some(OBLITERATE_IRREVERSIBLE),
             _ => None,
         }
     }
@@ -1241,6 +1265,13 @@ impl ExecutableCommand for Command {
             Command::Rmdir { path, .. } => format!("rmdir {}", path),
             Command::Touch { path, .. } => format!("touch {}", path),
             Command::Rm { path, .. } => format!("rm {}", path),
+            Command::Obliterate { path, force, .. } => {
+                if *force {
+                    format!("obliterate --force {}", path)
+                } else {
+                    format!("obliterate {}", path)
+                }
+            }
             Command::Cp { src, dst, .. } => format!("cp {} {}", src, dst),
             Command::Mv { src, dst, .. } => format!("mv {} {}", src, dst),
             Command::Ln { target, link, .. } => format!("ln -s {} {}", target, link),

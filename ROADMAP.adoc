@@ -112,8 +112,10 @@ Hard requirements before any v1.0 claim:
 * [ ] CRG v2.0 grade B: 6+ diverse external targets, issues fed back.
   See audit `=== External validation` section for the proposed diverse-6
   shape.
-* [ ] Complete RMO (Remove-Match-Obliterate) implementation for GDPR
-  compliance — currently stubs only. Tracked under #41.
+* [~] RMO (Remove-Match-Obliterate): file-level `obliterate` implemented and
+  wired (best-effort 3-pass overwrite + unlink + append-only audit residue).
+  Remaining for full GDPR: hardware erase for CoW/SSD, audit HMAC signing,
+  recursive-dir hardening. Tracked under #41.
 * [ ] Echidna integration for automated property-based verification.
 
 == v2.0 — Idris2 Extraction Path

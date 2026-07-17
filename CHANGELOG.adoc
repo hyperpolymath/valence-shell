@@ -17,6 +17,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full POSIX shell compliance (subset)
 - RMO (Remove-Match-Obliterate) proofs for GDPR compliance
 
+=== Added — 2026-07-17
+
+==== RMO / secure deletion (runtime)
+- `obliterate` is now **wired into the shell** and reachable from the REPL and
+  scripts. It was previously implemented in `commands/secure_deletion.rs` but
+  never dispatched (no `Command` variant, parser case, or executor arm), so it
+  was unreachable dead code. Added `Command::Obliterate { path, force, .. }`, the
+  `"obliterate"` parser case (with `--force`/`-f`), and the executor arm routing
+  to `secure_deletion::obliterate_path` (file/dir dispatch). Proof reference:
+  `OBLITERATE_IRREVERSIBLE`.
+- **Audit residue**: obliterate now appends an append-only record to
+  `<sandbox-root>/.vsh-audit.log` — the MAA attestation that survives the data
+  destruction (GDPR Article 17 evidence). Data is destroyed; proof-of-deletion
+  persists.
+- Tests: `impl/rust-cli/tests/obliterate_rmo_tests.rs` (6 tests) — dispatch
+  wiring, missing-operand error, end-to-end destruction, audit residue,
+  irreversibility (undo cannot resurrect), and no-old-plaintext-remains. Full
+  suite green; verified through the real binary in script mode.
+- **Honest scope**: best-effort 3-pass overwrite (random/0x00/0xFF + fsync) on
+  in-place filesystems only. CoW (btrfs/ZFS/APFS)/SSD FTL defeat overwrite (use
+  `secure_erase` for hardware NIST SP 800-88 Purge); audit-log HMAC signing is
+  still pending. NOT a complete GDPR compliance framework. Status docs
+  reconciled from "RMO stubs only" accordingly.
+
+==== Correspondence (mechanized differential oracle)
+- `proofs/lean4/ModelOracle.lean` + `lean_exe model_oracle` — compiles the
+  **proven** Lean model definitions (`mkdir`/`rmdir`/`createFile`/`deleteFile`/
+  `fsUpdate`) into a standalone oracle that reports the node type at probe paths.
+- `impl/rust-cli/tests/model_oracle_correspondence.rs` — differential test that
+  generates precondition-respecting operation sequences, applies them to the real
+  Rust `ShellState`, runs the same sequence through the compiled Lean model, and
+  asserts they agree at every touched path. **1218 probes agree across 200
+  sequences.** This makes the proof artifact itself the test oracle (stronger
+  than hand-transcribed property tests); it remains differential testing, not a
+  full refinement proof — the latter is still the v1.0 blocker. The test skips
+  cleanly when the oracle is not built.
+- `just build-model-oracle` / `just test-correspondence-model`; wired into
+  `lean-verification.yml` CI.
+- `docs/LEAN4_RUST_CORRESPONDENCE.md` documents the harness, why the Coq
+  extraction is not executable (function-typed filesystem + classical axioms;
+  needs `FMaps.t FSNode` migration), and the roadmap to full mechanization.
+
+==== Launcher (E-Grade Launcher Standard)
+- `launch.sh` — a standard-conformant launcher implementing the Hyperpolymath
+  E-Grade Launcher Standard mode surface: `--auto` (default), `--start`,
+  `--stop`, `--status`, `--browser`/`--web`, `--integ`, `--disinteg`, `--help`,
+  `--version`. Version output matches the required
+  `vsh <version> (<sha>) [<platform>]` format. Desktop integration (Linux
+  first-class) is idempotent, copies rather than symlinks, sets `Terminal=true`,
+  writes the `.desktop` at 0444, and `--disinteg` preserves config and logs.
+  Sources `keepopen.sh`/`soft-attach.sh`/`gui-error.sh` via the published
+  resolution ladder with graceful no-op degradation when the desktop-tools are
+  absent. PID/log paths use XDG dirs (never `/tmp`). Server-oriented clauses
+  (nohup daemon, `wait_for_server` URL polling, browser launch) are honestly
+  **declared deferred** in the `a2ml-metadata-block` header, since `vsh` is a
+  foreground terminal shell with no HTTP server. See `docs/LAUNCHER.md`.
+- `scripts/run.sh` — the canonical startup command the standard searches for
+  (`{repo-dir}/scripts/run.sh`); builds the release binary on first use and
+  execs the shell.
+- `just run` / `just launch` now delegate to `./launch.sh --auto`.
+
 === Added — 2026-07-16
 
 ==== Launcher

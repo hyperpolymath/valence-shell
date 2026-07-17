@@ -54,7 +54,7 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 * [x] Here Documents: `<<DELIMITER`, `<←DELIMITER`, `<<<word`
 * [x] Job Control: Background jobs, `fg`, `bg`, `kill`, job specifications
 * [x] Shell Variables: `$VAR`, `export`, assignment, expansion
-* [ ] GDPR Compliance: Secure deletion (`obliterate`) + audit logging (stubs only)
+* [~] GDPR/RMO: `obliterate` secure deletion implemented + wired (3-pass overwrite + unlink + append-only audit residue); best-effort on in-place filesystems — CoW/SSD need hardware `secure_erase`, HMAC signing pending (not a full GDPR framework)
 * [x] Syntax Highlighting: Real-time color-coded REPL
 * [x] Command Correction: Intelligent typo suggestions
 * [x] Friendly Errors: fish-style helpful error messages

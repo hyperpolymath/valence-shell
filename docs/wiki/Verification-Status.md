@@ -70,9 +70,9 @@ The **Idris2 ABI layer is hole-free** (builds under `--total`, closed via issue
 |-----------|--------|
 | Reversible ops (**RMR**): undo/redo, checkpoint/restore, transactions | ✅ Working & proven |
 | Interactive shell surface (pipelines, redirs, glob, control structures, jobs, variables) | ✅ Working |
-| Secure deletion / GDPR (**RMO** / `obliterate`) | ❌ Proven in model, **stub in runtime** |
+| Secure deletion (**RMO** / `obliterate`) | ⚠️ Implemented & wired (3-pass overwrite + unlink + audit residue); best-effort on in-place FS only (CoW/SSD need HW erase); not a full GDPR framework |
 | Full POSIX compliance | ⚠️ Subset only (no external-arg word-splitting, subshells, `~user`) |
-| Mechanized Lean → Rust correspondence | ❌ Not done (v1.0.0 blocker) |
+| Mechanized Lean → Rust correspondence | ⚠️ Differential oracle vs compiled proven model (`just test-correspondence-model`); full refinement proof still the v1.0.0 blocker |
 
 ## Test posture
 

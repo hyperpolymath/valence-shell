@@ -49,7 +49,7 @@ This is the heart of this page. Please read it before publishing.
 | "A shell with **formally proven** reversible operations." | "A **fully verified** shell." (The proof-to-code link isn't mechanically verified yet.) |
 | "Reversibility is **proven in the mathematical model**." | "Every line of the program is **proven correct**." |
 | "**Property-tested** correspondence between proofs and code (~85% confidence)." | "The Rust code is **proven** to match the proofs." (This is the explicit v1.0.0 blocker, not yet done.) |
-| "**Designed** for GDPR-style provable secure deletion." | "**GDPR-compliant** secure deletion." (RMO is a stub; not implemented.) |
+| "Has a **best-effort** secure-deletion command (`obliterate`) with an audit trail." | "**GDPR-compliant** secure deletion." (best-effort on in-place filesystems only; CoW/SSD need hardware erase; not a complete GDPR framework.) |
 | "An **advanced research prototype**." | "**Production-ready** / enterprise-ready / ready to ship." |
 | "Proven for its **modeled filesystem operations**." | "A **full POSIX / bash replacement**." (POSIX coverage is a subset.) |
 | "**Six proof systems** cross-validate the same theorems." | "**Impossible to have bugs.**" (Proofs cover the model, not the whole stack.) |

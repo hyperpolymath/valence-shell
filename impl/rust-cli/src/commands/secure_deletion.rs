@@ -41,6 +41,41 @@ use std::path::Path;
 
 use crate::state::{Operation, OperationType, ShellState};
 
+/// Dispatch `obliterate` to the file or directory variant by path type.
+/// This is the entry point wired into the shell parser/executor.
+pub fn obliterate_path(
+    state: &mut ShellState,
+    path: &str,
+    verbose: bool,
+    force: bool,
+) -> Result<()> {
+    if state.resolve_path(path).is_dir() {
+        obliterate_dir(state, path, verbose, force)
+    } else {
+        obliterate(state, path, verbose, force)
+    }
+}
+
+/// Append an RMO audit **residue**: the append-only proof that a compliant
+/// irreversible deletion occurred. The data is destroyed, but this record
+/// survives — the MAA (Mutually Assured Accountability) trail and the GDPR
+/// Article 17 attestation. Written within the shell's sandbox root
+/// (`<root>/.vsh-audit.log`) so it is session-isolated and testable.
+/// Best-effort: obliteration still succeeds if the residue cannot be written,
+/// but a warning is emitted so the failure is never silent.
+fn append_rmo_residue(state: &ShellState, op: &Operation, outcome: &str) {
+    let log_path = state.root.join(".vsh-audit.log");
+    match crate::audit_log::AuditLog::new(log_path, None) {
+        Ok(log) => {
+            let entry = crate::audit_log::AuditEntry::from_operation(op, outcome, None);
+            if let Err(e) = log.append(&entry) {
+                eprintln!("warning: RMO audit residue not written: {e}");
+            }
+        }
+        Err(e) => eprintln!("warning: RMO audit log unavailable: {e}"),
+    }
+}
+
 /// Simple yes/no confirmation prompt
 fn ask_confirmation(prompt: &str) -> Result<bool> {
     print!("{} [y/N] ", prompt);
@@ -279,6 +314,8 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
     // Step 3: Record as irreversible operation (NO undo_data stored)
     let op = Operation::new(OperationType::Obliterate, path.to_string(), None);
     let op_id = op.id;
+    // RMO residue: persist the append-only attestation BEFORE moving `op`.
+    append_rmo_residue(state, &op, "obliterated");
     state.record_operation(op);
 
     // Output
@@ -412,6 +449,8 @@ pub fn obliterate_dir(
     // Record operation
     let op = Operation::new(OperationType::Obliterate, path.to_string(), None);
     let op_id = op.id;
+    // RMO residue: persist the append-only attestation BEFORE moving `op`.
+    append_rmo_residue(state, &op, "obliterated-dir");
     state.record_operation(op);
 
     println!(

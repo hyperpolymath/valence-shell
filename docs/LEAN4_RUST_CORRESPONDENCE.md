@@ -36,11 +36,73 @@ This document establishes the **correspondence** between:
 └──────────────────────────────┘
 ```
 
-**Verification Strategy**:
+**Verification Strategy** (weakest → strongest):
 - **Manual proofs**: Argue why Rust code matches Lean 4 spec
-- **Integration tests**: Validate behavior (28/28 passing)
-- **Echidna**: Property-based testing (planned)
+- **Integration tests**: Validate behavior
+- **Property tests**: Hand-transcribed reversibility laws checked generatively
+- **Mechanized differential oracle** *(new, 2026-07-17)*: the **compiled proven
+  Lean model** is executed as the test oracle — see below.
 - **Code review**: Multiple reviewers check correspondence
+
+## Mechanized differential correspondence (model-as-oracle)
+
+`proofs/lean4/ModelOracle.lean` compiles the **exact** proven model definitions
+(`mkdir`, `rmdir`, `createFile`, `deleteFile`, `fsUpdate` from `FilesystemModel`
++ `FileOperations`) into a standalone executable. Given an operation sequence and
+a set of probe paths, it reports the node type (`DIR`/`FILE`/`NONE`) the *model*
+computes at each path.
+
+`impl/rust-cli/tests/model_oracle_correspondence.rs` then:
+
+1. generates **precondition-respecting** operation sequences (the regime where the
+   reversibility theorems hold — a shadow tracker guarantees every op is valid);
+2. applies each sequence to the real Rust `ShellState` (a sandboxed temp dir);
+3. runs the same sequence through the compiled Lean model oracle;
+4. asserts the model and the implementation agree at **every** touched path.
+
+This is stronger than the property tests: the oracle is the **proof artifact
+itself**, not a hand-written re-statement of the laws. A divergence is a genuine
+model↔implementation mismatch. Current status: **1218 probes agree across 200
+sequences** (`just test-correspondence-model`).
+
+```mermaid
+flowchart LR
+  G[precondition-respecting<br/>op sequence] --> R[Rust ShellState<br/>real temp dir]
+  G --> O[compiled Lean model<br/>ModelOracle]
+  R --> C{agree at<br/>every probe?}
+  O --> C
+  C -->|yes| P[pass]
+  C -->|no| D[correspondence<br/>divergence]
+```
+
+### What this does and does not establish
+
+- ✅ It executes the **proven** model (not a paraphrase) as the reference.
+- ✅ It is reproducible and CI-gatable (`just build-model-oracle`).
+- ⚠️ It is still **differential testing**, not a mechanized *refinement proof*.
+  Full mechanization (a machine-checked proof that the Rust semantics refine the
+  model) remains the v1.0 blocker.
+
+### Why not extraction-based (Coq → OCaml)?
+
+The Coq model extracts (`proofs/coq/extraction.v`) but is **not executable**: the
+filesystem is modelled as a total function `Path → option FSNode` over an infinite
+domain, and `is_empty_dir_dec` pulls in classical axioms
+(`constructive_indefinite_description`, `excluded_middle_informative`) that the
+extracted OCaml leaves unrealized. Making the *Coq* model executable requires
+migrating the representation to a finite map (`FMaps.t FSNode`) and re-proving the
+theorems over it — the same migration the proof-holes audit already recommends.
+The Lean model sidesteps this because its operations are ordinary computable
+`def`s that can be evaluated at any finite probe path, even though the state is
+also a function.
+
+### Roadmap to full mechanization
+
+1. **(done)** Compiled-model differential oracle (this section).
+2. Migrate the Coq filesystem model to `FMaps.t FSNode`; re-prove; extract an
+   executable OCaml oracle and cross-check it against the Lean oracle.
+3. Model the Rust operational semantics (or a shared IR) and prove refinement —
+   the machine-checked correspondence that closes the v1.0 gap.
 
 ---
 

@@ -30,7 +30,7 @@ Valence Shell supplies the shell operations; Echo Types supplies the language fo
 Valence Shell already has RMR and RMO vocabulary:
 
 * RMR: Remove-Match-Reverse, reversible transactions with undo/redo proof.
-* RMO: Remove-Match-Obliterate, irreversible deletion with proof of complete removal; currently stubs only.
+* RMO: Remove-Match-Obliterate, irreversible deletion with proof of complete removal. The `obliterate` command is implemented and wired (best-effort 3-pass overwrite + unlink + append-only audit residue); the full RMO/GDPR framework (hardware erase for CoW/SSD, audit HMAC signing) is incomplete.
 
 Without Echo Types, these can be misread as only implementation features. With Echo Types, they become cases in a broader theory of information change.
 
@@ -148,7 +148,7 @@ When working in Valence Shell, Claude and similar agents must observe these rule
 
 * Do not claim Valence Shell is production-ready.
 * Do not claim the Lean-to-Rust correspondence is mechanised.
-* Do not claim RMO/GDPR support exists beyond stubs.
+* Do not claim RMO/GDPR support beyond the implemented best-effort `obliterate` (in-place FS only; no hardware erase, no HMAC-signed audit) — i.e. do not claim a complete GDPR compliance framework.
 * Do not claim Echo Types proves Valence Shell implementation correctness.
 * Do not claim Ochrance cryptographic integrity while its hash/attestation gaps remain open.
 * Do not merge exploratory Echo bridges into core claims without checking `docs/bridge-status.md` in echo-types.
