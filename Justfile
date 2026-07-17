@@ -4,6 +4,9 @@
 # Default recipe - show available commands
 import? "contractile.just"
 
+# `just launch` is a synonym for `just run` (launch the vsh shell)
+alias launch := run
+
 default:
     @just --list
 
@@ -122,6 +125,14 @@ test-cli:
     @echo "Testing Rust CLI..."
     cd impl/rust-cli && cargo test
     @echo "✓ Rust CLI tests passed"
+
+# Launch the interactive vsh shell (the primary deliverable). Extra args pass
+# through to the binary:
+#   just run              # start the interactive REPL
+#   just run --version    # print version and exit
+#   just run script.vsh   # run a script
+run *ARGS:
+    cd impl/rust-cli && cargo run -- {{ARGS}}
 
 # Build all FFI layers
 build-ffi: build-ffi-zig build-ffi-ocaml

@@ -18,17 +18,20 @@ detailed canonical guides live in the repository and are linked throughout.
 ## Install & run (the short path)
 
 The interactive shell is the Rust CLI in `impl/rust-cli/`. It needs only a Rust
-toolchain (1.88+); the six proof systems are **optional** and only needed if you
-want to re-check the proofs yourself.
+toolchain (1.88+) and [`just`](https://github.com/casey/just); the six proof
+systems are **optional** and only needed if you want to re-check the proofs
+yourself.
 
 ```bash
 git clone https://github.com/hyperpolymath/valence-shell.git
-cd valence-shell/impl/rust-cli
+cd valence-shell
 
-cargo build --release            # builds the `vsh` binary
-cargo run                        # start the interactive shell
-./target/release/vsh --version   # or run the release binary directly
+just run              # build and launch the interactive shell (alias: just launch)
+just run --version    # print version and exit
+just install-cli      # install `vsh` to ~/.cargo/bin, then just run `vsh`
 ```
+
+Prefer Cargo directly? `cd impl/rust-cli && cargo run` does the same thing.
 
 Canonical, longer install guide (containers, portable install, self-diagnostics):
 [`QUICKSTART-USER.adoc`](https://github.com/hyperpolymath/valence-shell/blob/main/QUICKSTART-USER.adoc).

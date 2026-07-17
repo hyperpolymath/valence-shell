@@ -17,6 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full POSIX shell compliance (subset)
 - RMO (Remove-Match-Obliterate) proofs for GDPR compliance
 
+=== Added — 2026-07-16
+
+==== Launcher
+- `just run` (alias `just launch`) — the user-facing launcher for the `vsh`
+  shell, previously missing. Builds and starts the interactive REPL; passes
+  extra arguments through to the binary (`just run --version`,
+  `just run script.vsh`). Verified end-to-end: `--version` prints `vsh 0.9.0`
+  (exit 0), the REPL banner starts interactively, and script execution runs and
+  exits 0.
+- `QUICKSTART-USER.adoc` rewritten from the unfilled RSR template to the real,
+  working flow — it no longer references non-existent recipes (`just setup`,
+  `just uninstall`, `just stapeln-run`, `just install --portable`); every `just`
+  command it now cites is a real recipe (verified via `just --show`). Uninstall
+  documents the honest `cargo uninstall vsh` path.
+
 === Verified — 2026-07-16
 
 ==== Proofs
