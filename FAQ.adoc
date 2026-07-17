@@ -86,8 +86,9 @@ deep-audit inventory in `docs/audits/2026-06-01-deep-audit.adoc`.
 What is solid:
 
 * The 6-system proofs of the model-layer operations. ~478 theorem candidates;
-  1 real gap remaining (Coq `obliterate_overwrites_all_blocks`) + 2 documented
-  axioms (1 justified decidability + 1 structural funext).
+  0 real gaps (Coq `obliterate_overwrites_all_blocks` CLOSED, re-verified
+  2026-07-16 via `Print Assumptions` under Coq 8.18.0) + 2 documented axioms
+  (1 justified decidability + 1 structural funext).
 * The Rust CLI. 736 tests passing, 0 failures, 7 fuzz targets, working shell
   surface (pipelines, redirections, here-docs, job control, variables, control
   structures, glob, quoting).
@@ -116,12 +117,12 @@ plus the Idris2 ABI layer, distributed as:
 |===
 |System |Count |Notes
 |Lean 4 |101 |Primary source of truth
-|Coq |131 |Includes `extraction.v` — 3 admits remaining
+|Coq |131 |Includes `extraction.v` — 0 admits (re-verified 2026-07-16, Coq 8.18.0)
 |Isabelle/HOL |76 |Cross-validation
 |Agda |85 |3 postulates remaining (including funext)
 |Mizar |63 |Set-theoretic foundation
 |Z3 SMT |125 asserts |Automated decision procedures
-|Idris2 (ABI + filesystem) |~22 |2 holes + 10 partial markers
+|Idris2 (ABI + filesystem) |~22 |0 holes, 0 partials, 2 primitive-eq axioms (closed #151/#152)
 |===
 
 If you see a stale number elsewhere in the repo, please file an issue —
@@ -178,8 +179,8 @@ Valence-shell follows the estate boundary-convention policy
 (`feedback_estate_boundary_conventions`):
 
 * In-process FFI (Rust ↔ C) — Zig scaffolding in `impl/zig/`.
-* Formal ABI / proof carrier — Idris2 in `proofs/idris2/` (~22 theorems, 2 holes,
-  10 partial markers per issue #42).
+* Formal ABI / proof carrier — Idris2 in `proofs/idris2/` (~22 theorems, 0 holes,
+  0 partial markers, 2 primitive-eq axioms; closed via #151/#152, builds under `--total`).
 * BEAM ↔ native — would use SNIFs; not currently wired (BEAM daemon is
   designed but not implemented).
 * Compile target / typed-wasm — not currently a target.

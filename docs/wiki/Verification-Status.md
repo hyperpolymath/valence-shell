@@ -48,9 +48,15 @@ is proven; wiring it irrefutably to the code is the remaining research problem.
 
 ## Open proof holes (as of the latest audit)
 
-| Hole | System | Nature |
+**0 real gaps.** Re-verified 2026-07-16 with `coqc` + `Print Assumptions` under
+Coq 8.18.0: the full Coq tree compiles with zero `admit`/`Admitted`/`Axiom`
+markers, and the load-bearing theorems are *Closed under the global context* or
+depend only on standard `functional_extensionality`. The two remaining items are
+standard/justified axioms, not gaps:
+
+| Item | System | Nature |
 |------|--------|--------|
-| `obliterate_overwrites_all_blocks` | Coq | **1 real gap** — mechanical induction over overwrite passes |
+| `obliterate_overwrites_all_blocks` | Coq | **CLOSED** (was the one real gap) — *Closed under the global context* |
 | `is_empty_dir_dec` | Coq | Justified axiom (infinite-domain decidability) |
 | `funext` | Agda | Structural axiom (function extensionality; standard in intensional type theory) |
 

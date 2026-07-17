@@ -42,7 +42,7 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 == Formal Verification
 * [x] Formally Proven Reversibility: `rmdir(mkdir(p, fs)) = fs`
 * [x] Polyglot Verification: 6 proof systems (Coq, Lean 4, Agda, Isabelle, Mizar, Z3)
-* [x] ~478 Theorem Candidates: Proven across different logical foundations (1 real gap, 1 justified axiom, 1 structural axiom remain — see `docs/PROOF_HOLES_AUDIT.md`)
+* [x] ~478 Theorem Candidates: Proven across different logical foundations (0 real gaps; 1 justified axiom + 1 structural axiom remain — see `docs/PROOF_HOLES_AUDIT.md`)
 * [x] Content Operations: File read/write with proven reversibility
 * [x] MAA Framework: Mutually Assured Accountability with audit trails
 
@@ -358,8 +358,8 @@ Valence Shell sits inside a three-layer architecture; the other two layers are u
 * If preconditions hold, `write(p, old, write(p, new, fs)) = fs`
 * Operations on `p1` don't affect `p2` (when `p1 ≠ p2`)
 * Composition: sequences of operations reverse correctly
-* ~478 theorem candidates proven across 6 verification systems (1 real gap + 2 axioms remain — see `docs/PROOF_HOLES_AUDIT.md`)
-* 2026-06-02 snapshot: 4 admits in `proofs/coq/rmo_operations.v` are annotated with explicit obligations; Idris2 0.8.0 keyword/parse fixes landed alongside (#112/#113/#115/#117) and the build oracle is strict (#118).
+* ~478 theorem candidates proven across 6 verification systems (0 real gaps; 2 justified/structural axioms remain — see `docs/PROOF_HOLES_AUDIT.md`)
+* 2026-07-16 re-verification: `proofs/coq/` compiles with **0 admits** under Coq 8.18.0; `Print Assumptions` on the load-bearing theorems reports *Closed under the global context* or dependence only on standard `functional_extensionality`. Idris2 0.8.0 keyword/parse fixes landed earlier (#112/#113/#115/#117), the build oracle is strict (#118), and the Idris2 layer is hole-free (#151/#152).
 
 === ❌ What Is NOT Guaranteed
 
@@ -604,7 +604,7 @@ See link:LICENSE[LICENSE] for full text.
 
 **Made with ❤️ by humans and AI, for humans who value formal correctness.**
 
-**Status**: Advanced Research Prototype (v0.9.0) | **RSR**: PLATINUM (105/100) | **Proofs**: ~478 theorem candidates (1 real gap remaining) | **Tests**: 736 passing
+**Status**: Advanced Research Prototype (v0.9.0) | **RSR**: PLATINUM (105/100) | **Proofs**: ~478 theorem candidates (0 real gaps; 2 justified axioms) | **Tests**: 736 passing
 
 [.text-center]
 _"Every operation reversible. Every claim proven. Every contributor valued."_

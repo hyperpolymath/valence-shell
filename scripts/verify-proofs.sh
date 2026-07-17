@@ -32,17 +32,19 @@ log_info() {
 
 log_success() {
     echo -e "${GREEN}[✓]${NC} $1"
-    ((PASSED_TESTS++))
+    # Assignment form (not ((VAR++))): post-increment returns the pre-value, so
+    # the first bump from 0 evaluates to 0 -> exit status 1 -> `set -e` aborts.
+    PASSED_TESTS=$((PASSED_TESTS + 1))
 }
 
 log_failure() {
     echo -e "${RED}[✗]${NC} $1"
-    ((FAILED_TESTS++))
+    FAILED_TESTS=$((FAILED_TESTS + 1))
 }
 
 log_skip() {
     echo -e "${YELLOW}[SKIP]${NC} $1"
-    ((SKIPPED_TESTS++))
+    SKIPPED_TESTS=$((SKIPPED_TESTS + 1))
 }
 
 # Check if command exists
@@ -59,12 +61,14 @@ run_test() {
     local name="$1"
     local cmd="$2"
 
-    ((TOTAL_TESTS++))
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
     log_info "Testing: $name"
 
+    # Run in a subshell so per-test `cd` side effects do not leak into the next
+    # test (commands are written as `cd proofs/X && ...` from the repo root).
     if $VERBOSE; then
         echo "Command: $cmd"
-        if eval "$cmd"; then
+        if ( eval "$cmd" ); then
             log_success "$name passed"
             return 0
         else
@@ -72,7 +76,7 @@ run_test() {
             return 1
         fi
     else
-        if eval "$cmd" &> /dev/null; then
+        if ( eval "$cmd" ) &> /dev/null; then
             log_success "$name passed"
             return 0
         else
@@ -87,21 +91,37 @@ echo "Valence Shell - Proof Verification"
 echo "========================================="
 echo ""
 
-# Coq Verification
+# Coq Verification (full _CoqProject chain, in dependency order)
 if check_command coqc; then
     log_info "Coq 8.x detected"
+    # extraction.v writes to extracted/filesystem.ml; the dir is gitignored, so create it.
+    mkdir -p proofs/coq/extracted
     run_test "Coq: filesystem_model.v" \
-        "cd proofs/coq && coqc filesystem_model.v"
+        "cd proofs/coq && coqc -R . ValenceShell filesystem_model.v"
     run_test "Coq: file_operations.v" \
-        "cd proofs/coq && coqc file_operations.v"
+        "cd proofs/coq && coqc -R . ValenceShell file_operations.v"
+    run_test "Coq: file_content_operations.v" \
+        "cd proofs/coq && coqc -R . ValenceShell file_content_operations.v"
+    run_test "Coq: copy_move_operations.v" \
+        "cd proofs/coq && coqc -R . ValenceShell copy_move_operations.v"
+    run_test "Coq: symlink_operations.v" \
+        "cd proofs/coq && coqc -R . ValenceShell symlink_operations.v"
+    run_test "Coq: permission_operations.v" \
+        "cd proofs/coq && coqc -R . ValenceShell permission_operations.v"
+    run_test "Coq: filesystem_composition.v" \
+        "cd proofs/coq && coqc -R . ValenceShell filesystem_composition.v"
+    run_test "Coq: filesystem_equivalence.v" \
+        "cd proofs/coq && coqc -R . ValenceShell filesystem_equivalence.v"
     run_test "Coq: posix_errors.v" \
-        "cd proofs/coq && coqc posix_errors.v"
+        "cd proofs/coq && coqc -R . ValenceShell posix_errors.v"
+    run_test "Coq: rmo_operations.v" \
+        "cd proofs/coq && coqc -R . ValenceShell rmo_operations.v"
     run_test "Coq: extraction.v" \
-        "cd proofs/coq && coqc extraction.v"
+        "cd proofs/coq && coqc -R . ValenceShell extraction.v"
 else
     log_skip "Coq not installed"
-    ((TOTAL_TESTS += 4))
-    ((SKIPPED_TESTS += 4))
+    ((TOTAL_TESTS += 11))
+    ((SKIPPED_TESTS += 11))
 fi
 
 echo ""
@@ -143,8 +163,8 @@ if check_command isabelle; then
         "cd proofs/isabelle && isabelle build -D ."
 else
     log_skip "Isabelle not installed"
-    ((TOTAL_TESTS++))
-    ((SKIPPED_TESTS++))
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    SKIPPED_TESTS=$((SKIPPED_TESTS + 1))
 fi
 
 echo ""
@@ -172,13 +192,13 @@ if check_command z3; then
             "z3 proofs/z3/filesystem.smt2"
     else
         log_skip "Z3 proofs not yet created"
-        ((TOTAL_TESTS++))
-        ((SKIPPED_TESTS++))
+        TOTAL_TESTS=$((TOTAL_TESTS + 1))
+        SKIPPED_TESTS=$((SKIPPED_TESTS + 1))
     fi
 else
     log_skip "Z3 not installed"
-    ((TOTAL_TESTS++))
-    ((SKIPPED_TESTS++))
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    SKIPPED_TESTS=$((SKIPPED_TESTS + 1))
 fi
 
 echo ""

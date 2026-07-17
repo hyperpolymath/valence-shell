@@ -4,9 +4,23 @@ Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 -->
 # Proof Holes Audit - Valence Shell
 
-**Date**: 2026-07-01 (Idris2 layer closed to 0 holes — issue #151 root; prior: 2026-04-12 believe_me sweep, Coq layer)
+**Date**: 2026-07-16 (Coq real gap re-verified CLOSED via `coqc` + `Print Assumptions` under Coq 8.18.0; prior: 2026-07-01 Idris2 layer to 0 holes — issue #151 root; 2026-04-12 believe_me sweep, Coq layer)
 **Auditor**: Opus (deep audit + proof closure)
-**Total Holes**: 6 across the 4 closed-core proof systems tracked here (down from 31; -2 Coq axioms proved 2026-04-12)
+**Total Holes**: 2 (both standard/justified axioms; **0 real gaps**) across the closed-core proof systems tracked here
+
+> **2026-07-16 prover re-verification.** The full Coq tree (`_CoqProject`,
+> 11 files) compiles under Coq 8.18.0 with **zero `admit`/`Admitted`/`Axiom`**
+> markers. `Print Assumptions` on the load-bearing theorems reports:
+> `obliterate_overwrites_all_blocks` and `overwrite_pass_equalizes_storage` are
+> **Closed under the global context** (zero axioms); `single_op_reversible`,
+> `operation_sequence_reversible`, `copy_file_reversible`,
+> `mkdir_two_dirs_reversible`, `obliterate_not_injective` depend only on the
+> standard `functional_extensionality_dep`. The former "1 real gap"
+> (`obliterate_overwrites_all_blocks`) and the 2026-06-02 `single_op_reversible`
+> `OpRmdir` model-permission admit (closed via `OpMkdirWithPerms`) are both
+> **CLOSED**. Remaining assumptions are all standard/justified: Coq
+> `functional_extensionality_dep` (stdlib) + `is_empty_dir_dec` (justified
+> classical decidability), and Agda `funext` (structural).
 
 > **Idris2 ABI layer (tracked separately in `PROOF-NEEDS.md` /
 > `proofs/idris2/README.md`): 0 holes as of 2026-07-01.** All 17 `?holes` were
@@ -19,10 +33,10 @@ Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 
 | Category | Count | Change | Action Required |
 |----------|-------|--------|-----------------|
-| **Real Gaps** | 1 | -25 | Coq `obliterate_overwrites_all_blocks` only |
-| **Axioms** | 1 | -3 | `is_empty_dir_dec` only (justified, infinite-domain) |
-| **Structural** | 1 | -1 | `funext` only (`_≟ₚ_` proven via `_path-≟_`) |
-| **Total** | **3** | **-28** | Updated 2026-04-12: 2 well-formedness + 5 decidability proofs closed |
+| **Real Gaps** | 0 | -1 | **NONE** — `obliterate_overwrites_all_blocks` CLOSED (re-verified 2026-07-16) |
+| **Axioms** | 1 | 0 | `is_empty_dir_dec` only (justified, infinite-domain) |
+| **Structural** | 1 | 0 | `funext` only (`_≟ₚ_` proven via `_path-≟_`) |
+| **Total** | **2** | **-1** | Both remaining are standard/justified axioms; no proof debt |
 
 ### What Was Closed (2026-04-03 proof closure session)
 
@@ -92,13 +106,13 @@ Replaced with `obliterate_not_injective` — the correct formalization of "not r
 
 Also closed 2026-04-12: `posix_errors.v` 5/6 decidability predicates converted from Axiom to Lemma (constructive proofs). One justified Axiom remains: `is_empty_dir_dec` — `Filesystem = Path -> option FSNode` is an infinite-domain function; universal quantification over all paths cannot be discharged constructively. Migration: switch to `FMaps.t FSNode`.
 
-## Remaining Real Gaps (1)
+## Remaining Real Gaps (0)
 
-### RMO Storage Proofs (1 gap remaining — low priority)
+### RMO Storage Proofs — CLOSED 2026-07-16
 
-| File | Line | Theorem | Gap |
-|------|------|---------|-----|
-| `coq/rmo_operations.v` | 214 | `obliterate_overwrites_all_blocks` | Induction over overwrite passes |
+| File | Line | Theorem | Status |
+|------|------|---------|--------|
+| `coq/rmo_operations.v` | 315 | `obliterate_overwrites_all_blocks` | **CLOSED** — `Print Assumptions` → *Closed under the global context* (zero axioms). The "induction over overwrite passes" is discharged by the helper `multi_pass_overwrite_count_precise` (line 274, `induction patterns`). |
 
 ~~`lean4/RMOOperations.lean` `obliterate_not_injective`~~ **RESOLVED 2026-03-22** — Proved via
 three auxiliary lemmas (`overwriteBlock_determined_by_shape`, `overwritePathBlocks_storage_eq`,
@@ -109,7 +123,9 @@ overwrite pass, mapped blocks become byte-identical; remaining passes operate on
 ~~`agda/RMOOperations.agda` `obliterate-not-reversible`~~ **RESOLVED 2026-04-03** — FALSE statement
 replaced with proven `obliterate-not-injective` matching the Lean 4/Coq formulation.
 
-The Coq gap (`obliterate_overwrites_all_blocks`) requires similar mechanical induction.
+The Coq theorem (`obliterate_overwrites_all_blocks`) is now **proved** with the
+same mechanical induction pattern (helper `multi_pass_overwrite_count_precise`),
+re-verified 2026-07-16 as *Closed under the global context*.
 
 ### Agda Deferred Proofs — ALL RESOLVED 2026-04-03
 
@@ -126,7 +142,7 @@ The Coq gap (`obliterate_overwrites_all_blocks`) requires similar mechanical ind
 
 ## Recommendations
 
-1. **1 remaining gap is low priority** — Coq `obliterate_overwrites_all_blocks` requires mechanical induction, not conceptually hard
+1. **0 remaining real gaps** — Coq `obliterate_overwrites_all_blocks` is proved (re-verified 2026-07-16); no proof debt remains in the Coq tree
 2. **Axiom count is minimal** — 1 structural (funext), 2 well-formedness, 6 decidability, 1 Coq funext = all standard
 3. **Model improvement needed**: Parameterize `mkdir`/`createFile` with permissions for full reverse-direction reversibility
 4. **Consider**: Agda `--cubical` flag provides funext natively, removing the last structural axiom

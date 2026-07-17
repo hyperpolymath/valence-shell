@@ -34,3 +34,6 @@ dist/
 
 # Extracted OCaml code (output of extraction.v)
 extracted/
+
+# Coq Lia tactic cache (build artifact)
+.lia.cache

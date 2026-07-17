@@ -21,8 +21,9 @@ plan builds on.
 ## Where we are (audit-verified, 2026-07-07)
 
 - 736 tests passing, 0 failures (see CLAUDE.md test table)
-- 3 proof holes: 1 real gap (Coq `obliterate_overwrites_all_blocks`),
-  2 documented axioms; Idris2 ABI layer fully closed
+- 2 proof holes, **0 real gaps**: the Coq `obliterate_overwrites_all_blocks`
+  gap is CLOSED (re-verified 2026-07-16, *Closed under the global context*);
+  2 documented axioms remain; Idris2 ABI layer fully closed
 - Lean→Rust correspondence is **tested, not mechanized** (~85–95% confidence)
 - Not a full POSIX shell: word splitting in external args, `~user`,
   subshell `(...)`, SIGCHLD/Ctrl+Z incomplete (`docs/POSIX_COMPLIANCE.md`)
@@ -55,7 +56,7 @@ defaults — vetoable, not ratified by merging this document.
 | **A** | POSIX completeness: word splitting (quote-context threading), subshell `(...)`, `~user`, SIGCHLD/Ctrl+Z | #91, #94 | Keystone — one sustained agent; word splitting first |
 | **B** | Seam sealing: 3 prod `panic!`, 10 `unreachable!`, 28 TODOs | #86, #87, #88 | Pure fan-out, one PR per file |
 | **C** | Test/fuzz/bench expansion: 736→2000+ tests, 7→20 fuzz targets, 15→75 security tests, benches in CI | #82–#85 | Pure fan-out by category |
-| **D** | Proof expansion: 478 theorem candidates across 6 systems; close last Coq gap; restate #130 non-theorem | #76–#81, #130 | Fan-out by prover system |
+| **D** | Proof expansion: 478 theorem candidates across 6 systems; ~~close last Coq gap~~ (DONE — closed + re-verified 2026-07-16); restate #130 non-theorem | #76–#81, #130 | Fan-out by prover system |
 | **E** | Lean→Rust correspondence mechanization | #93 | Keystone — blocked on **D2** |
 | **F** | RMO/GDPR implementation (theory unblocked: #60/#61 closed) | #92 | Blocked on **D4**, then bounded single lane |
 | **G** | Ops hygiene: CI reds, charter, issue-state drift | — | Inline, done first |

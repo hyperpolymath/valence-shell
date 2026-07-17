@@ -71,28 +71,33 @@ tasks-completed = [
 ]
 
 [coq-proof-status]
-admitted = 3
+admitted = 0
 axioms-justified = 1
 admitted-detail = """
-3 Admitted markers as of 2026-06-02 post-PR #55 design-gap surfacing:
+0 Admitted markers. Re-verified 2026-07-16 with `coqc` + `Print Assumptions`
+under Coq 8.18.0: the full _CoqProject (11 files) compiles with zero
+admit/Admitted/Axiom markers. The 3 admits recorded here on 2026-06-02 are all
+now Qed-closed:
 
-  1. mkdir_two_dirs_reversible (filesystem_composition.v:697) — non-LIFO
-     sequence reversal; not derivable from two_op_sequence_reversible as
-     stated. Tracked as #56 (restate as LIFO sequence).
+  1. mkdir_two_dirs_reversible (filesystem_composition.v:681, now an Example)
+     — CLOSED (#56); Print Assumptions: functional_extensionality_dep only.
 
-  2. overwrite_pass_equalizes_storage (rmo_operations.v:422) — model gap.
-     Needs Hgeom strengthening or conclusion relaxation. Tracked as #57.
+  2. overwrite_pass_equalizes_storage (rmo_operations.v:398) — CLOSED (#57);
+     Print Assumptions: Closed under the global context (zero axioms).
 
-  3. obliterate_not_injective (rmo_operations.v:535) — downstream of #57;
-     reconnects once #57 closes. Tracked as #58.
+  3. obliterate_not_injective (rmo_operations.v:530) — CLOSED (#58);
+     Print Assumptions: functional_extensionality_dep only.
 
-The prior single_op_reversible OpRmdir admit (declared 2026-04-19) was
-Qed-closed by PR #67 (2026-06-01) via OpMkdirWithPerms +
-OpCreateFileWithPerms constructor-variant approach — zero new axioms.
+The single_op_reversible OpRmdir model-permission admit (declared 2026-04-19)
+was Qed-closed via OpMkdirWithPerms + OpCreateFileWithPerms constructor variants
+— zero new axioms. The 1 real gap the audit historically tracked
+(obliterate_overwrites_all_blocks) is CLOSED: Print Assumptions reports Closed
+under the global context. Remaining Coq assumptions: functional_extensionality_dep
+(stdlib standard) + is_empty_dir_dec (1 justified classical).
 """
 axiom-detail = "is_empty_dir_dec: Filesystem = Path -> option FSNode is infinite-domain; universal quantification over all paths is not constructively decidable. Migration: switch to FMaps.t FSNode."
-proof-debt-items-closed = [1, 2]
-proof-debt-open = [3]
+proof-debt-items-closed = [1, 2, 3]
+proof-debt-open = []
 
 [dogfooding-status]
 # Section present per CRG v2.0 schema. Honest disclosure follows.
