@@ -126,13 +126,15 @@ test-cli:
     cd impl/rust-cli && cargo test
     @echo "✓ Rust CLI tests passed"
 
-# Launch the interactive vsh shell (the primary deliverable). Extra args pass
-# through to the binary:
+# Launch the interactive vsh shell via the E-Grade launcher (./launch.sh).
+# Extra args pass through to the binary:
 #   just run              # start the interactive REPL
 #   just run --version    # print version and exit
 #   just run script.vsh   # run a script
+# For the full launcher mode-set (--status/--integ/--disinteg/...), call
+# ./launch.sh directly. See docs/LAUNCHER.md.
 run *ARGS:
-    cd impl/rust-cli && cargo run -- {{ARGS}}
+    @"{{justfile_directory()}}/launch.sh" --auto -- {{ARGS}}
 
 # Build all FFI layers
 build-ffi: build-ffi-zig build-ffi-ocaml

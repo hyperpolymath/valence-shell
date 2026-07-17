@@ -17,6 +17,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Full POSIX shell compliance (subset)
 - RMO (Remove-Match-Obliterate) proofs for GDPR compliance
 
+=== Added — 2026-07-17
+
+==== Launcher (E-Grade Launcher Standard)
+- `launch.sh` — a standard-conformant launcher implementing the Hyperpolymath
+  E-Grade Launcher Standard mode surface: `--auto` (default), `--start`,
+  `--stop`, `--status`, `--browser`/`--web`, `--integ`, `--disinteg`, `--help`,
+  `--version`. Version output matches the required
+  `vsh <version> (<sha>) [<platform>]` format. Desktop integration (Linux
+  first-class) is idempotent, copies rather than symlinks, sets `Terminal=true`,
+  writes the `.desktop` at 0444, and `--disinteg` preserves config and logs.
+  Sources `keepopen.sh`/`soft-attach.sh`/`gui-error.sh` via the published
+  resolution ladder with graceful no-op degradation when the desktop-tools are
+  absent. PID/log paths use XDG dirs (never `/tmp`). Server-oriented clauses
+  (nohup daemon, `wait_for_server` URL polling, browser launch) are honestly
+  **declared deferred** in the `a2ml-metadata-block` header, since `vsh` is a
+  foreground terminal shell with no HTTP server. See `docs/LAUNCHER.md`.
+- `scripts/run.sh` — the canonical startup command the standard searches for
+  (`{repo-dir}/scripts/run.sh`); builds the release binary on first use and
+  execs the shell.
+- `just run` / `just launch` now delegate to `./launch.sh --auto`.
+
 === Added — 2026-07-16
 
 ==== Launcher

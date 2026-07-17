@@ -78,6 +78,22 @@ cargo build --release           # build the release binary
 ./target/release/vsh --version
 ----
 
+== Desktop integration (optional)
+
+`launch.sh` is the standard-conformant launcher (E-Grade Launcher Standard). It
+adds a desktop menu entry so you can start `vsh` from your application launcher:
+
+[source,bash]
+----
+./launch.sh --integ      # install a desktop entry (Linux; idempotent)
+./launch.sh --status     # show binary, version, platform
+./launch.sh --disinteg   # remove it again (keeps your config and logs)
+----
+
+`./launch.sh` with no arguments launches the shell (same as `just run`). See
+link:docs/LAUNCHER.md[docs/LAUNCHER.md] for the full mode set and conformance
+notes.
+
 == Run in a container
 
 [source,bash]
