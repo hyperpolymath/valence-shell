@@ -209,7 +209,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   * 105 Markdown · 70 Rust · 44 AsciiDoc · 22 Zig+C+H · 11 Elixir · 10 Idris2 + LICENSE + anchor taxonomy
 
 ==== Documentation
-- RSR-template gap fill: 188 `{{project}}` / `valence-shell` / `{{BUILD_CMD}}` placeholders replaced across 10 files (PR #59)
+- RSR-template gap fill: 188 `{{project}}` / `valence-shell` / `BUILD_CMD` placeholders replaced across 10 files (PR #59)
 - Anchor taxonomy migration: `.machine_readable/anchors/ANCHOR.a2ml` → `.machine_readable/6a2/anchor/ANCHOR.a2ml` + `0-AI-MANIFEST.a2ml` + `README.adoc` (PR #102)
 - ROADMAP refreshed with landed-PR cross-refs (M2 + M3 + M4 sweep, PR #68)
 - Wiki bootstrapped (Home + Session-Log-2026-06-01)
