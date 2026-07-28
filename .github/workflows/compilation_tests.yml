@@ -21,6 +21,7 @@ on:
       - '.github/workflows/compilation_tests.yml'
 
 permissions:
+  actions: read
   contents: read
 
 env:
