@@ -90,7 +90,7 @@ jobs:
           nm -D impl/ocaml/liblean_vsh.so | grep vsh_safe || echo "Warning: vsh_safe functions not exported"
 
       - name: Cache Rust build
-        uses: Swatinem/rust-cache@9f151aca7c3990bab7afe2d82ac58088d3b01074  # v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6  # v2
         with:
           workspaces: impl/rust-cli
 
