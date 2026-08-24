@@ -9,7 +9,7 @@
 ; - Move is atomic rename (preserves data)
 ; - Both operations are reversible under preconditions
 
-(set-logic QF_AUFLIA)
+(set-logic ALL)
 (set-option :produce-proofs true)
 
 ; ============================================================================
@@ -20,7 +20,6 @@
 (declare-sort Filesystem)
 (declare-sort FSNode)
 
-(declare-fun path-eq (Path Path) Bool)
 (declare-fun path-exists (Filesystem Path) Bool)
 (declare-fun is-file (Filesystem Path) Bool)
 (declare-fun is-directory (Filesystem Path) Bool)
@@ -32,14 +31,15 @@
 (declare-fun has-read-permission (Path Filesystem) Bool)
 (declare-fun has-write-permission (Path Filesystem) Bool)
 
-; path-eq is reflexive
-(assert (forall ((p Path)) (path-eq p p)))
-; path-eq is symmetric
-(assert (forall ((p1 Path) (p2 Path)) (=> (path-eq p1 p2) (path-eq p2 p1))))
-
 ; ============================================================================
 ; Base Axioms
 ; ============================================================================
+
+; File and directory classifications imply path existence.
+(assert (forall ((p Path) (fs Filesystem))
+  (=> (is-file fs p) (path-exists fs p))))
+(assert (forall ((p Path) (fs Filesystem))
+  (=> (is-directory fs p) (path-exists fs p))))
 
 ; fs-update at path sets the value
 (assert (forall ((p Path) (node FSNode) (fs Filesystem))
@@ -47,12 +47,18 @@
 
 ; fs-update preserves other paths
 (assert (forall ((p1 Path) (p2 Path) (node FSNode) (fs Filesystem))
-  (=> (not (path-eq p1 p2))
+  (=> (not (= p1 p2))
       (= (fs-get (fs-update p1 node fs) p2) (fs-get fs p2)))))
 
 ; path-exists after update
 (assert (forall ((p Path) (node FSNode) (fs Filesystem))
   (path-exists (fs-update p node fs) p)))
+
+; fs-update preserves existence at other paths.
+(assert (forall ((p1 Path) (p2 Path) (node FSNode) (fs Filesystem))
+  (=> (not (= p1 p2))
+      (= (path-exists (fs-update p1 node fs) p2)
+         (path-exists fs p2)))))
 
 ; fs-delete removes path
 (assert (forall ((p Path) (fs Filesystem))
@@ -60,8 +66,13 @@
 
 ; fs-delete preserves other paths
 (assert (forall ((p1 Path) (p2 Path) (fs Filesystem))
-  (=> (and (not (path-eq p1 p2)) (path-exists fs p2))
+  (=> (and (not (= p1 p2)) (path-exists fs p2))
       (path-exists (fs-delete p1 fs) p2))))
+
+; fs-delete preserves the contents associated with other paths.
+(assert (forall ((p1 Path) (p2 Path) (fs Filesystem))
+  (=> (not (= p1 p2))
+      (= (fs-get (fs-delete p1 fs) p2) (fs-get fs p2)))))
 
 ; ============================================================================
 ; Copy Operation
@@ -105,7 +116,7 @@
      (and (path-exists fs src)
           (not (path-exists fs dst))
           (parent-exists dst fs)
-          (not (path-eq src dst))
+          (not (= src dst))
           (not (and (is-directory fs src) (is-path-prefix src dst)))
           (has-write-permission (parent-path src) fs)
           (has-write-permission (parent-path dst) fs)))))
@@ -144,7 +155,7 @@
 (declare-const dst Path)
 (declare-const fs Filesystem)
 (assert (copy-file-precondition src dst fs))
-(assert (not (path-eq src dst)))
+(assert (not (= src dst)))
 ; Negation: source content changed
 (assert (not (= (fs-get fs src) (fs-get (copy-file src dst fs) src))))
 (check-sat)  ; Should be UNSAT
@@ -169,7 +180,8 @@
 (declare-const dst Path)
 (declare-const p Path)
 (declare-const fs Filesystem)
-(assert (not (path-eq p dst)))
+(assert (copy-file-precondition src dst fs))
+(assert (not (= p dst)))
 ; Negation: unrelated path changed
 (assert (not (= (fs-get fs p) (fs-get (copy-file src dst fs) p))))
 (check-sat)  ; Should be UNSAT
@@ -222,8 +234,9 @@
 (declare-const dst Path)
 (declare-const p Path)
 (declare-const fs Filesystem)
-(assert (not (path-eq p src)))
-(assert (not (path-eq p dst)))
+(assert (move-precondition src dst fs))
+(assert (not (= p src)))
+(assert (not (= p dst)))
 (assert (path-exists fs p))
 ; Negation: unrelated path doesn't exist after move
 (assert (not (path-exists (move src dst fs) p)))
@@ -247,7 +260,7 @@
 (assert (not (= (fs-get fs p)
                 (fs-get (fs-delete dst (copy-file src dst fs)) p))))
 ; Only fails if p = dst (which now doesn't exist) but didn't exist before either
-(assert (not (path-eq p dst)))  ; exclude dst case
+(assert (not (= p dst)))  ; exclude dst case
 (check-sat)  ; Should be UNSAT
 (pop)
 
@@ -260,8 +273,8 @@
 (declare-const p Path)
 (assert (move-precondition src dst fs))
 ; For any path p not equal to src or dst
-(assert (not (path-eq p src)))
-(assert (not (path-eq p dst)))
+(assert (not (= p src)))
+(assert (not (= p dst)))
 ; After move src->dst then dst->src, p should be unchanged
 (assert (not (= (fs-get fs p)
                 (fs-get (move dst src (move src dst fs)) p))))

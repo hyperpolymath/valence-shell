@@ -23,8 +23,13 @@ per the `../CLAUDE.md` language policy.
 
 | `verify-proofs.sh`
 | Proof-system verification helper (Coq / Lean / etc.).
-  `verify-proofs` job in `validation.yml` is currently gated
-  (`if: false`) per audit item 6.
+  Individual CI jobs use authoritative project builds where needed.
+
+| `verify-z3.sh`
+| Runs every checked-in Z3 script, rejects solver/parser diagnostics, checks
+  each exact `sat`/`unsat` sequence, and proves the oracle can reject a
+  satisfiable theorem query. Invoked by the `verify-z3` job in
+  `validation.yml`.
 
 | `generate-verification-report.sh`
 | Emits a `validation-report.md` artefact uploaded by the

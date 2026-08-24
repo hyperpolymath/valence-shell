@@ -19,8 +19,8 @@ pub mod secure_deletion;
 
 /// Typed errors raised by the command layer.
 ///
-/// Previously several branches in the inverse/undo dispatch reached
-/// `unreachable!()` after upstream filters were supposed to exclude them.
+/// Previously several branches in the inverse/undo dispatch aborted the
+/// process after upstream filters were supposed to exclude them.
 /// Those panics have been replaced with typed `CommandError::Internal*`
 /// variants so that any future regression in the filtering logic surfaces
 /// as a *recoverable* error rather than aborting the shell.

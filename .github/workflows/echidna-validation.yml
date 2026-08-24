@@ -24,9 +24,9 @@ permissions:
 jobs:
   echidna-verify:
     name: ECHIDNA Proof Verification
-    # This job builds the external ECHIDNA repository from its current default
-    # branch. Keep that moving integration check out of required PR CI so
-    # valence-shell changes are not blocked by an unrelated upstream breakage.
+    # Keep this integration check out of required PR CI until ECHIDNA verify
+    # supports project roots for Lean, Coq, and Agda. The pinned revision makes
+    # scheduled results reproducible while that upstream contract is repaired.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -45,11 +45,17 @@ jobs:
           workspaces: impl/rust-cli
 
       - name: Build ECHIDNA from source
+        env:
+          ECHIDNA_REF: e1347cd3552ac6ec7c404da3d941baee3bb51817
         run: |
-          git clone --depth 1 https://github.com/hyperpolymath/echidna.git /tmp/echidna
+          git init /tmp/echidna
           cd /tmp/echidna
+          git remote add origin https://github.com/hyperpolymath/echidna.git
+          git fetch --depth 1 origin "$ECHIDNA_REF"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$ECHIDNA_REF"
           cargo build --release --bin echidna
-          echo "/tmp/echidna/target/release" >> $GITHUB_PATH
+          echo "/tmp/echidna/target/release" >> "$GITHUB_PATH"
 
       - name: Install proof provers
         # Ubuntu 24.04 (noble) packages neither `lean` nor `isabelle`, and
@@ -65,7 +71,7 @@ jobs:
           echo "f5d473c923c093759ae3839073bec2a58e82cb8bc0e4083930e76090da75b310  elan-init.sh" | sha256sum -c -
           sh elan-init.sh -y
           rm -f elan-init.sh
-          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
       - name: Verify ECHIDNA available
         run: echidna list-provers

@@ -54,6 +54,32 @@ fn function_body_contains_for_loop() -> Result<()> {
 }
 
 #[test]
+fn until_stops_when_condition_succeeds() -> Result<()> {
+    let temp = tempdir()?;
+    let mut state = ShellState::new(temp.path().to_str().unwrap())?;
+
+    parse_command("until true; do mkdir should_not_run; done")?.execute(&mut state)?;
+
+    assert!(!state.resolve_path("should_not_run").exists());
+    Ok(())
+}
+
+#[test]
+fn until_runs_while_condition_fails() -> Result<()> {
+    let temp = tempdir()?;
+    let mut state = ShellState::new(temp.path().to_str().unwrap())?;
+
+    // The body returns from a function on its first iteration. This proves an
+    // initially-false condition enters the body without relying on an infinite
+    // `until false` loop in the test.
+    parse_command("ufunc() { until false; do mkdir ran; return 0; done; }")?.execute(&mut state)?;
+    parse_command("ufunc")?.execute(&mut state)?;
+
+    assert!(state.resolve_path("ran").exists());
+    Ok(())
+}
+
+#[test]
 fn function_body_contains_case_statement() -> Result<()> {
     let temp = tempdir()?;
     let mut state = ShellState::new(temp.path().to_str().unwrap())?;

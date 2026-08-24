@@ -1,5 +1,15 @@
 == Secure Erase User Guide
 
+[WARNING]
+====
+Most method-selection examples below describe a roadmap interface and are not
+implemented CLI syntax. The current `obliterate` command is a best-effort
+file-level overwrite and unlink; it is not a GDPR determination or a guarantee
+of physical-media sanitisation. See
+link:../../../docs/RMO-DURABILITY-BOUNDARY.adoc[RMO Durability and Assurance
+Boundary] before relying on it.
+====
+
 === NIST SP 800-88 Compliance
 
 Valence Shell implements *NIST SP 800-88 Rev. 1* guidelines for media
@@ -26,7 +36,7 @@ repurpose
 
 === File-Level Deletion
 
-==== NIST Clear (Default - GDPR Compliant)
+==== NIST Clear (Roadmap Interface; Not a Compliance Claim)
 
 [source,bash]
 ----
@@ -38,10 +48,10 @@ obliterate /path/to/file --method=clear
 ----
 
 *What it does*: - 1 pass of zeros over file data - Sufficient for modern
-drives (post-2001) - GDPR "`right to erasure`" compliant - Defeats
+drives (post-2001) - May support a broader right-to-erasure process - Defeats
 casual recovery
 
-*When to use*: - Normal secure file deletion - GDPR compliance - Privacy
+*When to use*: - Normal secure file deletion - A separately assessed erasure process - Privacy
 protection - De-identification
 
 ==== NIST Purge (High Security)

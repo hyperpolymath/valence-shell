@@ -690,8 +690,12 @@ pub fn eval_arith(expr: &ArithExpr, state: &ShellState) -> Result<i64> {
                 ArithOp::Eq => Ok(if lval == rval { 1 } else { 0 }),
                 ArithOp::Ne => Ok(if lval != rval { 1 } else { 0 }),
 
-                // Logical handled above with short-circuit
-                ArithOp::LogAnd | ArithOp::LogOr => unreachable!(),
+                // Logical operators return from the short-circuit match above.
+                // Keep this defensive error instead of panicking if a future
+                // refactor changes that control-flow invariant.
+                ArithOp::LogAnd | ArithOp::LogOr => Err(anyhow!(
+                    "logical operator reached non-short-circuit evaluation"
+                )),
 
                 _ => Err(anyhow!("Invalid binary operator")),
             }

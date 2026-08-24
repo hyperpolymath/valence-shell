@@ -2,8 +2,8 @@
 // Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Secure Deletion (RMO - Remove-Match-Obliterate)
 //!
-//! GDPR-compliant irreversible file deletion with secure overwrite.
-//! Implements DoD 5220.22-M 3-pass overwrite + POSIX file deletion.
+//! Best-effort irreversible file deletion with a 3-pass overwrite followed by
+//! POSIX unlink.
 //!
 //! **WARNING**: These operations are NOT REVERSIBLE. No undo possible.
 //!
@@ -29,9 +29,10 @@
 //! - **Network filesystems**: NFS, SMB, FUSE-backed stores do not honor in-place
 //!   semantics from the client's perspective.
 //!
-//! This implementation provides best-effort file-level erasure suitable for
-//! GDPR Article 17 ("right to erasure") on cooperating filesystems. For
-//! hardware-level guarantees use [`crate::secure_erase`].
+//! This implementation narrows ordinary recovery opportunities on cooperating
+//! in-place filesystems. It does not establish physical-media sanitisation,
+//! removal from backups or replicas, or legal compliance. For device-level
+//! operations use [`crate::secure_erase`] and validate the result independently.
 
 use anyhow::{bail, Context, Result};
 use colored::Colorize;
@@ -56,10 +57,10 @@ pub fn obliterate_path(
     }
 }
 
-/// Append an RMO audit **residue**: the append-only proof that a compliant
-/// irreversible deletion occurred. The data is destroyed, but this record
-/// survives — the MAA (Mutually Assured Accountability) trail and the GDPR
-/// Article 17 attestation. Written within the shell's sandbox root
+/// Append an RMO audit **residue**: a best-effort record that the command
+/// completed its local overwrite-and-unlink sequence. It is evidence of the
+/// command outcome, not proof of physical erasure or legal compliance. Written
+/// within the shell's sandbox root
 /// (`<root>/.vsh-audit.log`) so it is session-isolated and testable.
 /// Best-effort: obliteration still succeeds if the residue cannot be written,
 /// but a warning is emitted so the failure is never silent.
@@ -184,10 +185,30 @@ fn secure_overwrite_3pass(file_path: &std::path::Path, file_size: u64) -> Result
     Ok(())
 }
 
+/// Make an unlink durable in the containing directory where the platform
+/// exposes directory fsync. This closes the common crash window between a
+/// successful `unlink(2)` and persistence of that directory entry update.
+#[cfg(unix)]
+fn sync_parent_directory(path: &Path) -> Result<()> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    std::fs::File::open(parent)
+        .with_context(|| format!("Failed to open parent directory {}", parent.display()))?
+        .sync_all()
+        .with_context(|| format!("Failed to sync parent directory {}", parent.display()))
+}
+
+#[cfg(not(unix))]
+fn sync_parent_directory(_path: &Path) -> Result<()> {
+    Ok(())
+}
+
 /// Securely delete a single regular file by 3-pass overwrite + unlink.
 ///
 /// This is the low-level primitive used by [`obliterate`]; exposed publicly so
-/// other modules (audit log compaction, RMO sweeps, GDPR right-to-erasure
+/// other modules (audit log compaction and RMO sweeps)
 /// workflows) can call it without going through the shell-state recording path.
 ///
 /// **WARNING**: this operation is irreversible. The file is destroyed.
@@ -198,7 +219,7 @@ fn secure_overwrite_3pass(file_path: &std::path::Path, file_size: u64) -> Result
 /// 2. Pass 1: overwrite with random bytes from `/dev/urandom`, then `fsync`.
 /// 3. Pass 2: overwrite with zeros, then `fsync`.
 /// 4. Pass 3: overwrite with `0xFF` (final pattern), then `fsync`.
-/// 5. `unlink` the path.
+/// 5. `unlink` the path and sync its parent directory on Unix.
 ///
 /// # Errors
 ///
@@ -222,17 +243,19 @@ pub fn secure_delete(path: &Path) -> Result<()> {
     let file_size = meta.len();
     secure_overwrite_3pass(path, file_size)?;
     fs::remove_file(path).context("Failed to unlink after overwrite")?;
+    sync_parent_directory(path)?;
     Ok(())
 }
 
-/// Obliterate a file (GDPR-compliant secure deletion)
+/// Obliterate a file using best-effort overwrite and unlink
 ///
 /// This is an **irreversible** operation that:
 /// 1. Overwrites file content with 3-pass DoD 5220.22-M pattern
 /// 2. Deletes the file
 /// 3. Records operation as non-reversible
 ///
-/// Use this for GDPR "right to erasure" compliance or security-critical deletion.
+/// This primitive alone is not a legal-compliance or physical-sanitisation
+/// guarantee. See the module-level filesystem and device limitations.
 ///
 /// # Arguments
 /// * `state` - Mutable shell state for recording the operation
@@ -286,10 +309,7 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
         eprintln!("This will:");
         eprintln!("  1. Overwrite with 3-pass NIST SP 800-88 Purge pattern (random, 0x00, 0xFF)");
         eprintln!("  2. Delete the file");
-        eprintln!(
-            "  3. Make recovery {} impossible on in-place filesystems",
-            "cryptographically".bright_red()
-        );
+        eprintln!("  3. Reduce ordinary file-level recovery opportunities");
         eprintln!("     (CoW filesystems like btrfs/ZFS/APFS and SSDs with FTL");
         eprintln!("     remapping require hardware-level erase — see `secure_erase`)");
         eprintln!();
@@ -310,6 +330,7 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
 
     // Step 2: Delete file
     fs::remove_file(&full_path).context("Failed to delete file after overwrite")?;
+    sync_parent_directory(&full_path)?;
 
     // Step 3: Record as irreversible operation (NO undo_data stored)
     let op = Operation::new(OperationType::Obliterate, path.to_string(), None);
@@ -336,7 +357,7 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
             "Method:".bright_black()
         );
         println!(
-            "    {} GDPR Article 17 compliant",
+            "    {} not established by this command",
             "Compliance:".bright_black()
         );
         println!("    {} IRREVERSIBLE", "Undo:".bright_black());
@@ -430,21 +451,20 @@ pub fn obliterate_dir(
         let entry_path = entry.path();
 
         if entry.file_type().is_file() {
-            if let Ok(metadata) = fs::metadata(entry_path) {
-                secure_overwrite_3pass(entry_path, metadata.len())?;
-                obliterated += 1;
-                if verbose {
-                    println!("  🔥 {}", entry_path.display());
-                }
+            secure_delete(entry_path)?;
+            obliterated += 1;
+            if verbose {
+                println!("  🔥 {}", entry_path.display());
             }
-            fs::remove_file(entry_path)?;
         } else if entry.file_type().is_dir() && entry_path != full_path {
             fs::remove_dir(entry_path)?;
+            sync_parent_directory(entry_path)?;
         }
     }
 
     // Remove root directory
     fs::remove_dir(&full_path)?;
+    sync_parent_directory(&full_path)?;
 
     // Record operation
     let op = Operation::new(OperationType::Obliterate, path.to_string(), None);

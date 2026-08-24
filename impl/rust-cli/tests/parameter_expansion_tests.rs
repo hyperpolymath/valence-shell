@@ -81,7 +81,7 @@ fn test_assign_default_unset() {
     // Note: Assignment not implemented in v1.1.0 (requires mutable state)
     // Should still return the default value
     assert_eq!(expand_variables("${VAR:=default}", &state), "default");
-    // TODO: When assignment is implemented, verify VAR is now set
+    // Mutation semantics require the expansion/state API redesign tracked by #189.
 }
 
 #[test]

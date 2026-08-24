@@ -47,6 +47,11 @@ uuid = { version = "1.22", features = ["v4", "serde"] }
 # Time handling
 chrono = { version = "0.4", features = ["serde"] }
 
+# Audit-log authentication
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+
 # Stdout/stderr capture for redirections
 gag = "1.0"
 

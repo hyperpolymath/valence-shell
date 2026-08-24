@@ -16,7 +16,7 @@ for the ground truth this plan builds on.
 
 === Where we are (audit-verified, 2026-07-07)
 
-* 736 tests passing, 0 failures (see CLAUDE.md test table)
+* 794 tests passing, 0 failures, 14 ignored (`cargo test --all-features`, 2026-08-24)
 * 2 proof holes, *0 real gaps*: the Coq
 `+obliterate_overwrites_all_blocks+` gap is CLOSED (re-verified
 2026-07-16, _Closed under the global context_); 2 documented axioms
@@ -27,8 +27,9 @@ confidence)
 subshell `+(...)+`, SIGCHLD/Ctrl+Z incomplete
 (`+docs/POSIX_COMPLIANCE.md+`)
 * RMO `+obliterate+` implemented + wired (best-effort overwrite + unlink
-+ audit residue); full GDPR not yet shippable (HW erase for CoW/SSD,
-HMAC signing pending)
++ unsigned audit residue); full deployment erasure and legal compliance are
+not established (HW erase for CoW/SSD, RMO key provisioning, and external
+audit anchoring remain)
 * Backlog is decomposed fan-out-ready in Tier-S issues:
 #41→(#86,#87,#88) seams, #42→(#76–#81) proofs, #43→(#82–#85) tests,
 #45→(#63–#66, #90–#94) theory frontiers
@@ -80,7 +81,7 @@ sustained agent; word splitting first
 |*B* |Seam sealing: 3 prod `+panic!+`, 10 `+unreachable!+`, 28 TODOs
 |#86, #87, #88 |Pure fan-out, one PR per file
 
-|*C* |Test/fuzz/bench expansion: 736→2000+ tests, 7→20 fuzz targets,
+|*C* |Test/fuzz/bench expansion: 791→2000+ tests, 7→20 fuzz targets,
 15→75 security tests, benches in CI |#82–#85 |Pure fan-out by category
 
 |*D* |Proof expansion: 478 theorem candidates across 6 systems;

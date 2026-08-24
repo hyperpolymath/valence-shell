@@ -31,8 +31,6 @@ for arg in "$@"; do
     esac
 done
 
-FORMAT_FLAG="--format $FORMAT"
-
 echo "=== ECHIDNA Validation Pipeline for Valence Shell ==="
 echo "Binary: $ECHIDNA"
 echo ""
@@ -40,11 +38,25 @@ echo ""
 PASSED=0
 FAILED=0
 SKIPPED=0
+INTEGRATION_ERRORS=0
+
+prover_executable() {
+    case "$1" in
+        lean) echo "lean" ;;
+        coq) echo "coqc" ;;
+        agda) echo "agda" ;;
+        isabelle) echo "isabelle" ;;
+        mizar) echo "verifier" ;;
+        z3) echo "z3" ;;
+        *) echo "$1" ;;
+    esac
+}
 
 verify_file() {
     local label="$1"
     local file="$2"
     local prover="$3"
+    local executable
 
     if [ ! -f "$REPO_ROOT/$file" ]; then
         echo "[SKIP] $label — file not found: $file"
@@ -52,24 +64,42 @@ verify_file() {
         return 0
     fi
 
+    executable=$(prover_executable "$prover")
+    if ! command -v "$executable" >/dev/null 2>&1; then
+        echo "[SKIP] $label (native prover executable '$executable' not available)"
+        SKIPPED=$((SKIPPED + 1))
+        return 0
+    fi
+
     echo -n "[....] $label"
     local output
-    output=$("$ECHIDNA" verify "$REPO_ROOT/$file" --prover "$prover" --timeout 120 $VERBOSE $FORMAT_FLAG 2>&1) && {
+    local echidna_args=(
+        verify "$REPO_ROOT/$file" --prover "$prover" --timeout 120 --format "$FORMAT"
+    )
+    if [ -n "$VERBOSE" ]; then
+        echidna_args+=("$VERBOSE")
+    fi
+
+    if output=$("$ECHIDNA" "${echidna_args[@]}" 2>&1); then
         echo -e "\r[PASS] $label"
         PASSED=$((PASSED + 1))
-    } || {
-        # Distinguish prover-not-found from actual verification failure
-        if echo "$output" | grep -qi "not found\|not installed\|not available\|no such\|cannot find"; then
-            echo -e "\r[SKIP] $label (prover '$prover' not available)"
-            SKIPPED=$((SKIPPED + 1))
+    else
+        # Distinguish unavailable tools, known project-context gaps, and an
+        # actual standalone-proof failure. ECHIDNA's current `verify` command
+        # has no --project-root option, so a single-file failure for Lean,
+        # Coq, or Agda cannot honestly be called an invalid proof here.
+        if [[ "$prover" == "lean" || "$prover" == "coq" || "$prover" == "agda" ]]; then
+            echo -e "\r[INTEGRATION] $label (ECHIDNA verify lacks project-root context)"
+            printf '%s\n' "$output" | sed 's/^/       /'
+            INTEGRATION_ERRORS=$((INTEGRATION_ERRORS + 1))
         else
             echo -e "\r[FAIL] $label"
             if [ -n "$VERBOSE" ]; then
-                echo "       $output" | head -3
+                printf '%s\n' "$output" | sed 's/^/       /'
             fi
             FAILED=$((FAILED + 1))
         fi
-    }
+    fi
 }
 
 # ─── Step 1: Verify Lean 4 proofs (primary source of truth) ───
@@ -140,7 +170,7 @@ fi
 echo ""
 
 # ─── Summary ───
-TOTAL=$((PASSED + FAILED + SKIPPED))
+TOTAL=$((PASSED + FAILED + SKIPPED + INTEGRATION_ERRORS))
 echo "========================================="
 echo "ECHIDNA Validation Summary"
 echo "========================================="
@@ -148,9 +178,13 @@ echo "Total:   $TOTAL"
 echo "Passed:  $PASSED"
 echo "Failed:  $FAILED"
 echo "Skipped: $SKIPPED"
+echo "Integration errors: $INTEGRATION_ERRORS"
 echo ""
 
-if [ "$FAILED" -eq 0 ] && [ "$PASSED" -gt 0 ]; then
+if [ "$INTEGRATION_ERRORS" -gt 0 ]; then
+    echo "ECHIDNA could not reproduce native project context; no affected proof was classified invalid."
+    exit 3
+elif [ "$FAILED" -eq 0 ] && [ "$PASSED" -gt 0 ]; then
     echo "All available proofs verified successfully."
     exit 0
 elif [ "$SKIPPED" -eq "$TOTAL" ]; then

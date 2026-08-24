@@ -166,7 +166,7 @@ pub fn execute_pipeline(
                 // Invariant: when idx > 0, the previous iteration spawned a
                 // non-last child with Stdio::piped() stdout (line below) and
                 // stored child.stdout into prev_stdout after spawning. So the
-                // expect documents an unreachable branch rather than a TODO.
+                // The expect documents the loop invariant described above.
                 Stdio::from(prev_stdout.take().expect(
                     "prev_stdout invariant: previous non-last stage stored its piped stdout",
                 ))
@@ -678,7 +678,8 @@ pub fn execute_external_background(
     println!("[{}] {}", job_id, pid);
 
     // Don't wait for background job - it will run independently
-    // Job state will be updated by SIGCHLD handler (TODO)
+    // Full asynchronous SIGCHLD-driven state updates remain in the POSIX
+    // conformance frontier (#91); polling/reaping currently owns this state.
 
     Ok(job_id)
 }
