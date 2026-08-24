@@ -421,7 +421,7 @@ fn stress_resource_limits_max_history() {
     let history_size = state.history.len();
     println!("✓ Completed {} operations without OOM", history_size);
 
-    // TODO: Implement configurable history limit for production
+    // A configurable production history bound remains tracked by #190.
     // assert!(history_size <= MAX_HISTORY_SIZE);
 }
 

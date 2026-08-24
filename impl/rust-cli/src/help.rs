@@ -377,7 +377,8 @@ static HELP_DATABASE: &[HelpEntry] = &[
         description: "Removes a file at the specified path.\n\
                       File contents are preserved in undo history for restoration.\n\
                       This operation is reversible via 'undo'.\n\n\
-                      For GDPR-compliant secure deletion, use 'obliterate'.",
+                      For best-effort overwrite and unlink, use 'obliterate';\n\
+                      storage-level erasure and compliance require separate assessment.",
         examples: &[
             Example {
                 description: "Remove file",

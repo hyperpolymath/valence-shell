@@ -1,5 +1,15 @@
 == Secure Deletion Standards for Valence Shell RMO
 
+[WARNING]
+====
+This document contains design tiers and examples, not a certification or an
+inventory of implemented CLI flags. The current `obliterate` command performs a
+best-effort three-pass overwrite and unlink. It does not establish GDPR
+compliance or physical-media sanitisation. The authoritative implementation
+boundary is link:../../../docs/RMO-DURABILITY-BOUNDARY.adoc[RMO Durability and
+Assurance Boundary].
+====
+
 === Standards Compliance
 
 ==== NIST SP 800-88 Rev. 1 (Guidelines for Media Sanitization)
@@ -39,7 +49,7 @@ reliable)
 
 === Valence Shell RMO Implementation
 
-==== Tier 1: GDPR Compliance (Default)
+==== Tier 1: Logical File Erasure (Design Target)
 
 [source,rust]
 ----
@@ -91,8 +101,8 @@ obliterate(file, method: "destroy")         // Triggers physical destruction wor
 === Implementation Priority
 
 [arabic]
-. ✅ *Clear* (1 pass) - GDPR, normal use
-. ✅ *Purge* (verified) - High security
+. ⚠️ *Three-pass file overwrite + unlink* - implemented, with the documented storage limitations
+. ⏸️ *Clear/Purge method selection and read-back verification* - design only
 . ⏸️ *Hardware erase* - SSD support (ATA/NVMe)
 . ⏸️ *Crypto erase* - Key destruction
 . ⏸️ *Destroy* - Physical destruction workflow

@@ -32,7 +32,7 @@ honest research prototype" than as anything we can't yet back up.
 |-------|-----------------|
 | Version **0.9.0**, an **advanced research prototype**, ~**78%** of its roadmap complete | `impl/rust-cli/Cargo.toml`, `README.adoc`, `CHANGELOG.adoc` |
 | **NOT production-ready** (the project says so itself) | `README.adoc`, `FAQ.adoc`, `CLAUDE.md` |
-| **736 tests passing, 0 failures** (14 slow tests ignored by default) | `cargo test` in `impl/rust-cli/` |
+| **794 tests passing, 0 failures** (14 slow tests ignored by default) | `cargo test --all-features` in `impl/rust-cli/` on 2026-08-24 |
 | Proofs span **6 independent proof systems** (Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3) plus an Idris2 ABI layer | `proofs/` directory |
 | **~478 theorem candidates** across those systems | `docs/audits/2026-06-01-deep-audit.adoc` |
 | Reversibility (**RMR**) is **proven and working** in the shell | `proofs/`, and `explain`/`checkpoint`/`undo` in the running CLI |

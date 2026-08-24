@@ -240,10 +240,11 @@ pub const HARDWARE_ERASE_IRREVERSIBLE: ProofReference = ProofReference {
     description: "∀ fs device. ¬∃ op. apply(op, hardware_erase(device, fs)) = fs",
 };
 
-/// Proof reference for GDPR-compliant obliterate irreversibility.
+/// Proof reference for abstract obliterate irreversibility.
 ///
-/// Theorem: Obliterate operations have NO inverse - secure 3-pass overwrite + deletion.
-/// Complies with DoD 5220.22-M and GDPR Article 17 (Right to Erasure).
+/// The theorem is model-level: an obliterate transition has no inverse in the
+/// abstract filesystem. It does not prove physical-media erasure, correspondence
+/// with the Rust I/O sequence, or compliance with a legal regime.
 pub const OBLITERATE_IRREVERSIBLE: ProofReference = ProofReference {
     theorem: "obliterate_irreversible",
     coq_location: "proofs/coq/rmo_operations.v:L70-L95",

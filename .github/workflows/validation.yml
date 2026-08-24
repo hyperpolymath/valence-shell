@@ -85,6 +85,21 @@ jobs:
           coqc -R . ValenceShell /tmp/print_assumptions.v 2>&1 | tee print_assumptions.log
           echo "=== Print Assumptions surfaced (see job log above) ==="
 
+  verify-z3:
+    name: verify-z3 (exact-result oracle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Install Z3
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends z3
+
+      - name: Verify every Z3 encoding and the failure control
+        run: bash scripts/verify-z3.sh
+
   property-testing:
     runs-on: ubuntu-latest
     timeout-minutes: 30

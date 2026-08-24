@@ -489,9 +489,9 @@ impl ExecutableCommand for Command {
                 let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
 
                 // Check if the command is a shell function before external execution.
-                // `if let Some(...)` performs a single map lookup; the previous
-                // `is_defined()` + `.get(...).expect("TODO")` shape both panicked
-                // through a fake-debt marker and duplicated the lookup.
+                // `if let Some(...)` performs a single map lookup; the former
+                // double-lookup plus expect shape could panic and duplicated
+                // the lookup.
                 if let Some(func_def) = state.functions.get(&expanded_program).cloned() {
                     let expanded_args: Vec<String> = args
                         .iter()
@@ -585,12 +585,9 @@ impl ExecutableCommand for Command {
                 let expanded_stages = expanded_stages?;
 
                 if *background && !expanded_stages.is_empty() {
-                    // Background pipeline: launch first stage in background, pipe rest
-                    // For now, warn and run in foreground — full background pipeline
-                    // requires SIGCHLD handler and process group management for all stages
-                    eprintln!(
-                        "vsh: background pipelines not yet fully supported, running in foreground"
-                    );
+                    return Err(anyhow::anyhow!(
+                        "Background pipelines are not supported yet; refusing to run them in the foreground"
+                    ));
                 }
 
                 let exit_code = external::execute_pipeline(&expanded_stages, redirects, state)
@@ -945,50 +942,11 @@ impl ExecutableCommand for Command {
             }
 
             Command::WhileLoop { condition, body } => {
-                let mut last_result = ExecutionResult::Success;
-                // Safety: limit iterations to prevent infinite loops
-                let max_iterations = 100_000;
-                let mut iterations = 0;
+                execute_loop(condition, body, state, LoopKind::While)
+            }
 
-                loop {
-                    if iterations >= max_iterations {
-                        return Err(anyhow::anyhow!(
-                            "while: exceeded {} iterations (safety limit)",
-                            max_iterations
-                        ));
-                    }
-                    iterations += 1;
-
-                    // Check condition
-                    let cond_result = condition.execute(state)?;
-                    let cond_exit = match cond_result {
-                        ExecutionResult::Success => 0,
-                        ExecutionResult::Exit => return Ok(ExecutionResult::Exit),
-                        ExecutionResult::Return { .. } => return Ok(cond_result),
-                        ExecutionResult::ExternalCommand { exit_code } => exit_code,
-                    };
-
-                    if cond_exit != 0 {
-                        break; // Condition failed — exit loop
-                    }
-
-                    // Execute body
-                    last_result = execute_block(body, state)?;
-                    if matches!(
-                        last_result,
-                        ExecutionResult::Exit | ExecutionResult::Return { .. }
-                    ) {
-                        return Ok(last_result);
-                    }
-
-                    // Check for SIGINT
-                    if crate::signals::is_interrupt_requested() {
-                        crate::signals::clear_interrupt();
-                        break;
-                    }
-                }
-
-                Ok(last_result)
+            Command::UntilLoop { condition, body } => {
+                execute_loop(condition, body, state, LoopKind::Until)
             }
 
             Command::ForLoop { var, words, body } => {
@@ -1436,6 +1394,10 @@ impl ExecutableCommand for Command {
                 format!("while {} do ...", condition.description())
             }
 
+            Command::UntilLoop { condition, .. } => {
+                format!("until {} do ...", condition.description())
+            }
+
             Command::ForLoop { var, words, .. } => {
                 format!("for {} in {} do ...", var, words.join(" "))
             }
@@ -1614,6 +1576,72 @@ fn execute_block(commands: &[Command], state: &mut ShellState) -> Result<Executi
             }
         }
     }
+    Ok(last_result)
+}
+
+#[derive(Clone, Copy)]
+enum LoopKind {
+    While,
+    Until,
+}
+
+/// Execute `while` and `until` without erasing their opposite condition
+/// semantics in the parser representation.
+fn execute_loop(
+    condition: &Command,
+    body: &[Command],
+    state: &mut ShellState,
+    kind: LoopKind,
+) -> Result<ExecutionResult> {
+    let mut last_result = ExecutionResult::Success;
+    let max_iterations = 100_000;
+    let mut iterations = 0;
+    let label = match kind {
+        LoopKind::While => "while",
+        LoopKind::Until => "until",
+    };
+
+    loop {
+        if iterations >= max_iterations {
+            return Err(anyhow::anyhow!(
+                "{}: exceeded {} iterations (safety limit)",
+                label,
+                max_iterations
+            ));
+        }
+        iterations += 1;
+
+        let cond_result = condition.execute(state)?;
+        let cond_exit = match cond_result {
+            ExecutionResult::Success => 0,
+            ExecutionResult::Exit => return Ok(ExecutionResult::Exit),
+            ExecutionResult::Return { exit_code } => {
+                return Ok(ExecutionResult::Return { exit_code });
+            }
+            ExecutionResult::ExternalCommand { exit_code } => exit_code,
+        };
+        let should_continue = match kind {
+            LoopKind::While => cond_exit == 0,
+            LoopKind::Until => cond_exit != 0,
+        };
+        if !should_continue {
+            break;
+        }
+
+        last_result = execute_block(body, state)?;
+        if matches!(
+            last_result,
+            ExecutionResult::Exit | ExecutionResult::Return { .. }
+        ) {
+            return Ok(last_result);
+        }
+
+        if crate::signals::is_interrupt_requested() {
+            crate::signals::clear_interrupt();
+            break;
+        }
+    }
+
     Ok(last_result)
 }
 

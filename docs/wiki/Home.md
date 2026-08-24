@@ -13,7 +13,7 @@ Valence Shell *proves* it.
 
 > **Status — please read before quoting us.**
 > Valence Shell is **v0.9.0, an advanced research prototype (~78% of the roadmap complete). It is NOT production-ready.** The shell runs, is
-> extensively tested (736 tests passing, 0 failures), and the reversibility
+> extensively tested (794 tests passing, 0 failures), and the reversibility
 > proofs are real. What is *not* finished is the mechanically-verified link
 > between the proofs and the running Rust code (today that link is
 > property-tested, ~85% confidence), and the GDPR secure-deletion features are

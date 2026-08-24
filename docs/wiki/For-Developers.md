@@ -38,7 +38,7 @@ nix develop           # fallback
 # The shell (only needs a Rust toolchain)
 cd impl/rust-cli
 cargo build --release
-cargo test            # 736 passing, 0 failures, 14 ignored
+cargo test            # 791 passing, 0 failures, 14 ignored (2026-08-24)
 
 # Re-check the proofs (needs the proof assistants installed)
 just verify-proofs    # all systems

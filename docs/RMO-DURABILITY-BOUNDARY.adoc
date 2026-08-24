@@ -1,0 +1,49 @@
+= RMO Durability and Assurance Boundary
+
+Valence Shell's experimental `obliterate` command performs three overwrite
+passes on a regular file, calls `fsync` after each pass, unlinks the path, and
+on Unix syncs the containing directory. This is a concrete local I/O sequence;
+it is not a claim that every copy of the data has ceased to exist.
+
+== What the implementation establishes
+
+* Every completed overwrite pass was accepted and synchronised by the local
+  filesystem interface before the next pass began.
+* A successful command unlinked the named file and, on Unix, synchronised the
+  containing directory.
+* Shell state records the operation as irreversible.
+* The command attempts to append an audit residue after deletion. Failure to
+  write that residue is reported but does not recreate the deleted file.
+
+== What it does not establish
+
+The file-level sequence cannot show that old bytes are absent from copy-on-write
+extents, filesystem journals, snapshots, flash translation layers, device
+spares, caches, replicas, backups, network storage, or previously exported
+copies. Hardware and storage-stack behaviour must be handled and verified at
+the deployment layer. The command also cannot by itself establish compliance
+with GDPR Article 17 or any other legal regime.
+
+The RMO Z3 model proves properties of an abstract filesystem/block mapping. It
+does not model crashes or storage devices, and there is currently no mechanised
+refinement proof connecting that model to the Rust implementation.
+
+== Audit integrity boundary
+
+The audit-log library supports HMAC-SHA-256 chaining when a key is supplied.
+That detects mutation, deletion, and reordering within the retained chain, but
+it cannot detect truncation of the chain's tail without a trusted external
+checkpoint. Key provisioning and external anchoring are deployment concerns.
+
+The current RMO residue writer deliberately has no implicit key source and
+therefore writes unsigned entries. Unsigned entries are records, not
+tamper-evident attestations. A future integration must explicitly provision a
+key, define its lifecycle, and anchor signed checkpoints before stronger MAA
+claims are appropriate.
+
+== Operational consequence
+
+Treat `obliterate` as a best-effort local file erasure primitive. For a concrete
+deployment, inventory all copies and retention systems, choose an appropriate
+device-level sanitisation or cryptographic-erasure method, verify its outcome,
+and obtain the relevant legal/compliance determination outside this command.

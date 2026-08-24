@@ -434,6 +434,12 @@ pub enum Command {
         body: Vec<Command>,
     },
 
+    /// Until loop: until condition; do body; done
+    UntilLoop {
+        condition: Box<Command>,
+        body: Vec<Command>,
+    },
+
     /// For loop: for var in words...; do body; done
     ForLoop {
         var: String,
@@ -1060,12 +1066,16 @@ fn parse_extended_test(tokens: &[Token]) -> Result<Command> {
     // Extract arguments between [[ and ]]
     let mut args = Vec::new();
     for token in tokens.iter().take(close_pos).skip(1) {
-        if let Token::Word(w) = token {
-            args.push(quoted_word_to_string(w));
-        } else {
-            // For now, convert other tokens to strings
-            // TODO: Handle operators specially in Task #40
-            args.push(format!("{:?}", token));
+        match token {
+            Token::Word(w) => args.push(quoted_word_to_string(w)),
+            Token::And => args.push("&&".to_string()),
+            Token::Or => args.push("||".to_string()),
+            other => {
+                return Err(anyhow!(
+                    "Unsupported token inside extended test: {:?}",
+                    other
+                ));
+            }
         }
     }
 
@@ -1161,8 +1171,11 @@ fn tokens_to_string(tokens: &[Token]) -> Result<String> {
             Token::HereDocDash => result.push_str("<<-"),
             Token::HereString => result.push_str("<<<"),
             Token::Background => result.push('&'),
-            Token::And => return Err(anyhow!("Unexpected && in tokens_to_string")),
-            Token::Or => return Err(anyhow!("Unexpected || in tokens_to_string")),
+            // A left-associative AND-OR list is split at its rightmost
+            // operator. The left side can therefore still contain earlier
+            // operators and must survive reconstruction for recursive parsing.
+            Token::And => result.push_str("&&"),
+            Token::Or => result.push_str("||"),
             Token::ExtendedTestOpen => result.push_str("[["),
             Token::ExtendedTestClose => result.push_str("]]"),
         }
@@ -1172,6 +1185,15 @@ fn tokens_to_string(tokens: &[Token]) -> Result<String> {
 }
 
 fn parse_pipeline(tokens: &[Token]) -> Result<Command> {
+    if tokens
+        .iter()
+        .any(|token| matches!(token, Token::Background))
+    {
+        return Err(anyhow!(
+            "Background pipelines are not supported yet; refusing to run them in the foreground"
+        ));
+    }
+
     // Split token stream on Pipe tokens
     let mut stages: Vec<Vec<Token>> = Vec::new();
     let mut current_stage: Vec<Token> = Vec::new();
@@ -1233,7 +1255,7 @@ fn parse_pipeline(tokens: &[Token]) -> Result<Command> {
     Ok(Command::Pipeline {
         stages: parsed_stages,
         redirects: final_redirects,
-        background: false, // TODO: detect & in pipeline
+        background: false,
     })
 }
 
@@ -2261,8 +2283,9 @@ fn apply_expansion(expansion: &ParameterExpansion, state: &crate::state::ShellSt
 
         ExpansionOp::AssignDefault { value, check_null } => {
             // ${VAR:=default} or ${VAR=default}
-            // TODO: Assignment not implemented - requires mutable state
-            // For v1.1.0, just return default without assigning (like Default)
+            // Semantic assignment requires threading mutable state (and error
+            // propagation) through the expansion API; tracked by #189. Until
+            // that seam is redesigned this returns the default value only.
             if is_unset || (*check_null && is_null) {
                 // Note: In bash, this would also assign to VAR.
                 // Requires signature change: &mut ShellState
@@ -2687,17 +2710,13 @@ pub(crate) fn expand_quoted_word_with_state(
                     result.push_str(&state.expand_variable(name));
                 } else {
                     // In single quotes, variables are literal
-                    match part {
-                        WordPart::Variable(n) => {
-                            result.push('$');
-                            result.push_str(n);
-                        }
-                        WordPart::BracedVariable(n) => {
-                            result.push_str("${");
-                            result.push_str(n);
-                            result.push('}');
-                        }
-                        _ => unreachable!(),
+                    if matches!(part, WordPart::BracedVariable(_)) {
+                        result.push_str("${");
+                        result.push_str(name);
+                        result.push('}');
+                    } else {
+                        result.push('$');
+                        result.push_str(name);
                     }
                 }
             }
@@ -2986,10 +3005,8 @@ fn parse_while_command(input: &str) -> Result<Command> {
     })
 }
 
-/// Parse: until condition; do body; done (same as while but inverted condition)
+/// Parse: until condition; do body; done
 fn parse_until_command(input: &str) -> Result<Command> {
-    // "until" is just "while" with inverted exit code check
-    // We parse it identically but negate at execution time
     let sections = split_control_keywords(input, &["until", "do", "done"]);
 
     let mut condition: Option<Box<Command>> = None;
@@ -3002,8 +3019,6 @@ fn parse_until_command(input: &str) -> Result<Command> {
                 if cond_str.is_empty() {
                     return Err(anyhow!("until: missing condition"));
                 }
-                // Wrap in a negation: until cond ≡ while ! cond
-                // We negate by wrapping in a LogicalOp that inverts the result
                 condition = Some(Box::new(parse_command(cond_str)?));
             }
             "do" => {
@@ -3021,17 +3036,7 @@ fn parse_until_command(input: &str) -> Result<Command> {
         return Err(anyhow!("until: missing 'done' (incomplete until loop)"));
     }
 
-    // until is while with negated condition — we'll handle this in the executor
-    // by adding an "UntilLoop" variant or using a flag. For simplicity, we negate
-    // by checking exit_code != 0 instead of == 0 in WhileLoop execution.
-    // We represent this as WhileLoop with a LogicalOp Not wrapper:
-    // "until cond; do body; done" ≡ "while ! cond; do body; done"
-    // Since we don't have a Not operator, we invert in executor.
-    // Actually, let's just use WhileLoop and negate in executor via a separate variant.
-    // For now, keep it as WhileLoop — the caller can tell from original keyword.
-    // TODO: Add UntilLoop variant if needed. For now, use the same WhileLoop
-    // and let executor handle "until" semantics by negating the condition check.
-    Ok(Command::WhileLoop {
+    Ok(Command::UntilLoop {
         condition: condition.ok_or_else(|| anyhow!("until: missing condition"))?,
         body,
     })
@@ -4074,6 +4079,23 @@ mod tests {
     }
 
     #[test]
+    fn test_background_pipeline_is_rejected_instead_of_foregrounded() {
+        let error = parse_command("printf data | wc -c &").unwrap_err();
+        assert!(error.to_string().contains("Background pipelines"));
+    }
+
+    #[test]
+    fn test_extended_test_preserves_logical_operator_tokens() {
+        let cmd = parse_command("[[ a == a && b == b ]]").unwrap();
+        match cmd {
+            Command::ExtendedTest { args, .. } => {
+                assert_eq!(args, vec!["a", "==", "a", "&&", "b", "==", "b"]);
+            }
+            _ => panic!("Expected ExtendedTest command"),
+        }
+    }
+
+    #[test]
     fn test_parse_pipeline_single_stage_not_pipeline() {
         // Single command with no pipe should not create pipeline
         let cmd = parse_command("ls").unwrap();
@@ -4774,6 +4796,18 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_until_do_done() {
+        let cmd = parse_command("until true; do echo waiting; done").unwrap();
+        match cmd {
+            Command::UntilLoop { condition, body } => {
+                assert!(matches!(*condition, Command::True));
+                assert_eq!(body.len(), 1);
+            }
+            _ => panic!("Expected UntilLoop command"),
+        }
+    }
+
+    #[test]
     fn test_parse_for_in_do_done() {
         let cmd = parse_command("for x in a b c; do echo $x; done").unwrap();
         match cmd {
@@ -5144,6 +5178,64 @@ mod job_control_tests {
                 assert!(matches!(*right, Command::Touch { .. }));
             }
             _ => panic!("Expected LogicalOp command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_mixed_logical_operators_left_associative() {
+        let cmd = parse_command("test -f file && echo yes || echo no").unwrap();
+        match cmd {
+            Command::LogicalOp {
+                operator: LogicalOperator::Or,
+                left,
+                right,
+            } => {
+                assert!(matches!(*right, Command::Echo { .. }));
+                match *left {
+                    Command::LogicalOp {
+                        operator: LogicalOperator::And,
+                        left,
+                        right,
+                    } => {
+                        assert!(matches!(*left, Command::Test { .. }));
+                        assert!(matches!(*right, Command::Echo { .. }));
+                    }
+                    other => panic!("Expected left-associated && expression, got {other:?}"),
+                }
+            }
+            other => panic!("Expected outer || expression, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_three_logical_operators_left_associative() {
+        let cmd = parse_command("true || false && true || false").unwrap();
+        match cmd {
+            Command::LogicalOp {
+                operator: LogicalOperator::Or,
+                left,
+                right,
+            } => {
+                assert!(matches!(*right, Command::False));
+                match *left {
+                    Command::LogicalOp {
+                        operator: LogicalOperator::And,
+                        left,
+                        right,
+                    } => {
+                        assert!(matches!(*right, Command::True));
+                        assert!(matches!(
+                            *left,
+                            Command::LogicalOp {
+                                operator: LogicalOperator::Or,
+                                ..
+                            }
+                        ));
+                    }
+                    other => panic!("Expected middle && expression, got {other:?}"),
+                }
+            }
+            other => panic!("Expected outer || expression, got {other:?}"),
         }
     }
 
