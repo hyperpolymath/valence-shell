@@ -1,18 +1,30 @@
-; SPDX-License-Identifier: MPL-2.0
-;; guix.scm — GNU Guix package definition for valence-shell
-;; Usage: guix shell -f guix.scm
+;; SPDX-License-Identifier: MPL-2.0
+;; Guix development environment.
+;; Usage: guix shell -D -f guix.scm
 
 (use-modules (guix packages)
              (guix build-system gnu)
-             (guix licenses))
+             (guix licenses)
+             (gnu packages base)
+             (gnu packages bash)
+             (gnu packages base)
+             (gnu packages java)
+             (gnu packages rust)
+             (gnu packages cmake)
+             (gnu packages zig)
+             (gnu packages golang)
+             (gnu packages node)
+             (gnu packages elixir)
+             (gnu packages erlang)
+             (gnu packages python))
 
 (package
   (name "valence-shell")
   (version "0.1.0")
   (source #f)
   (build-system gnu-build-system)
+  (inputs (list coreutils bash  make openjdk rust cmake zig go node elixir erlang python))
   (synopsis "valence-shell")
   (description "valence-shell — part of the hyperpolymath ecosystem.")
   (home-page "https://github.com/hyperpolymath/valence-shell")
-  (license ((@@ (guix licenses) license) "MPL-2.0"
-             "https://github.com/hyperpolymath/palimpsest-license")))
+  (license ((@@ (guix licenses) license) "MPL-2.0" "https://github.com/hyperpolymath/palimpsest-license")))
