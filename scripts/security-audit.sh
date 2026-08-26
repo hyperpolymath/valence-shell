@@ -109,7 +109,7 @@ else
 fi
 
 # Check for dangerous path patterns
-if grep -rq "\\.\\./\|\\.\\.\\\\\" "$IMPL_DIR/src" | grep -v "test\|comment"; then
+if grep -rqE '\.\./|\.\.\\' "$IMPL_DIR/src"; then
     check "Hardcoded traversal patterns" "WARN" "Found ../ patterns - verify they're safe"
 else
     check "Hardcoded traversal patterns" "PASS"
