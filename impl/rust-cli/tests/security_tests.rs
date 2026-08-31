@@ -316,7 +316,7 @@ fn security_operation_history_bounds() {
     assert_eq!(history_len, 1000);
 
     // In production, should have configurable limit
-    // TODO: Implement MAX_HISTORY_SIZE
+    // A configurable production history bound remains tracked by #190.
 }
 
 #[test]
@@ -433,7 +433,7 @@ fn security_recursive_glob_bounded() {
     // This would be a recursive glob like: **/*
     // Should either limit depth or timeout gracefully
 
-    // TODO: Implement glob depth limit for production
+    // A production glob-depth limit remains tracked by #191.
 }
 
 // ============================================================

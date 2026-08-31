@@ -74,7 +74,8 @@ and worked examples in
   does a 3-pass overwrite (random/0x00/0xFF) + unlink and writes an append-only
   audit record. It is **best-effort on in-place filesystems** (CoW like
   btrfs/ZFS/APFS and SSDs need hardware erase) and is **not a full GDPR
-  framework** (audit HMAC signing still pending).
+  framework**. The audit library supports HMAC chaining, but RMO key
+  provisioning and external checkpoint anchoring remain pending.
 - The proof-to-code correspondence is **property-tested (~85% confidence)**, not
   mechanically proven.
 

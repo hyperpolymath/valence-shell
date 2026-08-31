@@ -29,20 +29,25 @@ Z3 discharges decidable fragments via SAT-modulo-theories solving.
 | Symlink creation + traversal properties.
 
 | `rmo_operations.smt2`
-| Remove-Match-Obliterate properties (GDPR-relevant).
+| Abstract Remove-Match-Obliterate tree/block-mapping properties. These do not
+  model storage hardware, crash durability, the Rust implementation, or legal
+  compliance.
 |===
 
 == Build / verify
 
 ```bash
-cd proofs/z3
-z3 filesystem_operations.smt2          # single script
-z3 -smt2 copy_move_operations.smt2     # explicit SMT-LIB v2 mode
+./scripts/verify-z3.sh
 ```
 
 A `(check-sat)` returning `unsat` for a negated property is the
 "theorem holds" outcome; `sat` indicates a counterexample (model
 extractable via `(get-model)`).
+
+The verifier checks the expected result sequence for every script, rejects Z3
+diagnostics even when the process exits successfully, and includes a positive
+failure control. The `sat` checks in `filesystem_operations.smt2` and
+`symlink_operations.smt2` are model-consistency checks, not proved theorems.
 
 == Conventions
 

@@ -184,17 +184,11 @@ fi
 
 echo ""
 
-# Z3 Verification (if we add SMT encodings)
+# Z3 Verification (all checked-in encodings, with exact result validation)
 if check_command z3; then
     log_info "Z3 SMT Solver detected"
-    if [ -f "proofs/z3/filesystem.smt2" ]; then
-        run_test "Z3: filesystem.smt2" \
-            "z3 proofs/z3/filesystem.smt2"
-    else
-        log_skip "Z3 proofs not yet created"
-        TOTAL_TESTS=$((TOTAL_TESTS + 1))
-        SKIPPED_TESTS=$((SKIPPED_TESTS + 1))
-    fi
+    run_test "Z3: all encodings and failure control" \
+        "bash scripts/verify-z3.sh"
 else
     log_skip "Z3 not installed"
     TOTAL_TESTS=$((TOTAL_TESTS + 1))

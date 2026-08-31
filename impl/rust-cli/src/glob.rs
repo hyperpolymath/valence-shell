@@ -199,7 +199,7 @@ fn expand_braces_limited(pattern: &str, remaining: usize) -> Vec<String> {
                 // The only site that increments brace_depth (the `ch == '{'`
                 // arm above) sets brace_start = Some(i) when brace_depth was
                 // zero, and only the matched '}' decrements it back. So this
-                // expect documents an unreachable case rather than a TODO.
+                // The expect documents the non-empty split invariant.
                 let start =
                     brace_start.expect("brace_start invariant: Some whenever brace_depth >= 1");
                 let prefix = &pattern[..start];

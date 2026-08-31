@@ -76,7 +76,7 @@ The **Idris2 ABI layer is hole-free** (builds under `--total`, closed via issue
 
 ## Test posture
 
-- **736 tests passing, 0 failures, 14 ignored** (`cargo test` in `impl/rust-cli/`).
+- **794 tests passing, 0 failures, 14 ignored** (`cargo test --all-features` in `impl/rust-cli/`, 2026-08-24).
 - 7 `cargo-fuzz` targets, run in CI via ClusterFuzzLite (address sanitizer).
 - Property-based correspondence tests against the Lean model.
 

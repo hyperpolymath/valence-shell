@@ -24,15 +24,15 @@ permissions:
 jobs:
   echidna-verify:
     name: ECHIDNA Proof Verification
-    # This job builds the external ECHIDNA repository from its current default
-    # branch. Keep that moving integration check out of required PR CI so
-    # valence-shell changes are not blocked by an unrelated upstream breakage.
+    # Keep this integration check out of required PR CI until ECHIDNA verify
+    # supports project roots for Lean, Coq, and Agda. The pinned revision makes
+    # scheduled results reproducible while that upstream contract is repaired.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v6.0.2
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7  # stable
@@ -40,16 +40,22 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@7e35be21c2b94d972b1143087fabc27d7dc881ef  # v2
+        uses: Swatinem/rust-cache@9f151aca7c3990bab7afe2d82ac58088d3b01074  # v2
         with:
           workspaces: impl/rust-cli
 
       - name: Build ECHIDNA from source
+        env:
+          ECHIDNA_REF: e1347cd3552ac6ec7c404da3d941baee3bb51817
         run: |
-          git clone --depth 1 https://github.com/hyperpolymath/echidna.git /tmp/echidna
+          git init /tmp/echidna
           cd /tmp/echidna
+          git remote add origin https://github.com/hyperpolymath/echidna.git
+          git fetch --depth 1 origin "$ECHIDNA_REF"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$ECHIDNA_REF"
           cargo build --release --bin echidna
-          echo "/tmp/echidna/target/release" >> $GITHUB_PATH
+          echo "/tmp/echidna/target/release" >> "$GITHUB_PATH"
 
       - name: Install proof provers
         # Ubuntu 24.04 (noble) packages neither `lean` nor `isabelle`, and
@@ -65,7 +71,7 @@ jobs:
           echo "f5d473c923c093759ae3839073bec2a58e82cb8bc0e4083930e76090da75b310  elan-init.sh" | sha256sum -c -
           sh elan-init.sh -y
           rm -f elan-init.sh
-          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
       - name: Verify ECHIDNA available
         run: echidna list-provers
@@ -81,13 +87,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v6.0.2
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7  # stable
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@7e35be21c2b94d972b1143087fabc27d7dc881ef  # v2
+        uses: Swatinem/rust-cache@9f151aca7c3990bab7afe2d82ac58088d3b01074  # v2
         with:
           workspaces: impl/rust-cli
 

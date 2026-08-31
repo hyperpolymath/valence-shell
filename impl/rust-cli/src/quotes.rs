@@ -226,14 +226,16 @@ pub fn parse_quotes(input: &str) -> Result<Vec<QuotedSegment>> {
 
     // Check for unclosed quotes
     if state != QuoteState::Unquoted {
-        anyhow::bail!(
-            "Unclosed quote (expected closing {})",
-            match state {
-                QuoteState::SingleQuoted => "'",
-                QuoteState::DoubleQuoted => "\"",
-                QuoteState::Unquoted => unreachable!(),
+        let expected_closing = match state {
+            QuoteState::SingleQuoted => "'",
+            QuoteState::DoubleQuoted => "\"",
+            QuoteState::Unquoted => {
+                return Err(anyhow::anyhow!(
+                    "internal quote-state invariant violated while reporting an unclosed quote"
+                ));
             }
-        );
+        };
+        anyhow::bail!("Unclosed quote (expected closing {})", expected_closing);
     }
 
     // Push final segment if any

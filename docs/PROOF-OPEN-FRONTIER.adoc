@@ -252,14 +252,14 @@ Pure induction on list length.
 |===
 
 [[B-7]]
-=== B-7. Audit log HMAC signing + verification
+=== B-7. Audit log HMAC formalisation and external anchoring
 
 [cols="1,4",options="header"]
 |===
-| Statement | `audit_log_append(entry)` produces a log entry whose HMAC-SHA256 signature is verifiable iff the entry was added through the official API.
-| File | `impl/rust-cli/src/audit_log.rs:77,266` — both `TODO: Add HMAC signing` and `TODO: Implement HMAC verification`.
-| Why | Audit log is GDPR/compliance critical. The append-only property is half the story; tamper-detection via HMAC is the other half.
-| Lift | Small implementation, medium proof. The proof is about *the HMAC key not being compromised*, which is an external assumption.
+| Statement | The implemented HMAC-SHA-256 chain detects retained-entry mutation, deletion, and reordering under an uncompromised key; externally anchored checkpoints detect tail truncation.
+| File | `impl/rust-cli/src/audit_log.rs` implements and tests signing and strict verification. RMO key provisioning and external checkpoint anchoring remain open.
+| Why | A local chain cannot detect removal of its final entries unless a trusted party retains a checkpoint. Key lifecycle and concurrency also sit outside the current model.
+| Lift | Medium proof plus deployment design. The assumptions about key secrecy, writer serialization, and external checkpoint retention must be explicit.
 |===
 
 [[B-8]]

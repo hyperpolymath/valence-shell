@@ -1,14 +1,16 @@
 ; SPDX-License-Identifier: MPL-2.0
 ; Valence Shell - RMO (Remove-Match-Obliterate) Operations in Z3/SMT-LIB
 ;
-; This module formalizes secure deletion for GDPR compliance.
-; RMO ensures physical data is unrecoverable after deletion.
+; This module formalizes the logical block-mapping model of secure deletion.
+; It does not model SSD remapping, filesystem journals, snapshots, controller
+; caches, or physical forensic recovery and therefore is not by itself a GDPR
+; compliance proof.
 ;
 ; MAA Framework:
 ; - RMR: Operations can be undone (reversibility)
 ; - RMO: Operations permanently destroy data (obliteration)
 
-(set-logic QF_AUFLIA)
+(set-logic ALL)
 (set-option :produce-proofs true)
 
 ; ============================================================================
@@ -28,6 +30,7 @@
 
 ; Path as before
 (declare-sort Path)
+(declare-sort Filesystem)
 (declare-fun path-eq (Path Path) Bool)
 
 ; Block mapping: path to list of block IDs
@@ -69,9 +72,9 @@
 (declare-fun overwrite-block (Storage BlockId Int) Storage)
 
 ; Axiom: overwrite-block increments overwrite count
-(declare-fun overwrite-block-count (BlockId Int) Int)
+(declare-fun overwrite-block-count (BlockId Int Int) Int)
 (assert (forall ((bid BlockId) (old-count Int) (pattern Int))
-  (= (overwrite-block-count bid pattern)
+  (= (overwrite-block-count bid old-count pattern)
      (+ old-count 1))))
 
 ; multi-pass-overwrite: apply multiple patterns
@@ -99,7 +102,6 @@
 (declare-fun obliterate (StorageFS Path Int) StorageFS)
 
 ; Import filesystem operations (from base theory)
-(declare-sort Filesystem)
 (declare-fun path-exists (Filesystem Path) Bool)
 (declare-fun is-file (Filesystem Path) Bool)
 (declare-fun delete-file (Filesystem Path) Filesystem)
@@ -193,7 +195,7 @@
 (pop)
 
 ; Theorem 4: obliterate_leaves_no_trace
-; GDPR Article 17 compliance
+; Logical tree-and-mapping erasure in this model
 (push)
 (echo "Theorem: obliterate_leaves_no_trace")
 (declare-const sfs StorageFS)
@@ -206,35 +208,6 @@
 (check-sat)  ; Should be UNSAT
 (pop)
 
-; Theorem 5: obliterate_not_reversible (existential)
-; RMO is NOT reversible - no recovery function exists
-; This is harder to express in SMT - we state it as a property
-(push)
-(echo "Theorem: obliterate_not_reversible")
-; The key insight: after obliterate, original block data is lost
-; We model this by asserting that block data changes
-(declare-const sfs StorageFS)
-(declare-const p Path)
-(declare-const bid BlockId)
-(declare-const n Int)
-(assert (obliterate-precondition sfs p))
-(assert (> n 0))
-; After n passes, overwrite count >= n
-(declare-const new-count Int)
-(assert (>= new-count n))
-; The original data at position 0 was some value orig-val
-(declare-const orig-val Int)
-(assert (>= orig-val 0))
-(assert (< orig-val 256))
-; After overwrite, position 0 has pattern value (e.g., 0)
-(declare-const new-val Int)
-(assert (= new-val 0))  ; pattern-zeros
-; If orig-val != 0, data was changed and cannot be recovered
-(assert (not (= orig-val new-val)))
-; This shows information loss - original data is gone
-(check-sat)  ; Should be SAT (there exist cases where data changes)
-(pop)
-
 ; ============================================================================
 ; Summary of Verified Properties
 ; ============================================================================
@@ -244,9 +217,9 @@
 (echo "  [X] obliterate_removes_path - path not in tree after RMO")
 (echo "  [X] obliterate_removes_mapping - block mapping cleared")
 (echo "  [X] obliterate_preserves_other_paths - unrelated paths unchanged")
-(echo "  [X] obliterate_leaves_no_trace - GDPR Article 17 compliance")
-(echo "  [X] obliterate_not_reversible - information loss (vs RMR)")
+(echo "  [X] obliterate_leaves_no_trace - no tree or block mapping in this model")
 (echo "")
 (echo "Key distinction from RMR:")
 (echo "  - RMR (file_operations.smt2): reversible operations")
-(echo "  - RMO (this file): irreversible secure deletion")
+(echo "  - RMO (this file): logical tree-and-mapping erasure only")
+(echo "  - Physical irreversibility is outside this SMT model")

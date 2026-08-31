@@ -13,7 +13,9 @@
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
@@ -55,7 +57,12 @@ pub struct AuditEntry {
     pub root: String,
 
     /// Optional HMAC-SHA256 signature (for tamper detection)
+    #[serde(default)]
     pub signature: Option<String>,
+
+    /// Signature of the preceding entry, forming a tamper-evident chain.
+    #[serde(default)]
+    pub previous_signature: Option<String>,
 }
 
 impl AuditEntry {
@@ -75,8 +82,19 @@ impl AuditEntry {
                 .ok()
                 .and_then(|p| p.to_str().map(|s| s.to_string()))
                 .unwrap_or_else(|| "/".to_string()),
-            signature: None, // TODO: Add HMAC signing
+            signature: None,
+            previous_signature: None,
         }
+    }
+
+    /// Canonical payload authenticated by the HMAC.
+    ///
+    /// The signature itself is excluded; `previous_signature` remains in the
+    /// payload so deletion or reordering inside the log breaks the chain.
+    fn signing_payload(&self) -> Result<Vec<u8>> {
+        let mut unsigned = self.clone();
+        unsigned.signature = None;
+        serde_json::to_vec(&unsigned).context("Failed to serialize audit entry for signing")
     }
 
     /// Serialize to JSON line
@@ -100,6 +118,10 @@ pub struct AuditLog {
     /// Optional HMAC key for signing entries
     hmac_key: Option<Vec<u8>>,
 }
+
+type HmacSha256 = Hmac<Sha256>;
+
+const SIGNATURE_PREFIX: &str = "hmac-sha256:v1:";
 
 impl AuditLog {
     /// Create new audit log manager
@@ -170,8 +192,9 @@ impl AuditLog {
 
     /// Append audit entry to log
     ///
-    /// This is the core append-only operation. Failures are non-fatal
-    /// (shell continues even if audit fails), but logged to stderr.
+    /// This is the core append-only operation. It returns every open, parse,
+    /// signing, write, and sync failure to the caller; the caller decides
+    /// whether an audit failure is fatal to its operation.
     ///
     /// # Arguments
     /// * `entry` - Audit entry to append
@@ -188,13 +211,35 @@ impl AuditLog {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn append(&self, entry: &AuditEntry) -> Result<()> {
+        let mut entry_to_write = entry.clone();
+
+        if let Some(key) = self.hmac_key.as_deref() {
+            let existing = self.read_all_strict()?;
+            entry_to_write.previous_signature = existing
+                .last()
+                .map(|previous| {
+                    previous.signature.clone().ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Cannot append a signed entry after an unsigned audit entry"
+                        )
+                    })
+                })
+                .transpose()?;
+            entry_to_write.signature = Some(Self::sign_entry(&entry_to_write, key)?);
+        } else {
+            // Never persist a caller-supplied signature that this AuditLog
+            // instance cannot authenticate.
+            entry_to_write.signature = None;
+            entry_to_write.previous_signature = None;
+        }
+
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.log_path)
             .context("Failed to open audit log")?;
 
-        let json_line = entry.to_json_line()?;
+        let json_line = entry_to_write.to_json_line()?;
 
         file.write_all(json_line.as_bytes())
             .context("Failed to write audit entry")?;
@@ -241,6 +286,52 @@ impl AuditLog {
         }
 
         Ok(entries)
+    }
+
+    /// Read every non-empty entry, failing on the first malformed line.
+    /// Integrity verification must never skip damage and continue.
+    fn read_all_strict(&self) -> Result<Vec<AuditEntry>> {
+        let content =
+            crate::fs_pure::read_to_string(&self.log_path).context("Failed to read audit log")?;
+
+        content
+            .lines()
+            .enumerate()
+            .filter(|(_, line)| !line.trim().is_empty())
+            .map(|(line_num, line)| {
+                AuditEntry::from_json_line(line).with_context(|| {
+                    format!("Failed to parse audit entry at line {}", line_num + 1)
+                })
+            })
+            .collect()
+    }
+
+    fn sign_entry(entry: &AuditEntry, key: &[u8]) -> Result<String> {
+        let mut mac = HmacSha256::new_from_slice(key)
+            .map_err(|_| anyhow::anyhow!("Invalid HMAC-SHA256 key"))?;
+        mac.update(&entry.signing_payload()?);
+        Ok(format!(
+            "{}{}",
+            SIGNATURE_PREFIX,
+            hex::encode(mac.finalize().into_bytes())
+        ))
+    }
+
+    fn verify_entry(entry: &AuditEntry, key: &[u8]) -> Result<bool> {
+        let Some(signature) = entry.signature.as_deref() else {
+            return Ok(false);
+        };
+        let Some(encoded) = signature.strip_prefix(SIGNATURE_PREFIX) else {
+            return Ok(false);
+        };
+        let Ok(signature_bytes) = hex::decode(encoded) else {
+            return Ok(false);
+        };
+
+        let mut mac = HmacSha256::new_from_slice(key)
+            .map_err(|_| anyhow::anyhow!("Invalid HMAC-SHA256 key"))?;
+        mac.update(&entry.signing_payload()?);
+        Ok(mac.verify_slice(&signature_bytes).is_ok())
     }
 
     /// Read audit entries for a specific time range
@@ -291,20 +382,27 @@ impl AuditLog {
 
     /// Verify audit log integrity (check for tampering)
     ///
-    /// Returns Ok(true) if log is intact, Ok(false) if tampered, Err on read failure.
-    ///
-    /// Note: Only works if HMAC signing is enabled.
+    /// Returns `Ok(true)` only when every entry has a valid HMAC and the
+    /// signature chain is continuous. Returns `Ok(false)` for tampering and
+    /// unsigned/malformed signatures, and an error when no key was configured
+    /// or the log cannot be read strictly.
     pub fn verify_integrity(&self) -> Result<bool> {
-        if self.hmac_key.is_none() {
-            // No signing enabled, cannot verify
-            return Ok(true);
-        }
+        let key = self
+            .hmac_key
+            .as_deref()
+            .context("Cryptographic audit integrity cannot be verified without an HMAC key")?;
+        let entries = self.read_all_strict()?;
+        let mut expected_previous: Option<String> = None;
 
-        // TODO: Implement HMAC verification
-        // For each entry:
-        // 1. Recompute HMAC from entry fields
-        // 2. Compare with stored signature
-        // 3. Return false if mismatch
+        for entry in entries {
+            if entry.previous_signature != expected_previous {
+                return Ok(false);
+            }
+            if !Self::verify_entry(&entry, key)? {
+                return Ok(false);
+            }
+            expected_previous = entry.signature.clone();
+        }
 
         Ok(true)
     }
@@ -406,5 +504,137 @@ mod tests {
         assert_eq!(mkdirs.len(), 2);
         assert_eq!(mkdirs[0].path, "dir1");
         assert_eq!(mkdirs[1].path, "dir2");
+    }
+
+    #[test]
+    fn test_hmac_signed_log_round_trip_and_chain() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let log =
+            AuditLog::new(temp_file.path().to_path_buf(), Some(b"test-key".to_vec())).unwrap();
+
+        let op1 = Operation::new(OperationType::Mkdir, "dir1".to_string(), None);
+        let op2 = Operation::new(OperationType::CreateFile, "file1".to_string(), None);
+        log.append(&AuditEntry::from_operation(&op1, "success", None))
+            .unwrap();
+        log.append(&AuditEntry::from_operation(&op2, "success", None))
+            .unwrap();
+
+        let entries = log.read_all_strict().unwrap();
+        assert_eq!(entries.len(), 2);
+        assert!(entries[0].signature.is_some());
+        assert_eq!(entries[0].previous_signature, None);
+        assert_eq!(entries[1].previous_signature, entries[0].signature);
+        assert!(log.verify_integrity().unwrap());
+    }
+
+    #[test]
+    fn test_hmac_detects_modified_entry() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+        let log = AuditLog::new(path.clone(), Some(b"test-key".to_vec())).unwrap();
+        let op = Operation::new(OperationType::Mkdir, "dir1".to_string(), None);
+        log.append(&AuditEntry::from_operation(&op, "success", None))
+            .unwrap();
+
+        let mut entry = log.read_all_strict().unwrap().remove(0);
+        entry.path = "tampered".to_string();
+        std::fs::write(&path, entry.to_json_line().unwrap()).unwrap();
+
+        assert!(!log.verify_integrity().unwrap());
+    }
+
+    #[test]
+    fn test_hmac_detects_reordering() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+        let log = AuditLog::new(path.clone(), Some(b"test-key".to_vec())).unwrap();
+        for name in ["first", "second"] {
+            let op = Operation::new(OperationType::Mkdir, name.to_string(), None);
+            log.append(&AuditEntry::from_operation(&op, "success", None))
+                .unwrap();
+        }
+
+        let mut entries = log.read_all_strict().unwrap();
+        entries.reverse();
+        let reordered = entries
+            .iter()
+            .map(AuditEntry::to_json_line)
+            .collect::<Result<String>>()
+            .unwrap();
+        std::fs::write(&path, reordered).unwrap();
+
+        assert!(!log.verify_integrity().unwrap());
+    }
+
+    #[test]
+    fn test_hmac_detects_internal_deletion() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+        let log = AuditLog::new(path.clone(), Some(b"test-key".to_vec())).unwrap();
+        for name in ["first", "middle", "last"] {
+            let op = Operation::new(OperationType::Mkdir, name.to_string(), None);
+            log.append(&AuditEntry::from_operation(&op, "success", None))
+                .unwrap();
+        }
+
+        let mut entries = log.read_all_strict().unwrap();
+        entries.remove(1);
+        let with_gap = entries
+            .iter()
+            .map(AuditEntry::to_json_line)
+            .collect::<Result<String>>()
+            .unwrap();
+        std::fs::write(&path, with_gap).unwrap();
+
+        assert!(!log.verify_integrity().unwrap());
+    }
+
+    #[test]
+    fn test_hmac_wrong_key_and_unsigned_log_fail_closed() {
+        let signed_file = NamedTempFile::new().unwrap();
+        let signed_path = signed_file.path().to_path_buf();
+        let signed_log = AuditLog::new(signed_path.clone(), Some(b"correct-key".to_vec())).unwrap();
+        let op = Operation::new(OperationType::Mkdir, "dir1".to_string(), None);
+        signed_log
+            .append(&AuditEntry::from_operation(&op, "success", None))
+            .unwrap();
+        let wrong_key_log = AuditLog::new(signed_path, Some(b"wrong-key".to_vec())).unwrap();
+        assert!(!wrong_key_log.verify_integrity().unwrap());
+
+        let unsigned_file = NamedTempFile::new().unwrap();
+        let unsigned_path = unsigned_file.path().to_path_buf();
+        let unsigned_log = AuditLog::new(unsigned_path.clone(), None).unwrap();
+        unsigned_log
+            .append(&AuditEntry::from_operation(&op, "success", None))
+            .unwrap();
+        assert!(unsigned_log.verify_integrity().is_err());
+
+        let keyed_reader = AuditLog::new(unsigned_path, Some(b"test-key".to_vec())).unwrap();
+        assert!(!keyed_reader.verify_integrity().unwrap());
+    }
+
+    #[test]
+    fn test_hmac_verification_rejects_malformed_log() {
+        let temp_file = NamedTempFile::new().unwrap();
+        std::fs::write(temp_file.path(), "{not-json}\n").unwrap();
+        let log =
+            AuditLog::new(temp_file.path().to_path_buf(), Some(b"test-key".to_vec())).unwrap();
+        assert!(log.verify_integrity().is_err());
+    }
+
+    #[test]
+    fn test_signed_append_rejects_unsigned_history() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+        let op = Operation::new(OperationType::Mkdir, "dir1".to_string(), None);
+        AuditLog::new(path.clone(), None)
+            .unwrap()
+            .append(&AuditEntry::from_operation(&op, "success", None))
+            .unwrap();
+
+        let signed_log = AuditLog::new(path, Some(b"test-key".to_vec())).unwrap();
+        assert!(signed_log
+            .append(&AuditEntry::from_operation(&op, "success", None))
+            .is_err());
     }
 }

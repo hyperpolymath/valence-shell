@@ -5,13 +5,11 @@ on:
   branch_protection_rule:
   schedule:
     - cron: '23 4 * * 1'
-  push:
-    branches: [main]
 
 permissions:
+  actions: read
   contents: read
-  security-events: write
-  id-token: write
+
 jobs:
   analysis:
     # Explicit least-privilege permissions for the OSSF Scorecard reusable

@@ -98,8 +98,8 @@ pub enum OperationType {
     /// Hardware-level secure erase (NIST SP 800-88 Purge)
     /// NOT REVERSIBLE - destroys entire device
     HardwareErase,
-    /// Obliterate: GDPR-compliant irreversible deletion
-    /// NOT REVERSIBLE - secure file deletion with no recovery
+    /// Obliterate: best-effort overwrite and unlink
+    /// NOT REVERSIBLE in shell history; physical recovery is storage-dependent
     Obliterate,
 }
 
