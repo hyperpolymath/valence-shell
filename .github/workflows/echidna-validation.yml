@@ -40,7 +40,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@9f151aca7c3990bab7afe2d82ac58088d3b01074  # v2
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16  # v2
         with:
           workspaces: impl/rust-cli
 
@@ -93,7 +93,7 @@ jobs:
         uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7  # stable
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@9f151aca7c3990bab7afe2d82ac58088d3b01074  # v2
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16  # v2
         with:
           workspaces: impl/rust-cli
 
