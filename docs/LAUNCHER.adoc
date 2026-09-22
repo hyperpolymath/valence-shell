@@ -4,7 +4,7 @@
 entry point for running and integrating `+vsh+`. It conforms to the
 Hyperpolymath *E-Grade Launcher Standard* (`+hyperpolymath/standards+`,
 `+docs/UX-standards/launcher-standard.adoc+` +
-`+launcher/launcher-standard.a2ml+`).
+`+launcher/launcher-standard_praxis.deed+`).
 
 [source,bash]
 ----
