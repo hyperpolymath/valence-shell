@@ -66,7 +66,7 @@ Reference counts come from `git grep -li <name>` on valence-shell `origin/main` 
 
 Feeder facts were read from each repo's default branch via the GitHub API on 2026-09-30. All 17 feeders are on `main` and none is archived.
 
-NOTE: The brief says 19 feeders but lists 18. This document covers the 18 named. If a 19th was intended, it is unassessed; see <<caveats>>.
+NOTE: The brief says 19 feeders but lists 18. D205 dropped `zerostep`, so this document assesses the 17 remaining named feeders. If a 19th was intended, it is unassessed; see <<caveats>>.
 
 == Summary matrix
 
