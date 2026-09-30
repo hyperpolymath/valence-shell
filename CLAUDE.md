@@ -139,7 +139,7 @@ deep-audit session). The corresponding Phase 4C design docs under
 - **4 doctest fixes**: Missing imports, PATH-dependent assertions
 - **Append redirection truncation**: `>>` used `File::create()` (truncates!) instead of `OpenOptions::append()` in `external.rs`
 - **`2>` tokenization**: `file2>out` incorrectly split as `file [2>] out` instead of `file2 [>] out` — now only treats `2>` as error redirect when `2` starts a new token
-- **Logical operator precedence**: `a && b || c` parsed as `a && (b || c)` — fixed to left-to-right `(a && b) || c` via `rposition`
+- **Logical operator precedence**: mixed AND/OR lists incorrectly grouped the OR expression first — fixed to left-to-right evaluation via `rposition`
 - **Shift overflow panic**: `$((1 << 64))` panicked — now returns error for shift counts >= 64
 - **Path traversal**: `resolve_path("../../etc/passwd")` could escape sandbox — now normalizes `..` components and clamps to root
 - **Version mismatch**: `main.rs` reported version 1.0.0 and "256 proofs" — fixed to 0.9.0 and "200+ theorems"
