@@ -1,0 +1,630 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Theory Feed: how the maths, types and prover repos feed valence-shell
+:toc: macro
+:toclevels: 2
+:revdate: 2026-09-30
+:status: DRAFT (direction document, not yet adopted)
+
+toc::[]
+
+== Purpose
+
+Owner directive, 2026-09-30, verbatim:
+
+[quote]
+____
+the work on januskey and other types and absolute zero and so on, are all massively relevant to the design of valence shell. we need to make sure that this stuff is always judged as part of the progress of that stuff in particular so it can be fed into valence shell and the direction both of the next proofs and elements of engineering and so on towards valence shell, and also as guidance on where next to take the work on these maths and theory repos in the right direction for the development we have across other areas of the estate
+____
+
+This document does three things:
+
+. It records what each feeder repo proves or provides *today*.
+. It maps each feeder onto valence-shell's actual open frontier: `PROOF-NEEDS.adoc`, `docs/PROOF-OPEN-FRONTIER.adoc` and open issues.
+. It proposes where each feeder goes next, so that its progress is judged partly by what it feeds valence-shell.
+
+Evidence conventions:
+
+* *Measured* means the claim comes from a file or issue that was read, and the path or number is cited.
+* *Inference* means a proposed fit that no artefact in either repo states yet.
+* *Unverified* means the claim could not be confirmed from primary sources.
+
+== Headline finding
+
+*valence-shell has zero mechanised dependencies on any feeder.* On `origin/main` @ `0355246` (2026-09-27) there is no `Require`, `import`, `open import` or Lake/`_CoqProject` entry naming any feeder anywhere under `proofs/`. Every existing link is one of three kinds:
+
+* a comment, e.g. 9 proof files that credit "Absolute Zero" CNO in comments;
+* a documentation obligation, e.g. `docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc`, which states it is not a mechanised dependency;
+* a tooling invocation (ECHIDNA).
+
+Issue valence-shell#51 records the same fact for echo-types: "0 active imports".
+
+The second structural finding is a *convergence*. Three open issues in three different repos ask the same question, and no repo answers it: where is the formal home of filesystem reversibility?
+
+* absolute-zero#167: port the Coq concrete FS model into Lean so the axioms become theorems.
+* januskey#137: decide the formal home of reversibility, absolute-zero CNO or IS-NOT.
+* nextgen-typing#118: register boundary notes for absolute-zero and januskey.
+
+valence-shell's multi-prover filesystem model is the most developed candidate, and nobody is asking it. See NW-1.
+
+== Method and measurement
+
+Reference counts come from `git grep -li <name>` on valence-shell `origin/main` @ `0355246`. The search was case-insensitive over the whole tree, including `.github/` and `.machine_readable/`. They differ from the baseline supplied with the task:
+
+[cols="2,1,1,4",options="header"]
+|===
+|Feeder |Task baseline |This measurement |Note
+|echidna |20 |43 |Includes files matching only via `echidnabot`, plus workflows and `.machine_readable/`.
+|echo-types |13 |15 |
+|absolute-zero |4 |4 hyphenated; 23 with `absolute.?zero` |The gap is itself a finding. 9 *proof* files name Absolute Zero's CNO in comments and import nothing: `proofs/agda/FilesystemEquivalence.agda`, `proofs/coq/filesystem_composition.v`, `proofs/coq/filesystem_equivalence.v`, `proofs/isabelle/FilesystemEquivalence.thy`, `proofs/lean4/FilesystemComposition.lean`, `proofs/lean4/FilesystemEquivalence.lean`, `proofs/mizar/*`.
+|ephapax |2 |4 |
+|affinescript |2 |6 |Language policy (`.claude/CLAUDE.md`) plus `impl/mcp/src/*.affine`.
+|echidnabot |(in echidna) |3 |
+|tangle |1 |1, a false positive |The only hit is the word "untangles" in `Composition.idr:354`.
+|januskey |0 |0 |
+|all others |0 |0 |
+|===
+
+Feeder facts were read from each repo's default branch via the GitHub API on 2026-09-30. All 17 feeders are on `main` and none is archived.
+
+NOTE: The brief says 19 feeders but lists 18. D205 dropped `zerostep`, so this document assesses the 17 remaining named feeders. If a 19th was intended, it is unassessed; see <<caveats>>.
+
+== Summary matrix
+
+Columns are valence-shell's actual frontier, not generic capabilities:
+
+* *RMR*: reversible core (Remove-Match-Reverse).
+* *Equiv/CNO*: equivalence, Certified Null Operation, C-3.
+* *RMO/loss*: obliterate and disclosure, #92.
+* *Audit*: audit log, attestation and anchoring, B-7.
+* *Txn/crash*: transactions and crash consistency, F-3, #63–#66.
+* *Conc*: concurrency, F-4, #64, #90.
+* *Bounds*: resource bounds, A-6, #190, #191.
+* *Refine*: Lean→Rust refinement, F-1, #93.
+* *ProofCI*: prover and CI infrastructure, #162, D-1, D-3.
+* *Impl*: implementation surface (MCP, app language, alkahest, scripting).
+
+Legend:
+
+* *M* (mechanised import): none exist today.
+* *D* (documented link): a doc or bridge file exists in one of the two repos.
+* *C* (conceptual only): the fit is named in prose, or is an inference.
+* *T* (tooling in use).
+* *—* (no fit found).
+* *→* marks the cell this document recommends making real next.
+
+[cols="3,1,1,1,1,1,1,1,1,1,1",options="header"]
+|===
+|Feeder |RMR |Equiv/CNO |RMO/loss |Audit |Txn/crash |Conc |Bounds |Refine |ProofCI |Impl
+|januskey |C→ |C |C |C→ |C |— |— |— |— |C
+|absolute-zero |C |C→ |C→ |C |— |— |— |— |— |—
+|echidna |— |— |— |— |— |— |— |— |T→ |—
+|tangle |— |C |— |— |— |— |— |— |— |—
+|echo-types |D |D→ |D |— |— |— |— |— |— |—
+|epistemic-types |— |— |C |C→ |— |— |— |— |— |—
+|secret-types |— |— |? |? |— |— |— |— |— |—
+|choreographic-types |— |— |— |— |— |C |— |— |— |—
+|residual-evidence-types |C |— |C |C→ |— |— |— |— |— |—
+|tropical-types |— |— |— |— |— |— |C→ |— |— |—
+|nextgen-typing |— |— |— |— |— |— |— |— |C |—
+|typell |— |— |— |C |C→ |— |— |— |— |—
+|ephapax |— |— |— |— |C |— |— |C |— |D
+|affinescript |— |— |— |C |— |— |— |— |— |T→
+|oblibeny |C |— |— |C |— |— |C |— |— |C→
+|echidnabot |— |— |— |— |— |— |— |— |D→ |—
+|proof-burrower |— |— |— |— |— |— |— |— |C→ |—
+|===
+
+Reading the matrix:
+
+* The *D* cells are almost all echo-types.
+* absolute-zero is graded *C* even though 9 valence-shell proof files credit it: those credits are comments. Its only artefact link runs through a third repo (echo-types `EchoCNOBridge.agda`).
+* The only *T* cells are ECHIDNA and AffineScript.
+* Every other cell is conceptual.
+* januskey is the repo the owner named first, and it has *no* documented link from valence-shell at all.
+
+== Prioritised next work (all feeders)
+
+Priority reflects two things: how directly the item unblocks a named valence-shell gate (the ROADMAP v1.0 gate is "mechanised Lean→Rust correspondence; Echidna integration"), and how much the item also repairs the feeder for the rest of the estate.
+
+. *NW-1: One filesystem model, not three* (valence-shell, absolute-zero, januskey). Decide the canonical formal home of filesystem reversibility.
+** *RULED D204 (2026-09-30): Arm A.* absolute-zero factors out the abstract CNO interface, and valence-shell instantiates it. Posted on absolute-zero#167, januskey#137 and nextgen-typing#118.
+** *The duplication (measured):*
+*** absolute-zero `proofs/coq/filesystem/FilesystemCNO.v` (927 lines) defines its own FS types (`Permission`, `FileMetadata`, `FileEntry`) and re-proves `mkdir_rmdir_inverse`, `create_unlink_inverse` and `rename_inverse`.
+*** valence-shell already proves the same operations: `single_mkdir_reversible` in `filesystem_composition.v:226`, and `write_file_reversible` in `file_content_operations.v:117`.
+** *Obstacle (measured):* absolute-zero `proofs/coq/common/CNO.v` is *not* parametric. `is_CNO` is defined over one concrete instruction machine (`Memory`, `Instruction`, `ProgramState`), and each domain file re-instantiates it (`filesystem/`, `lambda/`, `quantum/`). valence-shell therefore cannot simply `Require` it today.
+** *Arm A, the elegance arm (recommended):*
+*** absolute-zero factors out an abstract CNO interface: a Coq `Module Type` or `Class` over a state type with an equivalence and a step relation. Whether `category/CNOCategory.v` already serves is unverified.
+*** valence-shell's proof files `Require Import` that interface and instantiate it with valence-shell's own model, proving `is_CNO (mkdir;rmdir)` and the rest there. That turns the 9 comment-only credits into real import sites, the first *M* cells in the matrix.
+*** The dependency edge runs feeder→consumer, as in echo-types `EchoCNOBridge.agda`.
+*** `FilesystemCNO.v` and the 21 Lean opaque ops then become redundant. #167 becomes "retire, or keep as a toy instance".
+** *Arm B:* absolute-zero keeps its own FS model and ports it to Lean per #167 as written. Two FS models are then maintained indefinitely, and valence-shell still imports nothing.
+** januskey#137 gets its answer under either arm: januskey's operations refine valence-shell's model.
+** This is an owner decision because it moves a dependency edge between repos. Record the ruling in nextgen-typing#118.
+. *NW-2: ECHIDNA tri-state verdict plus project context* (echidna, valence-shell#162). Two independent defects combine to report 15 known-good proofs "invalid":
+** *valence-shell side:* `scripts/validate-with-echidna.sh:77` invokes `echidna verify <file> --prover <p> --timeout 120 --format <f>` with no `--library` or project root. echidna's verify already accepts `library: Vec<PathBuf>`. Pass `_CoqProject`, `lakefile.lean` and the `.agda-lib` roots.
+** *echidna side:* `src/rust/main.rs` ~L590–631 collapses the result to a bool and prints "✗ Proof is invalid" then `exit(1)`, so an environment failure is indistinguishable from a refutation. Return `Valid | Invalid | EnvironmentError`, with distinct exit codes.
+** Estate benefit: every ECHIDNA consumer stops reading a missing import path as a disproof.
+. *NW-3: First real echo-types import* (echo-types, valence-shell#51). The smallest first step already named in #51: import `EchoObservationalEquivalence` into `proofs/agda/FilesystemEquivalence.agda` and restate `fsEquiv` as `_≡m_`. Then map the remaining pairs:
+** `obliterate_not_injective` → `EchoLossTaxonomy.const-fibre-↔-domain`
+** `operationSequenceReversible` → `EchoNoSectionGeneric` / `EchoOFSUnivF5`
+** `copyFile_reversible` → `EchoTotalCompletion`
+** *Prerequisite in echo-types:* fix #329 (Agda red on main, `EchoHaplotypeCollapsing`) and #322 (unpinned apt `agda`). Otherwise valence-shell imports a library that does not build.
+. *NW-4: januskey becomes a proof consumer, and its engineering feeds valence-shell.*
+** Replace the placeholder theorems in `src/abi/Proofs.idr` with statements over the NW-1 model. Examples of the placeholders: `memoryDefeatsGPU : So (65536>=65536)`, `cnoPairCompose _ _ = Unit`, `tamperDetectable _ _ = Unit`.
+** Sync `echo-types/proofs/agda/EchoJanusBridge.agda`, which has a local 4-variant enum, to januskey's 8-variant `OpKind`.
+** In the other direction, januskey's content-addressed store, append-only log and HMAC attestation (#59) are the engineering pattern for valence-shell B-7.
+. *NW-5: A resource-bound feed for glob and history* (tropical-types → valence-shell #191, #190, A-6). Graded `Resource.*` transport and `hub_ceiling` give the vocabulary for "glob depth/resources are bounded", with static grade equal to dynamic cost. This is an inference. Pair it with tropical-types#58, which removes the banned `deno.lock`.
+. *NW-6: Oblibeny as vsh's verified reversible script subset* (inference, strong). Oblibeny's constrained form has five relevant properties: it is Turing-incomplete, has a total evaluator, reversible ops, an accountability trace and a first-class linear `echo[A,B]`. That is the shape a provably reversible, auditable vsh script would need. The target lands in oblibeny#78 (metatheory toward verified extraction).
+. *NW-7: Epistemic receipts for the audit log* (epistemic-types → valence-shell B-7, #190, #192). `SoundWarrant`, `ReadConsistency` (stale caches, forked histories) and the reject suite are directly reusable as negative controls for audit-log anchoring. Relevant rejects include `ForkedHistory`, `ReplayedArtifact` and `FakeFreshness`. Inference.
+. *NW-8: Residual evidence for `explain` and history analysis* (residual-evidence-types → valence-shell#192). The target claim: the candidate pre-states consistent with a log exist, and the log does not identify them. That is the honest RMO/audit claim, and `Candidate observe r E` is its type. Inference.
+. *NW-9: AffineScript primitives that the MCP port needs* (affinescript → valence-shell `impl/mcp`). The MCP server is now in AffineScript (`impl/mcp/src/{Main,Server,State}.affine`). It still carries `impl/mcp/src/bindings/Deno.affine`. That file is a stub (`module Deno;` plus a TODO), named after a banned runtime. Replace it with a real bun binding. An AffineScript audit log is blocked by affinescript#746 (no hashing/HMAC). Note also affinescript#642 (module search path) and echidna#266/#117 (AffineScript primitives).
+. *NW-10: Registry and naming hygiene* (nextgen-typing, echidnabot, proof-burrower → valence-shell D-1, D-3).
+** Add a *valence-shell consumer row* to `nextgen-typing/docs/TYPE-CONNECTIONS.adoc`.
+** Make each `PROOF-OPEN-FRONTIER` item name its feeder home (D-3).
+** Wire echidnabot's axiom tracking as the D-1 "Print Assumptions" gate.
+** Point proof-burrower's obligation router at the frontier.
+
+Deliberately later:
+
+* choreographic-types (K-CUT open) → F-4 concurrency.
+* typell session transactions → F-3.
+* ephapax typed-WASM → #65.
+* tangle → A-9 and C-9.
+
+Each of these waits on the feeder having content, or on NW-1.
+
+== How to apply
+
+. *Every new issue or PR in a feeder repo states what it feeds valence-shell* in one line, `Feeds valence-shell: <frontier id or issue>`, or `Feeds valence-shell: none`. "None" is an acceptable answer. Omitting the line is not.
+. *Label `feeds:valence-shell`* (repo-local by D206; not in the canonical labels.yml, per its rule 4). It exists in every feeder and in valence-shell as of 2026-09-30, on 90 issues. Apply it to issues whose acceptance criteria change a valence-shell frontier item.
+. *The standing umbrella is valence-shell#210* ("Theory feed: feeder progress toward valence-shell"). It holds one checklist row per NW item above and links each labelled feeder issue.
+. *The valence-shell side of the contract is D-3.* Each entry in `docs/PROOF-OPEN-FRONTIER.adoc` gains a `Feeder:` field naming the repo and module expected to discharge or inform it. A frontier item with no feeder is either valence-shell-internal or a gap to raise with the owner.
+. *Progress is judged at mechanisation, not at documentation.* A feeder link moves from C to D when a bridge doc exists. It moves to M only when a valence-shell proof file imports the feeder module *and* that file builds in CI.
+. Provenance and registries go in `.k9` / `.deed`. Never register feeder provenance in A2ML files; see <<caveats>>.
+
+== Per-feeder sections
+
+=== Proof and kernel
+
+==== januskey
+
+*What it is, and what it proves today.*
+
+* It is a Rust CLI, `jk`, with these commands: delete, modify, move, copy, undo, begin, commit, rollback. It keeps an append-only operation log and SHA-256 content-addressed storage, and offers best-effort `jk shred`.
+* The README carries a CAUTION: "formal proofs pending".
+* `src/abi/Proofs.idr` mixes two kinds of theorem:
+** Genuine transaction state-machine lemmas: `noDoubleCommit`, `pendingCannotCommit`.
+** Placeholders that prove nothing about the system: `memoryDefeatsGPU : So (65536>=65536)`, `cnoPairCompose _ _ = Unit`, `tamperDetectable _ _ = Unit`. januskey's own PROOF-NEEDS says so.
+* `generated/idrisiser/.../Verified/*.idr` does not typecheck, because the module names are lowercase. This is from januskey's PROOF-NEEDS; not re-run here.
+* Measured: 93 tests, 6 proptests, 7 `.idr` files. januskey#134 records conflicting published test counts.
+* Main is red on 7 of 12 workflows (#135). #133 records decorative gates and banned `python3`.
+
+*What it feeds, or should feed, valence-shell.* The link runs in both directions:
+
+* *januskey → valence-shell (engineering):*
+** the inversion-metadata log and content-addressed store, relevant to RMR undo;
+** the attestation chain with HMAC (#59), relevant to B-7;
+** the 8-variant `OpKind` (Copy|Move|Delete|Modify|Obliterate|KeyGen|KeyRotate|KeyRevoke). It includes key-lifecycle operations that valence-shell's RMO key provisioning does not model.
+* *valence-shell → januskey (proof):* valence-shell's reversibility theorems are the formal home januskey#137 is asking for.
+
+*Existing links.*
+
+* valence-shell → januskey: 0 references.
+* echo-types has `docs/bridges/EchoJanusBridge.adoc` and `proofs/agda/EchoJanusBridge.agda`. This is a *name* bridge over a local 4-variant enum, and it has drifted from the 8-variant `OpKind` (echo-types `cross-repo-bridge-status.adoc`, 2026-06-21).
+
+*Missing links.* No shared model, no import, and no statement of which valence-shell operation each `OpKind` refines.
+
+*Next direction.*
+
+. Resolve #137 under NW-1 (owner decision). Restate the `Proofs.idr` placeholders as theorems over the chosen model, or delete them.
+. Get main green (#135) and remove `python3` (#133) before any proof work, so that proof CI means something.
+. Publish the log, store and attestation design as the B-7 reference for valence-shell. Sync EchoJanusBridge to the 8 variants.
+
+==== absolute-zero
+
+*What it is, and what it proves today.*
+
+* It proves the CNO (Certified Null Operation) and OND (Observational Null Disclosure) pillars.
+* Coq: 115 `Qed`, 0 `Admitted`, 61 `Axiom`. #171 records that 73 of 182 Coq theorems rest on axioms.
+* OND-1..5 are axiom-free in Coq, and mirrored in Lean, Agda and Z3. OND-6 is open.
+* The CNO↔OND independence theorem is proved.
+* The key files:
+** `proofs/coq/common/CNO.v` and `proofs/coq/ond/OND.v`.
+** `proofs/coq/filesystem/FilesystemCNO.v`: its own concrete FS model, with `is_fs_CNO`, `mkdir_rmdir_is_cno`, `fs_cno_composition` and `mkdir_alone_not_cno`.
+** `proofs/lean4/FilesystemCNO.lean`: 21 axiomatic opaque ops. It does not compile (#176).
+** `proofs/agda/EchoBridgeCNO.agda`: not `--safe` and not checked (#162).
+* Proofs are not a CI gate (#161).
+
+*What it feeds, or should feed, valence-shell.*
+
+* CNO algebra for C-3 (associativity).
+* The CNO semantics that valence-shell's 9 proof files already credit in comments.
+* OND for the *disclosure* half of RMO (#92): what an observer learns after `obliterate`, stated with residue lists. This matters because valence-shell's `obliterate` is best-effort (3-pass overwrite + unlink) and leaves an unsigned audit residue. OND is the vocabulary for stating that honestly.
+
+*Existing links.*
+
+* 9 valence-shell proof files reference Absolute Zero's CNO in comments, and import nothing.
+* echo-types `EchoCNOBridge.agda` imports absolute-zero's `CNO.agda` directly. This is the only mechanised feeder-to-feeder edge found in this family.
+
+*Missing links.* The two filesystem models are duplicates, with no refinement or import in either direction.
+
+*Next direction.*
+
+. Under NW-1 Arm A, factor out a state-parametric CNO interface from `common/CNO.v`, which today is fixed to one instruction machine. Offer it for valence-shell to import and instantiate. Then retarget #167 from "port FilesystemCNO to Lean" to "retire FilesystemCNO in favour of the valence-shell instance".
+. Make proofs a gate (#161) and fix #176 and #162, so that a feeder valence-shell imports is itself checked.
+. Resolve #175 ("residue list" collides with the shared glossary) before valence-shell #92 adopts the term.
+
+==== echidna
+
+*What it is, and what it proves today.*
+
+* A neurosymbolic multi-prover platform. The README claims 30 prover backends; not individually verified.
+* It provides a trust pipeline, axiom-usage tracking at 4 danger levels, cross-prover exchange (OpenTheory, Dedukti, TPTP, SMT-LIB) and 17 corpus adapters.
+* `verify` accepts `library: Vec<PathBuf>`, and `--diagnose` exists. `diagnostics/proof_failure.rs:719` already suggests `.agda-lib`, `_CoqProject` and `lakefile.lean`.
+
+*What it feeds valence-shell.* The ROADMAP v1.0 gate names "Echidna integration". Specifically:
+
+* multi-prover validation of the ~478 theorem candidates;
+* axiom tracking for D-1;
+* theorem exchange for D-3 name alignment.
+
+*Existing links.* The heaviest in the estate: 43 files. They are:
+
+* `docs/ECHIDNA_INTEGRATION.adoc`;
+* `impl/rust-cli/src/echidna_integration.rs`, a `PropertyRegistry` behind the `echidna` feature, whose entries carry `lean_theorem`;
+* `.github/workflows/echidna-validation.yml`;
+* `scripts/validate-with-echidna.sh`.
+
+*Missing links.* Project and library context is not passed, and the verdict is binary. valence-shell#162, run 28895577871, shows what that produces:
+
+[cols="1,1,1",options="header"]
+|===
+|Prover |Pass |Fail
+|Lean |0 |4
+|Coq |1 |5
+|Agda |0 |4
+|===
+
+*Next direction.*
+
+. NW-2: a tri-state verdict (echidna) and `--library` roots (valence-shell script).
+. Land the Dedukti and OpenTheory bridges (#191, #190). These make D-3 cross-prover theorem alignment mechanical rather than by name.
+. Unblock AffineScript primitives (#266, #117) so ECHIDNA can drive the AffineScript MCP surface.
+
+==== tangle
+
+*What it is, and what it proves today.* A topological programming language where program equivalence is isotopy, built from Compose, Tensor and Pipeline. `proofs/Tangle.lean` (~1604 LoC) proves:
+
+* progress, preservation and determinism;
+* type safety;
+* inference soundness and completeness;
+* an echo-types fragment (EchoClose, Lower, Residue).
+
+Open obligations are tracked in #51 and #27 (TG-6: WASM compilation preserves semantics).
+
+*What it feeds valence-shell.* Inference, and weak. It could supply a diagrammatic equational theory for pipes (A-9 pipe associativity) and operation commutation (C-9).
+
+*Existing links.* None. The single grep hit is a false positive.
+
+*Next direction.*
+
+. Low priority for valence-shell. If pursued, state A-9 as an isotopy instance in `Tangle.lean`, a small self-contained lemma.
+. For the estate, TG-6 (#27) is the higher-value target.
+
+=== Type theories
+
+==== echo-types
+
+*What it is, and what it proves today.*
+
+* A constructive Agda library of 219 `.agda` files, centred on the fibre `Echo f y := Σ (x : A), (f x ≡ y)`.
+* The relevant modules exist:
+** `EchoObservationalEquivalence`, `EchoLossTaxonomy`, `EchoNoSectionGeneric`, `EchoOFSUnivF5` and `EchoTotalCompletion`;
+** `EchoProvenance` and `EchoSecurity`;
+** the bridges `EchoCNOBridge`, `EchoEphapaxBridge` and `EchoJanusBridge`.
+* Main is red on Agda (#329, `EchoHaplotypeCollapsing`). Agda comes from an unpinned apt package (#322). `experimental/echo-additive` is not in CI (#321).
+
+*What it feeds valence-shell.* The L3 semantics of loss:
+
+* observational equivalence of filesystems (`fsEquiv`);
+* the non-injectivity of `obliterate`;
+* no-section results for irreversible sequences;
+* total completion for `copyFile`.
+
+The mapping is in valence-shell#51.
+
+*Existing links.*
+
+* valence-shell has 15 files referencing echo-types, incl. `docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc`. That doc states it is not a mechanised dependency.
+* echo-types has `docs/echo-types/explorations/accountable-shell/README.adoc`, marked EXPLORATORY, "Core Affect: NO", with no Agda artefact.
+
+*Missing links.* The import itself (NW-3).
+
+*Next direction.*
+
+. Fix #329 and #322 so the library valence-shell would import builds reproducibly.
+. Land the #51 first step (NW-3), then promote `accountable-shell` from exploration to a checked module.
+. Keep EchoTypes.jl (#280, Julia) as the estate-facing mirror. It is a permitted language.
+
+==== epistemic-types
+
+*What it is, and what it proves today.* Agda modules:
+
+* Modality, Factive, Belief;
+* Warrant and `SoundWarrant`;
+* `ProofTransport`, the "no-smuggling" discipline;
+* `ReadConsistency`: store histories, stale caches, `ReadView`;
+* EchoBridge.
+
+`tests/reject/` contains:
+
+* `ForgedAcceptance`, `ForgedResidue` and `ForkedHistory`;
+* `LyingVerifier`, `ReplayedArtifact` and `StaleSample`;
+* `UncheckedSkip`, `UnderstatedBound` and `FakeFreshness`;
+* others not listed here.
+
+*What it feeds valence-shell.* Inference: the type of an audit receipt. The goal is to show that a history entry is *known* (factive) rather than *believed*, and that anchoring (B-7) cannot be satisfied by a replayed or forked log. The reject tests are ready-made negative controls.
+
+*Existing links.* None from valence-shell.
+
+*Missing links.* Everything. The fit is conceptual.
+
+*Next direction.*
+
+. Write a worked example, "an audit log entry as a `SoundWarrant`", targeted at valence-shell B-7 (NW-7).
+. Answer #32 (a security model for secret types) jointly with the secret-types mint, because both need the same observer model.
+
+==== secret-types
+
+*What it is.* *Un-minted.* The README is the RSR template placeholder `{{PROJECT_NAME}}`, and #2 asks to define and mint it.
+
+*Assessment.* Not possible on content. By name alone (inference) it would feed the RMO key-provisioning and disclosure story, #92.
+
+*Next direction.* Mint it with a scope statement that names its valence-shell consumer, e.g. obliteration keys or secrets in the audit log. Alternatively, fold it into epistemic-types#32. This is an owner call.
+
+==== choreographic-types
+
+*What it is.*
+
+* A pre-registration notebook. The conjectures K-CUT-LOSS and K-CUT-WARRANT are *open*.
+* The only Agda file is `applications/rapidnj-two-thread.agda`. Its own header says it is "deliberately standalone and is not imported by the repository build: every declaration below is an open interface or an open conjecture, not a proof". It is a set of `postulate`s: `Role`, `State`, `Event`, `project`, `step`, `Antichain2`.
+* #15 (0 source files) is stale by this one file, but is substantively accurate.
+
+*What it feeds valence-shell.* Inference: projection of a global protocol onto roles, with commuting concurrent events. That is the shape of F-4 concurrency, #90 linearizability and #64 multi-process crash.
+
+*Existing links.* None.
+
+*Next direction.*
+
+. Prove one K-CUT instance, however small, before claiming any feed.
+. Make the first worked application two concurrent vsh operations on disjoint paths commuting, which is C-9. That serves valence-shell directly and is a cleaner test case than RapidNJ.
+
+==== residual-evidence-types
+
+*What it is, and what it proves today.*
+
+* A checked minimal Agda core: Core, Composition, Revision, `Finite/Checker` and `Finite/Soundness`.
+* Integration comparisons with Echo and Epistemic.
+* 9 reject tests.
+* A hosted proof run exists: 35781018563 at `938a7a5`.
+
+*What it feeds valence-shell.* Inference: `Candidate observe r E`, presence without identification. This is the type of an honest `explain` or history-analysis answer (#192): "these pre-states are consistent with the log", without claiming which one. It is also the right residue claim after `obliterate`.
+
+*Existing links.* None.
+
+*Next direction.*
+
+. Model one valence-shell log fragment (mkdir, write, obliterate) as a finite instance, and run it through `Finite/Checker` (NW-8).
+. Align its residue vocabulary with absolute-zero#175 before both reach valence-shell.
+
+==== tropical-types
+
+*What it is, and what it proves today.*
+
+* Lean 4, with no Mathlib and no `sorry`.
+* `TropicalSessionTypes` proves static grade = dynamic cost.
+* `TropicalAdapterPath` provides `hub_ceiling`.
+* A `Resource.*` grade axis has parametric transport.
+* Hygiene issues:
+** #58: a banned `deno.lock` remains.
+** #57: Isabelle is not CI-gated.
+** #59: pins.
+
+*What it feeds valence-shell.* Inference: max-plus resource grades give a proof vocabulary for the following:
+
+* bounded recursive glob (#191, A-6 termination and complexity);
+* history retention bounds (#190).
+
+*Existing links.* None.
+
+*Next direction.*
+
+. Remove `deno.lock` (#58), which is estate doctrine.
+. State a glob-expansion cost grade as a Lean example whose bound matches the depth limit #191 proposes (NW-5).
+. Gate the Isabelle mirror (#57) or drop it.
+
+==== nextgen-typing
+
+*What it is.* A coordination monorepo.
+
+* `docs/TYPE-CONNECTIONS.adoc` is the family map (Echo, Epistemic, Tropical, Residual, Choreographic) with a glossary. Its dashed arrows are conceptual only.
+* Ownership rules live in `placement.a2ml`. That file is A2ML, which is legacy; see <<caveats>>.
+* #118 registers boundary notes for kategoria, typell, absolute-zero and januskey; secret-types is pending.
+* #57: verification and proofs are not built in CI.
+
+*What it feeds valence-shell.* Governance rather than theorems. It is the natural single place to record which type theory feeds which valence-shell frontier item.
+
+*Existing links.* None to valence-shell.
+
+*Next direction.*
+
+. Add valence-shell as a *consumer row* in TYPE-CONNECTIONS, with one arrow per NW item, each labelled M, D or C (NW-10).
+. The NW-1 ruling (D204) is recorded on #118.
+. Migrate `placement.a2ml` to `.k9` or `.deed` rather than extending it.
+
+==== typell
+
+*What it is.* A verification kernel for database queries:
+
+* Idris2 specs, a Rust kernel (58 `.rs` files), Zig FFI and JSON-RPC.
+* Type features: dependent, linear, session ("transactions atomic"), QTT, effects, modal, and proof-carrying certificates.
+* It delegates proving to Echidna.
+* #62 asks for the family-map link.
+
+*What it feeds valence-shell.* Inference, on two fronts:
+
+* The begin/commit/rollback session protocol, relevant to valence-shell transactions and F-3.
+* Proof-carrying certificates as the model for a vsh command that carries its own reversibility certificate. This is also the shape of `PropertyRegistry.lean_theorem`.
+
+*Existing links.* None.
+
+*Next direction.*
+
+. Extract the session-typed transaction protocol as a standalone spec that valence-shell's transaction layer, and januskey's begin/commit/rollback, can both be checked against.
+. Close #62 by adding typell to the map with its valence-shell edge.
+
+=== Languages
+
+==== ephapax
+
+*What it is, and what it proves today.*
+
+* A dyadic linear+affine language targeting WASM.
+* Coq in `formal/*.v`: 18 files including `Typing`, `Semantics`, `Echo.v` and `L1ChoreoExperiment`. There is also Idris2.
+* A second design draft is in progress (`V1-TO-V2.adoc`).
+* Open soundness-relevant issues: #348 (region miscompile), #378 (Creusot), #380 (partiality waiver) and #240–242 (Phase 3b).
+
+*What it feeds valence-shell.* Inference: the typed-WASM boundary for crash frontier C (#65, Idris2-via-typed-WASM), and linear resource handling for file handles.
+
+*Existing links.*
+
+* valence-shell `alkahest-shell-transmuter/` README claims "Ephapax linear types". However, alkahest is a *scaffold*: README, ROADMAP, a Zig FFI stub and contractiles, with no engine. It is EUPL-1.2.
+* It also carries `examples/web-project-deno.json`, which is Deno and banned.
+* echo-types has `EchoEphapaxBridge.agda`; its doc is echo-types#164.
+
+*Missing links.* Any working consumer.
+
+*Next direction.*
+
+. Fix the region miscompile (#348) before anything relies on ephapax's linearity guarantee.
+. Decide whether alkahest is live. If it is, replace the Deno example. If it is not, record it as parked in valence-shell so it stops asserting a link.
+. For #65, a single typed-WASM crash-boundary lemma in `formal/` would be the first real feed.
+
+==== affinescript
+
+*What it is.*
+
+* An affine core with "faces" that compile to typed WASM: 519 `.affine` files. The Agda and Coq metatheory is partial.
+* Blocking issues:
+** #746: no hashing or HMAC.
+** #642: no module search path.
+** #563: the v1 ledger.
+
+*What it feeds valence-shell.* The application language. valence-shell `.claude/CLAUDE.md` names AffineScript as primary (replacing ReScript and TypeScript). `impl/mcp/src/{Main,Server,State}.affine` exists on main. Note that PROOF-NEEDS still refers to `Server.res`, which is stale.
+
+*Existing links.* 6 files. This is a real tooling link (T).
+
+*Missing links.*
+
+* `impl/mcp/src/bindings/Deno.affine` exists, and is a stub. Its entire body is `module Deno;` and `// TODO: Complete semantic implementation`, with the header "Ported via Harvard Engine bulk-processor". The MCP surface is therefore named after a banned runtime and has no working runtime binding at all. It needs bun bindings.
+* An AffineScript audit log (B-7) cannot be written until #746 lands.
+
+*Next direction.*
+
+. Land hashing and HMAC (#746). This unblocks valence-shell B-7 in AffineScript, and any estate service that signs records.
+. Provide bun bindings so valence-shell can drop `Deno.affine`.
+. Land the module search path (#642), which multi-file MCP needs.
+
+==== oblibeny
+
+*What it is, and what it proves today.*
+
+* Described as a "secure edge language for reversibility and accountability".
+* Its constrained form is Turing-incomplete, with a total evaluator, reversible operations, an accountability trace and a first-class linear `echo[A,B]`.
+* `src/abi/Lang/{Syntax,Eval,Checker,Resource,Reversible}.idr` are total, with no escape hatches.
+* #78 tracks the metatheory toward verified extraction.
+
+*What it feeds valence-shell.* Inference, and the strongest unexploited fit in the set. The constrained form is exactly what a *provably reversible, auditable vsh script* would be:
+
+* termination is guaranteed, which addresses the A-6 style of bound;
+* reversibility is by construction, which is RMR lifted to scripts;
+* the accountability trace is the audit log, B-7.
+
+*Existing links.* None (0 references).
+
+*Next direction.*
+
+. Write a design note in oblibeny stating the vsh script subset: which vsh operations are oblibeny primitives, and what `Reversible.idr` guarantees about their composition (NW-6).
+. Aim #78's extraction target at that subset.
+
+=== Provers and infrastructure
+
+==== echidnabot
+
+*What it is.*
+
+* A proof-aware CI bot, the gitbot-fleet Tier-1 Verifier. It runs 12 provers via ECHIDNA with podman isolation, and has 184 tests.
+* Bot modes are configured in `.machine_readable/bot_directives/echidnabot.a2ml`. That file is A2ML, which is legacy.
+* Open issues:
+** #57: proof caching and incremental runs.
+** #58: consensus voting.
+** #61: prover images.
+** #95, #67: path dependencies.
+** #83, #87: SPDX.
+
+*What it feeds valence-shell.* The CI gate for the multi-prover suite, and the enforcement point for D-1 (a "Print Assumptions" axiom guard).
+
+*Existing links.* 3 valence-shell files reference it.
+
+*Missing links.* No D-1 gate exists. It inherits the #162 false-invalid problem until NW-2 lands.
+
+*Next direction.*
+
+. After NW-2, run echidnabot on valence-shell with axiom tracking, failing on any *new* axiom beyond the registered set (`funext`, `is_empty_dir_dec`, `axStringEqRefl`, `axBits8EqRefl`).
+. Land incremental proof caching (#57), because 6 provers per PR is expensive.
+. Move its directives off A2ML.
+
+
+
+==== proof-burrower
+
+*What it is.*
+
+* The README describes PseudoScript, which does not match the code. Treat the README as unverified.
+* The real code is in two crates, `burrower-core` and `burrower-cli`. `burrower-core` contains:
+** `goal.rs`: parses obligations into signature tokens.
+** `corpus.rs`: indexes lemmas from libraries.
+** `ledger.rs`: an append-only Burrow Ledger of attempts.
+** `oracle.rs`: a pre-proof numeric oracle for tropical claims.
+** `attempt.rs`: specialist playbooks.
+* PROOF-STATUS reports 0/7.
+
+*What it feeds valence-shell.* Inference: obligation routing. It could index echo-types and absolute-zero as corpora, and home each open `PROOF-OPEN-FRONTIER` item to candidate lemmas. That mechanises the D-3 `Feeder:` field.
+
+*Existing links.* None.
+
+*Next direction.*
+
+. Fix the README so it describes the crates.
+. Make valence-shell's frontier the first real corpus-routing target, with echo-types and absolute-zero as the corpora.
+
+[[caveats]]
+== Caveats and unverified items
+
+* *Feeder count.* The brief named 18 feeders. zerostep was dropped by D205 (a VAE dataset normaliser with no fit), which leaves 17.
+* *Not assessable on content:*
+** secret-types, which is un-minted.
+** choreographic-types, which has no proofs and only postulates, though it is assessed as far as it goes.
+** proof-burrower's README, which is mismatched; its crates *were* assessed.
+* *Unverified:*
+** echidna's "30 prover backends" figure.
+** januskey's idrisiser typecheck failure, taken from its own PROOF-NEEDS and not re-run.
+** Absolute-zero's axiom counts, taken from its docs and issues and not recounted.
+* *Every "Inference" fit* above is a proposal. No artefact in either repo states it.
+* *A2ML is dead; do not build on it.* The following files exist today and are legacy: valence-shell `.machine_readable/IDRIS2_AXIOMS.a2ml` (the axiom registry PROOF-NEEDS points at), echidnabot `echidnabot.a2ml` and nextgen-typing `placement.a2ml`. Where this document says "registry", it means `.k9` / `.deed`. Migrate these files; never extend them.
+* *Banned runtimes found in the feed path* (the estate is bun-only):
+** valence-shell `impl/mcp/src/bindings/Deno.affine` (a stub);
+** `alkahest-shell-transmuter/examples/web-project-deno.json`;
+** tropical-types `deno.lock` (#58);
+** januskey `python3` (#133).
+* *Snapshot dates.* valence-shell was read at `origin/main` `0355246` (2026-09-27). Feeder state was read on 2026-09-30. Red/green status and issue numbers decay; re-check before acting.
