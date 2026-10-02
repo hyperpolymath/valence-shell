@@ -58,7 +58,7 @@ theorem symlink_unlink_reversible (p : Path) (fs : Filesystem)
       exact ⟨node, hfs⟩
   · simp [h]
 
-/-- Summary:
+/- Summary:
     ✓ Symlink creation and removal operations
     ✓ Preconditions for safe symlink creation
     ✓ Reversibility: unlink(symlink(p, fs)) = fs

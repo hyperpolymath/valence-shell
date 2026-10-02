@@ -1,7 +1,13 @@
 -- SPDX-License-Identifier: MPL-2.0
 -- Valence Shell — Lean 4 Proof Package
 --
--- Last verified working: Lean 4 v4.12.0 (2026-03-10)
+-- Last verified working: Lean 4 v4.34.1 (2026-10-02)
+--   Builds clean: FilesystemModel, FileOperations, FilesystemComposition,
+--   FilesystemEquivalence, SymlinkOperations, Extraction, CrashConsistency,
+--   PathTraversal, model_oracle.
+--   Do NOT build (already broken on v4.12.0, not port regressions):
+--   FileContentOperations, RMOOperations, CopyMoveOperations,
+--   PermissionOperations.
 -- Toolchain pinned in: lean-toolchain
 -- CI workflow:          .github/workflows/lean-verification.yml
 --                       .github/workflows/rust-cli.yml (lean4 job)
