@@ -138,6 +138,13 @@ pub fn verify_mkdir(root: &str, path: &str) -> Result<()> {
 ///
 /// `notRoot` is mapped to "the resolved path is not the sandbox root", since
 /// `/` and any `..` that would escape both resolve to the root.
+///
+/// `isEmpty` is implemented as "the directory has no entries". The Lean
+/// `isEmptyDir` (FilesystemModel.lean) quantifies over `child.isPrefixOf p`,
+/// i.e. over the *ancestors* of `p`, not its descendants; read literally it
+/// forbids the parent from existing, which contradicts `parentWritable`, so
+/// the structure as written is unsatisfiable for any non-root path. This
+/// check follows the evident intent instead.
 pub fn verify_rmdir(root: &str, path: &str) -> Result<()> {
     let full = resolve(root, path);
     if !node_exists(&full) {
@@ -146,7 +153,7 @@ pub fn verify_rmdir(root: &str, path: &str) -> Result<()> {
     if !node_is_dir(&full) {
         anyhow::bail!("Path is not a directory (ENOTDIR)");
     }
-    let mut entries = fs::read_dir(&full).context("rmdir: cannot read directory")?;
+    let mut entries = fs::read_dir(&full)?;
     if entries.next().is_some() {
         anyhow::bail!("Directory is not empty (ENOTEMPTY)");
     }
