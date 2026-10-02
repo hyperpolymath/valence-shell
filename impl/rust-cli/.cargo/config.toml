@@ -1,8 +1,0 @@
-# Cargo configuration for Lean FFI linking
-
-[target.x86_64-unknown-linux-gnu]
-# Link paths for Lean runtime verification (when lean-runtime-checks feature is enabled)
-rustflags = [
-    "-L", "/var$REPOS_DIR/valence-shell/impl/zig/zig-out/lib",
-    "-C", "link-arg=-Wl,-rpath,/var$REPOS_DIR/valence-shell/impl/zig/zig-out/lib",
-]

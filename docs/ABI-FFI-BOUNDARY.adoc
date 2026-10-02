@@ -69,8 +69,8 @@ languages link against. The C-ABI-_provider_ role belongs to
 (11 exports, wired to the Idris2 ABI declarations). `+impl/zig/+` is an
 experimental fast-path lib plus a Lean-runtime wrapper, gated on the
 not-yet-built BEAM daemon. Collapsing the two is future work.
-* *The primary Rust CLI (`+impl/rust-cli/+`) does not link the FFI.* Its
-`+build.rs+` is intentionally a no-op; `+vsh+` is a self-contained
+* *The primary Rust CLI (`+impl/rust-cli/+`) does not link the FFI.* It has
+no `+build.rs+` and no link flags; `+vsh+` is a self-contained
 pure-Rust shell today. Wiring it to the Zig FFI is future work.
 
 === Deferred (code-level consolidation — needs owner sign-off)
@@ -80,8 +80,9 @@ the shipping shell:
 
 [arabic]
 . Port `+ffi/rust+` to Zig, or fold it behind the Zig FFI.
-. Wire `+impl/rust-cli+` to the Zig FFI (replace the no-op
-`+build.rs+`).
+. Wire `+impl/rust-cli+` to the Zig FFI (would need a `+build.rs+`
+and link flags; the former no-op `+build.rs+` and broken
+`+.cargo/config.toml+` link path were removed).
 . Collapse `+impl/zig+` into `+ffi/zig+`.
 
 Until then, the spine above is the documented contract, and the three
