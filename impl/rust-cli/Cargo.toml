@@ -61,6 +61,9 @@ ctrlc = "3.5"
 # Unix syscalls (mkfifo for process substitution)
 libc = "0.2"
 
+# Safe syscall wrappers (access(2) for the precondition checks)
+nix = { version = "0.31", default-features = false, features = ["fs", "user"] }
+
 # Glob pattern matching
 glob = "0.3"
 
