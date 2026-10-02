@@ -78,8 +78,7 @@ pub enum CommandError {
 pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
-    // Optional Lean 4 verification (compile-time feature flag)
-    // Provides mathematical guarantee that preconditions are satisfied
+    // Runtime check of the Lean 4 precondition (see verification.rs)
     verification::verify_mkdir(state.root(), path)?;
 
     // Check preconditions (matching Coq)
@@ -146,7 +145,7 @@ pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 pub fn rmdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
-    // Optional Lean 4 verification
+    // Runtime check of the Lean 4 precondition (see verification.rs)
     verification::verify_rmdir(state.root(), path)?;
 
     // Check preconditions
@@ -210,7 +209,7 @@ pub fn rmdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
-    // Optional Lean 4 verification
+    // Runtime check of the Lean 4 precondition (see verification.rs)
     verification::verify_create_file(state.root(), path)?;
 
     if full_path.exists() {
@@ -273,7 +272,7 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
-    // Optional Lean 4 verification
+    // Runtime check of the Lean 4 precondition (see verification.rs)
     verification::verify_delete_file(state.root(), path)?;
 
     if !full_path.exists() {
@@ -341,7 +340,7 @@ pub fn cp(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
     let src_path = state.resolve_path(src);
     let dst_path = state.resolve_path(dst);
 
-    // Optional verification
+    // Runtime check of the Lean 4 precondition (see verification.rs)
     verification::verify_copy_file(state.root(), src, dst)?;
 
     // Check preconditions (matching Lean 4 copyFilePrecondition)
@@ -418,7 +417,7 @@ pub fn mv(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
     let src_path = state.resolve_path(src);
     let dst_path = state.resolve_path(dst);
 
-    // Optional verification
+    // Runtime check of the Lean 4 precondition (see verification.rs)
     verification::verify_move(state.root(), src, dst)?;
 
     // Check preconditions (matching Lean 4 movePrecondition)
@@ -496,7 +495,7 @@ pub fn mv(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
 pub fn symlink(state: &mut ShellState, target: &str, link: &str, verbose: bool) -> Result<()> {
     let link_path = state.resolve_path(link);
 
-    // Optional verification
+    // Runtime check of the Lean 4 precondition (see verification.rs)
     verification::verify_symlink(state.root(), target, link)?;
 
     // Check preconditions (matching Lean 4 SymlinkPrecondition)
