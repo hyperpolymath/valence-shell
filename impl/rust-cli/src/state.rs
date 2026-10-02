@@ -11,7 +11,7 @@ use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 use crate::functions::FunctionTable;
@@ -561,38 +561,7 @@ impl ShellState {
     /// Resolve a path relative to sandbox root
     /// Prevents path traversal attacks via `..` components
     pub fn resolve_path(&self, path: &str) -> PathBuf {
-        let raw = if let Some(stripped) = path.strip_prefix('/') {
-            self.root.join(stripped)
-        } else {
-            self.root.join(path)
-        };
-
-        // Normalize path components to prevent traversal via ..
-        let mut normalized = PathBuf::new();
-        for component in raw.components() {
-            match component {
-                std::path::Component::ParentDir => {
-                    // Only pop if we're still within the sandbox root
-                    if normalized.starts_with(&self.root) && normalized != self.root {
-                        normalized.pop();
-                    }
-                    // If popping would escape root, silently clamp to root
-                }
-                std::path::Component::CurDir => {
-                    // Skip . components
-                }
-                other => {
-                    normalized.push(other);
-                }
-            }
-        }
-
-        // Final safety check: ensure result is within sandbox
-        if !normalized.starts_with(&self.root) {
-            self.root.clone()
-        } else {
-            normalized
-        }
+        resolve_under_root(&self.root, path)
     }
 
     /// Get root path as string (for Lean FFI)
@@ -947,6 +916,47 @@ struct SerializableState {
     active_transaction: Option<Transaction>,
     #[serde(default)]
     previous_dir: Option<PathBuf>,
+}
+
+/// Resolve `path` against the sandbox `root`, clamping any `..` traversal so
+/// the result never escapes `root`.
+///
+/// A leading `/` is treated as relative to `root`; `.` components are dropped.
+/// This is the single path-resolution rule shared by [`ShellState::resolve_path`]
+/// and the precondition checks in [`crate::verification`].
+pub fn resolve_under_root(root: &Path, path: &str) -> PathBuf {
+    let raw = if let Some(stripped) = path.strip_prefix('/') {
+        root.join(stripped)
+    } else {
+        root.join(path)
+    };
+
+    // Normalize path components to prevent traversal via ..
+    let mut normalized = PathBuf::new();
+    for component in raw.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                // Only pop if we're still within the sandbox root
+                if normalized.starts_with(root) && normalized != root {
+                    normalized.pop();
+                }
+                // If popping would escape root, silently clamp to root
+            }
+            std::path::Component::CurDir => {
+                // Skip . components
+            }
+            other => {
+                normalized.push(other);
+            }
+        }
+    }
+
+    // Final safety check: ensure result is within sandbox
+    if !normalized.starts_with(root) {
+        root.to_path_buf()
+    } else {
+        normalized
+    }
 }
 
 #[cfg(test)]
