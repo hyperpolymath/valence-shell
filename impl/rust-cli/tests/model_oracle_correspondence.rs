@@ -14,10 +14,14 @@
 //! Any disagreement is a genuine correspondence divergence between the proven
 //! model and the runtime — the thing a mechanized correspondence is meant to catch.
 //!
-//! Gating: if the oracle binary is not built, the test SKIPS (prints how to build
-//! it) rather than failing, so `cargo test` stays green without a Lean toolchain.
+//! Gating: the test is `#[ignore]`d, so a plain `cargo test` (no Lean toolchain)
+//! reports it as IGNORED rather than passing it. Run it explicitly with
+//! `--ignored`; when run, a missing or invalid oracle is a hard FAILURE, never a
+//! silent skip-as-pass.
 //! Build it with:  cd proofs/lean4 && lake build model_oracle
 //! or:             just build-model-oracle
+//! Run it with:    cargo test --test model_oracle_correspondence -- --ignored
+//! or:             just test-correspondence-model
 
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -57,25 +61,33 @@ impl Rng {
     }
 }
 
-/// Locate the compiled Lean model oracle. Env override wins; otherwise the
-/// default lake build path relative to this crate.
-fn locate_oracle() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("VSH_MODEL_ORACLE") {
+/// Locate the compiled Lean model oracle, panicking if it cannot be found.
+///
+/// If `VSH_MODEL_ORACLE` is set it must name an existing file: an invalid value
+/// panics instead of silently falling back to the default path, so a typo can
+/// never cause a different (or no) oracle to be used. Otherwise the default lake
+/// build path relative to this crate is used, and its absence also panics.
+fn locate_oracle() -> PathBuf {
+    if let Some(p) = std::env::var_os("VSH_MODEL_ORACLE") {
         let pb = PathBuf::from(p);
-        if pb.is_file() {
-            return Some(pb);
-        }
+        assert!(
+            pb.is_file(),
+            "VSH_MODEL_ORACLE is set to {pb:?}, which is not a file. Unset it to \
+             use the default lake build path, or point it at a built model_oracle."
+        );
+        return pb;
     }
     // impl/rust-cli/tests -> repo root -> proofs/lean4/.lake/build/bin/model_oracle
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let candidate = manifest
-        .join("../../proofs/lean4/.lake/build/bin/model_oracle")
-        .canonicalize()
-        .ok()?;
-    if candidate.is_file() {
-        Some(candidate)
-    } else {
-        None
+    let default = manifest.join("../../proofs/lean4/.lake/build/bin/model_oracle");
+    match default.canonicalize() {
+        Ok(candidate) if candidate.is_file() => candidate,
+        _ => panic!(
+            "Lean model oracle not found at {default:?}.\n\
+             Build it with:  cd proofs/lean4 && lake build model_oracle\n\
+             or:             just build-model-oracle\n\
+             or set VSH_MODEL_ORACLE=/path/to/model_oracle"
+        ),
     }
 }
 
@@ -236,22 +248,20 @@ fn rust_kind(root: &std::path::Path, rel: &str) -> &'static str {
     }
 }
 
+/// Differential test: apply generated precondition-respecting op sequences to
+/// the real Rust implementation and to the compiled Lean model oracle, and assert
+/// both agree on the node type at every touched path. Ignored by default because
+/// it needs the Lean oracle; when run, a missing oracle fails the test.
 #[test]
+#[ignore = "needs Lean model_oracle — build with `just build-model-oracle`, run with --ignored"]
 fn rust_matches_proven_lean_model() {
-    let Some(oracle) = locate_oracle() else {
-        eprintln!(
-            "SKIP model_oracle_correspondence: Lean model oracle not built.\n\
-             Build it with:  cd proofs/lean4 && lake build model_oracle\n\
-             or:             just build-model-oracle\n\
-             or set VSH_MODEL_ORACLE=/path/to/model_oracle"
-        );
-        return;
-    };
+    let oracle = locate_oracle();
 
     const SEQUENCES: usize = 200;
     const MAX_OPS: usize = 14;
     let mut rng = Rng::new(20260717u64);
     let mut checked_probes = 0usize;
+    let mut sequences_run = 0usize;
 
     for seq in 0..SEQUENCES {
         let (ops, probes) = gen_sequence(&mut rng, MAX_OPS);
@@ -278,6 +288,8 @@ fn rust_matches_proven_lean_model() {
                 )
             });
         }
+
+        sequences_run += 1;
 
         // Ask the proven model for the same probes.
         let model = oracle_query(&oracle, &ops, &probes);
@@ -307,10 +319,15 @@ fn rust_matches_proven_lean_model() {
     }
 
     assert!(
+        sequences_run > 0,
+        "no sequences were run — generator produced only empty sequences"
+    );
+    assert!(
         checked_probes > 0,
         "no probes were checked — generator produced only empty sequences"
     );
     eprintln!(
-        "model_oracle_correspondence: {checked_probes} probes agreed across {SEQUENCES} sequences"
+        "model_oracle_correspondence: {checked_probes} probes agreed across \
+         {sequences_run} non-empty sequences (of {SEQUENCES} generated)"
     );
 }

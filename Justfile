@@ -51,9 +51,10 @@ build-model-oracle:
     @echo "✓ model oracle -> proofs/lean4/.lake/build/bin/model_oracle"
 
 # Run the differential correspondence test (proven Lean model vs Rust impl).
-# Builds the oracle first so the test does not skip.
+# Builds the oracle first; the test is #[ignore]d so it needs --ignored, and
+# fails (never skips) if the oracle is missing.
 test-correspondence-model: build-model-oracle
-    cd impl/rust-cli && cargo test --test model_oracle_correspondence -- --nocapture
+    cd impl/rust-cli && cargo test --test model_oracle_correspondence -- --ignored --nocapture
 
 # Build Agda proofs
 build-agda:

@@ -117,7 +117,7 @@ jobs:
       - name: Differential correspondence (proven Lean model vs Rust impl)
         run: |
           cd impl/rust-cli
-          cargo test --test model_oracle_correspondence -- --nocapture
+          cargo test --test model_oracle_correspondence -- --ignored --nocapture
 
       - name: Report Rust binary size
         run: |
