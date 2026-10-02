@@ -99,7 +99,7 @@ theorem isPrefix_dropLast
       -- (since t :: ts is non-empty), so xs is still a prefix.
       refine ⟨(t :: ts).dropLast, ?_⟩
       subst htail
-      rw [List.dropLast_append_of_ne_nil _ (List.cons_ne_nil t ts)]
+      rw [List.dropLast_append_of_ne_nil (List.cons_ne_nil t ts)]
 
 -- ---------------------------------------------------------------------
 -- Per-step invariant
