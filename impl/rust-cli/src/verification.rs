@@ -67,23 +67,18 @@ fn node_is_file(p: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Whether the current process may access `p` with `mode` (`libc::R_OK` or
-/// `libc::W_OK`), as decided by `access(2)`.
+/// Whether the current process may access `p` with `mode` (`AccessFlags::R_OK`
+/// or `AccessFlags::W_OK`), as decided by `access(2)`.
 #[cfg(unix)]
-fn accessible(p: &Path, mode: libc::c_int) -> bool {
-    use std::os::unix::ffi::OsStrExt;
-    let Ok(c_path) = std::ffi::CString::new(p.as_os_str().as_bytes()) else {
-        return false;
-    };
-    // SAFETY: `c_path` is a valid NUL-terminated C string that outlives the call.
-    unsafe { libc::access(c_path.as_ptr(), mode) == 0 }
+fn accessible(p: &Path, mode: nix::unistd::AccessFlags) -> bool {
+    nix::unistd::access(p, mode).is_ok()
 }
 
 /// Lean `hasWritePermission`: the current process may write to `p`.
 fn writable(p: &Path) -> bool {
     #[cfg(unix)]
     {
-        accessible(p, libc::W_OK)
+        accessible(p, nix::unistd::AccessFlags::W_OK)
     }
     #[cfg(not(unix))]
     {
@@ -97,7 +92,7 @@ fn writable(p: &Path) -> bool {
 fn readable(p: &Path) -> bool {
     #[cfg(unix)]
     {
-        accessible(p, libc::R_OK)
+        accessible(p, nix::unistd::AccessFlags::R_OK)
     }
     #[cfg(not(unix))]
     {
@@ -315,8 +310,7 @@ mod tests {
     /// Whether permission-denial tests are meaningful (root bypasses `access`).
     #[cfg(unix)]
     fn not_root() -> bool {
-        // SAFETY: geteuid has no preconditions.
-        unsafe { libc::geteuid() != 0 }
+        !nix::unistd::geteuid().is_root()
     }
 
     /// Make `p` read-only (r-x) so creating entries in it is denied.
@@ -505,9 +499,7 @@ mod tests {
     fn delete_file_rejects_fifo() {
         let (d, root) = sandbox();
         let fifo = d.path().join("p");
-        let c = std::ffi::CString::new(fifo.to_str().unwrap()).unwrap();
-        // SAFETY: valid NUL-terminated path.
-        assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o644) }, 0);
+        nix::unistd::mkfifo(&fifo, nix::sys::stat::Mode::from_bits_truncate(0o644)).unwrap();
         assert!(err(verify_delete_file(&root, "p")).contains("not a regular file"));
     }
 
