@@ -76,7 +76,7 @@ the running code is the remaining research problem the project is honest about."
   aerospace.** Applying that discipline to something as everyday as a *shell* is
   an unusual and pedagogically vivid choice.
 - **Radical honesty as an engineering value.** The project ships its own
-  "here's exactly what isn't finished" audit (`docs/PROOF_HOLES_AUDIT.md`) and
+  "here's exactly what isn't finished" audit (`docs/PROOF_HOLES_AUDIT.adoc`) and
   refused to inflate its own status — an interesting counter-story to typical
   software hype.
 - **The GDPR / "right to be forgotten" angle.** The deeper research question —

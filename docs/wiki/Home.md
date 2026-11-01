@@ -75,7 +75,7 @@ allow.
 - **Primary development (GitLab mirror):** <https://gitlab.com/non-initiate/rhodinised/vsh>
 - **FAQ:** [`FAQ.adoc`](https://github.com/hyperpolymath/valence-shell/blob/main/FAQ.adoc)
 - **Show-me-the-receipts (claims vs. evidence):** [`EXPLAINME.adoc`](https://github.com/hyperpolymath/valence-shell/blob/main/EXPLAINME.adoc)
-- **Honest proof-hole accounting:** [`docs/PROOF_HOLES_AUDIT.md`](https://github.com/hyperpolymath/valence-shell/blob/main/docs/PROOF_HOLES_AUDIT.md)
+- **Honest proof-hole accounting:** [`docs/PROOF_HOLES_AUDIT.adoc`](https://github.com/hyperpolymath/valence-shell/blob/main/docs/PROOF_HOLES_AUDIT.adoc)
 - **License:** MPL-2.0
 
 ---

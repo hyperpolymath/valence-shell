@@ -273,7 +273,8 @@ blocker is relevant.
 
 [arabic]
 . *Lean → Rust mechanised refinement* (F-1) — biggest verification gap;
-today’s link is property tests at ~85% confidence. Tractable slice:
+today’s link is `argued` plus `tested-only` property tests, never `proven`
+(estate vocabulary; see `EXPLAINME.adoc#proof-ledger`). Tractable slice:
 `+mkdir+` + `+rmdir+` only, ~1 week.
 . *Crash-consistency for begin/commit/rollback* (F-3) — gated on
 modelling `+Filesystem × UndoLog+` first.
@@ -340,11 +341,12 @@ are research-level work; the bigger frontier is real.
 `+secureDeleteNotInjective+` (closes #60) and `+gdprDeletionCompliant+`
 (closes #61) shipped 2026-06-02 via PR #105 with corrected theorem
 shapes (the prior holes had non-theorem signatures refutable by
-`+recovery = id+` / `+recovery = const empty+`). The MAA/GDPR claims now
-rest on these closed theorems plus `+?overwriteIrreversibleProof+`
-(still open as Cat-D placeholder) and axiomatic NIST SP 800-88 /
-Shannon-entropy / physical-world assumptions which should be made
-explicit (see narrative §10).
+`+recovery = id+` / `+recovery = const empty+`). The *model-level* deletion
+claims rest on these closed theorems. A GDPR claim would additionally require
+`+?overwriteIrreversibleProof+` (still open as Cat-D placeholder) and the
+axiomatic NIST SP 800-88 / Shannon-entropy / physical-world assumptions, which
+must be stated as assumptions rather than theorems (see narrative §10). No
+theorem in this repo establishes that bytes are absent from a device.
 
 The three Coq admits (#56 / #57 / #58) closed in the 2026-06-02 PM
 session bring the Coq layer to *zero `+Admitted+` markers* — only the

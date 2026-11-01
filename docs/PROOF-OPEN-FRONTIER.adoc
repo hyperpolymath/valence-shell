@@ -31,7 +31,7 @@ Closing any of them moves the bar materially.
 |===
 | Field | Value
 | Statement (informal) | The Rust function `vsh::commands::mkdir` refines the Lean 4 definition `mkdir : Path → Filesystem → Filesystem` under a defined refinement relation `R(rust_state, lean_fs)`.
-| Why | `CLAUDE.md` flags this as the single biggest verification gap. Today the link is via property tests (`tests/lean4_proptest_correspondence.rs`, `tests/correspondence_tests.rs`) at ~85% confidence. A mechanised refinement closes this without depending on test coverage.
+| Why | `CLAUDE.md` flags this as the single biggest verification gap. Today the link is `argued` at best, with `tested-only` evidence (property tests: `tests/lean4_proptest_correspondence.rs`, `tests/correspondence_tests.rs`; differential oracle: `tests/model_oracle_correspondence.rs`). A mechanised refinement closes this without depending on test coverage. Vocabulary: `standards/3-practice/PROOF-POLICY.adoc` §5; rows: `EXPLAINME.adoc#proof-ledger`.
 | Lift | Large. Requires choosing an extraction target (Lean 4 → C via `Extraction.lean` or Lean 4 → OCaml via `Lean.Meta.Compile`) and writing a refinement relation per operation.
 | Gates | None — orthogonal to other proofs. Could land incrementally per op.
 | First tractable slice | `mkdir` + `rmdir` refinement only (~1 week of work). Then template-fill the remaining ops.
@@ -48,6 +48,7 @@ Closing any of them moves the bar materially.
 | Lift | Small. ~30 lines of Coq. The strengthened precondition propagates trivially through `operation_sequence_reversible`.
 | Gates | None.
 | Risk | Strengthening `reversible` changes a public-facing predicate; downstream callers that constructed `reversible` proofs need to add the perm clause. Low blast radius.
+| Status (re-audited 2026-11-01) | **Closed.** `single_op_reversible` at `proofs/coq/filesystem_composition.v:269` is proved over `reversible op fs` with a `reverse_op op fs` inverse; `grep` finds no `admit`/`Admitted` anywhere in `proofs/coq/`. Retained as history; see `docs/audits/2026-11-01-assurance-boundary-audit.adoc`.
 |===
 
 [[F-3]]

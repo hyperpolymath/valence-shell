@@ -1,0 +1,595 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Assurance Boundary and JanusKey Relationship — Re-audit (2026-11-01)
+:toc: macro
+:toclevels: 3
+:icons: font
+
+toc::[]
+
+== Purpose
+
+This is a focused re-audit of one thing: *what Valence Shell's prose is allowed
+to claim about assurance*, and *what its relationship with JanusKey actually is*.
+
+It is the second audit in the log. It follows
+`docs/audits/2026-06-01-deep-audit.adoc`, which set the convention that audits
+append rather than rewrite. It changes no proof and adds no theorem. Everything
+below is either a measured fact with a command, or a correction to a sentence
+that claimed more than the measured facts support.
+
+Five rules were treated as fixed points, and prose was brought back to them:
+
+. Proof, warrant and receipt are different things, and a claim must say which
+  one it is making.
+. A cross-repo orientation document is *not* a mechanised dependency.
+. Reversibility here is *algorithmic*, not thermodynamic.
+. The Lean/Coq/etc. model → Rust/POSIX extraction gap is *the* trust boundary.
+  It is open.
+. RMO is best-effort local overwrite/unlink plus an audit residue. It is not
+  physical erasure and not GDPR compliance.
+
+== Provenance
+
+[cols="2,1,1",options="header"]
+|===
+| Source | Revision | Read
+
+| `hyperpolymath/valence-shell` (this repo)
+| `295c3ca` (main at session start)
+| 2026-11-01
+
+| `hyperpolymath/epistemic-types`
+| `5422cd5bf1418c44321bf0f77e894737a451d8f5`
+| 2026-11-01 (primary source, cloned)
+
+| `hyperpolymath/januskey`
+| `4afb710e86646658f667f10bd6274ee47416bfc7`
+| 2026-11-01 (primary source, cloned)
+
+| `hyperpolymath/standards` — `3-practice/PROOF-POLICY.adoc`, `docs/README-EXPLAINME-STANDARD.adoc`
+| `46ee18323305d5b36e2eef936e47dd54c39ea736`
+| 2026-11-01 (normative policy read)
+
+| `hyperpolymath/mathesis` — `estate-mathematical-architecture`, catalogue
+| `50a012dba57fe90c9aca8d57241690c133ab117c`
+| 2026-11-01 (grading scheme read)
+|===
+
+The previous theory-feed measurement (`docs/THEORY-FEED.adoc`, 2026-09-30) read
+valence-shell at `0355246`. Its central finding is re-confirmed here at `295c3ca`.
+
+== Verdict in one paragraph
+
+The repository's *headline* claims were already honest: `README.adoc`,
+`FAQ.adoc`, `docs/wiki/Verification-Status.md`, `docs/RMO-DURABILITY-BOUNDARY.adoc`
+and `docs/PROOF-OPEN-FRONTIER.adoc` all state the extraction gap, decline the
+GDPR claim, and separate model proof from implementation. The drift was in the
+*secondary* surfaces — a CLI banner, a changelog sentence, a test comment, a
+design sketch, a bridge table, a positioning paragraph, a bot directive — each of
+which quietly moved a claim one level up. Twenty-two such moves are recorded below;
+the load-bearing ones are corrected. On JanusKey: *there is no integration to
+audit.* Valence Shell neither imports JanusKey nor depends on `reversible-core`;
+the integration is planned, on JanusKey's side, and the D204 ruling is a decision
+rather than an artefact.
+
+== The claim ladder, restated
+
+This is the audit's own statement of the levels, aligned with the new
+`docs/THEORY-FEED.adoc` § "Assurance boundary" so that the two documents cannot
+drift apart.
+
+[cols="1,3,3",options="header"]
+|===
+| Level | Earned by | Not earned by
+
+| *Conceptual*
+| prose proposing a fit
+| anything at all — keep the word "inference"
+
+| *Documented*
+| a maintained bridge/orientation document
+| the existence of the document. An orientation doc adds no theorem and no import.
+
+| *Mechanised*
+| a proof file importing the dependency, building in CI
+| a shared vocabulary, a shared author, or a shared decision record
+
+| *Refined*
+| a machine-checked relation between the model and the executing code
+| any test, fuzz target, differential oracle, extraction script or code comment
+|===
+
+And the three separations that the level ladder does not itself express:
+
+*Proof vs warrant vs receipt.* Taken from `epistemic-types` @ `5422cd5`
+(`PROOF-STATUS.adoc`, `docs/what-epistemic-is.adoc`, `docs/proof-transport.adoc`):
+a `Proof` type-checks under `--safe --without-K` with zero postulates; a
+`Warrant`/`Epi` is deliberately *non-factive* and holding one does not yield the
+claim; `SoundWarrant` adds `sound : Evidence -> A` as a *separate* interface; and
+a `Receipt` never certifies — the library proves `verifyReceiptIsGap`. The same
+repo states plainly that it "is NOT a verified external system" and that cross-repo
+orientation documents are not mechanised dependencies. Any valence-shell sentence
+that names a warrant or receipt as if it were a proof has crossed that line.
+
+*Algorithmic vs thermodynamic.* `F⁻¹(F(s)) = s`, with `F⁻¹` a program, is
+algorithmic reversibility. Thermodynamic reversibility is about energy dissipation
+and the Landauer/Bennett programme. Valence Shell has the first and not the second,
+and its own `FAQ.adoc` says so. Naming the product "the thermodynamic shell" is the
+error the FAQ warns about.
+
+*Model vs machine.* `rmdir (mkdir p fs) = fs` holds of `Filesystem`, a function in
+a proof assistant. The shipped `vsh` is Rust calling `libc`. Nothing in this
+repository relates the two by proof.
+
+== JanusKey and `reversible-core`: the measured relationship
+
+=== What was checked
+
+[cols="3,1,4",options="header"]
+|===
+| Check | Result | Command
+
+| Imports under `proofs/` naming a feeder
+| none
+| `grep -rn "Require\|open import\|^import" proofs/` (project files too: `_CoqProject`, `lakefile.lean`, `valence-shell.agda-lib`, `valence-shell.ipkg` name only own modules + stdlib)
+
+| `Cargo` dependency on `januskey` or `reversible-core`
+| none
+| `grep -rn "januskey\|reversible-core" --include=Cargo.toml .`; neither name appears in `Cargo.lock`
+
+| Git submodule / vendored copy
+| none
+| `test -f .gitmodules`
+
+| Build or CI step referencing JanusKey
+| none
+| `git grep -n "januskey" .github/ Justfile`
+
+| Mentions of `januskey` anywhere in this repo
+| 1 file, 23 lines, before this audit's edits
+| `git grep -liI januskey` → `docs/THEORY-FEED.adoc` only
+
+| Mentions of `reversible-core`
+| 0
+| `git grep -liI "reversible[-_]core"` → no hits
+
+| `Feeder:` fields in the open frontier (D-3)
+| 0 of N
+| `grep -c "Feeder:" docs/PROOF-OPEN-FRONTIER.adoc`
+|===
+
+=== What JanusKey says about the relationship
+
+Measured in `januskey` @ `4afb710`, quoted because these are claims *about this
+repository* that Valence Shell's own docs must not silently adopt:
+
+* `ARCHITECTURE.adoc` lists three downstream applications — ochrance,
+  valence-shell, aletheia — and then, under "Phase 2: valence-shell integration",
+  marks it **NEXT**: wire `impl/rust-cli/` to depend on `reversible-core`, add
+  `ContentStore` to `ShellState`, replace `undo_data: Option<Vec<u8>>`, add an
+  A2ML emitter, replace `verification.rs` stubs.
+* `crates/reversible-core/src/content_store.rs` describes `ContentStore` as "the
+  shared storage backend that both januskey-cli and valence-shell use".
+* `crates/reversible-core/src/lib.rs` describes the lineage
+  `maa-framework (policy) → absolute-zero (theory) → januskey (PoC) → ochrance,
+  valence-shell, aletheia (applications)`.
+
+Read precisely, all three are statements of *intended* consumption. None is a
+statement that consumption has happened, and none of them is a proof claim. The
+user-facing asymmetry matters too: JanusKey says its own formal proofs of complete
+reversibility are "pending" (`README.adoc` CAUTION), so even a landed code
+dependency would not import assurance — it would import Rust.
+
+=== What the relationship is, and is not
+
+* *Engineering, planned.* `reversible-core` (content-addressed store, operation
+  metadata, `ReversibleExecutor`) is a natural home for the undo payloads that
+  `ShellState` currently keeps inline. That is a code dependency. If it lands it
+  will be a Cargo line in `impl/rust-cli/Cargo.toml`, reviewed on its own merits.
+* *Proof, unwritten.* The D204 ruling ("Arm A": absolute-zero factors out a
+  parameterised CNO interface; valence-shell instantiates it) answers *where* the
+  formal home of filesystem reversibility should be. It does not create the
+  instantiation, and it does not create a januskey→valence-shell refinement.
+  Under either arm, "januskey's operations refine valence-shell's model" is a
+  target, not a theorem.
+* *Not a matrix move.* Adding `reversible-core` as a dependency would not change
+  any cell of the `docs/THEORY-FEED.adoc` matrix from C to M. M requires a proof
+  import that builds; sharing a Rust crate is T at best, and T is "tooling in use",
+  not "mechanised".
+* *Upstream bridge is a name bridge.* `echo-types`' `EchoJanusBridge.agda` is a
+  4-variant local enum over the name "Janus", drifted from JanusKey's 8-variant
+  `OpKind`. It lives upstream, has no valence-shell counterpart, and does not
+  involve this repository.
+
+=== Exactly what would change this verdict
+
+Any one of these, and this section must be rewritten:
+
+. a `Cargo.toml` entry for `reversible-core` in `impl/rust-cli/` (engineering edge);
+. an `.agda`/`.v`/`.lean`/`.idr` file under `proofs/` importing a JanusKey or
+absolute-zero module, with the building CI job named;
+. a theorem in either repo stating a refinement between a `jk` operation and a
+  valence-shell model operation.
+
+Until then the correct sentence is: *"JanusKey integration is planned; Valence
+Shell has no implemented dependency on it."*
+
+== RMO: the boundary, restated
+
+The implementation is a three-pass overwrite with `fsync`, an `unlink`, and a
+directory sync on Unix, plus an appended record in `<root>/.vsh-audit.log`. The
+audit residue is *unsigned* unless a key is provisioned, and the RMO path
+deliberately provisions none.
+
+Therefore, and this is the sentence every other document must agree with:
+`obliterate` is a *best-effort local file-erasure primitive* on cooperating
+in-place filesystems. It is not a claim that bytes are absent from copy-on-write
+extents, journals, snapshots, flash translation layers, device spares, caches,
+replicas, backups or remote storage, and it is not a GDPR Article 17 determination.
+An abstract Z3 model of a filesystem/block mapping, and a Coq/Idris2 non-injectivity
+theorem, are statements about the model. Neither reaches the device.
+
+The canonical long form is `docs/RMO-DURABILITY-BOUNDARY.adoc`; this audit agrees
+with it and found only *other* files disagreeing.
+
+== The extraction gap: what this audit found inside it
+
+Three facts, each measured, that sharpen the boundary rather than move it:
+
+. *The Coq extraction is a placeholder.* `proofs/coq/extraction.v` extracts
+  `Filesystem` as `unit -> unit`, commented "Placeholder". It cannot represent a
+  filesystem state. The file's header used to say it "bridges the gap between
+  formal proofs and real implementation"; it now says what it is.
+. *The shipped CLI does not use the FFI shard.* `ffi/rust` (`vsh-ffi`) is a
+  separate crate. It is not a dependency of `impl/rust-cli/` and is not referenced
+  from its sources; `.github/workflows/rust-cli.yml` builds and tests it separately.
+  The `README.adoc` trust diagram previously labelled the implementation layer
+  "OCaml", which is neither the shipped binary nor the extraction target's language
+  at runtime; it now names the Rust CLI and notes the separate crate.
+. *The differential oracle is a test.* `proofs/lean4/ModelOracle.lean` +
+  `impl/rust-cli/tests/model_oracle_correspondence.rs` execute the compiled proven
+  model against the Rust `ShellState` and compare probes (1,218 probes over 200
+  sequences, per the changelog). It is genuinely stronger than hand-written
+  property tests, because the oracle *is* the proof artefact. It is still
+  differential testing. `docs/LEAN4_RUST_CORRESPONDENCE.adoc` says this correctly
+  in its own "What this does and does not establish" subsection, and that is the
+  sentence to keep.
+
+== Alignment with estate proof policy and mathesis grading
+
+The estate's normative documents were read at the same date: `standards` @
+`46ee183` — `3-practice/PROOF-POLICY.adoc` (owner ruling 2026-10-26) and
+`docs/README-EXPLAINME-STANDARD.adoc` §5 — and `mathesis` @ `50a012d`
+(`estate-mathematical-architecture`, §5 "Graded Proof Architecture" and §6).
+
+=== Two vocabularies, one obligation
+
+[cols="2,3",options="header"]
+|===
+| Source | Vocabulary
+
+| PROOF-POLICY §5 / README-EXPLAINME-STANDARD §5
+| `proven`, `proven-with-postulates`, `argued`, `tested-only`, `open` — closed set
+
+| mathesis §5
+| Grade 3 (iterative Agda, type-checks locally) → Grade 2i (translated to one independent foundation) → Grade 2ii (translated to two, one of them non-DTT) → Grade 1 (machine-checked through a verified checker API in headless CI)
+
+| mathesis §6
+| "Do not flatten proof confidence into a percentage." Record Open / Claimed / Grade 3 / 2i / 2ii / 1.
+|===
+
+Consequence for this repository: the ~85% / ~95% confidence figures that
+circulated through `README`, `FAQ`, `CLAUDE.md`, `TOPOLOGY`, `PROOF-NEEDS`,
+`ROADMAP` and the wiki were **removed**, not adjusted. They were not
+measurements of anything, and the estate forbids the form. The replacement is a
+status token per obligation, in `EXPLAINME.adoc` § Proof Ledger (below).
+
+=== Where Valence Shell actually sits
+
+[cols="2,2,4",options="header"]
+|===
+| Obligation class | Best grade held today | Why not higher
+
+| Filesystem reversibility, obliteration, composition (Coq)
+| `proven-with-postulates` for the model (`functional_extensionality` where whole-filesystem equality is asserted); one row is `proven` closed
+| Grade 2 requires the *Agda witness to be translated* into an independent foundation. Valence Shell has six parallel hand-written models; a restatement is not a translation. Under PROOF-POLICY §2 a re-proof is an allowed fallback — but only after "the Agda statement is the source of truth" and the statement comparison is recorded. That ordering is not in place here.
+
+| The same theorems (Lean, Agda, Isabelle, Mizar, Z3)
+| supplementary evidence, per system: Lean `proven` per building module; Agda `proven-with-postulates`; Isabelle `proven-with-postulates`; Mizar and Z3 `open`
+| PROOF-POLICY §3: a pre-existing Rocq/Lean proof of a theory statement counts as that prover's leg only once the Agda source is `PROVEN` and the statement comparison is recorded. Isabelle is supplementary by rule and never satisfies a Rocq or Lean leg. Mizar and Z3 are §4 exceptions with no recorded exception note yet.
+
+| Rust CLI behaviour
+| `argued` / `tested-only`
+| PROOF-POLICY §1 maps Rust to *Creusot*, verified on the code itself. There are no Creusot contracts in `impl/rust-cli/`. Kani is the standing exception for `unsafe`/FFI seams; no Kani harnesses exist.
+
+| APIs, ABI and wire formats (Idris2)
+| `tested-only` (layout, round-trips) with two registered axioms
+| PROOF-POLICY §1 assigns these to Idris2, which is present and hole-free, but layout agreement is a script, not a proof, and the axioms are primitive-equality.
+
+| POSIX semantics, crash timing, concurrency
+| `open`
+| Not modelled; F-3/F-4 in the open frontier.
+|===
+
+So: *no obligation in this repository reaches Grade 2 or Grade 1*, and the
+Grade 3-adjacent rows are Coq/Lean-sourced rather than Agda-sourced — the
+reverse of the estate's source-of-truth order. That is a policy-alignment item,
+not a defect the audit can fix without an owner decision and a proof campaign.
+
+=== Findings specific to policy alignment
+
+[cols="1,1,3,3",options="header"]
+|===
+| ID | Sev | Finding | Disposition
+
+| AP-1 | H
+| `README`, `FAQ`, `CLAUDE.md`, `TOPOLOGY`, `PROOF-NEEDS`, `ROADMAP`, wiki, `VERIFICATION_REPORT` quoted ~85%/~95% confidence for the model→code link. mathesis §6 forbids the percentage form, and no measurement backs it.
+| *Corrected.* All current claim surfaces now use the closed vocabulary; the correspondence row is `argued`, the oracle and tests are `tested-only`. Historical session documents were left as dated records.
+
+| AP-2 | H
+| No Proof Ledger existed, although README/EXPLAINME make proof claims — required by README-EXPLAINME-STANDARD §5.
+| *Added.* `EXPLAINME.adoc` § Proof Ledger: 17 rows, one per obligation, each with status, checker version and flags, location, and trust boundary. Rules 1–3 of the standard are stated above the table.
+
+| AP-3 | M
+| "6 proof systems" was presented as cross-validation without the estate distinction between *translation* (Grade 2) and *parallel restatement*.
+| *Recorded.* The ledger's Lean row states plainly that it is an independent restatement, not a translation, so it is not Grade 2; the audit's next-directions record the Agda-source-first ordering as an open policy item.
+
+| AP-4 | M
+| Isabelle, Mizar and Z3 are §4 exceptions but carried no recorded exception note beside the artefact or in the proof-status file.
+| *Recorded as open.* The ledger marks them as exceptions without notes yet; adding the notes is a follow-up requiring an owner call on whether to keep Mizar and Z3 at all.
+
+| AP-5 | M
+| `.claude/CLAUDE.md` did not name `standards/3-practice/PROOF-POLICY.adoc` as normative, which the policy asks every repo's `CLAUDE.md` to do.
+| *Corrected.* `CLAUDE.md` now points at PROOF-POLICY as normative, maps the obligation classes it binds (Rust→Creusot, ABI→Idris2, theory→Agda), and states the vocabulary in one line.
+
+| AP-6 | H
+| The Agda layer cannot satisfy PROOF-POLICY §2.1 as written: `proofs/agda/FilesystemModel.agda:162` declares `postulate funext : Extensionality lzero lzero`, and `--safe` rejects `postulate`. The tree is built with bare `agda FilesystemModel.agda` (`Justfile:62`), `agda FileOperations.agda` (`scripts/verify-proofs.sh:148`), and through ECHIDNA (`scripts/validate-with-echidna.sh:125`) — three sites, none using `--safe --without-K --cubical-compatible`. `echidna-validation.yml:69` installs `agda` (and `coq`, `z3`) unpinned from apt.
+| *Recorded, not fixed.* Discharging or quarantining extensionality is a proof change, not a prose one. The ledger row is `proven-with-postulates` and names the invocation. Fixing it is the highest-value proof-policy item in this repo.
+
+| AP-7 | M
+| The Mizar build target swallows failure: `Justfile:75-76` ends each `mizf` invocation in `|| echo "⚠ Mizar not configured"`, so a red Mizar build is indistinguishable from a green one, and `echidna-validation.yml`'s hole check uses a threshold of 35 rather than zero.
+| *Recorded, not fixed.* The ledger marks Mizar `open`. This is the same defect class as NW-2 in `docs/THEORY-FEED.adoc` (an environment failure read as a verdict).
+
+| AP-8 | M
+| No prover was installed in the audit environment (`coqc`, `agda`, `lean`, `idris2`, `isabelle`, `mizar`, `z3` all absent), so nothing in this audit was re-run.
+| *Stated in the ledger header.* Every row records the repository's own recorded evidence and names the invocation a future audit must reproduce. Claiming a re-run would have been the exact overclaim this audit exists to remove.
+|===
+
+== Findings
+
+Severity: *H* = a claim that could mislead a user or auditor about assurance;
+*M* = an internal inconsistency that will regenerate the H claim; *L* = drift.
+
+[cols="1,1,3,3,1",options="header"]
+|===
+| ID | Sev | Location | Finding | Disposition
+
+| AB-01 | H
+| `impl/rust-cli/src/main.rs:322`, `docs/COMPREHENSIVE_EXAMPLES.adoc:42`
+| Startup banner read "The Thermodynamic Shell - Every operation is reversible": simultaneously the wrong kind of reversibility and false (obliteration is irreversible).
+| *Corrected.* Banner now reads "Algorithmic reversibility - not thermodynamic (Landauer)" and "Backed by 478 theorem candidates across 6 proof systems". Box art re-padded to a uniform 64 columns (it was ragged).
+
+| AB-02 | H
+| `impl/elixir/lib/vsh.ex:8`
+| Moduledoc: "A thermodynamic shell where every operation can be undone."
+| *Corrected* to algorithmic-only, with the `obliterate` exception stated.
+
+| AB-03 | H
+| `REVERSIBILITY.adoc:3`
+| "Every operation can be undone. This is mathematically proven."
+| *Corrected.* Reversible-modelled operations are provable; `obliterate` is not undoable; link to the RMO boundary added.
+
+| AB-04 | H
+| `REVERSIBILITY.adoc` § "GDPR Compliance (Future)"
+| "we'll prove that deletion is *complete* (not just best effort)".
+| *Corrected.* No theorem makes deletion complete on a device. Section now distinguishes abstract non-injectivity from device sanitisation and from legal determination.
+
+| AB-05 | H
+| `docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc` (RMO row)
+| Described obliteration as "a proof-relevant certificate that the target information has been eliminated while permitted audit residue remains". Echo Types is used to *name* loss, not to certify absence.
+| *Corrected* to best-effort overwrite + unlink + record, explicitly "not a certificate that the target information has been eliminated from the storage stack". Two forbidden moves added: tests ≠ refinement proof, orientation doc ≠ dependency.
+
+| AB-06 | H
+| `CHANGELOG.adoc` (2026-07-17 entry)
+| "the MAA attestation ... (GDPR Article 17 evidence). Data is destroyed; proof-of-deletion persists."
+| *Annotated, not rewritten.* The original text is retained and followed by a dated correction stating that the residue is unsigned, the overwrite is best-effort local, and the sentence overstated the guarantee.
+
+| AB-07 | M
+| `CHANGELOG.adoc` (Unreleased → Planned)
+| "RMO (Remove-Match-Obliterate) proofs for GDPR compliance".
+| *Corrected* to non-injectivity proofs "explicitly not a GDPR compliance determination".
+
+| AB-08 | H
+| `FAQ.adoc:33`
+| "If you can prove the operation *destroys information* (is non-injective), you can give a third-party attestation of compliance."
+| *Corrected.* Non-injectivity of an abstract transition is not evidence about bytes and not an attestation.
+
+| AB-09 | M
+| `SECURITY.adoc`
+| Two errors: RMO listed under "Planned" while also described with "Cryptographic erasure guarantees"; and "Memory Safety: Rust-equivalent via OCaml" for a Rust product.
+| *Corrected.* RMO moved to "implemented, best-effort, not a compliance claim" with no cryptographic-erasure claim; memory-safety line now describes safe Rust with audited `unsafe` FFI sites.
+
+| AB-10 | M
+| `README.adoc` trust-boundary diagram; `SECURITY.adoc`; `REVERSIBILITY.adoc`
+| The boundary diagram named an "OCaml Implementation", and the production path was "Close extraction gap (Coq → OCaml verification)", while the shipped implementation is the Rust CLI.
+| *Corrected.* Diagram names the Rust CLI and marks the *refinement* edge as the gap; `ffi/rust` and the Coq→OCaml path are named as separate and equally unproven. Production path is stated as model → Rust/POSIX refinement.
+
+| AB-11 | H
+| `impl/rust-cli/tests/security_tests.rs:125`
+| "`proofs/lean4/PathTraversal.lean` proves that the Rust normaliser's loop-body invariant holds" — a Lean theorem about a Lean model, attributed to Rust code.
+| *Corrected.* Comment now says the theorem is about the Lean model, and the property test is Rust-side evidence for correspondence, "not a proof of it".
+
+| AB-12 | M
+| `docs/SIMPLIFICATION_OPPORTUNITIES.adoc:195`
+| "Property tests verify the Rust code matches the proof ... If property tests pass, the Rust code is probably correct."
+| *Corrected.* Tests exercise behaviour against the model; passing raises confidence and closes nothing.
+
+| AB-13 | H
+| `docs/SEAM_ANALYSIS_AND_IDRIS2_PLAN.adoc` (×2)
+| "Confidence: 99%+ (only POSIX syscall trust boundary)" — awarded to a path that has not been built, and which relocates the gap to the extractor and FFI rather than removing it.
+| *Corrected.* Both instances now say the extraction/FFI boundary is as unproven as the gap it replaces, and that no percentage is claimed for an unbuilt path.
+
+| AB-14 | H
+| `.machine_readable/bot_directives/methodology.a2ml:58`
+| "the Idris2 ABI layer carries the proof story across the FFI boundary into the Rust CLI runtime".
+| *Corrected.* The ABI layer documents layout/encodings/axioms; it does not transport proofs. The directive now names the open refinement gap as the boundary.
+
+| AB-15 | M
+| `proofs/coq/extraction.v`; `proofs/lean4/Extraction.lean`
+| Headers claimed extraction "bridges the gap" and yields "verified logic callable from OCaml", while `Filesystem` is extracted as a placeholder `unit -> unit`.
+| *Corrected.* Both headers carry an assurance note: extraction relocates work, does not close refinement; the `Filesystem` placeholder is named.
+
+| AB-16 | M
+| `docs/ZIG_LEAN_EXTRACTION.adoc`
+| "Status: Implementation Ready"; a "verified ops" / "vsh binary" in the architecture diagram; trust chain naming the C wrapper as the weakest link.
+| *Corrected.* Status is a design sketch, the Zig binary is not the shipped `vsh`, preconditions are transcribed (reviewed, not proven), and the weakest link is named as the refinement step.
+
+| AB-17 | H
+| `docs/THEORY-FEED.adoc` (januskey section, NW-1, NW-4)
+| Stated "valence-shell's reversibility theorems are the formal home januskey#137 is asking for" and "januskey's operations refine valence-shell's model" as if established; omitted the no-import measurement and conflated an engineering crate with a proof edge.
+| *Corrected.* Two clearly separated proposals (engineering via `reversible-core`; proof via a refinement that does not exist), the measured zero-dependency facts, the upstream "Phase 2 — NEXT" status, and an explicit "a Cargo dependency would not move a cell from C to M".
+
+| AB-18 | M
+| `docs/THEORY-FEED.adoc` (epistemic-types section, NW-7)
+| Present the reject suite as "directly reusable as negative controls", blurring warrant/receipt/proof.
+| *Corrected.* Marked inference-only, with the `Proof`/`Warrant`/`SoundWarrant`/`Receipt` separation stated and the applied consequence spelled out.
+
+| AB-19 | L
+| `CLAUDE.md`, `TOPOLOGY.adoc` vs `README.adoc`/`FAQ.adoc`/wiki
+| Correspondence confidence quoted as ~95% in two places and ~85% in four.
+| *Corrected* to a range explicitly labelled an estimate, not a measurement. The percentage is not a quantity anyone measured.
+
+| AB-20 | L
+| `docs/PROOF-OPEN-FRONTIER.adoc` F-2
+| Declared "the only admit" in the Coq layer as an open gap; there is no `admit`/`Admitted` in `proofs/coq/`, and `single_op_reversible` is proved at `filesystem_composition.v:269`.
+| *Corrected.* F-2 marked closed with the location and the grep evidence; retained as history.
+
+| AB-21 | L
+| 99 lines in 40+ files
+| Dangling `.md` references to documents that exist only as `.adoc` (`PROOF_HOLES_AUDIT`, `LEAN4_RUST_CORRESPONDENCE`, `OCAML_EXTRACTION`, `ZIG_LEAN_EXTRACTION`), plus an absolute local path (`/var/mnt/eclipse/...`) in `EXPLAINME.adoc`.
+| *Corrected* across the tree (comment-only edits in `.v`/`.lean`/`.sh`). A broader `.md`→`.adoc` naming sweep of historical docs remains a follow-up (see below).
+
+| AB-22 | M
+| `EXTRACTION_FILES.txt`
+| A file inventory dated 2026-01-28 marked every extraction artefact "✅ Complete", including a `lean_wrapper.c` with a TODO and a Coq extraction whose `Filesystem` is a placeholder. "Complete" read as "the extraction is done".
+| *Corrected.* Header now says "Complete" means "the file exists and has content", names the three reasons the path is not assured, and links this audit. Filenames updated to the `.adoc` reality.
+
+| AB-23 | H
+| `arcvix-formally-verified-reversible-shell.tex` (abstract, §RMO, §No-trace, conclusion)
+| Paper claimed non-injectivity "provides a formal basis for certifying GDPR Article 17 compliance", that obliteration is "information-destroying", and that the paper presents "a shell in which every filesystem operation possesses a proof of reversibility".
+| *Corrected in place.* Model-level scope stated at each site; the device/legal layers named as outside the theorem; conclusion distinguishes the closed proof-of-model from the open correspondence gap; the "99%+" projection for extraction replaced with a statement that extraction relocates trust.
+
+| AB-24 | M
+| `PROOF-NEEDS.adoc`; `UNIMPLEMENTED_FEATURES.adoc`
+| "The MAA/GDPR claims now rest on these closed theorems"; secure deletion still listed as "Stub only — blocks GDPR compliance claims" after `obliterate` shipped.
+| *Corrected.* PROOF-NEEDS separates model-level claims from the physical-world assumptions that would be needed for any compliance argument; UNIMPLEMENTED_FEATURES marks the item superseded and says plainly that no remaining engineering task produces a GDPR claim.
+
+|===
+
+== Corrected artefacts (complete list)
+
+Paper: `arcvix-formally-verified-reversible-shell.tex` (scoped sentences only).
+
+Documentation and agent surfaces: `README.adoc`, `EXPLAINME.adoc` (rewritten claims 1–2, status section, and the new Proof Ledger), `CLAUDE.md` (new normative proof-policy block), `FAQ.adoc`,
+`PROOF-NEEDS.adoc`, `UNIMPLEMENTED_FEATURES.adoc`,
+`REVERSIBILITY.adoc`, `SECURITY.adoc`, `ROADMAP.adoc`, `RSR_COMPLIANCE.adoc`,
+`TOPOLOGY.adoc`, `CHANGELOG.adoc`, `CLAUDE.md`, `.claude/CLAUDE.md`,
+`0-AI-MANIFEST.a2ml`, `.machine_readable/bot_directives/methodology.a2ml`,
+`docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc`, `docs/THEORY-FEED.adoc`,
+`docs/RMO-DURABILITY-BOUNDARY.adoc` (unchanged — audited and agreed),
+`docs/PROOF-OPEN-FRONTIER.adoc`, `docs/LEAN4_RUST_CORRESPONDENCE.adoc` (unchanged),
+`docs/SIMPLIFICATION_OPPORTUNITIES.adoc`, `docs/SEAM_ANALYSIS_AND_IDRIS2_PLAN.adoc`,
+`docs/ZIG_LEAN_EXTRACTION.adoc`, `docs/OCAML_EXTRACTION.adoc`,
+`docs/COMPREHENSIVE_EXAMPLES.adoc`, `docs/wiki/Verification-Status.md`.
+
+Build/inventory surfaces: `EXTRACTION_FILES.txt`.
+
+Code and proof comments: `impl/rust-cli/src/main.rs` (banner),
+`impl/elixir/lib/vsh.ex` (moduledoc), `impl/rust-cli/tests/security_tests.rs`,
+`proofs/coq/extraction.v`, `proofs/lean4/Extraction.lean`.
+
+== Deliberately not changed
+
+* *`arcvix-formally-verified-reversible-shell.tex` — partially.* Its "Janus" is
+  the Yokoyama 2007 reversible language, not JanusKey, and its thermodynamics
+  discussion is literature framing; neither was touched. Its GDPR and
+  "every operation" claims were corrected in place (AB-23), because a paper in
+  the repository is a claim surface like any other. Unrelated staleness (test
+  and line counts in the abstract) was left alone.
+* *`CONTINUATION_SESSION_COMPLETE.adoc`, `SESSION_COMPLETE.adoc`,
+  `EXTRACTION_SUMMARY.adoc`, `docs/PHASE*`, `docs/SESSION_*`.* Dated session
+  records. They say "Coq → OCaml" because that was the plan of the day. Rewriting
+  them would falsify the record; they are cited here instead.
+* *Historical `CHANGELOG` entries other than AB-06.* Annotated rather than
+  rewritten, so the history of the claim is visible.
+* *`.machine_readable/6a2/ECOSYSTEM.a2ml`.* Tempting place to record the JanusKey
+  relationship, and deliberately not used: the repo's own doctrine is that A2ML is
+  legacy and must not be extended (`docs/THEORY-FEED.adoc` caveats). The record
+  lives in this audit, `docs/THEORY-FEED.adoc`, and `.claude/CLAUDE.md` until a
+  `.k9`/`.deed` registry exists.
+* *`proofs/` semantics.* No proof was edited, weakened or strengthened. AB-15
+  changes comments in two extraction files only.
+
+== Residual risk and open items
+
+. *The refinement gap is unchanged.* This audit can only stop prose from claiming
+   it is closed. F-1 (`docs/PROOF-OPEN-FRONTIER.adoc`) remains the v1.0 blocker.
+. *`ffi/rust` has no consumer.* `vsh-ffi` is tested but not depended on. Either
+   wire it (`impl/rust-cli/Cargo.toml`) or mark it explicitly as a shard, so the
+   trust diagram does not imply a layering that does not exist.
+. *No machine-readable assurance registry.* Without a `.k9`/`.deed` record, the
+   C/D/T/M gradation lives in prose and will drift again. This is D-3's job
+   (`Feeder:` fields): 0 of N frontier entries have one today.
+. *D-1 axiom gate still absent.* The registered axioms (`funext`,
+   `is_empty_dir_dec`, `axStringEqRefl`, `axBits8EqRefl`) are documented, not
+   enforced on new work.
+. *Bulk `.md` → `.adoc` reference sweep.* 39 files were fixed where they were
+   boundary-relevant or trivially safe; many historical docs still cite old
+   filenames.
+. *`docs/wiki/` is published from this tree*, so its `.adoc` link fixes will reach
+   the GitHub wiki on the next mirror.
+
+== How to reproduce
+
+[source,sh]
+----
+# Zero mechanised dependencies, re-measured
+grep -rnE "Require|open import|^import" proofs/ | grep -viE "valence|bootstrap|Classical|Arith|List|String|Bool|Nat|Logic|Data\.|Relation\.|Function|Agda\.|Stdlib"
+test -f .gitmodules || echo "no submodules"
+grep -rn "januskey\|reversible-core" --include=Cargo.toml .
+cat proofs/coq/_CoqProject proofs/agda/valence-shell.agda-lib \
+    proofs/lean4/lakefile.lean proofs/idris2/valence-shell.ipkg
+
+# No admits in Coq
+grep -rn "admit\.\|Admitted" proofs/coq/*.v
+sed -n '269,272p' proofs/coq/filesystem_composition.v
+
+# The extraction placeholder
+grep -n "Placeholder\|Extract Constant Filesystem" proofs/coq/extraction.v
+
+# ffi/rust is not wired into the CLI
+grep -rn "vsh-ffi\|vsh_ffi" impl/rust-cli/ || echo "not a dependency"
+
+# The forbidden-phrase gate this audit must keep passing
+bash .github/scripts/check-bridge-forbidden-phrases.sh
+----
+
+* *Grade 2 is unreachable by the current arrangement.* Six parallel models are
+  six statements, not one translated witness. Reaching Grade 2i/2ii needs either
+  an Agda source statement per theorem with a recorded Dedukti transport or a
+  recorded re-proof, per PROOF-POLICY §2 — an owner decision, not a docs change.
+* *Creusot is absent.* PROOF-POLICY §1 maps first-party Rust to Creusot; the CLI
+  has no contracts. Even one contract plus a Why3 receipt would give F-1 its
+  first real foothold and turn a `tested-only` row into something stronger.
+* *Exception notes for Isabelle/Mizar/Z3* are missing (AP-4), and keeping three
+  supplementary provers without notes is exactly the kind of drift this audit
+  exists to catch.
+
+== Next audit trigger
+
+Re-run this audit, and rewrite its JanusKey section, when any of the following
+happens: `reversible-core` is added to a `Cargo.toml`; a `proofs/` file imports a
+feeder module; a refinement relation is stated in Lean/Coq/Agda/Idris2 against the
+Rust semantics; or RMO gains key provisioning and external anchoring; or a Proof Ledger row changes
+status, or `standards` `3-practice/PROOF-POLICY.adoc` changes the mapping.

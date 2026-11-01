@@ -37,11 +37,11 @@ cargo build --release
 [source,bash]
 ----
 $ vsh
-╔═══════════════════════════════════════════════════════════╗
+╔══════════════════════════════════════════════════════════════╗
 ║  ██╗   ██╗ █████╗ ██╗     ███████╗███╗   ██╗ ██████╗███████╗ ║
-║  The Thermodynamic Shell - Every operation is reversible     ║
-║  Backed by 256 formal proofs across 6 verification systems   ║
-╚═══════════════════════════════════════════════════════════╝
+║  Algorithmic reversibility - not thermodynamic (Landauer)    ║
+║  Backed by 478 theorem candidates across 6 proof systems     ║
+╚══════════════════════════════════════════════════════════════╝
 
 vsh> help
 # ... help output ...
@@ -502,9 +502,9 @@ vsh> graph
 ----
 vsh> proofs
 
-╔═══════════════════════════════════════════════════════════╗
+╔══════════════════════════════════════════════════════════════╗
 ║             Formal Verification Summary                   ║
-╚═══════════════════════════════════════════════════════════╝
+╚══════════════════════════════════════════════════════════════╝
 
 Verified in 6 independent proof systems:
 ✓ Lean 4 (Dependent Type Theory)
@@ -1211,7 +1211,7 @@ Error: No operations to redo
 === Further Reading
 
 * `+docs/ARCHITECTURE.md+` - System design and architecture
-* `+docs/LEAN4_RUST_CORRESPONDENCE.md+` - Proof ↔ implementation mapping
+* `+docs/LEAN4_RUST_CORRESPONDENCE.adoc+` - Proof ↔ implementation mapping
 * `+docs/POSIX_COMPLIANCE.md+` - Roadmap to full POSIX shell
 * `+docs/SIGINT_TESTING.md+` - Signal handling details
 * `+proofs/README.md+` - Formal verification details

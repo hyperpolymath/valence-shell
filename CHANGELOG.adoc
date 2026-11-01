@@ -11,11 +11,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 == [Unreleased]
 
+=== Changed — 2026-11-01 (assurance-boundary re-audit)
+
+- Corrected prose that had drifted across the assurance boundary. The audit
+  record is `docs/audits/2026-11-01-assurance-boundary-audit.adoc`. In summary:
+  * the CLI banner and the Elixir moduledoc no longer call the project
+    "thermodynamic" — the claim is *algorithmic* reversibility only;
+  * RMO is described everywhere as best-effort local overwrite + unlink + audit
+    residue, never as physical erasure or GDPR compliance;
+  * the trust-boundary diagram now names the shipped Rust CLI, keeping the
+    extraction/refinement gap as the boundary;
+  * a test comment that said a Lean theorem proves the Rust normaliser now says
+    what it actually proves (the Lean model of the normaliser);
+  * `docs/THEORY-FEED.adoc` states the measured JanusKey situation: zero
+    imports, no `reversible-core` dependency, integration planned upstream only.
+- Stale `.md` references to `docs/LEAN4_RUST_CORRESPONDENCE`, `PROOF_HOLES_AUDIT`,
+  `OCAML_EXTRACTION` and `ZIG_LEAN_EXTRACTION` corrected to `.adoc`.
+
+=== Added — 2026-11-01 (estate proof-policy alignment)
+
+- `EXPLAINME.adoc` now carries the **Proof Ledger** required by `standards`
+  `docs/README-EXPLAINME-STANDARD.adoc` §5: 17 obligation rows, each with a
+  status from the closed vocabulary (`proven`, `proven-with-postulates`,
+  `argued`, `tested-only`, `open`), the checker invocation, the location and the
+  trust boundary. The header states that no prover was installed in the audit
+  environment, so no row was re-run.
+- `CLAUDE.md` gains a normative proof-policy block mapping obligation classes to
+  the verifiers `standards/3-practice/PROOF-POLICY.adoc` assigns
+  (Rust→Creusot, ABI/APIs→Idris2, theory→Agda rechecked in Rocq and Lean).
+- Confidence percentages (~85%, ~95%) are no longer used on any current claim
+  surface. `mathesis` §6 forbids the form; the replacement is a status token per
+  obligation, and mathesis Grades 3/2i/2ii/1 where a grade is needed.
+- Recorded, not fixed: the Agda tree postulates `funext` and is built without
+  the canonical `--safe --without-K --cubical-compatible` invocation, so no Agda
+  row can be `proven`; the Mizar target swallows failure (`|| echo`). Both are
+  logged as AP-6, AP-7 and AP-8 in the audit.
+
 === Planned
 - Glob expansion (*.txt, ?.rs, [a-z]*)
 - Quote processing (proper escaping, single/double quotes)
 - Full POSIX shell compliance (subset)
-- RMO (Remove-Match-Obliterate) proofs for GDPR compliance
+- RMO (Remove-Match-Obliterate) non-injectivity proofs — audit evidence about the
+  abstract model, explicitly not a GDPR compliance determination
 
 === Added — 2026-07-17
 
@@ -27,10 +64,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `"obliterate"` parser case (with `--force`/`-f`), and the executor arm routing
   to `secure_deletion::obliterate_path` (file/dir dispatch). Proof reference:
   `OBLITERATE_IRREVERSIBLE`.
-- **Audit residue**: obliterate now appends an append-only record to
-  `<sandbox-root>/.vsh-audit.log` — the MAA attestation that survives the data
-  destruction (GDPR Article 17 evidence). Data is destroyed; proof-of-deletion
-  persists.
+- **Audit residue**: obliterate appends an append-only record to
+  `<sandbox-root>/.vsh-audit.log` — an unsigned record that the command ran,
+  which survives the deletion.
+
+  *Corrected 2026-11-01:* this bullet originally read "the MAA attestation that
+  survives the data destruction (GDPR Article 17 evidence). Data is destroyed;
+  proof-of-deletion persists." That overstated the guarantee. The overwrite is
+  best-effort and local; CoW extents, journals, snapshots, device spares and
+  replicas are outside it, and an unsigned residue is not an attestation or legal
+  evidence. See `docs/RMO-DURABILITY-BOUNDARY.adoc`.
 - Tests: `impl/rust-cli/tests/obliterate_rmo_tests.rs` (6 tests) — dispatch
   wiring, missing-operand error, end-to-end destruction, audit residue,
   irreversibility (undo cannot resurrect), and no-old-plaintext-remains. Full
@@ -55,7 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cleanly when the oracle is not built.
 - `just build-model-oracle` / `just test-correspondence-model`; wired into
   `lean-verification.yml` CI.
-- `docs/LEAN4_RUST_CORRESPONDENCE.md` documents the harness, why the Coq
+- `docs/LEAN4_RUST_CORRESPONDENCE.adoc` documents the harness, why the Coq
   extraction is not executable (function-typed filesystem + classical axioms;
   needs `FMaps.t FSNode` migration), and the roadmap to full mechanization.
 
@@ -109,7 +152,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   2026-06-02 admits (#56/#57/#58) are all closed. Remaining assumptions
   are standard/justified: Coq `functional_extensionality` (stdlib) +
   `is_empty_dir_dec` (justified classical), Agda `funext` (structural).
-  Docs reconciled: `PROOF_HOLES_AUDIT.md`, `README.adoc`, `FAQ.adoc`,
+  Docs reconciled: `PROOF_HOLES_AUDIT.adoc`, `README.adoc`, `FAQ.adoc`,
   `CLAUDE.md`, `docs/wiki/`, `ROADMAP*.{adoc,md}`,
   `.machine_readable/6a2/STATE.a2ml`, `bot_directives/methodology.a2ml`.
 
@@ -350,7 +393,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated REPL with new parser and external execution
 
 - **Architecture Documentation**
-  - LEAN4_RUST_CORRESPONDENCE.md
+  - LEAN4_RUST_CORRESPONDENCE.adoc
   - ECHIDNA_INTEGRATION.md
   - ARCHITECTURE.md
   - POSIX_COMPLIANCE.md with 14-milestone roadmap
@@ -372,8 +415,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 === Documentation
 - PHASE6_M1_DESIGN.md
 - EXTRACTION_SUMMARY.md (500 lines)
-- docs/OCAML_EXTRACTION.md (600 lines)
-- docs/ZIG_LEAN_EXTRACTION.md (700 lines)
+- docs/OCAML_EXTRACTION.adoc (600 lines)
+- docs/ZIG_LEAN_EXTRACTION.adoc (700 lines)
 
 == [0.6.0] - 2025-12-01
 

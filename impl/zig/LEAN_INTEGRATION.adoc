@@ -108,7 +108,7 @@ zig build test
 
 === Documentation
 
-See *`+../../docs/ZIG_LEAN_EXTRACTION.md+`* for: - Complete build
+See *`+../../docs/ZIG_LEAN_EXTRACTION.adoc+`* for: - Complete build
 instructions - Usage examples - Troubleshooting - Performance benchmarks
 - Integration guide
 

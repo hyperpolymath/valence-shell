@@ -3,7 +3,7 @@
 # Validate Lean 4 ↔ Rust Correspondence
 #
 # This script validates that Rust implementation matches Lean 4 specifications
-# as documented in docs/LEAN4_RUST_CORRESPONDENCE.md
+# as documented in docs/LEAN4_RUST_CORRESPONDENCE.adoc
 
 set -euo pipefail
 
@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 IMPL_DIR="$PROJECT_ROOT/impl/rust-cli"
 PROOF_DIR="$PROJECT_ROOT/proofs/lean4"
-CORRESPONDENCE_DOC="$PROJECT_ROOT/docs/LEAN4_RUST_CORRESPONDENCE.md"
+CORRESPONDENCE_DOC="$PROJECT_ROOT/docs/LEAN4_RUST_CORRESPONDENCE.adoc"
 
 echo "=== Lean 4 ↔ Rust Correspondence Validation ==="
 echo

@@ -370,10 +370,12 @@ Valence Shell provides features beyond standard RSR requirements:
 
 * *Mutually Assured Accountability*
 * *RMR primitives* (proven reversible)
-* *GDPR foundation* (RMO planned)
-* *Audit trail* with mathematical guarantees
+* *Deletion evidence* (RMO: best-effort overwrite + unsigned residue; no
+  GDPR determination)
+* *Audit trail* whose tamper-evidence is conditional on a supplied HMAC key and
+  an external checkpoint
 
-*Impact*: Provable compliance, not just claims
+*Impact*: Claims scoped to what is proved, not a compliance certificate
 
 '''''
 

@@ -71,7 +71,7 @@ verification via `lake build` is unaffected.
 
 == Proof-debt status
 
-Per `../../docs/PROOF_HOLES_AUDIT.md` (last sweep 2026-04-12): 1 real
+Per `../../docs/PROOF_HOLES_AUDIT.adoc` (last sweep 2026-04-12): 1 real
 gap, 1 justified axiom, 1 structural item across the full
 six-proof-system stack — the Lean layer specifically is clean.
 `../../STATE.a2ml` carries the canonical machine-readable status under
@@ -84,5 +84,5 @@ six-proof-system stack — the Lean layer specifically is clean.
 * `../coq/`, `../agda/`, `../isabelle/`, `../mizar/`, `../z3/` —
   cross-validating proof systems (no per-subdir READMEs yet; tracked as
   audit item 3)
-* `../../docs/LEAN4_RUST_CORRESPONDENCE.md` — Lean → Rust
+* `../../docs/LEAN4_RUST_CORRESPONDENCE.adoc` — Lean → Rust
   correspondence design

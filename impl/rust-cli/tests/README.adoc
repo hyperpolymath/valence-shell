@@ -104,4 +104,4 @@ shelling out to `ls`.
 
 * `../src/README.adoc` — source-file map
 * `../../../docs/PROPERTY_TESTING.md` — proptest discipline
-* `../../../docs/LEAN4_RUST_CORRESPONDENCE.md` — correspondence design
+* `../../../docs/LEAN4_RUST_CORRESPONDENCE.adoc` — correspondence design

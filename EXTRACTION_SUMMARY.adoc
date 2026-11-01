@@ -117,8 +117,8 @@ formally verified code to be called from both OCaml and Zig.
 
 ==== 7. Documentation
 
-*Files*: - `+docs/OCAML_EXTRACTION.md+` (~600 lines) -
-`+docs/ZIG_LEAN_EXTRACTION.md+` (~700 lines) -
+*Files*: - `+docs/OCAML_EXTRACTION.adoc+` (~600 lines) -
+`+docs/ZIG_LEAN_EXTRACTION.adoc+` (~700 lines) -
 `+impl/zig/LEAN_INTEGRATION.md+` (~100 lines)
 
 *Total Documentation*: ~1,400 lines
@@ -441,8 +441,8 @@ OCaml, Zig, C *License*: MPL-2.0
 
 === Getting Started
 
-*For OCaml Users*: See `+docs/OCAML_EXTRACTION.md+` *For Zig Users*: See
-`+docs/ZIG_LEAN_EXTRACTION.md+` *For Contributors*: See inline
+*For OCaml Users*: See `+docs/OCAML_EXTRACTION.adoc+` *For Zig Users*: See
+`+docs/ZIG_LEAN_EXTRACTION.adoc+` *For Contributors*: See inline
 documentation in source files
 
 '''''

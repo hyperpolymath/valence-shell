@@ -4,9 +4,14 @@
 
 === Critical (Must Have for v1.0)
 
-==== 1. Secure Deletion (GDPR/RMO)
+==== 1. Secure Deletion (RMO)
 
-*Location*: `+tests/security_tests.rs:338+` *Status*: Stub only
+*Location*: `+tests/security_tests.rs:338+` *Status*: superseded.
+`obliterate` is now implemented and wired (3-pass overwrite + unlink + unsigned
+audit residue, best-effort on in-place filesystems). What remains is *not* a
+GDPR determination: hardware erase for CoW/SSD, audit-key provisioning and
+external anchoring. See `docs/RMO-DURABILITY-BOUNDARY.adoc`. The sketch below is
+retained as design history.
 *Implementation Needed*:
 
 [source,rust]
@@ -284,8 +289,8 @@ fn builtin_help() {
 
 *Total Implementation Time*: ~10-12 days
 
-*Critical Path*: 1. Secure deletion (3 days) - Blocks GDPR compliance
-claims 2. Audit log (3 days) - Blocks GDPR compliance claims 3. History
+*Critical Path*: 1. Secure deletion (3 days) - superseded by the wired,
+best-effort `obliterate`; no engineering task here yields a GDPR claim 2. Audit log (3 days) - Blocks GDPR compliance claims 3. History
 limits (1 day) - Prevents OOM in production 4. Process substitution
 cleanup (1 day) - Prevents temp file leaks 5. Background job parsing (1
 day) - Completes job control 6. FD duplication (1 day) - Fixes

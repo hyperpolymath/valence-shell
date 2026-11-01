@@ -127,7 +127,7 @@ Defined.
 
     Fully constructive decidability requires switching Filesystem to a finite map
     (e.g., list (Path * FSNode) or MSetAVL), at which point a scan over entries
-    suffices and Classical is no longer needed. See PROOF_HOLES_AUDIT.md. *)
+    suffices and Classical is no longer needed. See PROOF_HOLES_AUDIT.adoc. *)
 Theorem is_empty_dir_dec : forall p fs, {is_empty_dir p fs} + {~ is_empty_dir p fs}.
 Proof.
   intros p fs.

@@ -68,4 +68,4 @@ sweep.
 * `../README.md` — overall proof-stack design
 * `../lean4/README.adoc` — primary source of truth (interactive)
 * `../coq/README.adoc` — interactive CIC foundation
-* `../../docs/PROOF_HOLES_AUDIT.md` — proof-debt status
+* `../../docs/PROOF_HOLES_AUDIT.adoc` — proof-debt status
