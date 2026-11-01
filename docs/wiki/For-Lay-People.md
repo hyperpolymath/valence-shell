@@ -101,8 +101,9 @@ of what really happened — nobody has to just take anybody's word for it.
 - The "you can always undo this" proofs are **real and reproducible** — you can
   re-run them on your own computer.
 - But the bridge between the *proven math* and the *actual running program* is
-  not yet fully mechanically checked — right now it's confirmed by heavy testing
-  (roughly 85% confidence), not by an end-to-end proof.
+  not yet mechanically checked. It is `argued` and `tested-only` — heavy testing,
+  with no proof. No confidence number is quoted, because there is no measurement
+  behind one (see [Verification Status](Verification-Status)).
 - The "provably destroyed" (right-to-be-forgotten) feature is **designed but not
   built yet**.
 

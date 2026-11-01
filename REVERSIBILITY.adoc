@@ -378,6 +378,12 @@ A: The *proofs* guarantee model reversibility. The *implementation*
 history) and `+impl/rust-cli/Cargo.toml+` `+[package].version+` (semver
 pin) *Proven*: ~256 theorems across 6 verification systems
 
-*Summary*: Every operation in Valence Shell has a mathematically proven
-inverse. This isn’t hope or testing—it’s *formal proof*. Mistakes are
-reversible. Experimentation is safe. Accountability is guaranteed.
+*Summary*: Every operation in Valence Shell's *modelled* filesystem has a
+machine-checked inverse, under stated preconditions -- with one documented
+exception: `obliterate` is deliberately *not* reversible (see the scope note at
+the top of this file). This is formal proof about the model. It is not a proof
+about the running Rust program: that step is `argued` and `tested-only` in the
+Proof Ledger, and it is the open item blocking v1.0. Mistakes in the model are
+reversible; what the shipped shell does on a given kernel, filesystem and cache
+state is evidenced by testing, not proved. Accountability rests on the audit
+record, which is best-effort and unsigned.

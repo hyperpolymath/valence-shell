@@ -237,7 +237,7 @@ All share: *Multiple proof systems for cross-validation, honest status reporting
 
 | `proofs/z3/` | Z3 SMT proofs: ~150 lines. Automated first-order logic verification.
 
-| `impl/rust-cli/tests/correspondence_tests.rs` | Correspondence tests: Lean 4 theorem validation via property testing (~85% confidence, not mechanized)
+| `impl/rust-cli/tests/correspondence_tests.rs` | Correspondence tests: Lean 4 theorem validation via property testing -- `tested-only`, not mechanised, and no confidence percentage is quoted for it
 
 | `impl/rust-cli/tests/integration_test.rs` | Full end-to-end shell tests: pipes, redirections, glob expansion, job control
 

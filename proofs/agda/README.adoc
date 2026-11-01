@@ -33,18 +33,27 @@ Manifest:
 
 ```bash
 cd proofs/agda
-agda --safe --without-K FilesystemModel.agda           # single module
-agda --safe --without-K -i . CopyMoveOperations.agda   # transitive
+agda --library-file=<stdlib>.agda-lib --library=valence-shell FilesystemModel.agda    # single module
+agda --library-file=<stdlib>.agda-lib --library=valence-shell CopyMoveOperations.agda # transitive
 ```
+
+All nine modules type-check this way under Agda 2.6.4.3 + stdlib 2.1.1 and under
+Agda 2.7.0.1 + stdlib 2.2.
+
+*Waiver (see `VERIFICATION.adoc`).* The estate invocation is
+`agda --safe --without-K --cubical-compatible`, and this tree does **not** meet
+it: `--safe` reports `Cannot postulate funext with safe flag` and `--without-K`
+reports `Cannot eliminate reflexive equation p = p of type List String because K
+has been disabled`. The commands above are therefore the *unflagged* invocation,
+used under a recorded waiver. Do not add `--safe` or `--without-K` to them until
+those two obstacles are discharged.
 
 == Conventions
 
-* `--safe --without-K` discipline (no axiom K, no postulates) — same
-  flags as the `echo-types` proof suite the author maintains in the
-  hyperpolymath repo.
+* Status under PROOF-POLICY §5 is `proven-with-postulates` (one postulate:
+  `funext` in `FilesystemModel`) -- the waiver above is why it is not `proven`.
 * PascalCase module names; one module per file.
-* No `.agdai` interface artefacts in tree (cached locally, not
-  committed).
+* No `.agdai` interface artefacts in tree (cached locally, not committed).
 
 == See also
 
