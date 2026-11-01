@@ -45,7 +45,7 @@ applySequence (op ∷ ops) fs = applySequence ops (applyOp op fs)
 -- NOTE (2026-11-01): defined by structural recursion on the list rather than as
 -- `map reverseOp (reverse ops)`.  `reverse` is a foldl in agda-stdlib, so the
 -- `map`/`reverse` formulation does not reduce on a cons and blocks the
--- composition proof.  The two definitions coincide (see REVERSE-SEQUENCE below).
+-- composition proof.
 reverseSequence : List Operation → List Operation
 reverseSequence [] = []
 reverseSequence (op ∷ ops) = reverseSequence ops ++ (reverseOp op ∷ [])
