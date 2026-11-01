@@ -78,17 +78,63 @@ moveFile src dst fs with fs src
 -- Helper Lemmas
 -- ============================================================================
 
--- fsUpdate p v fs at p evaluates to v
-fsUpdate-at : ∀ p v fs → fsUpdate p v fs p ≡ v
-fsUpdate-at p v fs with p path-≟ p
-... | yes refl = refl
-... | no p≢p = ⊥-elim (p≢p refl)
+-- fsUpdate-at and fsUpdate-other are provided by FilesystemModel
 
--- fsUpdate p v fs at p' (p ≠ p') returns fs p'
-fsUpdate-other : ∀ p p' v fs → (¬ (p ≡ p')) → fsUpdate p v fs p' ≡ fs p'
-fsUpdate-other p p' v fs neq with p path-≟ p'
-... | yes p≡p' = ⊥-elim (neq p≡p')
-... | no _ = refl
+-- Local injectivity of just: convenient direction for the proofs below
+just-inj : ∀ {A : Set} {a b : A} → just a ≡ just b → a ≡ b
+just-inj refl = refl
+
+-- moveFile as a point update, when the source is known to exist
+moveFile-just-eq : ∀ src dst fs node → fs src ≡ just node →
+  moveFile src dst fs ≡ fsUpdate src nothing (fsUpdate dst (just node) fs)
+moveFile-just-eq src dst fs node h with fs src
+... | just n = cong (λ x → fsUpdate src nothing (fsUpdate dst (just x) fs)) (just-inj h)
+... | nothing = ⊥-elim (nothing≢just h)
+
+-- moveFile is a no-op when the source is empty
+moveFile-nothing-eq : ∀ src dst fs → fs src ≡ nothing → moveFile src dst fs ≡ fs
+moveFile-nothing-eq src dst fs h with fs src
+... | nothing = refl
+... | just n = ⊥-elim (nothing≢just (sym h))
+
+-- moveFile is reversible: moving back restores the original filesystem
+moveFile-reversible : ∀ src dst fs →
+  movePrecondition src dst fs →
+  moveFile dst src (moveFile src dst fs) ≡ fs
+moveFile-reversible src dst fs ((node , hsrc) , not-dst , parent-ex , notEq , rest) =
+  trans (cong (λ t → moveFile dst src t) (moveFile-just-eq src dst fs node hsrc))
+        (trans (moveFile-just-eq dst src fs1 node fs1-dst)
+               (funext fs2-is-fs))
+  where
+    fs1 : Filesystem
+    fs1 = fsUpdate src nothing (fsUpdate dst (just node) fs)
+
+    fs1-dst : fs1 dst ≡ just node
+    fs1-dst = trans (fsUpdate-other src dst nothing (fsUpdate dst (just node) fs)
+                      notEq)
+                    (fsUpdate-at dst (just node) fs)
+
+    fs2-is-fs : ∀ p' →
+      fsUpdate dst nothing (fsUpdate src (just node) fs1) p' ≡ fs p'
+    fs2-is-fs p' = dst-case (dst path-≟ p')
+      where
+        dst-case : Dec (dst ≡ p') →
+          fsUpdate dst nothing (fsUpdate src (just node) fs1) p' ≡ fs p'
+        dst-case (yes refl) =
+          trans (fsUpdate-at dst nothing (fsUpdate src (just node) fs1))
+                (sym (not-path-exists-nothing {dst} {fs} not-dst))
+        dst-case (no dst≢p') = src-case (src path-≟ p')
+          where
+            src-case : Dec (src ≡ p') →
+              fsUpdate dst nothing (fsUpdate src (just node) fs1) p' ≡ fs p'
+            src-case (yes refl) =
+              trans (fsUpdate-other dst src nothing (fsUpdate src (just node) fs1) dst≢p')
+                    (trans (fsUpdate-at src (just node) fs1) (sym hsrc))
+            src-case (no src≢p') =
+              trans (fsUpdate-other dst p' nothing (fsUpdate src (just node) fs1) dst≢p')
+                    (trans (fsUpdate-other src p' (just node) fs1 src≢p')
+                           (trans (fsUpdate-other src p' nothing (fsUpdate dst (just node) fs) src≢p')
+                                  (fsUpdate-other dst p' (just node) fs dst≢p')))
 
 -- After fsUpdate with just node, path exists
 fsUpdate-exists : ∀ p node fs → pathExists p (fsUpdate p (just node) fs)
@@ -108,13 +154,15 @@ fsUpdate-overwrite : ∀ p v1 v2 fs →
 fsUpdate-overwrite p v1 v2 fs = funext helper
   where
     helper : ∀ p' → fsUpdate p v2 (fsUpdate p v1 fs) p' ≡ fsUpdate p v2 fs p'
-    helper p' with p path-≟ p'
-    ... | yes refl with p path-≟ p
-        ... | yes _ = refl
-        ... | no p≢p = ⊥-elim (p≢p refl)
-    ... | no neq with p path-≟ p'
-        ... | yes p≡p' = ⊥-elim (neq p≡p')
-        ... | no _ = refl
+    helper p' = case-split (p path-≟ p')
+      where
+        case-split : Dec (p ≡ p') → fsUpdate p v2 (fsUpdate p v1 fs) p' ≡ fsUpdate p v2 fs p'
+        case-split (yes refl) =
+          trans (fsUpdate-at p v2 (fsUpdate p v1 fs)) (sym (fsUpdate-at p v2 fs))
+        case-split (no neq) =
+          trans (trans (fsUpdate-other p p' v2 (fsUpdate p v1 fs) neq)
+                       (fsUpdate-other p p' v1 fs neq))
+                (sym (fsUpdate-other p p' v2 fs neq))
 
 -- fsUpdate p nothing fs ≡ fs when fs p ≡ nothing (path didn't exist)
 fsUpdate-nothing-noop : ∀ p fs →
@@ -124,197 +172,103 @@ fsUpdate-nothing-noop p fs notExists = funext helper
   where
     helper : ∀ p' → fsUpdate p nothing fs p' ≡ fs p'
     helper p' with p path-≟ p'
-    ... | yes refl = sym (not-path-exists-nothing notExists)
+    ... | yes refl = sym (not-path-exists-nothing {p} {fs} notExists)
     ... | no _ = refl
 
 -- After fsUpdate p nothing, path p does not exist
 fsUpdate-nothing-removes : ∀ p fs → ¬ pathExists p (fsUpdate p nothing fs)
-fsUpdate-nothing-removes p fs (node , eq) with p path-≟ p
-... | yes refl with eq
-...   | ()
-... | no p≢p = ⊥-elim (p≢p refl)
+fsUpdate-nothing-removes p fs (node , eq) = case-split (p path-≟ p)
+  where
+    case-split : (d : Dec (p ≡ p)) → ⊥
+    case-split (no p≢p) = p≢p refl
+    case-split (yes _) = nothing≢just (trans (sym (fsUpdate-at p nothing fs)) eq)
 
 -- ============================================================================
 -- Copy Operation Theorems
 -- ============================================================================
 
+-- Equations characterising copyFile, stated against the node it copies.
+-- (Proving the theorems below by `with fs src` instead would put the stuck
+-- application `fs src` on the left of the goal, which Agda cannot refine.)
+copyFile-nothing : ∀ src dst fs → fs src ≡ nothing → copyFile src dst fs ≡ fs
+copyFile-nothing src dst fs h with fs src
+... | nothing = refl
+... | just x = ⊥-elim (nothing≢just (sym h))
+
+copyFile-just : ∀ src dst fs node → fs src ≡ just node →
+  copyFile src dst fs ≡ fsUpdate dst (just node) fs
+copyFile-just src dst fs node h with fs src
+... | just x = cong (λ n → fsUpdate dst (just n) fs) (just-inj h)
+... | nothing = ⊥-elim (nothing≢just h)
+
 -- Theorem: copy creates a file at destination
 copyFile-creates-destination : ∀ src dst fs →
   copyFilePrecondition src dst fs →
   pathExists dst (copyFile src dst fs)
-copyFile-creates-destination src dst fs (isFile-prf , _) with fs src | isFile-prf
--- Source exists: copyFile = fsUpdate dst (just node) fs
-... | just node | _ = fsUpdate-exists dst node fs
--- Source doesn't exist: impossible — isFile requires fs src ≡ just _
-... | nothing | (perms , ())
+copyFile-creates-destination src dst fs ((perms , hsrc) , _) =
+  subst (λ t → pathExists dst t) (sym (copyFile-just src dst fs (mkFSNode File perms) hsrc))
+        (fsUpdate-exists dst (mkFSNode File perms) fs)
 
 -- Theorem: copy preserves source
 copyFile-preserves-source : ∀ src dst fs →
   copyFilePrecondition src dst fs →
   (¬ (src ≡ dst)) →
   fs src ≡ (copyFile src dst fs) src
-copyFile-preserves-source src dst fs pre neq with fs src
-... | just node = sym (fsUpdate-other dst src (just node) fs (λ eq → neq (sym eq)))
-... | nothing = refl
+copyFile-preserves-source src dst fs ((perms , hsrc) , _) neq =
+  trans (sym (fsUpdate-other dst src (just (mkFSNode File perms)) fs (λ eq → neq (sym eq))))
+        (cong (λ t → t src) (sym (copyFile-just src dst fs (mkFSNode File perms) hsrc)))
 
 -- Theorem: copy creates exact duplicate of content
 copyFile-same-content : ∀ src dst fs →
   copyFilePrecondition src dst fs →
   fs src ≡ (copyFile src dst fs) dst
-copyFile-same-content src dst fs (isFile-prf , _) with fs src | isFile-prf
-... | just node | _ = sym (fsUpdate-at dst (just node) fs)
--- Impossible: isFile requires fs src ≡ just _
-... | nothing | (perms , ())
+copyFile-same-content src dst fs ((perms , hsrc) , _) =
+  trans hsrc
+        (trans (sym (fsUpdate-at dst (just (mkFSNode File perms)) fs))
+               (cong (λ t → t dst) (sym (copyFile-just src dst fs (mkFSNode File perms) hsrc))))
 
 -- Theorem: copy is reversible by deleting destination
 copyFile-reversible : ∀ src dst fs →
   copyFilePrecondition src dst fs →
   deleteFile dst (copyFile src dst fs) ≡ fs
-copyFile-reversible src dst fs (isFile-prf , not-dst , rest) with fs src | isFile-prf
-... | just node | _ =
-    -- deleteFile dst (fsUpdate dst (just node) fs)
-    -- = fsUpdate dst nothing (fsUpdate dst (just node) fs)    [by def of deleteFile]
-    -- = fsUpdate dst nothing fs                                [by fsUpdate-overwrite]
-    -- = fs                                                     [by fsUpdate-nothing-noop, since ¬ pathExists dst fs]
-    trans (fsUpdate-overwrite dst (just node) nothing fs)
-          (fsUpdate-nothing-noop dst fs not-dst)
--- Impossible: isFile requires fs src ≡ just _
-... | nothing | (perms , ())
+copyFile-reversible src dst fs ((perms , hsrc) , not-dst , _) =
+  trans (cong (λ t → deleteFile dst t) (copyFile-just src dst fs (mkFSNode File perms) hsrc))
+        (trans (fsUpdate-overwrite dst (just (mkFSNode File perms)) nothing fs)
+               (fsUpdate-nothing-noop dst fs not-dst))
 
 -- ============================================================================
 -- Move Operation Theorems
 -- ============================================================================
 
+-- (moveFile-just-eq and moveFile-nothing-eq are defined just below)
+
 -- Theorem: move creates path at destination
 moveFile-creates-destination : ∀ src dst fs →
   movePrecondition src dst fs →
   pathExists dst (moveFile src dst fs)
-moveFile-creates-destination src dst fs (exists , rest) with fs src | exists
--- Source exists: moveFile = fsUpdate src nothing (fsUpdate dst (just node) fs)
--- dst is in fsUpdate dst (just node) fs, and fsUpdate src nothing preserves it (src ≠ dst)
-... | just node | _ =
-    let notEq = proj₁ (proj₂ (proj₂ rest))
-    in subst (λ v → pathExists dst (fsUpdate src nothing (fsUpdate dst (just node) fs)))
-             refl
-             (node , trans (sym (fsUpdate-other src dst nothing (fsUpdate dst (just node) fs)
-                                  (λ eq → notEq (sym eq))))
-                           (fsUpdate-at dst (just node) fs))
--- Impossible: pathExists requires fs src ≡ just _
-... | nothing | (node , ())
+moveFile-creates-destination src dst fs ((node , hsrc) , _ , _ , notEq , _) =
+  subst (λ t → pathExists dst t) (sym (moveFile-just-eq src dst fs node hsrc))
+        (node , trans (fsUpdate-other src dst nothing (fsUpdate dst (just node) fs)
+                        notEq)
+                      (fsUpdate-at dst (just node) fs))
 
 -- Theorem: move removes source
 moveFile-removes-source : ∀ src dst fs →
   movePrecondition src dst fs →
   ¬ pathExists src (moveFile src dst fs)
-moveFile-removes-source src dst fs (exists , rest) with fs src | exists
--- Source exists: result has fsUpdate src nothing at top level → src doesn't exist
-... | just node | _ = fsUpdate-nothing-removes src (fsUpdate dst (just node) fs)
--- Impossible: pathExists requires fs src ≡ just _
-... | nothing | (n , ())
+moveFile-removes-source src dst fs ((node , hsrc) , _ , _ , _ , _) =
+  subst (λ t → ¬ pathExists src t) (sym (moveFile-just-eq src dst fs node hsrc))
+        (fsUpdate-nothing-removes src (fsUpdate dst (just node) fs))
 
 -- Theorem: move preserves content (node is same at destination)
 moveFile-preserves-content : ∀ src dst fs →
   movePrecondition src dst fs →
   fs src ≡ (moveFile src dst fs) dst
-moveFile-preserves-content src dst fs (exists , not-dst , parent-ex , notEq , rest) with fs src | exists
-... | just node | _ =
-    -- (moveFile src dst fs) dst
-    -- = fsUpdate src nothing (fsUpdate dst (just node) fs) dst
-    -- src ≠ dst, so fsUpdate src nothing doesn't affect dst
-    -- = fsUpdate dst (just node) fs dst
-    -- = just node
-    trans (cong just refl)
-          (sym (trans (fsUpdate-other src dst nothing (fsUpdate dst (just node) fs)
-                        (λ eq → notEq (sym eq)))
-                      (fsUpdate-at dst (just node) fs)))
--- Impossible: pathExists requires fs src ≡ just _
-... | nothing | (n , ())
-
--- Theorem: move is reversible (moving back restores original)
-moveFile-reversible : ∀ src dst fs →
-  movePrecondition src dst fs →
-  moveFile dst src (moveFile src dst fs) ≡ fs
-moveFile-reversible src dst fs (exists , not-dst , parent-ex , notEq , rest)
-  with fs src | exists
--- Source exists: need to show double move is identity
-... | just node | _ = funext pointwise
-  where
-    -- After first move: fs1 = fsUpdate src nothing (fsUpdate dst (just node) fs)
-    -- After second move:
-    --   fs1 dst = just node (by fsUpdate-other + fsUpdate-at, since src ≠ dst)
-    --   fs2 = fsUpdate dst nothing (fsUpdate src (just node) fs1)
-    -- Need: fs2 ≡ fs (pointwise)
-    fs1 : Filesystem
-    fs1 = fsUpdate src nothing (fsUpdate dst (just node) fs)
-
-    -- fs1 dst ≡ just node
-    fs1-dst : fs1 dst ≡ just node
-    fs1-dst = trans (fsUpdate-other src dst nothing (fsUpdate dst (just node) fs)
-                      (λ eq → notEq (sym eq)))
-                    (fsUpdate-at dst (just node) fs)
-
-    pointwise : ∀ p' → moveFile dst src fs1 p' ≡ fs p'
-    pointwise p' with fs1 dst | fs1-dst
-    ... | just node' | eq with just-injective eq
-      where
-        just-injective : ∀ {A : Set} {a b : A} → just a ≡ just b → a ≡ b
-        just-injective refl = refl
-    ... | refl =
-      -- moveFile dst src fs1 = fsUpdate dst nothing (fsUpdate src (just node) fs1)
-      -- We need to show this equals fs pointwise at p'
-      helper p'
-      where
-        -- fs2 = fsUpdate dst nothing (fsUpdate src (just node) fs1)
-        -- where fs1 = fsUpdate src nothing (fsUpdate dst (just node) fs)
-        --
-        -- For any p':
-        -- Case p' = src: fs2 src = fsUpdate src (just node) fs1 src = just node = fs src
-        -- Case p' = dst: fs2 dst = nothing... but fs dst must be nothing (from not-dst)
-        --   Wait: fsUpdate dst nothing returns nothing at dst. And ¬ pathExists dst fs
-        --   means fs dst = nothing. So both are nothing. ✓
-        -- Case p' ≠ src, p' ≠ dst: all updates are identity
-        helper : ∀ p' →
-          fsUpdate dst nothing (fsUpdate src (just node) fs1) p' ≡ fs p'
-        helper p' with dst path-≟ p'
-        -- Case p' = dst:
-        ... | yes refl =
-          -- LHS: fsUpdate dst nothing _ dst = nothing
-          -- RHS: fs dst = nothing (from ¬ pathExists dst fs)
-          sym (not-path-exists-nothing not-dst)
-        ... | no dst≢p' with src path-≟ p'
-        -- Case p' = src:
-            ... | yes refl =
-              -- LHS: fsUpdate dst nothing (fsUpdate src (just node) fs1) src
-              -- Since dst ≠ src: = fsUpdate src (just node) fs1 src = just node
-              -- RHS: fs src = just node (given by with-match)
-              -- fsUpdate-other: dst ≠ src → fsUpdate dst nothing doesn't touch src
-              -- fsUpdate-at: fsUpdate src (just node) fs1 src = just node
-              trans (fsUpdate-other dst src nothing (fsUpdate src (just node) fs1)
-                      (λ eq → dst≢p' eq))
-                    (fsUpdate-at src (just node) fs1)
-            -- Case p' ≠ src, p' ≠ dst: all four fsUpdates pass through
-            ... | no src≢p' =
-              -- LHS cascades through all updates to fs p'
-              trans (fsUpdate-other dst p' nothing (fsUpdate src (just node) fs1)
-                      dst≢p')
-                    (trans (fsUpdate-other src p' (just node) fs1 src≢p')
-                           (trans (fsUpdate-other src p' nothing (fsUpdate dst (just node) fs)
-                                    src≢p')
-                                  (fsUpdate-other dst p' (just node) fs dst≢p')))
--- Impossible: pathExists requires fs src ≡ just _
-... | nothing | (n , ()) = refl
-
--- ============================================================================
--- Preservation Theorems
--- ============================================================================
-
--- Theorem: copy preserves unrelated paths
-copyFile-preserves-other-paths : ∀ src dst p fs →
-  (¬ (p ≡ dst)) →
-  fs p ≡ (copyFile src dst fs) p
-copyFile-preserves-other-paths src dst p fs neq with fs src
-... | just node = sym (fsUpdate-other dst p (just node) fs neq)
-... | nothing = refl
+moveFile-preserves-content src dst fs ((node , hsrc) , _ , _ , notEq , _) =
+  trans hsrc
+        (trans (sym (fsUpdate-at dst (just node) fs))
+               (trans (sym (fsUpdate-other src dst nothing (fsUpdate dst (just node) fs) notEq))
+                      (cong (λ t → t dst) (sym (moveFile-just-eq src dst fs node hsrc)))))
 
 -- Theorem: move preserves unrelated paths
 moveFile-preserves-other-paths : ∀ src dst p fs →
@@ -323,8 +277,8 @@ moveFile-preserves-other-paths : ∀ src dst p fs →
   fs p ≡ (moveFile src dst fs) p
 moveFile-preserves-other-paths src dst p fs neq-src neq-dst with fs src
 ... | just node =
-    sym (trans (fsUpdate-other src p nothing (fsUpdate dst (just node) fs) neq-src)
-               (fsUpdate-other dst p (just node) fs neq-dst))
+    sym (trans (fsUpdate-other src p nothing (fsUpdate dst (just node) fs) (λ eq → neq-src (sym eq)))
+               (fsUpdate-other dst p (just node) fs (λ eq → neq-dst (sym eq))))
 ... | nothing = refl
 
 -- ============================================================================

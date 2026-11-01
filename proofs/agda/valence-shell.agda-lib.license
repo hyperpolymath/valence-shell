@@ -1,0 +1,7 @@
+SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+SPDX-License-Identifier: MPL-2.0
+
+The .agda-lib format has no comment syntax: Agda's parser reads every line as a
+`key: value` field and aborts with "Missing ':' for field" on anything else. The
+SPDX header that the rest of this repository carries inline therefore lives here,
+as the REUSE companion file.

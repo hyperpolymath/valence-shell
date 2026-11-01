@@ -14,6 +14,7 @@ open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Nat using (ℕ)
 open import Data.Bool using (Bool; true; false)
 open import Relation.Nullary using (¬_; Dec; yes; no)
+open import Data.Empty using (⊥-elim)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; cong; subst)
 
 -- ============================================================================
@@ -54,6 +55,26 @@ fsUpdateExt p n fs p' with p pathExt-≟ p'
 ... | no _ = fs p'
 
 -- ============================================================================
+-- Node-level setters
+-- ============================================================================
+--
+-- NOTE (2026-11-01): the original definitions of chmod/chown used a nested
+-- `with` inside a `with` clause (`... | yes _ with fs p'`).  Agda rejects that
+-- layout outright ("Could not parse the left-hand side"), so the node surgery
+-- is factored out into total functions on `Maybe FSNodeExt`.  This is a
+-- presentational change: the model is unchanged.
+
+applyMode : Mode → Maybe FSNodeExt → Maybe FSNodeExt
+applyMode m nothing = nothing
+applyMode m (just node) =
+  just (mkFSNodeExt (FSNodeExt.nodeType node) m (FSNodeExt.owner node))
+
+applyOwner : Ownership → Maybe FSNodeExt → Maybe FSNodeExt
+applyOwner o nothing = nothing
+applyOwner o (just node) =
+  just (mkFSNodeExt (FSNodeExt.nodeType node) (FSNodeExt.mode node) o)
+
+-- ============================================================================
 -- chmod Operation
 -- ============================================================================
 
@@ -64,10 +85,20 @@ ChmodPrecondition p fs = ∃ λ node → fs p ≡ just node
 -- Apply chmod: change mode bits of a file
 chmod : Path → Mode → FilesystemExt → FilesystemExt
 chmod p newMode fs p' with p pathExt-≟ p'
-... | yes _ with fs p'
-...   | nothing = nothing
-...   | just node = just (mkFSNodeExt (FSNodeExt.nodeType node) newMode (FSNodeExt.owner node))
+... | yes _ = applyMode newMode (fs p')
 ... | no _ = fs p'
+
+-- Value of chmod at the modified path
+chmod-at : ∀ p m fs → chmod p m fs p ≡ applyMode m (fs p)
+chmod-at p m fs with p pathExt-≟ p
+... | yes _ = refl
+... | no p≢p = ⊥-elim (p≢p refl)
+
+-- Value of chmod at any other path
+chmod-other : ∀ p p' m fs → ¬ (p ≡ p') → chmod p m fs p' ≡ fs p'
+chmod-other p p' m fs p≢p' with p pathExt-≟ p'
+... | yes p≡p' = ⊥-elim (p≢p' p≡p')
+... | no _ = refl
 
 -- ============================================================================
 -- chmod Theorems
@@ -79,16 +110,22 @@ chmod-reversible : ∀ p fs oldMode newMode →
   chmod p oldMode (chmod p newMode fs) ≡ fs
 chmod-reversible p fs oldMode newMode (node , hnode , hmode) = funext helper
   where
+    node-modes : Mode → FSNodeExt
+    node-modes m = mkFSNodeExt (FSNodeExt.nodeType node) m (FSNodeExt.owner node)
+
     helper : ∀ p' → chmod p oldMode (chmod p newMode fs) p' ≡ fs p'
-    helper p' with p pathExt-≟ p'
-    ... | no _ = refl
-    ... | yes refl with fs p | hnode
-    ...   | .(just node) | refl with p pathExt-≟ p
-    ...     | no p≢p = ⊥-elim (p≢p refl)
-              where open import Data.Empty using (⊥-elim)
-    ...     | yes _ with node
-    ...       | mkFSNodeExt nt m o with hmode
-    ...         | refl = refl
+    helper p' = case-split (p pathExt-≟ p')
+      where
+        case-split : Dec (p ≡ p') → chmod p oldMode (chmod p newMode fs) p' ≡ fs p'
+        case-split (no p≢p') =
+            trans (chmod-other p p' oldMode (chmod p newMode fs) p≢p')
+                  (chmod-other p p' newMode fs p≢p')
+        case-split (yes refl) =
+            trans (trans (chmod-at p oldMode (chmod p newMode fs)) (cong (applyMode oldMode) applied))
+                  (trans (sym (cong just (cong node-modes hmode))) (sym hnode))
+          where
+            applied : chmod p newMode fs p ≡ just (node-modes newMode)
+            applied = trans (chmod-at p newMode fs) (cong (applyMode newMode) hnode)
 
 -- chmod to same mode is identity
 chmod-same-mode : ∀ p fs m →
@@ -96,22 +133,23 @@ chmod-same-mode : ∀ p fs m →
   chmod p m fs ≡ fs
 chmod-same-mode p fs m (node , hnode , hmode) = funext helper
   where
+    node-modes : Mode → FSNodeExt
+    node-modes md = mkFSNodeExt (FSNodeExt.nodeType node) md (FSNodeExt.owner node)
+
     helper : ∀ p' → chmod p m fs p' ≡ fs p'
-    helper p' with p pathExt-≟ p'
-    ... | no _ = refl
-    ... | yes refl with fs p | hnode
-    ...   | .(just node) | refl with node
-    ...     | mkFSNodeExt nt md o with hmode
-    ...       | refl = refl
+    helper p' = case-split (p pathExt-≟ p')
+      where
+        case-split : Dec (p ≡ p') → chmod p m fs p' ≡ fs p'
+        case-split (no p≢p') = chmod-other p p' m fs p≢p'
+        case-split (yes refl) =
+            trans (trans (chmod-at p m fs) (cong (applyMode m) hnode))
+                  (trans (sym (cong just (cong node-modes hmode))) (sym hnode))
 
 -- chmod preserves other paths
 chmod-preserves-other : ∀ p₁ p₂ fs m →
   ¬ (p₁ ≡ p₂) →
   chmod p₁ m fs p₂ ≡ fs p₂
-chmod-preserves-other p₁ p₂ fs m hneq with p₁ pathExt-≟ p₂
-... | yes p₁≡p₂ = ⊥-elim (hneq p₁≡p₂)
-      where open import Data.Empty using (⊥-elim)
-... | no _ = refl
+chmod-preserves-other = λ p₁ p₂ fs m hneq → chmod-other p₁ p₂ m fs hneq
 
 -- ============================================================================
 -- chown Operation
@@ -124,10 +162,20 @@ ChownPrecondition p fs = ∃ λ node → fs p ≡ just node
 -- Apply chown: change ownership of a file
 chown : Path → Ownership → FilesystemExt → FilesystemExt
 chown p newOwner fs p' with p pathExt-≟ p'
-... | yes _ with fs p'
-...   | nothing = nothing
-...   | just node = just (mkFSNodeExt (FSNodeExt.nodeType node) (FSNodeExt.mode node) newOwner)
+... | yes _ = applyOwner newOwner (fs p')
 ... | no _ = fs p'
+
+-- Value of chown at the modified path
+chown-at : ∀ p o fs → chown p o fs p ≡ applyOwner o (fs p)
+chown-at p o fs with p pathExt-≟ p
+... | yes _ = refl
+... | no p≢p = ⊥-elim (p≢p refl)
+
+-- Value of chown at any other path
+chown-other : ∀ p p' o fs → ¬ (p ≡ p') → chown p o fs p' ≡ fs p'
+chown-other p p' o fs p≢p' with p pathExt-≟ p'
+... | yes p≡p' = ⊥-elim (p≢p' p≡p')
+... | no _ = refl
 
 -- ============================================================================
 -- chown Theorems
@@ -139,16 +187,22 @@ chown-reversible : ∀ p fs oldOwner newOwner →
   chown p oldOwner (chown p newOwner fs) ≡ fs
 chown-reversible p fs oldOwner newOwner (node , hnode , howner) = funext helper
   where
+    node-owners : Ownership → FSNodeExt
+    node-owners o = mkFSNodeExt (FSNodeExt.nodeType node) (FSNodeExt.mode node) o
+
     helper : ∀ p' → chown p oldOwner (chown p newOwner fs) p' ≡ fs p'
-    helper p' with p pathExt-≟ p'
-    ... | no _ = refl
-    ... | yes refl with fs p | hnode
-    ...   | .(just node) | refl with p pathExt-≟ p
-    ...     | no p≢p = ⊥-elim (p≢p refl)
-              where open import Data.Empty using (⊥-elim)
-    ...     | yes _ with node
-    ...       | mkFSNodeExt nt m o with howner
-    ...         | refl = refl
+    helper p' = case-split (p pathExt-≟ p')
+      where
+        case-split : Dec (p ≡ p') → chown p oldOwner (chown p newOwner fs) p' ≡ fs p'
+        case-split (no p≢p') =
+            trans (chown-other p p' oldOwner (chown p newOwner fs) p≢p')
+                  (chown-other p p' newOwner fs p≢p')
+        case-split (yes refl) =
+            trans (trans (chown-at p oldOwner (chown p newOwner fs)) (cong (applyOwner oldOwner) applied))
+                  (trans (sym (cong just (cong node-owners howner))) (sym hnode))
+          where
+            applied : chown p newOwner fs p ≡ just (node-owners newOwner)
+            applied = trans (chown-at p newOwner fs) (cong (applyOwner newOwner) hnode)
 
 -- chown to same owner is identity
 chown-same-owner : ∀ p fs o →
@@ -156,32 +210,23 @@ chown-same-owner : ∀ p fs o →
   chown p o fs ≡ fs
 chown-same-owner p fs o (node , hnode , howner) = funext helper
   where
+    node-owners : Ownership → FSNodeExt
+    node-owners ow = mkFSNodeExt (FSNodeExt.nodeType node) (FSNodeExt.mode node) ow
+
     helper : ∀ p' → chown p o fs p' ≡ fs p'
-    helper p' with p pathExt-≟ p'
-    ... | no _ = refl
-    ... | yes refl with fs p | hnode
-    ...   | .(just node) | refl with node
-    ...     | mkFSNodeExt nt m ow with howner
-    ...       | refl = refl
+    helper p' = case-split (p pathExt-≟ p')
+      where
+        case-split : Dec (p ≡ p') → chown p o fs p' ≡ fs p'
+        case-split (no p≢p') = chown-other p p' o fs p≢p'
+        case-split (yes refl) =
+            trans (trans (chown-at p o fs) (cong (applyOwner o) hnode))
+                  (trans (sym (cong just (cong node-owners howner))) (sym hnode))
 
 -- chown preserves other paths
 chown-preserves-other : ∀ p₁ p₂ fs o →
   ¬ (p₁ ≡ p₂) →
   chown p₁ o fs p₂ ≡ fs p₂
-chown-preserves-other p₁ p₂ fs o hneq with p₁ pathExt-≟ p₂
-... | yes p₁≡p₂ = ⊥-elim (hneq p₁≡p₂)
-      where open import Data.Empty using (⊥-elim)
-... | no _ = refl
-
--- ============================================================================
--- Cross-operation Commutativity
--- ============================================================================
-
--- chmod and chown commute (they modify different fields)
--- Note: This requires showing that the intermediate filesystem at p
--- produces the same result regardless of order. Since chmod modifies
--- mode and chown modifies owner, applying both yields the same node.
--- The proof at other paths is trivial (both are identity).
+chown-preserves-other = λ p₁ p₂ fs o hneq → chown-other p₁ p₂ o fs hneq
 
 {-
   Summary of Proven Claims:
