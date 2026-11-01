@@ -290,7 +290,7 @@ fn builtin_help() {
 *Total Implementation Time*: ~10-12 days
 
 *Critical Path*: 1. Secure deletion (3 days) - superseded by the wired,
-best-effort `obliterate`; no engineering task here yields a GDPR claim 2. Audit log (3 days) - Blocks GDPR compliance claims 3. History
+best-effort `obliterate`; no engineering task here yields a GDPR claim 2. Audit log (3 days) - Needed for a tamper-evident record (not a GDPR claim) 3. History
 limits (1 day) - Prevents OOM in production 4. Process substitution
 cleanup (1 day) - Prevents temp file leaks 5. Background job parsing (1
 day) - Completes job control 6. FD duplication (1 day) - Fixes
