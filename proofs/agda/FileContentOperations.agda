@@ -57,6 +57,8 @@ isFileType : FSNodeType → Bool
 isFileType File = true
 isFileType Directory = false
 
+-- Preserve the type and permissions, giving files empty content and directories
+-- no content.
 fromNode : FSNode → FSNodeWithContent
 fromNode node = mkFSNodeWithContent (FSNode.nodeType node) (FSNode.permissions node)
                  (if isFileType (FSNode.nodeType node) then just emptyContent else nothing)
@@ -96,9 +98,13 @@ writeContent c (just node) = just record node { nodeContent = just c }
 -- File Content Operations
 -- ============================================================================
 
+-- Return the stored content, or nothing if the path or its content is absent.
+-- This operation does not check the node type or read permission.
 readFile : Path → FilesystemWithContent → Maybe FileContent
 readFile p fs = readContent (fs p)
 
+-- Replace the content of an existing node, leaving an absent path unchanged.
+-- This operation does not check the node type or write permission.
 writeFile : Path → FileContent → FilesystemWithContent → FilesystemWithContent
 writeFile p content fs p' with p path-≟ p'
 ... | yes _ = writeContent content (fs p')
@@ -313,12 +319,14 @@ record FileModificationRecord : Set where
 createModRecord : Path → FileContent → FileContent → ℕ → FileModificationRecord
 createModRecord p old new ts = mkFileModRecord p old new ts
 
+-- Write the record's new content at its path using writeFile.
 applyModification : FileModificationRecord → FilesystemWithContent → FilesystemWithContent
 applyModification mrec fs =
   writeFile (FileModificationRecord.modPath mrec)
             (FileModificationRecord.modNewContent mrec)
             fs
 
+-- Write the record's old content at its path using writeFile.
 reverseModification : FileModificationRecord → FilesystemWithContent → FilesystemWithContent
 reverseModification mrec fs =
   writeFile (FileModificationRecord.modPath mrec)

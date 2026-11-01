@@ -307,6 +307,11 @@ fn execute_script_content(content: &str, state: &mut state::ShellState) -> Resul
     std::process::exit(state.last_exit_code);
 }
 
+/// Print the interactive shell banner and command hints to standard output.
+///
+/// # Panics
+///
+/// Panics if writing to standard output fails.
 fn print_banner() {
     println!(
         "{}",

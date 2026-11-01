@@ -40,7 +40,7 @@ applySequence : List Operation → Filesystem → Filesystem
 applySequence [] fs = fs
 applySequence (op ∷ ops) fs = applySequence ops (applyOp op fs)
 
--- Reverse sequence
+-- Reverse the order of operations and replace each with its reverse.
 --
 -- NOTE (2026-11-01): defined by structural recursion on the list rather than as
 -- `map reverseOp (reverse ops)`.  `reverse` is a foldl in agda-stdlib, so the

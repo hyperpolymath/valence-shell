@@ -82,7 +82,7 @@ applyOwner o (just node) =
 ChmodPrecondition : Path → FilesystemExt → Set
 ChmodPrecondition p fs = ∃ λ node → fs p ≡ just node
 
--- Apply chmod: change mode bits of a file
+-- Change the mode of the node at the path, if present. Other paths are unchanged.
 chmod : Path → Mode → FilesystemExt → FilesystemExt
 chmod p newMode fs p' with p pathExt-≟ p'
 ... | yes _ = applyMode newMode (fs p')
@@ -159,7 +159,7 @@ chmod-preserves-other = λ p₁ p₂ fs m hneq → chmod-other p₁ p₂ m fs hn
 ChownPrecondition : Path → FilesystemExt → Set
 ChownPrecondition p fs = ∃ λ node → fs p ≡ just node
 
--- Apply chown: change ownership of a file
+-- Change the ownership of the node at the path, if present. Other paths are unchanged.
 chown : Path → Ownership → FilesystemExt → FilesystemExt
 chown p newOwner fs p' with p pathExt-≟ p'
 ... | yes _ = applyOwner newOwner (fs p')

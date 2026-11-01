@@ -72,7 +72,7 @@ data OverwritePattern : Set where
   pattern-55 : OverwritePattern
   pattern-AA : OverwritePattern
 
--- Positions 0 .. n-1
+-- Positions from n - 1 down to 0; zero gives an empty list.
 indices : ℕ → List ℕ
 indices zero = []
 indices (suc n) = n ∷ indices n
@@ -81,6 +81,8 @@ _mod_ : ℕ → ℕ → ℕ
 n mod zero = 0
 n mod suc m = n ∸ ((n / suc m) * suc m)
 
+-- Return the pattern's value at a position. The random pattern is deterministic
+-- for a given seed and position and yields values modulo 256.
 byte : OverwritePattern → ℕ → ℕ
 byte pattern-zeros _ = 0
 byte pattern-ones _ = 255
@@ -101,7 +103,8 @@ gutmann-patterns =
 -- Overwriting
 -- ============================================================================
 
--- Overwriting replaces the block content with a pattern-determined sequence
+-- Replace the block content with a pattern-determined sequence of the same
+-- length and increment its overwrite count.
 overwrite-block : StorageBlock → OverwritePattern → StorageBlock
 overwrite-block blk pat = record blk
   { blockData = map (byte pat) (indices (length (StorageBlock.blockData blk)))
@@ -127,7 +130,8 @@ _∈b_ : ℕ → List ℕ → Bool
 n ∈b [] = false
 n ∈b (x ∷ xs) = (n ≡b x) ∨ (n ∈b xs)
 
--- Overwrite the blocks mapped to a path
+-- Overwrite existing blocks mapped to a path; missing blocks remain absent.
+-- A block shared with another path is also changed for that path.
 overwrite-mapped : Path → OverwritePattern → StorageFS → StorageFS
 overwrite-mapped p pat sfs = record sfs
   { sfs-storage = λ bid →
@@ -136,7 +140,7 @@ overwrite-mapped p pat sfs = record sfs
       else StorageFS.sfs-storage sfs bid
   }
 
--- Multi-pass overwrite
+-- Apply the patterns in order; an empty list leaves storage unchanged.
 multi-pass-overwrite : Path → List OverwritePattern → StorageFS → StorageFS
 multi-pass-overwrite p [] sfs = sfs
 multi-pass-overwrite p (pat ∷ pats) sfs =
@@ -148,7 +152,10 @@ remove-mapping p m p' with p path-≟ p'
 ... | yes _ = []
 ... | no _ = m p'
 
--- Full obliteration: over-write, delete the path, drop the mapping
+-- Overwrite mapped blocks in pattern order, then remove the path and mapping.
+-- An empty pattern list still removes the path and mapping without overwriting.
+-- With a non-empty pattern list, shared blocks are overwritten too. This models
+-- logical rather than physical erasure.
 obliterate : Path → List OverwritePattern → StorageFS → StorageFS
 obliterate p pats sfs = record sfs'
   { sfs-tree = deleteFile p (StorageFS.sfs-tree sfs')
