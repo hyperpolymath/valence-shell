@@ -34,8 +34,8 @@ intermediate layer with OCaml FFI bindings.
          │ OCaml Ctypes FFI
          ↓
 ┌──────────────────┐
-│ OCaml Module     │  ← ValenceLean.ml
-│ (verified API)   │
+│ OCaml Module     │  ← ValenceLean.ml (proposed;
+│                  │     a wrapper, not a proof)
 └──────────────────┘
 ....
 

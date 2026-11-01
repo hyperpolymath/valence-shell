@@ -30,10 +30,12 @@ This matters most for two classes of work:
 * **Reversible operations (RMR — Remove-Match-Reverse)** — undo/redo,
   checkpoint/restore, transaction grouping. If you can prove the operation is
   reversible, you can ship the rollback button.
-* **Auditably irreversible operations (RMO — Remove-Match-Obliterate)** — GDPR
-  "right to be forgotten", secure deletion. If you can prove the operation
-  *destroys information* (is non-injective), you can give a third-party
-  attestation of compliance.
+* **Irreversible, auditable operations (RMO — Remove-Match-Obliterate)** —
+  deletion. Proving the *abstract* transition is non-injective tells you that the
+  modelled state does not determine the pre-state. It does **not** show that bytes
+  are gone from the storage stack, and it is not a third-party attestation of
+  legal compliance; the implemented `obliterate` is best-effort local overwrite +
+  unlink + an audit residue.
 
 == Why six proof systems and not one?
 
@@ -76,7 +78,7 @@ README claims a theorem exists and `just verify-proofs` does not produce
 a certificate for it, the README is wrong — file an issue.
 
 For an honest accounting of *which* theorems are open holes vs. proved,
-see `docs/PROOF_HOLES_AUDIT.md` (the single source of truth) and the
+see `docs/PROOF_HOLES_AUDIT.adoc` (the single source of truth) and the
 deep-audit inventory in `docs/audits/2026-06-01-deep-audit.adoc`.
 
 == Is this production-ready?
@@ -95,8 +97,11 @@ What is solid:
 
 What is **not** solid enough for production:
 
-* The link from the proven model to the Rust runtime is *property-tested*
-  (~85% confidence), not *mechanically proven*. This is the v1.0.0 blocker.
+* The link from the proven model to the Rust runtime is `argued` and
+  `tested-only` (property tests plus a compiled-model differential oracle),
+  never `proven`. That is the v1.0.0 blocker. See
+  link:EXPLAINME.adoc#proof-ledger[the Proof Ledger]; this repository quotes no
+  confidence percentage for it.
 * RMO (secure deletion / GDPR): the `obliterate` command is implemented and
   wired (`obliterate <file> --force` → 3-pass overwrite + unlink + append-only
   audit residue), but it is best-effort on in-place filesystems only (CoW/SSD

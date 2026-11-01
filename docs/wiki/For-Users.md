@@ -76,8 +76,9 @@ and worked examples in
   btrfs/ZFS/APFS and SSDs need hardware erase) and is **not a full GDPR
   framework**. The audit library supports HMAC chaining, but RMO key
   provisioning and external checkpoint anchoring remain pending.
-- The proof-to-code correspondence is **property-tested (~85% confidence)**, not
-  mechanically proven.
+- The proof-to-code correspondence is **property-tested only** (`argued` +
+  `tested-only` in the Proof Ledger), not mechanically proven, and no confidence
+  percentage is quoted for it.
 
 The authoritative "not implemented" list:
 [`UNIMPLEMENTED_FEATURES.md`](https://github.com/hyperpolymath/valence-shell/blob/main/UNIMPLEMENTED_FEATURES.md)

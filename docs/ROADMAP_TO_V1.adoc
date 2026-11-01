@@ -9,7 +9,7 @@ and its claims were not audit-verified)
 This charter is the working plan for an *orchestrated multi-agent
 project*: one coordinating session manages parallel worker lanes, with a
 fan-in review at the end of every phase. It is honest by construction —
-see `+CLAUDE.md+` "`HONEST STATUS`" and `+docs/PROOF_HOLES_AUDIT.md+`
+see `+CLAUDE.md+` "`HONEST STATUS`" and `+docs/PROOF_HOLES_AUDIT.adoc+`
 for the ground truth this plan builds on.
 
 '''''

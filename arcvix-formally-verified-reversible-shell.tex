@@ -154,8 +154,11 @@ introduce the \emph{Mutually Assured Accountability} (\maa{}) framework, which
 decomposes shell operations into two formally distinct modes:
 \emph{Remove-Match-Reverse} (\rmr{}), providing proven undo/redo with
 transaction grouping, and \emph{Remove-Match-Obliterate} (\rmo{}), a
-formally-specified irreversible deletion mode designed for GDPR compliance
-(currently a stub; full proof of non-recoverability is future work).
+formally-specified irreversible deletion mode whose model-level
+non-injectivity is proved for the abstract filesystem and which is implemented
+as best-effort local overwrite plus unlink and an unsigned audit record (no
+device-level erasure guarantee and no compliance determination; see
+\S\ref{sec:rmo} and the project's RMO durability boundary note).
 We describe the Rust implementation (15,720 lines, 602 passing tests), the
 multi-prover verification strategy, and the algebraic structure---including
 Certified Null Operations (\cno{}), operation commutativity, and sequence
@@ -353,13 +356,15 @@ $s_1 \neq s_2$ such that $g(s_1) = g(s_2)$, and therefore no uniform left
 inverse exists.
 \end{definition}
 
-\rmo{} is essential for regulatory compliance. The European Union's General
+\rmo{} is relevant to regulatory compliance. The European Union's General
 Data Protection Regulation (GDPR) Article~17 establishes a ``right to
-erasure''---data subjects can demand that their personal data be permanently
-deleted. A system that merely marks data as deleted (while retaining the
-underlying bytes) does not satisfy this requirement. \rmo{} provides a
-mathematical guarantee that after obliteration, no recovery function can
-reconstruct the original data.
+erasure''---data subjects can demand that their personal data be deleted. A
+system that merely marks data as deleted (while retaining the underlying
+bytes) does not satisfy that right. \rmo{} contributes a model-level
+guarantee: within the abstract filesystem and storage model, no recovery
+function can reconstruct the pre-state after obliteration. Whether the bytes
+are in fact absent from a real device is a separate question, outside the
+model and outside this paper's claims.
 
 \subsection{The Accountability Duality}
 
@@ -1079,12 +1084,15 @@ structure and block mapping but differ in the block data for path $p$:
 \]
 \end{theorem}
 
-\Cref{thm:rmo-noninj} is the critical result for GDPR compliance. Because
-obliteration maps distinct starting states to identical ending states, no
-function can recover the original data from the obliterated state. This is a
-\emph{constructive proof of non-recoverability}: we exhibit two distinct
-pre-images that produce the same post-image, demonstrating that the operation
-is information-destroying.
+\Cref{thm:rmo-noninj} is the load-bearing result for deletion in the model.
+Because obliteration maps distinct starting states to identical ending states,
+no function \emph{in this model} can recover the original state from the
+obliterated state. This is a constructive proof of model-level
+non-recoverability: we exhibit two distinct pre-images with the same
+post-image. It is not a proof that the bytes are gone. Copies outside the model
+--- copy-on-write extents, filesystem journals, snapshots, flash translation
+layers, device spares, caches, replicas and backups --- are untouched by the
+theorem, and reaching them is a deployment and hardware concern.
 
 \subsection{No Trace Remains}
 
@@ -1100,7 +1108,12 @@ properties:
 \end{definition}
 
 This predicate, combined with the overwrite-count tracking on storage blocks,
-provides a formal basis for certifying GDPR Article~17 compliance.
+characterises what the \emph{model} means by a completed obliteration. It is a
+necessary condition for a defensible erasure claim, not a sufficient one: an
+Article~17 determination also depends on the storage stack, on inventorying
+every copy, and on legal judgement, none of which this formalisation models.
+The implementation's overwrite is best-effort and its audit residue is an
+unsigned record.
 
 % =============================================================================
 % 9. EVALUATION
@@ -1337,9 +1350,10 @@ programs can express, while \valence{} remains a practical Unix shell.
 \section{Conclusion}
 \label{sec:conclusion}
 
-We have presented \valence{}, a shell in which every filesystem operation
-possesses a machine-checkable mathematical proof of reversibility. The key
-contributions are:
+We have presented \valence{}, a shell in which every filesystem operation the
+model treats as reversible possesses a machine-checkable proof of reversibility
+in the abstract model, alongside a deliberately irreversible obliteration
+operation. The key contributions are:
 
 \begin{enumerate}
   \item A reversible operation algebra formalised in six independent proof
@@ -1347,8 +1361,10 @@ contributions are:
         confidence through prover diversity.
 
   \item The \maa{} framework, cleanly separating proven-reversible (\rmr{})
-        and proven-irreversible (\rmo{}) operations, enabling both safe
-        experimentation and GDPR-compliant deletion.
+        and deliberately irreversible (\rmo{}) operations, enabling safe
+        experimentation and a model-level, audit-recorded deletion primitive
+        that is relevant to --- but not by itself sufficient for --- a GDPR
+        Article~17 determination.
 
   \item A practical Rust implementation demonstrating that formal
         reversibility can be integrated into an interactive shell with
@@ -1356,20 +1372,23 @@ contributions are:
 \end{enumerate}
 
 The trust gap between what users hope and what systems guarantee is a
-fundamental problem in interactive computing. \valence{} demonstrates that
-this gap can be closed---not through better testing or more careful
-engineering, but through mathematical proof. When a \valence{} user types
-\texttt{undo}, the system does not merely \emph{try} to reverse the
-operation: it executes an inverse that is \emph{proven} to restore the
-original state.
+fundamental problem in interactive computing. \valence{} shows that part of
+this gap can be closed by mathematical proof rather than by testing alone: in
+the model, \texttt{undo} does not merely \emph{try} to reverse an operation,
+it executes an inverse that is proven to restore the original state. The
+remaining part is the correspondence gap between that model and the running
+Rust binary (§Future Work): the proofs constrain the design, and the
+implementation is tested against a compiled oracle, but no machine-checked
+refinement yet connects the two.
 
 \subsection{Future Work}
 
 The most important open problem is closing the \emph{correspondence gap}
 between the abstract proof model and the concrete Rust implementation.
-Mechanised extraction (Coq to OCaml) or Rust verification (Creusot, Prusti)
-would elevate the confidence from 85--95\% (property testing) to 99\%+
-(mechanised proof).
+Rust verification (Creusot, Prusti) of the CLI, or a mechanised refinement
+against the model, would move the link from \texttt{argued} and \texttt{tested-only}
+evidence to a proof obligation. Extraction alone does not: it relocates trust
+into the extractor and the FFI layer that the extracted code calls.
 
 Additional directions include:
 \begin{itemize}

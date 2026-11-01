@@ -15,8 +15,8 @@ Valence Shell *proves* it.
 > Valence Shell is **v0.9.0, an advanced research prototype (~78% of the roadmap complete). It is NOT production-ready.** The shell runs, is
 > extensively tested (794 tests passing, 0 failures), and the reversibility
 > proofs are real. What is *not* finished is the mechanically-verified link
-> between the proofs and the running Rust code (today that link is
-> property-tested, ~85% confidence), and the GDPR secure-deletion features are
+> between the proofs and the running Rust code (today that link is `argued` and
+> `tested-only`, with no percentage attached), and the secure-deletion features are
 > still stubs. Do not use it as your daily login shell. Full honesty page:
 > [Verification Status & Honest Limits](Verification-Status).
 
@@ -75,7 +75,7 @@ allow.
 - **Primary development (GitLab mirror):** <https://gitlab.com/non-initiate/rhodinised/vsh>
 - **FAQ:** [`FAQ.adoc`](https://github.com/hyperpolymath/valence-shell/blob/main/FAQ.adoc)
 - **Show-me-the-receipts (claims vs. evidence):** [`EXPLAINME.adoc`](https://github.com/hyperpolymath/valence-shell/blob/main/EXPLAINME.adoc)
-- **Honest proof-hole accounting:** [`docs/PROOF_HOLES_AUDIT.md`](https://github.com/hyperpolymath/valence-shell/blob/main/docs/PROOF_HOLES_AUDIT.md)
+- **Honest proof-hole accounting:** [`docs/PROOF_HOLES_AUDIT.adoc`](https://github.com/hyperpolymath/valence-shell/blob/main/docs/PROOF_HOLES_AUDIT.adoc)
 - **License:** MPL-2.0
 
 ---

@@ -17,13 +17,20 @@ honest research prototype" than as anything we can't yet back up.
 
 ## The project in one line (pick by length)
 
-- **Twitter-length:** *Valence Shell is a Unix shell whose core operations are
-  backed by machine-checked mathematical proofs — a shell with a provable undo
-  button. (Research prototype, not production-ready.)*
+- **Twitter-length:** *Valence Shell is a Unix shell whose *model* of filesystem
+  operations is machine-checked in Agda, Coq and Lean — with a deliberately
+  unproven step between that model and the Rust code. (Research prototype, not
+  production-ready.)*
 - **One sentence:** *Valence Shell (`vsh`) is an interactive command-line shell
-  whose fundamental filesystem operations are formally verified across six
-  independent proof systems, giving mathematically-proven reversibility (undo/redo)
-  — currently an advanced research prototype, not for production use.*
+  whose abstract filesystem model has machine-checked reversibility theorems in
+  Agda, Coq and Lean; those theorems are about the model, the model→Rust link is
+  argued and tested but not proved, and the project is an advanced research
+  prototype, not for production use.*
+
+> Do **not** describe the shipped shell as having a "provable undo button", and do
+> not quote a confidence percentage for model→code correspondence. The ledger
+> (`EXPLAINME.adoc` § Proof Ledger) establishes model properties; the
+> correspondence row is `argued` plus `tested-only`.
 - **Paragraph:** see [the wiki home page](Home).
 
 ## Accurate facts you can quote (all verifiable)
@@ -48,7 +55,7 @@ This is the heart of this page. Please read it before publishing.
 |-------------|---------------------------|
 | "A shell with **formally proven** reversible operations." | "A **fully verified** shell." (The proof-to-code link isn't mechanically verified yet.) |
 | "Reversibility is **proven in the mathematical model**." | "Every line of the program is **proven correct**." |
-| "**Property-tested** correspondence between proofs and code (~85% confidence)." | "The Rust code is **proven** to match the proofs." (This is the explicit v1.0.0 blocker, not yet done.) |
+| "Property-tested but **not proved** correspondence between model and code (`argued` + `tested-only`; no percentage is quoted)." | "The Rust code is **proven** to match the proofs." (This is the explicit v1.0.0 blocker, not yet done.) |
 | "Has a **best-effort** secure-deletion command (`obliterate`) with an audit trail." | "**GDPR-compliant** secure deletion." (best-effort on in-place filesystems only; CoW/SSD need hardware erase; not a complete GDPR framework.) |
 | "An **advanced research prototype**." | "**Production-ready** / enterprise-ready / ready to ship." |
 | "Proven for its **modeled filesystem operations**." | "A **full POSIX / bash replacement**." (POSIX coverage is a subset.) |
@@ -63,9 +70,9 @@ them is the most common mistake:
 1. **The proofs** — mathematical theorems about an *abstract model* of a
    filesystem. These are **done and reproducible**. ✅
 2. **The connection** between those proofs and the *actual Rust program that
-   runs*. This is currently established by **extensive testing (~85% confidence),
-   not by an end-to-end mechanical proof.** This gap is the explicit thing
-   standing between v0.9.0 and a future v1.0.0. ⚠️
+   runs*. This is currently established by **extensive testing, with no proof and
+   no confidence number** — the ledger row is `argued` plus `tested-only`. This gap
+   is the explicit thing standing between v0.9.0 and a future v1.0.0. ⚠️
 
 A fair, accurate framing: **"The math is proven; wiring the math irrefutably to
 the running code is the remaining research problem the project is honest about."**
@@ -76,7 +83,7 @@ the running code is the remaining research problem the project is honest about."
   aerospace.** Applying that discipline to something as everyday as a *shell* is
   an unusual and pedagogically vivid choice.
 - **Radical honesty as an engineering value.** The project ships its own
-  "here's exactly what isn't finished" audit (`docs/PROOF_HOLES_AUDIT.md`) and
+  "here's exactly what isn't finished" audit (`docs/PROOF_HOLES_AUDIT.adoc`) and
   refused to inflate its own status — an interesting counter-story to typical
   software hype.
 - **The GDPR / "right to be forgotten" angle.** The deeper research question —

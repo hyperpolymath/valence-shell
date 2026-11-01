@@ -641,7 +641,7 @@ in build 4. Correspondence guaranteed by generator
 
 ==== Correspondence Documentation
 
-* `+docs/LEAN4_RUST_CORRESPONDENCE.md+` - Manual mapping
+* `+docs/LEAN4_RUST_CORRESPONDENCE.adoc+` - Manual mapping
 * `+docs/ECHIDNA_INTEGRATION.md+` - Future automation plan
 
 ==== External Resources

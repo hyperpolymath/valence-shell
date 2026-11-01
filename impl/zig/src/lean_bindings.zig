@@ -349,7 +349,7 @@ test "verified mkdir integration" {
 /// BUILDING
 /// ========
 ///
-/// See docs/ZIG_LEAN_EXTRACTION.md for complete build instructions.
+/// See docs/ZIG_LEAN_EXTRACTION.adoc for complete build instructions.
 ///
 /// Quick start:
 /// ```bash

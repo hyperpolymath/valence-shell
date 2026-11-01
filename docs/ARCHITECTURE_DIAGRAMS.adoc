@@ -491,7 +491,7 @@ valence-shell/
 │
 ├── docs/                            # Documentation
 │   ├── ARCHITECTURE.md              # System design
-│   ├── LEAN4_RUST_CORRESPONDENCE.md # Proof mapping
+│   ├── LEAN4_RUST_CORRESPONDENCE.adoc # Proof mapping
 │   ├── ECHIDNA_INTEGRATION.md       # Verification pipeline
 │   ├── POSIX_COMPLIANCE.md          # POSIX roadmap
 │   └── PHASE6_M*.md                 # Milestone designs

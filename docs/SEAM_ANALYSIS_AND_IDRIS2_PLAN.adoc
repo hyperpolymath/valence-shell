@@ -113,11 +113,13 @@ Syscalls (POSIX)
 * *What we run*: Handwritten Rust that _might_ match the proofs
 * *The gap*: No mechanized proof that Rust = Lean 4
 
-*Current validation*: - ✅ Manual documentation
-(docs/LEAN4_RUST_CORRESPONDENCE.md) - ✅ Property tests (30+, validating
-behavior) - ❌ NO mechanized proof of equivalence
+*Current validation*: - Manual documentation
+(docs/LEAN4_RUST_CORRESPONDENCE.adoc) - Property tests (30+) and the
+compiled-model differential oracle, exercising behaviour - ❌ NO mechanized
+proof of equivalence
 
-*Confidence*: 85% (good, but not "`unbreakable`")
+*Confidence*: 85% (good, but not "`unbreakable`"). This is an estimate, not a
+measurement, and it does not close the gap.
 
 ==== How to Seal the Seams
 
@@ -470,7 +472,11 @@ fn prop_idris2_mkdir_rmdir_reversible() {
 }
 ----
 
-*Confidence*: 99%+ (only POSIX syscall trust boundary)
+*Confidence (planned design, not current status)*: extracting Idris2 would
+replace one gap with another. The POSIX boundary remains, and the
+extraction/FFI boundary (Idris2 → Scheme/C → syscalls, then any Rust callers)
+is exactly as unproven as the Lean → Rust gap it replaced. No percentage is
+claimed for a path that has not been built.
 
 '''''
 
@@ -611,8 +617,9 @@ M12-M14 features
 *Medium-term (v1.5)*: 1. Complete Idris2 proof suite 2. Extract Idris2
 to executable code 3. Property tests for extracted code
 
-*Long-term (v2.0)*: 1. Replace Rust core with Idris2 extracted code 2.
-Confidence: 99%+ (only POSIX trust boundary) 3. True "`unbreakable
+*Long-term (v2.0)*: 1. Replace the Rust core with Idris2 extracted code 2.
+Prove the extraction/FFI correspondence — extraction alone relocates the trust
+boundary to the extractor and FFI, it does not remove it 3. True "`unbreakable
 code`"
 
 ==== Reversible Operations Summary

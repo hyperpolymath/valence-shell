@@ -60,8 +60,8 @@ f : PreState -> PostState
 | Do not collapse this into total erasure.
 
 | RMO / obliteration
-| The point is not recovery. The point is a proof-relevant certificate that the target information has been eliminated while permitted audit residue remains.
-| Do not describe RMO as undoable deletion.
+| The point is not recovery. The operation is a best-effort local overwrite + unlink, so the honest Echo reading is a map with (i) a *loss* claim about the abstract obliteration transition and (ii) a residue that records that the command ran. It is not a certificate that the target information has been eliminated from the storage stack.
+| Do not describe RMO as undoable deletion, and do not describe the audit residue as proof of erasure.
 
 | `explain`, `checkpoint`, `restore`, `diff`, `replay`
 | Human-facing projections over state transitions, residues, and evidence trails.
@@ -152,6 +152,12 @@ When working in Valence Shell, Claude and similar agents must observe these rule
 
 * Do not claim Valence Shell is production-ready.
 * Do not claim the Lean-to-Rust correspondence is mechanised.
+* Do not describe a test, property test, or differential oracle as a refinement
+  proof. Tests validate behaviour; only a machine-checked refinement relation
+  closes the extraction gap.
+* Do not present this bridge document, `docs/THEORY-FEED.adoc`, or any other
+  orientation document as a mechanised dependency. Prose agreement between repos
+  is not an import, and a *planned* integration is not an implemented one.
 * Do not claim RMO/GDPR support beyond the implemented best-effort `obliterate`
   (cooperating in-place filesystems only; no RMO key provisioning, external
   audit anchor, or verified device erase) — i.e. do not claim a complete GDPR

@@ -8,15 +8,16 @@
 module SymlinkOperations where
 
 open import FilesystemModel
+open import Data.Maybe using (just; nothing)
 open import Data.Product using (_×_; _,_)
-open import Relation.Nullary using (¬_)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl)
+open import Relation.Nullary using (¬_; Dec; yes; no)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans)
 
 -- Preconditions for creating a symlink
 record SymlinkPrecondition (p : Path) (fs : Filesystem) : Set where
   field
     notExists : ¬ pathExists p fs
-    parentExists : parentExists p fs
+    parent-path-exists : parentExists p fs
     parentIsDir : isDirectory (parentPath p) fs
     parentWritable : hasWritePermission (parentPath p) fs
 
@@ -48,32 +49,24 @@ symlink-unlink-reversible : ∀ p fs → SymlinkPrecondition p fs → unlink p (
 symlink-unlink-reversible p fs pre = funext helper
   where
     helper : ∀ p' → unlink p (symlink p fs) p' ≡ fs p'
-    helper p' with p path-≟ p'
-    ... | yes refl with p path-≟ p
-        ... | yes _ =
-            -- After unlink p (symlink p fs), at path p we get:
-            -- fsUpdate p nothing (fsUpdate p (just (mkFSNode File defaultPerms)) fs) p
-            -- = nothing (by definition of fsUpdate with p ≟ p = yes)
-            --
-            -- We need to show: nothing ≡ fs p
-            -- From precondition: ¬ pathExists p fs, i.e. ¬ (∃ node. fs p ≡ just node)
-            -- Therefore fs p ≡ nothing
-            not-exists-is-nothing (SymlinkPrecondition.notExists pre)
-          where
-            open import Data.Empty using (⊥-elim)
-            -- If no node exists at p, then fs p = nothing
-            not-exists-is-nothing : ¬ pathExists p fs → nothing ≡ fs p
-            not-exists-is-nothing notEx with fs p
-            ... | nothing = refl
-            ... | just node = ⊥-elim (notEx (node , refl))
-        ... | no p≢p = ⊥-elim (p≢p refl)
-          where
-            open import Data.Empty using (⊥-elim)
-    ... | no p≢p' with p path-≟ p'
-        ... | yes p≡p' = ⊥-elim (p≢p' p≡p')
-          where
-            open import Data.Empty using (⊥-elim)
-        ... | no _ = refl
+    helper p' = case-split (p path-≟ p')
+      where
+        open import Data.Empty using (⊥-elim)
+
+        -- If no node exists at p, then fs p = nothing
+        not-exists-is-nothing : ¬ pathExists p fs → fs p ≡ nothing
+        not-exists-is-nothing notEx with fs p
+        ... | nothing = refl
+        ... | just node = ⊥-elim (notEx (node , refl))
+
+        case-split : Dec (p ≡ p') → unlink p (symlink p fs) p' ≡ fs p'
+        case-split (yes refl) =
+          -- unlink p (symlink p fs) p reduces to nothing (fsUpdate-at)
+          trans (fsUpdate-at p nothing (symlink p fs))
+                (sym (not-exists-is-nothing (SymlinkPrecondition.notExists pre)))
+        case-split (no p≢p') =
+          trans (fsUpdate-other p p' nothing (symlink p fs) p≢p')
+                (fsUpdate-other p p' (just (mkFSNode File defaultPerms)) fs p≢p')
 
 -- Summary:
 -- ✓ Symlink creation and removal operations

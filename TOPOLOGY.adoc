@@ -70,7 +70,7 @@ FORMAL VERIFICATION
   Permission Proofs (chmod/chown)  ██████████ 100%    NEW — 42 theorems across 6 systems
   MAA Framework (RMR)              ██████████ 100%    Reversible ops with audit trails
   MAA Framework (RMO)              ████░░░░░░  40%    Proofs + wired `obliterate` (best-effort + audit residue); no HW erase/HMAC
-  Extraction Gap (Lean → Rust)     ██████░░░░  60%    ~95% confidence via property testing
+  Extraction Gap (Lean → Rust)     ██████░░░░  open   argued + tested-only; never proven (EXPLAINME#proof-ledger)
 
 IMPLEMENTATION LAYERS
   Rust CLI (primary)               ████████░░  82%    15,720 lines, 602 tests, v0.9.0
@@ -105,7 +105,7 @@ Rust CLI ───────────► Cargo.toml ──────► c
                      proof_refs.rs ────► Maps ops to theorems across 6 systems
                           │
                           ▼
-                     correspondence ───► 59 tests validate Lean↔Rust (~95%)
+                     correspondence ───► argued + tested-only (never proven)
 ....
 
 === Seam Map (Proximal)

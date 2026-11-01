@@ -1,7 +1,23 @@
 Lean 4 → OCaml/Zig Extraction - File Inventory
 ===============================================
 
-Created: 2026-01-28
+Created: 2026-01-28. Reviewed 2026-11-01 (assurance-boundary re-audit).
+
+READ THIS FIRST
+---------------
+"Complete" below means "the file exists and has content". It does NOT mean the
+extraction is verified, or that a running system refines the proven model. In
+particular:
+
+  * proofs/coq/extraction.v extracts Filesystem as a placeholder (unit -> unit);
+  * the shipped CLI is the Rust crate in impl/rust-cli/, which does not use the
+    Lean C wrapper;
+  * ffi/rust (vsh-ffi) is a separate crate with no consumer in impl/rust-cli/;
+  * no mechanised refinement relates any extracted or handwritten code to the
+    Lean/Coq model. That gap is the project's trust boundary.
+
+See docs/audits/2026-11-01-assurance-boundary-audit.adoc.
+
 Total Files: 11
 Total Lines: 4,220 (2,820 code + 1,400 docs)
 
@@ -49,7 +65,7 @@ impl/zig/build.zig.lean                           150 lines   ✅ Complete
   - Link Lean runtime
   - Conditional compilation
 
-impl/zig/LEAN_INTEGRATION.md                      100 lines   ✅ Complete
+impl/zig/LEAN_INTEGRATION.adoc                     100 lines   ✅ Complete
   - Quick start guide
   - Build instructions
   - Usage examples
@@ -57,21 +73,21 @@ impl/zig/LEAN_INTEGRATION.md                      100 lines   ✅ Complete
 
 DOCUMENTATION
 -------------
-docs/OCAML_EXTRACTION.md                          600 lines   ✅ Complete
+docs/OCAML_EXTRACTION.adoc                        600 lines   ✅ Complete
   - OCaml extraction guide
   - Architecture overview
   - Build instructions
   - Integration examples
   - Troubleshooting
 
-docs/ZIG_LEAN_EXTRACTION.md                       700 lines   ✅ Complete
+docs/ZIG_LEAN_EXTRACTION.adoc                     700 lines   ✅ Complete
   - Zig extraction guide
   - Complete build pipeline
   - Usage examples
   - Performance benchmarks
   - FAQ
 
-EXTRACTION_SUMMARY.md                             500 lines   ✅ Complete
+EXTRACTION_SUMMARY.adoc                           500 lines   ✅ Complete
   - Overview of entire system
   - Files created summary
   - Architecture diagrams
@@ -116,9 +132,9 @@ LOW:     POSIX syscalls (OS dependent)
 
 QUICK START
 -----------
-For OCaml:  See docs/OCAML_EXTRACTION.md
-For Zig:    See docs/ZIG_LEAN_EXTRACTION.md
-Summary:    See EXTRACTION_SUMMARY.md
+For OCaml:  See docs/OCAML_EXTRACTION.adoc
+For Zig:    See docs/ZIG_LEAN_EXTRACTION.adoc
+Summary:    See EXTRACTION_SUMMARY.adoc
 
 BUILD COMMANDS
 --------------

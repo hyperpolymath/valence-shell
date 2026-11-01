@@ -8,8 +8,11 @@ module FilesystemComposition where
 open import FilesystemModel
 open import FileOperations
 open import Data.List using (List; []; _∷_; reverse; map; _++_)
+open import Data.Maybe using (just; nothing)
 open import Data.Product using (_×_; _,_)
+open import Relation.Nullary using (Dec; yes; no)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; cong)
+open import Data.Empty using (⊥-elim)
 
 -- Operation type
 data Operation : Set where
@@ -37,9 +40,21 @@ applySequence : List Operation → Filesystem → Filesystem
 applySequence [] fs = fs
 applySequence (op ∷ ops) fs = applySequence ops (applyOp op fs)
 
--- Reverse sequence
+-- Reverse the order of operations and replace each with its reverse.
+--
+-- NOTE (2026-11-01): defined by structural recursion on the list rather than as
+-- `map reverseOp (reverse ops)`.  `reverse` is a foldl in agda-stdlib, so the
+-- `map`/`reverse` formulation does not reduce on a cons and blocks the
+-- composition proof.
 reverseSequence : List Operation → List Operation
-reverseSequence ops = map reverseOp (reverse ops)
+reverseSequence [] = []
+reverseSequence (op ∷ ops) = reverseSequence ops ++ (reverseOp op ∷ [])
+
+-- Appending sequences composes the applications
+applySequence-append : ∀ xs ys fs →
+  applySequence (xs ++ ys) fs ≡ applySequence ys (applySequence xs fs)
+applySequence-append [] ys fs = refl
+applySequence-append (x ∷ xs) ys fs = applySequence-append xs ys (applyOp x fs)
 
 -- Precondition
 opPrecondition : Operation → Filesystem → Set
@@ -84,17 +99,14 @@ rmdir-mkdir-reversible : ∀ (p : Path) (fs : Filesystem) →
 rmdir-mkdir-reversible p fs pre hperms = funext helper
   where
     helper : ∀ p' → mkdir p (rmdir p fs) p' ≡ fs p'
-    helper p' with p path-≟ p'
-    ... | yes refl with p path-≟ p
-        ... | yes _ = sym hperms
-        ... | no p≢p = ⊥-elim (p≢p refl)
-          where
-            open import Data.Empty using (⊥-elim)
-    ... | no p≢p' with p path-≟ p'
-        ... | yes p≡p' = ⊥-elim (p≢p' p≡p')
-          where
-            open import Data.Empty using (⊥-elim)
-        ... | no _ = refl
+    helper p' = case-split (p path-≟ p')
+      where
+        case-split : Dec (p ≡ p') → mkdir p (rmdir p fs) p' ≡ fs p'
+        case-split (yes refl) =
+          trans (fsUpdate-at p (just (mkFSNode Directory defaultPerms)) (rmdir p fs)) (sym hperms)
+        case-split (no p≢p') =
+          trans (fsUpdate-other p p' (just (mkFSNode Directory defaultPerms)) (rmdir p fs) p≢p')
+                (fsUpdate-other p p' nothing fs p≢p')
 
 -- Helper: deleteFile-createFile reversibility (requires default perms)
 deleteFile-createFile-reversible : ∀ (p : Path) (fs : Filesystem) →
@@ -104,17 +116,14 @@ deleteFile-createFile-reversible : ∀ (p : Path) (fs : Filesystem) →
 deleteFile-createFile-reversible p fs pre hperms = funext helper
   where
     helper : ∀ p' → createFile p (deleteFile p fs) p' ≡ fs p'
-    helper p' with p path-≟ p'
-    ... | yes refl with p path-≟ p
-        ... | yes _ = sym hperms
-        ... | no p≢p = ⊥-elim (p≢p refl)
-          where
-            open import Data.Empty using (⊥-elim)
-    ... | no p≢p' with p path-≟ p'
-        ... | yes p≡p' = ⊥-elim (p≢p' p≡p')
-          where
-            open import Data.Empty using (⊥-elim)
-        ... | no _ = refl
+    helper p' = case-split (p path-≟ p')
+      where
+        case-split : Dec (p ≡ p') → createFile p (deleteFile p fs) p' ≡ fs p'
+        case-split (yes refl) =
+          trans (fsUpdate-at p (just (mkFSNode File defaultPerms)) (deleteFile p fs)) (sym hperms)
+        case-split (no p≢p') =
+          trans (fsUpdate-other p p' (just (mkFSNode File defaultPerms)) (deleteFile p fs) p≢p')
+                (fsUpdate-other p p' nothing fs p≢p')
 
 -- Default-perms witness for reverse operations.
 -- mkdir/createFile always create with defaultPerms, so:
@@ -132,7 +141,7 @@ record ReversibleDP (op : Operation) (fs : Filesystem) : Set where
   field
     precondition : opPrecondition op fs
     reversePrecondition : opPrecondition (reverseOp op) (applyOp op fs)
-    defaultPerms : HasDefaultPerms op fs
+    permsWitness : HasDefaultPerms op fs
 
 -- Single operation reversibility (with default-perms constraint)
 singleOpReversible : ∀ (op : Operation) (fs : Filesystem) →
@@ -140,12 +149,12 @@ singleOpReversible : ∀ (op : Operation) (fs : Filesystem) →
   applyOp (reverseOp op) (applyOp op fs) ≡ fs
 singleOpReversible (mkdirOp p) fs rev =
   mkdir-rmdir-reversible p fs (ReversibleDP.precondition rev)
-singleOpReversible (rmdirOp p) fs rev with ReversibleDP.defaultPerms rev
+singleOpReversible (rmdirOp p) fs rev with ReversibleDP.permsWitness rev
 ... | rmdirPerms refl hperms =
   rmdir-mkdir-reversible p fs (ReversibleDP.precondition rev) hperms
 singleOpReversible (createFileOp p) fs rev =
   createFile-deleteFile-reversible p fs (ReversibleDP.precondition rev)
-singleOpReversible (deleteFileOp p) fs rev with ReversibleDP.defaultPerms rev
+singleOpReversible (deleteFileOp p) fs rev with ReversibleDP.permsWitness rev
 ... | deleteFilePerms refl hperms =
   deleteFile-createFile-reversible p fs (ReversibleDP.precondition rev) hperms
 
@@ -163,7 +172,7 @@ operationSequenceReversible : ∀ (ops : List Operation) (fs : Filesystem) →
   applySequence (reverseSequence ops) (applySequence ops fs) ≡ fs
 operationSequenceReversible [] fs nilReversibleDP = refl
 operationSequenceReversible (op ∷ ops) fs (consReversibleDP {op} {ops} {fs} rev revRest) =
-  let fs' = applyOp op fs
-      ih = operationSequenceReversible ops fs' revRest
-      single = singleOpReversible op fs rev
-  in trans (cong (λ x → applyOp (reverseOp op) x) ih) single
+  trans (applySequence-append (reverseSequence ops) (reverseOp op ∷ []) (applySequence ops (applyOp op fs)))
+        (trans (cong (λ x → applyOp (reverseOp op) x)
+                     (operationSequenceReversible ops (applyOp op fs) revRest))
+               (singleOpReversible op fs rev))

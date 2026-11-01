@@ -64,7 +64,7 @@ is very high — the seL4/CompCert pattern.
 
 **Read the honest status first:** the project maintains a single source of truth
 for open proof holes —
-[`docs/PROOF_HOLES_AUDIT.md`](https://github.com/hyperpolymath/valence-shell/blob/main/docs/PROOF_HOLES_AUDIT.md).
+[`docs/PROOF_HOLES_AUDIT.adoc`](https://github.com/hyperpolymath/valence-shell/blob/main/docs/PROOF_HOLES_AUDIT.adoc).
 As of this writing: **0 real gaps** (the former Coq `obliterate_overwrites_all_blocks`
 gap is CLOSED — re-verified 2026-07-16 via `Print Assumptions` as *Closed under
 the global context* under Coq 8.18.0), plus 2 documented axioms: 1 justified

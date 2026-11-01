@@ -5,8 +5,11 @@ defmodule VSH do
   @moduledoc """
   Valence Shell - Formally Verified Reversible Shell
 
-  A thermodynamic shell where every operation can be undone.
-  Backed by ~256 theorems across 6 proof systems:
+  A shell with *algorithmically* reversible operations: for the operations
+  that are modelled as reversible, undo is proven in the abstract model.
+  This is not thermodynamic (Landauer/Bennett) reversibility, and the
+  irreversible `obliterate` operation is deliberately not undoable.
+  Backed by ~478 theorem candidates across 6 proof systems:
   - Coq (Calculus of Inductive Constructions)
   - Lean 4 (Dependent Type Theory)
   - Agda (Intensional Type Theory)

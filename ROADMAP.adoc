@@ -14,7 +14,7 @@ proof-annotated dry runs. It is NOT production-ready and NOT a drop-in
 replacement for bash/zsh.
 
 For the full honest status see `CLAUDE.md`; for caveats per claim see
-`EXPLAINME.adoc`; for proof-debt see `docs/PROOF_HOLES_AUDIT.md`.
+`EXPLAINME.adoc`; for proof-debt see `docs/PROOF_HOLES_AUDIT.adoc`.
 
 _Last refreshed: 2026-06-02 (post-merge sweep: PRs #105 #106 #108 #109 — closes #60 / #61 / #70 / #89; PR #107 dropped codeql.yml)._
 
@@ -105,8 +105,8 @@ M1-M9 complete, M10-M11 partial.
 Hard requirements before any v1.0 claim:
 
 * [ ] Mechanized Lean → Rust correspondence (currently property testing
-  only, ~85% confidence).
-* [x] Close all real gaps in `docs/PROOF_HOLES_AUDIT.md` — **DONE**
+  only: `argued` + `tested-only`, never `proven`).
+* [x] Close all real gaps in `docs/PROOF_HOLES_AUDIT.adoc` — **DONE**
   (re-verified 2026-07-16 under Coq 8.18.0): 0 real gaps; 1 justified axiom
   (`is_empty_dir_dec`) + 1 structural (`funext`) remain.
 * [ ] CRG v2.0 grade B: 6+ diverse external targets, issues fed back.
@@ -114,8 +114,11 @@ Hard requirements before any v1.0 claim:
   shape.
 * [~] RMO (Remove-Match-Obliterate): file-level `obliterate` implemented and
   wired (best-effort 3-pass overwrite + unlink + append-only audit residue).
-  Remaining for full GDPR: hardware erase for CoW/SSD, audit HMAC signing,
-  recursive-dir hardening. Tracked under #41.
+  Remaining engineering: hardware erase for CoW/SSD, audit HMAC signing,
+  recursive-dir hardening. Tracked under #41. Note that "GDPR compliance" is not
+  a state this repository can reach by finishing engineering work: the
+  determination is legal and deployment-specific (see
+  link:docs/RMO-DURABILITY-BOUNDARY.adoc[the boundary]).
 * [ ] Echidna integration for automated property-based verification.
 
 == v2.0 — Idris2 Extraction Path

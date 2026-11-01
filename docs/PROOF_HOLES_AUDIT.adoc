@@ -1,5 +1,20 @@
 == Proof Holes Audit - Valence Shell
 
+____
+*CORRECTED 2026-11-01.* This file records the state as believed on 2026-07-16.
+It has since been measured and parts of it were wrong. When the Agda tree was
+first actually compiled (Agda 2.7.0.1 + stdlib 2.2, then 2.6.4.3 + stdlib 2.1.1),
+**every Agda module failed with a parse error** -- so none of the "holes filled",
+"postulate PROVEN", "postulate REPLACED" claims below had ever been checked by a
+compiler. They have now been made true by repair (commit `a903c3f`, all nine
+modules type-check, one postulate, no holes), but they were not true when
+written. `obliterate-not-injective` no longer exists under that name: the RMO
+module now proves `overwrite-equalizes` (blocks of equal length become
+indistinguishable after the same pattern) and `obliterate-leaves-no-logical-trace`.
+See `docs/audits/2026-11-01-assurance-boundary-audit.adoc`, "Verification round,
+2026-11-01".
+____
+
 *Date*: 2026-07-16 (Coq real gap re-verified CLOSED via `+coqc+` +
 `+Print Assumptions+` under Coq 8.18.0; prior: 2026-07-01 Idris2 layer
 to 0 holes — issue #151 root; 2026-04-12 believe_me sweep, Coq layer)

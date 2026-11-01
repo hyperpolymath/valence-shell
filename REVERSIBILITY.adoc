@@ -1,12 +1,15 @@
 == Reversibility in Valence Shell
 
-*Every operation can be undone. This is mathematically proven.*
+*Every operation modelled as reversible can be undone in the abstract model.
+This is mathematically proven.* The shell also has one deliberately irreversible
+operation (`obliterate`), which is not undoable; see
+link:../docs/RMO-DURABILITY-BOUNDARY.adoc[RMO durability and assurance boundary].
 
 === What Is Reversibility?
 
-In Valence Shell, *reversibility* means that for every operation, there
-exists a mathematically proven inverse operation that returns the system
-to its original state.
+In Valence Shell, *reversibility* means that, for the operations the model
+treats as reversible, there exists a mathematically proven inverse operation
+that returns the modelled system to its original state.
 
 ==== Algorithmic Definition
 
@@ -90,13 +93,20 @@ guaranteed* to work.
 
 ==== 2. Accountability (MAA Framework)
 
-Every action has a provable audit trail. You can always get back to a
-previous state.
+Reversible actions have a provable inverse. Actions are also recorded in the
+history, and the audit log can be HMAC-chained when a key is supplied. You cannot
+get back to a previous state for every action: `obliterate` is deliberately
+irreversible, and its audit residue is an unsigned record unless a key is
+provisioned.
 
-==== 3. GDPR Compliance (Future)
+==== 3. GDPR Compliance (not claimed, now or by proving more theorems)
 
-With RMO (Remove-Match-Obliterate), we’ll prove that deletion is
-*complete* (not just "`best effort`").
+RMO (Remove-Match-Obliterate) proves properties of an *abstract* obliteration
+transition, for example that it is non-injective. It does not prove that data is
+absent from copy-on-write extents, journals, snapshots, device spares, replicas
+or backups, and it is not a legal compliance determination. Device-level
+sanitisation and a legal assessment happen at the deployment layer; see
+link:../docs/RMO-DURABILITY-BOUNDARY.adoc[RMO durability and assurance boundary].
 
 ==== 4. Confidence in Complex Operations
 
@@ -123,8 +133,12 @@ It means: *Within our model*, operations have proven inverses.
 
 ==== ❌ Implementation Guarantee (Yet)
 
-*Important*: The proofs operate on an abstract model. The OCaml/POSIX
-implementation is *not yet formally verified* to match the model.
+*Important*: The proofs operate on an abstract model. The shipped implementation
+is the Rust CLI (`impl/rust-cli/`, with the Coq model's OCaml extraction as a
+separate path) calling POSIX. Neither is *formally verified* to match the model:
+the correspondence is tested (property tests plus a differential oracle over the
+compiled Lean model), not proven. That extraction/refinement gap is the trust
+boundary.
 
 *Verification gap*: We prove model correctness, but implementation may
 have bugs.
@@ -293,11 +307,12 @@ to *doing nothing* (CNO = Certified Null Operation).
 read/write - ✅ Operation sequences - ✅ File copy/move - ✅ Symbolic
 links (abstract model)
 
-*NOT Proven*: - ❌ Network operations - ❌ Implementation (OCaml FFI)
+*NOT Proven*: - ❌ Network operations - ❌ Implementation (Rust CLI over POSIX;
+the Coq → OCaml extraction path has the same gap)
 
 ==== Future Work
 
-* Close extraction gap (Coq → OCaml verification)
+* Close the extraction gap (machine-checked Lean/Coq model → Rust/POSIX refinement)
 * Verify FFI layer
 * RMO (obliterative deletion) proofs
 
@@ -363,6 +378,12 @@ A: The *proofs* guarantee model reversibility. The *implementation*
 history) and `+impl/rust-cli/Cargo.toml+` `+[package].version+` (semver
 pin) *Proven*: ~256 theorems across 6 verification systems
 
-*Summary*: Every operation in Valence Shell has a mathematically proven
-inverse. This isn’t hope or testing—it’s *formal proof*. Mistakes are
-reversible. Experimentation is safe. Accountability is guaranteed.
+*Summary*: Every operation in Valence Shell's *modelled* filesystem has a
+machine-checked inverse, under stated preconditions -- with one documented
+exception: `obliterate` is deliberately *not* reversible (see the scope note at
+the top of this file). This is formal proof about the model. It is not a proof
+about the running Rust program: that step is `argued` and `tested-only` in the
+Proof Ledger, and it is the open item blocking v1.0. Mistakes in the model are
+reversible; what the shipped shell does on a given kernel, filesystem and cache
+state is evidenced by testing, not proved. Accountability rests on the audit
+record, which is best-effort and unsigned.

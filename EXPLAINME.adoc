@@ -8,49 +8,175 @@ The README makes claims. This file backs them up with evidence from real code.
 
 == Core Claims & Evidence
 
-=== Claim 1: "602 Tests Passing, 0 Failures — 250+ Theorems Across 6 Proof Systems"
+=== Claim 1: "794 tests passing, 0 failures — ~478 theorem candidates across 6 proof systems"
 
-**From README** (lines 44, 60):
-____
-* [x] 555 Tests Passing: Unit, correspondence, integration, property, security
-* [x] ~250+ Theorems: Proven across different logical foundations (4 proof gaps remain)
-____
+**From README**: the test count and the theorem-candidate count are separate
+claims, and the second is a count of *candidates*, not of proved theorems.
 
-**Evidence**: `/var/mnt/eclipse/repos/valence-shell/impl/rust-cli/tests/` contains 602 passing tests (updated 2026-03-08): 277 unit tests, 28 correspondence tests, 55 extended, 35 integration, 10 extra, 16 lean4 proptest, 28 property, 15 security, 52 doctests. Proof files at `/var/mnt/eclipse/repos/valence-shell/proofs/coq/` (~1,200 lines), `/var/mnt/eclipse/repos/valence-shell/proofs/lean4/` (~900 lines), `/var/mnt/eclipse/repos/valence-shell/proofs/agda/`, `/var/mnt/eclipse/repos/valence-shell/proofs/isabelle/`, `/var/mnt/eclipse/repos/valence-shell/proofs/mizar/`, `/var/mnt/eclipse/repos/valence-shell/proofs/z3/`.
+**Evidence**:
+`impl/rust-cli/` is where the tests live (`cargo test --all-features`); the
+proof trees are `proofs/{coq,lean4,agda,idris2,isabelle,mizar,z3}/`. The Coq
+tree alone declares 133 `Theorem`/`Lemma` commands and contains no
+`admit`/`Admitted`.
 
-**Caveat**: Test suite proves the *Rust implementation works correctly*. Proofs verify abstract *models* of reversibility. **The extraction gap between Lean 4 proofs → Rust implementation is NOT mechanically verified**—it's ~85% confidence via property testing only. This is not production-ready.
+**Caveat** — the status of every obligation is recorded in the
+<<proof-ledger,Proof Ledger>> below, and the two claims must not be merged. A
+test suite result is `tested-only`. A theorem in a proof assistant is `proven`
+*for the abstract model*. Nothing in this repository is `proven` about the Rust
+code, and no percentage is quoted for that correspondence: it is `argued` plus
+`tested-only` (see the ledger's model→code rows).
 
-=== Claim 2: "Formally Proven Reversibility: rmdir(mkdir(p, fs)) = fs"
+=== Claim 2: "Formally proven reversibility: `rmdir(mkdir(p, fs)) = fs`"
 
-**From README** (lines 40, 192-209):
-____
-* [x] Formally Proven Reversibility: `rmdir(mkdir(p, fs)) = fs`
-...
-Theorem mkdir_rmdir_reversible :
-  forall p fs,
-    mkdir_precondition p fs ->
-    rmdir p (mkdir p fs) = fs.
-____
+**From README**: the theorem holds under stated preconditions.
 
-**Evidence**: `/var/mnt/eclipse/repos/valence-shell/proofs/coq/FileSystem.v` contains the theorem `mkdir_rmdir_reversible` proven in Coq with ~200 lines of tactics. Same theorem proven in `/var/mnt/eclipse/repos/valence-shell/proofs/lean4/Reversibility.lean` (Lean 4), `/var/mnt/eclipse/repos/valence-shell/proofs/agda/`, etc. Cross-validation across 5-6 proof systems increases confidence.
+**Evidence**: `proofs/coq/filesystem_model.v:207`
+(`mkdir_rmdir_reversible`), with the same property restated in
+`proofs/lean4/FilesystemModel.lean`, `proofs/agda/FilesystemModel.agda`,
+`proofs/isabelle/`, `proofs/mizar/` and `proofs/z3/`. The composition lemma is
+`proofs/coq/filesystem_composition.v:352` (`operation_sequence_reversible`).
 
-**Caveat**: Proofs operate on *abstract filesystem models* (not real POSIX). The Rust FFI layer (`src/commands.rs`) calls real syscalls (`mkdir`, `rmdir`) which are NOT proven to match the abstract model. A POSIX implementation bug could violate the proofs.
+**Caveat**: this is a theorem about an abstract `Filesystem` function, not about
+POSIX. The Rust CLI calls `libc`; whether that code refines the model is the
+open correspondence row in the ledger — argued and tested, never proved.
 
-=== Claim 3: "Advanced Research Prototype (v0.9.0) — NOT Production-Ready"
+=== Claim 3: "Advanced research prototype (v0.9.0) — not production-ready"
 
-**From README** (lines 22-27):
-____
-[IMPORTANT]
-====
-**Current Status**: v0.9.0 — Advanced Research Prototype +
-**NOT production-ready.** Functional shell with formally proven reversibility, but POSIX compliance is incomplete and Lean→Rust correspondence is testing-based (~85% confidence), not mechanized. +
-**Progress**: ~72% of full roadmap complete, 602 tests passing (0 failures) +
-====
-____
+See <<_status,Status>>. This claim is accurate and is the one the repository
+wants readers to take away.
 
-**Evidence**: `/var/mnt/eclipse/repos/valence-shell/CLAUDE.md` (lines 15-47) provides honest status: v0.9.0, ~72% complete, 4 real proof gaps (documented in `/var/mnt/eclipse/repos/valence-shell/docs/PROOF_HOLES_AUDIT.md`). Main gaps: no mechanized Lean→Rust correspondence, RMO/GDPR compliance stubs only, shell functions/script execution missing.
+[[proof-ledger]]
+== Proof Ledger
 
-**Caveat**: This is refreshingly *honest* about limitations. Most projects would claim v1.0.0 and "production-ready"—this one correctly downgrades false claims from the Sonnet audit.
+Required by
+link:https://github.com/hyperpolymath/standards[`standards`]
+`docs/README-EXPLAINME-STANDARD.adoc` §5, and graded per
+`3-practice/PROOF-POLICY.adoc` (status vocabulary: `proven`,
+`proven-with-postulates`, `argued`, `tested-only`, `open`) and
+`mathesis` §5 (grades 3/2i/2ii/1).
+
+*Reading rule:* a row may only be as strong as the weakest step it depends on.
+A theorem about the model is `proven` *for the model*; the link from model to
+code is its own row, and it is `argued` here. Nothing in this ledger is
+grade 1 or grade 2ii.
+
+*Provenance of these rows (2026-11-01).* When this ledger was first written no
+proof assistant was installed, so no row had been re-run. **Agda and Z3 have since
+been installed and re-run** (see `docs/audits/2026-11-01-assurance-boundary-audit.adoc`,
+"Verification round, 2026-11-01"): all nine Agda modules now type-check and the Z3
+scripts were replayed, and the Agda tree needed substantial source repair before it
+would compile at all. Coq, Lean, Creusot, Idris2, Isabelle and Mizar could not be
+installed in that environment, so **those rows still record the repository's own
+evidence** and name, in the checker column, the invocation a future audit must
+reproduce. Absence of a tool is an open obligation, not a passing leg
+(PROOF-POLICY §2.1).
+
+[cols="3,1,2,2,3",options="header"]
+|===
+| Obligation | Status | Checker (version, flags) | Where | Trust boundary
+
+| `rmdir` undoes `mkdir` under its precondition
+| proven-with-postulates
+| Coq 8.18.0, `coqc` via `_CoqProject`, then `Print Assumptions`
+| `proofs/coq/filesystem_model.v:207` `mkdir_rmdir_reversible`
+| Equality of whole filesystems is extensional, so the 2026-07-16 record names `functional_extensionality`. Over the total-function model only; POSIX, permissions, crashes and concurrency are outside it
+
+| `write` restores previous content
+| proven-with-postulates
+| Coq 8.18.0 + `Print Assumptions`
+| `proofs/coq/file_content_operations.v:117` `write_file_reversible`
+| Same extensionality assumption; model only, and real writes go through `libc`
+
+| Sequences of reversible ops invert
+| proven-with-postulates
+| Coq 8.18.0 + `Print Assumptions`
+| `proofs/coq/filesystem_composition.v:352` `operation_sequence_reversible`
+| Extensionality where stated; model only; no crash or partial-failure semantics
+
+| Obliteration is non-injective (information is lost in the model)
+| proven-with-postulates
+| Coq 8.18.0 + `Print Assumptions`
+| `proofs/coq/rmo_operations.v:530` `obliterate_not_injective`
+| Assumptions as recorded for this file; says nothing about bytes on a device — see `docs/RMO-DURABILITY-BOUNDARY.adoc`
+
+| Overwrite covers every block of the modelled file
+| proven
+| Coq 8.18.0, `Print Assumptions`: closed under the global context (2026-07-16 record)
+| `proofs/coq/rmo_operations.v:315` `obliterate_overwrites_all_blocks`
+| The one row the record reports closed; still a theorem about the block mapping — copy-on-write, journals, spares and replicas are not modelled
+
+| Same reversibility theorems restated in Lean 4
+| proven (per module; four modules do not build)
+| Lean 4 v4.34.1 (`lake build`; the modules that do not build are listed in `lakefile.lean`)
+| `proofs/lean4/FilesystemModel.lean`, `FileOperations.lean`, `FilesystemComposition.lean`
+| Independent restatement, *not* a translation of the Coq term, so it is not mathesis grade 2; the Lean model is also separately typed
+
+| Same theorems restated in Agda
+| proven-with-postulates (reproduced 2026-11-01)
+| `agda --library-file=<stdlib> <Module>.agda`, Agda 2.6.4.3 + stdlib 2.1.1 *and* 2.7.0.1 + stdlib 2.2: 9/9 modules type-check
+| `proofs/agda/` (all nine modules; `postulate funext` at `FilesystemModel.agda:179`)
+| One postulate (`funext`), no holes -- but *not* the estate invocation. `--safe` reports `Cannot postulate funext with safe flag`; `--without-K` reports `Cannot eliminate reflexive equation p = p ... K has been disabled`. So this row is reproduced under a waiver, is not mathesis grade 3, and the waiver must be recorded beside the artefact per PROOF-POLICY §4. See the audit's AP-6 and its verification round
+
+| Same theorems restated in Isabelle / Mizar / Z3
+| proven-with-postulates (Isabelle) / open (Mizar) / Z3: reproduced for 4 of 5 files, `open` for `symlink_operations.smt2`
+| `isabelle build -D .`; `mizf` (failure-swallowing target); z3-solver 5.3.3, one process per file, parsing each `(check-sat)`
+| `proofs/isabelle/`, `proofs/mizar/`, `proofs/z3/`
+| §4 exceptions to PROOF-POLICY §1 with no recorded exception note yet; the Mizar target ends in `|| echo`, so a failing Mizar build is not distinguishable from a pass
+
+| Sandbox path normalisation never escapes the root
+| proven (model) / tested-only (code)
+| Lean 4 for the model; `proptest` for the code
+| `proofs/lean4/PathTraversal.lean:163`; `impl/rust-cli/tests/security_tests.rs`
+| The Lean theorem is about the Lean model. The property test is evidence that `resolve_path` matches, not a proof
+
+| The Rust CLI refines the proven model
+| argued
+| -
+| `docs/LEAN4_RUST_CORRESPONDENCE.adoc`; `docs/PROOF-OPEN-FRONTIER.adoc` F-1
+| Not formalised. Creusot contracts (PROOF-POLICY §1) do not exist on this code yet
+
+| Rust and model agree on sampled operation sequences
+| tested-only
+| `just test-correspondence-model` (compiled `ModelOracle`), 1,218 probes / 200 sequences
+| `impl/rust-cli/tests/model_oracle_correspondence.rs`
+| Sampled, precondition-respecting sequences only; a divergence would be a real bug but agreement is not a proof
+
+| Idris2 ABI layout, encodings and round-trips match the C header
+| tested-only
+| `--total`, plus `scripts/check-abi-layout.sh`
+| `proofs/idris2/src/Filesystem/`, `.machine_readable/IDRIS2_AXIOMS.a2ml`
+| Two registered `believe_me` axioms (`axStringEqRefl`, `axBits8EqRefl`); the C/FFI layer beyond layout is unchecked
+
+| Audit log detects mutation/truncation of its own chain
+| tested-only
+| HMAC-SHA-256 chaining tests
+| `impl/rust-cli/src/audit_log.rs`
+| Only when a key is supplied; tail truncation needs an external checkpoint, which does not exist
+
+| RMO key provisioning, external anchoring, device erasure
+| open
+| -
+| -
+| No key source, no anchor, no `secure_erase`; not a GDPR determination
+
+| A test or oracle implies refinement
+| open
+| -
+| -
+| A test is `tested-only` by definition (PROOF-POLICY §5); no test may be cited as a refinement proof
+
+| Valence Shell's audit entries are *known* rather than *believed* (warrant/receipt)
+| open
+| -
+| -
+| `hyperpolymath/epistemic-types` is not imported (0 imports). Warrant ≠ proof and receipt ≠ certificate upstream; nothing here models that distinction yet
+
+| JanusKey operations refine Valence Shell's model
+| open
+| -
+| -
+| `hyperpolymath/januskey` / `reversible-core` are not imported or depended on. The D204 ruling records intent only
+|===
 
 == Dogfooded Across The Account
 
@@ -111,7 +237,7 @@ All share: *Multiple proof systems for cross-validation, honest status reporting
 
 | `proofs/z3/` | Z3 SMT proofs: ~150 lines. Automated first-order logic verification.
 
-| `impl/rust-cli/tests/correspondence_tests.rs` | Correspondence tests: Lean 4 theorem validation via property testing (~85% confidence, not mechanized)
+| `impl/rust-cli/tests/correspondence_tests.rs` | Correspondence tests: Lean 4 theorem validation via property testing -- `tested-only`, not mechanised, and no confidence percentage is quoted for it
 
 | `impl/rust-cli/tests/integration_test.rs` | Full end-to-end shell tests: pipes, redirections, glob expansion, job control
 
@@ -119,7 +245,7 @@ All share: *Multiple proof systems for cross-validation, honest status reporting
 
 | `impl/rust-cli/tests/property_tests.rs` | Property-based tests: glob correctness, arithmetic soundness, operation sequence reversibility
 
-| `docs/PROOF_HOLES_AUDIT.md` | Honest audit: 4 real proof gaps, 4 axioms, 2 structural gaps. Clear about what's NOT proven.
+| `docs/PROOF_HOLES_AUDIT.adoc` | Honest audit: 4 real proof gaps, 4 axioms, 2 structural gaps. Clear about what's NOT proven.
 
 | `docs/POSIX_COMPLIANCE.md` | Detailed POSIX compliance roadmap: M1-M11 milestones, current status (M1-M9 complete, M10-11 partial)
 
@@ -140,20 +266,24 @@ The bridge is **documentation-and-orientation-only**, not a mechanised dependenc
 
 == Status
 
-**Honest Assessment**: Advanced research prototype. NOT production-ready. Extraction gap (Lean→Rust) is **the critical blocker** for any production claim.
+**Honest Assessment**: advanced research prototype; not production-ready. The
+model→code correspondence is **the critical blocker** for any production claim,
+and it is `argued`, not `proven` (see <<proof-ledger,Proof Ledger>>).
 
-**What Works**:
-- Functional shell: 602 tests passing, interactive REPL working
-- Formal proofs: 250+ theorems across 6 systems (about abstract models)
-- Reversibility tracking: undo/redo fully functional
+**What works**:
+- Functional shell: 794 tests passing, interactive REPL working
+- 133 Coq theorems plus restatements in five further systems, all about
+  abstract models; every obligation's status is a ledger row
+- Reversibility tracking: undo/redo functional for modelled operations
 - Most POSIX features: pipes, redirections, glob, job control, variables
 
-**What's Broken**:
-- NO mechanized Lean→Rust correspondence (85% confidence only)
-- NO shell functions (`func() { ... }`)
-- NO shell script execution (`.sh` files)
-- RMO/GDPR compliance: stubs only
-- POSIX compliance: ~72% (functions + script execution missing)
+**What is not established**:
+- No `proven` correspondence between the model and the Rust CLI (Creusot
+  contracts do not exist here); the status is `argued` + `tested-only`
+- No shell functions (`func() { ... }`) or script execution of `.sh` files
+- RMO: `obliterate` is implemented as best-effort overwrite + unlink + an
+  unsigned residue; no key provisioning, no anchor, no GDPR determination
+- POSIX coverage is a subset
 
 == Questions?
 

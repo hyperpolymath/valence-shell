@@ -7,7 +7,7 @@ Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 This is the single honest-status page the rest of the wiki links to. It
 summarises what is proven, what is merely tested, and what is not built. For the
 authoritative, machine-checked accounting see
-[`docs/PROOF_HOLES_AUDIT.md`](https://github.com/hyperpolymath/valence-shell/blob/main/docs/PROOF_HOLES_AUDIT.md)
+[`docs/PROOF_HOLES_AUDIT.adoc`](https://github.com/hyperpolymath/valence-shell/blob/main/docs/PROOF_HOLES_AUDIT.adoc)
 and the deep-audit log in
 [`docs/audits/`](https://github.com/hyperpolymath/valence-shell/tree/main/docs/audits).
 
@@ -24,7 +24,7 @@ them apart is the whole point.
 | Level | What it covers | Assurance | Status |
 |-------|----------------|-----------|--------|
 | **1. The proofs** | Abstract mathematical model of filesystem operations | Machine-checked, reproducible offline, in 6 systems | ✅ Solid |
-| **2. Proof ⇄ code correspondence** | That the running Rust matches the proven model | **Property-tested, ~85% confidence** | ⚠️ Not mechanically proven — the v1.0.0 blocker |
+| **2. Proof ⇄ code correspondence** | That the running Rust matches the proven model | `argued` + `tested-only` (property tests, differential oracle) | ⚠️ Never `proven` — the v1.0.0 blocker |
 | **3. POSIX / OS reality** | Real syscalls, real kernel, concurrency, crashes | Kernel guarantees only | ⚠️ Outside the proofs |
 
 The gap between level 1 and level 2 is the honest heart of the project. The math
@@ -40,7 +40,7 @@ is proven; wiring it irrefutably to the code is the remaining research problem.
 
 ## What is NOT guaranteed
 
-- That the implementation matches the proofs (manual review + property tests only).
+- That the implementation matches the proofs: that row is `argued`, with `tested-only` evidence (see `EXPLAINME.adoc#proof-ledger`).
 - POSIX behaviour beyond the modeled operations.
 - Performance (not optimized or benchmarked in CI).
 - Correctness under concurrent multi-process access.
@@ -72,7 +72,7 @@ The **Idris2 ABI layer is hole-free** (builds under `--total`, closed via issue
 | Interactive shell surface (pipelines, redirs, glob, control structures, jobs, variables) | ✅ Working |
 | Secure deletion (**RMO** / `obliterate`) | ⚠️ Implemented & wired (3-pass overwrite + unlink + audit residue); best-effort on in-place FS only (CoW/SSD need HW erase); not a full GDPR framework |
 | Full POSIX compliance | ⚠️ Subset only (no external-arg word-splitting, subshells, `~user`) |
-| Mechanized Lean → Rust correspondence | ⚠️ Differential oracle vs compiled proven model (`just test-correspondence-model`); full refinement proof still the v1.0.0 blocker |
+| Mechanized Lean → Rust correspondence | ⚠️ `argued`; differential oracle vs the compiled proven model is `tested-only` (`just test-correspondence-model`); a refinement proof remains the v1.0.0 blocker |
 
 ## Test posture
 

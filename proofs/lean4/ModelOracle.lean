@@ -9,7 +9,7 @@
 
    This makes the compiled proof artifact the oracle for differential testing
    against the Rust implementation (see impl/rust-cli/tests/model_oracle_correspondence.rs
-   and docs/LEAN4_RUST_CORRESPONDENCE.md).
+   and docs/LEAN4_RUST_CORRESPONDENCE.adoc).
 
    Protocol (stdin):
      one operation per line, then a line "---", then one probe path per line.
