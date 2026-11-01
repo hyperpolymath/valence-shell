@@ -60,12 +60,16 @@ A theorem about the model is `proven` *for the model*; the link from model to
 code is its own row, and it is `argued` here. Nothing in this ledger is
 grade 1 or grade 2ii.
 
-*Provenance of these rows (2026-11-01).* No proof assistant was installed in the
-environment where this ledger was written — `coqc`, `agda`, `lean`, `idris2`,
-`isabelle`, `mizar` and `z3` were all absent — so **no row below was re-run by the
-author of this ledger**. Each row records the repository's own recorded evidence
-and names, in the checker column, the invocation a future audit must reproduce.
-Absence of a tool is an open obligation, not a passing leg (PROOF-POLICY §2.1).
+*Provenance of these rows (2026-11-01).* When this ledger was first written no
+proof assistant was installed, so no row had been re-run. **Agda and Z3 have since
+been installed and re-run** (see `docs/audits/2026-11-01-assurance-boundary-audit.adoc`,
+"Verification round, 2026-11-01"): all nine Agda modules now type-check and the Z3
+scripts were replayed, and the Agda tree needed substantial source repair before it
+would compile at all. Coq, Lean, Creusot, Idris2, Isabelle and Mizar could not be
+installed in that environment, so **those rows still record the repository's own
+evidence** and name, in the checker column, the invocation a future audit must
+reproduce. Absence of a tool is an open obligation, not a passing leg
+(PROOF-POLICY §2.1).
 
 [cols="3,1,2,2,3",options="header"]
 |===
@@ -108,14 +112,14 @@ Absence of a tool is an open obligation, not a passing leg (PROOF-POLICY §2.1).
 | Independent restatement, *not* a translation of the Coq term, so it is not mathesis grade 2; the Lean model is also separately typed
 
 | Same theorems restated in Agda
-| proven-with-postulates
-| Bare `agda <file>.agda` in the Justfile; *not* the canonical `--safe --without-K --cubical-compatible` invocation
-| `proofs/agda/FilesystemModel.agda:162` `postulate funext`, then `mkdir-rmdir-reversible`
-| `--safe` rejects `postulate`, so this row cannot be `proven` under the estate invocation until extensionality is discharged or the module is reworked. See the audit's AP-6
+| proven-with-postulates (reproduced 2026-11-01)
+| `agda --library-file=<stdlib> <Module>.agda`, Agda 2.6.4.3 + stdlib 2.1.1 *and* 2.7.0.1 + stdlib 2.2: 9/9 modules type-check
+| `proofs/agda/` (all nine modules; `postulate funext` at `FilesystemModel.agda:179`)
+| One postulate (`funext`), no holes -- but *not* the estate invocation. `--safe` reports `Cannot postulate funext with safe flag`; `--without-K` reports `Cannot eliminate reflexive equation p = p ... K has been disabled`. So this row is reproduced under a waiver, is not mathesis grade 3, and the waiver must be recorded beside the artefact per PROOF-POLICY §4. See the audit's AP-6 and its verification round
 
 | Same theorems restated in Isabelle / Mizar / Z3
-| proven-with-postulates (Isabelle) / open (Mizar, Z3)
-| `isabelle build -D .`; `mizf` (failure-swallowing target); Z3 SMT scripts
+| proven-with-postulates (Isabelle) / open (Mizar) / Z3: reproduced for 4 of 5 files, `open` for `symlink_operations.smt2`
+| `isabelle build -D .`; `mizf` (failure-swallowing target); z3-solver 5.3.3, one process per file, parsing each `(check-sat)`
 | `proofs/isabelle/`, `proofs/mizar/`, `proofs/z3/`
 | §4 exceptions to PROOF-POLICY §1 with no recorded exception note yet; the Mizar target ends in `|| echo`, so a failing Mizar build is not distinguishable from a pass
 

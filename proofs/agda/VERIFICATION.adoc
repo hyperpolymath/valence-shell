@@ -1,0 +1,77 @@
+= Agda proof verification record
+:toc: preamble
+
+This file is the receipt that `standards/3-practice/PROOF-POLICY.adoc` §4 asks for:
+the invocation, the exact versions, the result, and the *waiver* that records why
+this artefact does not yet meet the estate invocation.
+
+== What was run
+
+[cols="3,1,1",options="header"]
+|===
+| Invocation | Agda 2.6.4.3 + stdlib 2.1.1 | Agda 2.7.0.1 + stdlib 2.2
+
+| `agda --library-file=<stdlib> --library=valence-shell <Module>.agda`, all nine modules
+| 9/9 type-check | 9/9 type-check
+
+| same, plus `--safe`
+| rejected | rejected
+
+| same, plus `--without-K`
+| rejected | rejected
+
+| same, plus `--cubical-compatible`
+| rejected | rejected
+|===
+
+Modules: `FilesystemModel`, `FileOperations`, `SymlinkOperations`,
+`PermissionOperations`, `FilesystemComposition`, `FilesystemEquivalence`,
+`CopyMoveOperations`, `FileContentOperations`, `RMOOperations`.
+
+== The two rejections, verbatim
+
+[source]
+----
+FilesystemModel.agda:179,3-38
+Cannot postulate funext with safe flag
+when scope checking the declaration
+  funext : Extensionality lzero lzero
+----
+
+[source]
+----
+FilesystemModel.agda:155,11-15
+I'm not sure if there should be a case for the constructor refl,
+because I get stuck when trying to solve the following unification
+problems (inferred index ≟ expected index):
+  p ≟ p
+Possible reason why unification failed:
+  Cannot eliminate reflexive equation p = p of type List String
+  because K has been disabled.
+----
+
+The first is `postulate funext` in `FilesystemModel`. The second is *not* about
+`funext`: any case split on `Dec (p ≡ p)` needs K, because Agda cannot eliminate
+the reflexive equation on `List String` without it. Every `... | yes refl` clause
+over `p path-≟ p` depends on that, so removing the postulate alone would not make
+`--without-K` pass.
+
+== Status and waiver
+
+* Status under PROOF-POLICY §5: `proven-with-postulates`.
+* Status under mathesis §5: *Claimed / reproduced*, **not** grade 3.
+* Waiver: this artefact is checked with the unflagged `agda` invocation because the
+  two blockers above are proof-engineering work, not documentation work. The waiver
+  expires when either (a) `funext` is discharged (state whole-filesystem
+  reversibility pointwise, or move the tree to a `--cubical` build), or (b) the path
+  decision is threaded through the operations instead of being re-asked with
+  `p ≟ p` at each site. Until then, no claim in this repository may say the Agda
+  layer is checked under `--safe --without-K --cubical-compatible`.
+
+== History
+
+Before 2026-11-01 this tree did not compile at all: every module failed with a
+parse error under the repository's own `agda <file>` invocation, and
+`valence-shell.agda-lib` itself was unparseable. The repairs are in commit
+`a903c3f` and are commented in place. The audit's "Verification round,
+2026-11-01" section lists each defect class.

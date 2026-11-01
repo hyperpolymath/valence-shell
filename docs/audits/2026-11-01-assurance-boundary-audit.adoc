@@ -345,7 +345,7 @@ not a defect the audit can fix without an owner decision and a proof campaign.
 
 | AP-6 | H
 | The Agda layer cannot satisfy PROOF-POLICY §2.1 as written: `proofs/agda/FilesystemModel.agda:162` declares `postulate funext : Extensionality lzero lzero`, and `--safe` rejects `postulate`. The tree is built with bare `agda FilesystemModel.agda` (`Justfile:62`), `agda FileOperations.agda` (`scripts/verify-proofs.sh:148`), and through ECHIDNA (`scripts/validate-with-echidna.sh:125`) — three sites, none using `--safe --without-K --cubical-compatible`. `echidna-validation.yml:69` installs `agda` (and `coq`, `z3`) unpinned from apt.
-| *Recorded, not fixed.* Discharging or quarantining extensionality is a proof change, not a prose one. The ledger row is `proven-with-postulates` and names the invocation. Fixing it is the highest-value proof-policy item in this repo.
+| *Confirmed by the compiler, not fixed.* `agda --safe` reports `Cannot postulate funext with safe flag` at `FilesystemModel.agda:179` (see the verification round below). Discharging extensionality is a proof change, not a prose one; the ledger row is `proven-with-postulates` and names the invocation. Still the highest-value proof-policy item in this repo.
 
 | AP-7 | M
 | The Mizar build target swallows failure: `Justfile:75-76` ends each `mizf` invocation in `|| echo "⚠ Mizar not configured"`, so a red Mizar build is indistinguishable from a green one, and `echidna-validation.yml`'s hole check uses a threshold of 35 rather than zero.
@@ -353,7 +353,142 @@ not a defect the audit can fix without an owner decision and a proof campaign.
 
 | AP-8 | M
 | No prover was installed in the audit environment (`coqc`, `agda`, `lean`, `idris2`, `isabelle`, `mizar`, `z3` all absent), so nothing in this audit was re-run.
-| *Stated in the ledger header.* Every row records the repository's own recorded evidence and names the invocation a future audit must reproduce. Claiming a re-run would have been the exact overclaim this audit exists to remove.
+| *Partly discharged.* Agda and Z3 were installed and re-run; the results, the exact invocations and two blocking compiler messages are in "Verification round, 2026-11-01". Coq, Lean, Creusot, Idris2, Isabelle and Mizar could not be installed in this environment, so those rows still rest on the repository's own recorded evidence.
+|===
+
+== Verification round, 2026-11-01: what was actually executed
+
+AP-8 recorded that nothing had been re-run. It has now been partly discharged.
+This section is the receipt: what could be installed, what was run, what the
+provers said, and what that does and does not license.
+
+=== Toolchain availability (measured, not assumed)
+
+[cols="2,1,2,4",options="header"]
+|===
+| Tool | Available | Version used | How it was obtained
+
+| Agda | yes | 2.7.0.1 and 2.6.4.3 | PyPI wheel; the wheel ships no `data/lib`, so `src/data/lib` was copied from the matching Agda source tarball
+| agda-stdlib | yes | 2.2 and 2.1.1 | codeload tarball from `agda/agda-stdlib`
+| Z3 | yes | z3-solver 5.3.3 | PyPI wheel
+| Rust / Cargo / rustup | no | — | `static.rust-lang.org` is not reachable; a `rustup` wheel from PyPI installs the toolchain *manager*, which then fails to download any toolchain (`tls handshake eof`)
+| Creusot, Why3, Kani | no | — | no channel reachable; the `kani` name on PyPI is an unrelated project
+| Lean / elan | no | — | no release assets reachable; the `lean`/`lean4` names on PyPI are unrelated
+| Coq / Rocq, coq-lsp | no | — | `coq` on PyPI is a placeholder SDK; no binaries elsewhere
+| Isabelle, Mizar, Idris2 | no | — | no channel reachable
+|===
+
+So this round is an **Agda and Z3 round**. Every claim below about Coq, Lean,
+Creusot, Idris2, Isabelle and Mizar remains unreproduced, exactly as AP-8 said.
+
+=== Agda: the tree did not compile at all, and now does
+
+The headline is worse than AP-6 said and then better. When this round started,
+*every* module in `proofs/agda/` failed with a parse error under
+`agda <file>` -- the invocation the repository itself uses. `valence-shell.agda-lib`
+was itself unparseable, because `.agda-lib` has no comment syntax and the file
+opened with `--` header lines. There was therefore no compiler-produced evidence
+of any kind for any Agda row: `proven-with-postulates` was a statement about
+intent.
+
+The source defects found and repaired (commit `a903c3f`, each site commented in
+the file) were:
+
+. Nested `with` under a with-clause (`... | yes refl with p path-≟ p`) in six
+  modules. Agda cannot parse this layout; re-indenting only makes it *silently
+  regroup* the clauses (`UnreachableClauses` plus `Incomplete pattern matching`),
+  so each site was restructured onto `Dec`-passing helpers.
+. `FilesystemModel.agda:118` declared a record field `parentExists` inside a
+  module that already defines `parentExists` -- a hard error, masked by the
+  parse error above. Same class: `isFile` (FileOperations),
+  `defaultPerms` (FilesystemComposition), `isFile` (FileContentOperations).
+. `open import Level using (lzero)` at `FilesystemModel.agda:21`, removed from
+  `Level` in stdlib 2.x.
+. `rmdir-removes-path` proved `⊥` with `λ ()`; the goal is `⊥`, not a function.
+. `FilesystemComposition.reverseSequence` was `map reverseOp (reverse ops)`, and
+  `reverse` is a foldl in stdlib, so the composition theorem could not reduce.
+. `FilesystemEquivalence` asserted its theorems over `Reversible`, while
+  `singleOpReversible` needs the default-permissions witness in `ReversibleDP`.
+. `FileContentOperations` and `RMOOperations` were written against constructors
+  and helper names that do not exist (`file`/`directory` rather than
+  `File`/`Directory`, `getNodeType`, `delete-file`, `path-exists`, `is-file`), and
+  `RMOOperations` redefined `case_of_` four times inside `where` blocks. Both
+  files were rewritten against the model that exists.
+
+Result -- all nine modules, both toolchains:
+
+[cols="4,1,1",options="header"]
+|===
+| Invocation | Agda 2.6.4.3 + stdlib 2.1.1 | Agda 2.7.0.1 + stdlib 2.2
+
+| `agda --library-file=<stdlib> <Module>.agda` (all 9 modules)
+| 9/9 type-check
+| 9/9 type-check
+
+| same, `--safe`
+| fails: `Cannot postulate funext with safe flag` (FilesystemModel:179)
+| fails, same message
+
+| same, `--without-K`
+| fails: `Cannot eliminate reflexive equation p = p of type List String because K has been disabled` (FilesystemModel:155)
+| fails, same message
+|===
+
+=== What that does to the Agda rows, and to Grade 3
+
+* The Agda rows are now **reproduced**: they are `proven-with-postulates` under the
+  *unflagged* invocation, with one postulate (`funext`) and no holes. That is the
+  first compiler-backed evidence the repository has had for them.
+* They are **not** Grade 3. mathesis §5 defines Grade 3 as type-checking under the
+  policy invocation, and PROOF-POLICY §2.1 pins that as
+  `agda --safe --without-K --cubical-compatible`. Two independent obstacles
+  remain, and they are both proof problems, not prose problems:
+  **the `funext` postulate** (for `--safe`) and **K-dependent matching on
+  `p ≟ p`** (for `--without-K`; any `Dec (p ≡ p)` case split needs K, because
+  Agda cannot eliminate the reflexive equation on a `List String` without it).
+  Escaping the second one means threading the path decision through the model
+  instead of asking for it again at each site.
+* Until both are settled, the Agda leg sits at *Claimed, reproduced under a
+  waiver*. PROOF-POLICY §4 requires that waiver to be recorded beside the
+  artefact; the ledger rows say so.
+
+=== Z3
+
+`z3-solver` 5.3.3, one process per file, exit code ignored (Z3 exits 0 for both
+`sat` and `unsat`), so each `(check-sat)` was parsed individually:
+
+[cols="4,1,1,5",options="header"]
+|===
+| File | `(check-sat)` | `assert (not ...)` | Observed
+
+| `proofs/z3/copy_move_operations.smt2` | 11 | 17 | the 4 named theorems: `unsat` (i.e. the negated goal is unsatisfiable)
+| `proofs/z3/filesystem_operations.smt2` | 2 | 1 | consistency check `sat`, then `unsat`
+| `proofs/z3/permission_operations.smt2` | 5 | 5 | 5x `unsat`
+| `proofs/z3/rmo_operations.smt2` | 4 | 4 | 4 named theorems `unsat`
+| `proofs/z3/symlink_operations.smt2` | 1 | 0 | **one bare `sat`; the file never negates a goal, so it proves nothing**
+|===
+
+Two conclusions follow. Z3 evidence is real for four files and *absent* for
+`symlink_operations.smt2`, whose ledger coverage must be dropped to `open`. And
+`rmo_operations.smt2` states in its own comments that physical irreversibility is
+outside the model -- logical tree and mapping erasure only -- which corroborates
+the RMO wording this audit imposed.
+
+=== Grade impact, in one table
+
+[cols="3,2,4",options="header"]
+|===
+| Obligation class | Grade now | What would move it
+
+| Filesystem model, RMO, composition (Agda)
+| Claimed / reproduced with one postulate (waiver required)
+| Discharge `funext` (state reversibility pointwise, or move to a `--cubical` build) and thread path decisions to drop the K dependency -> Grade 3
+| RMO logical-erasure claims (Z3, 4 files)
+| Claimed, supplementary exception
+| Record the §4 exception note; add the missing negated goal to `symlink_operations.smt2`
+| Coq, Lean, Idris2, Isabelle, Mizar
+| unchanged from the table above
+| unreachable in this environment: needs a toolchain channel this sandbox does not have
 |===
 
 == Findings
