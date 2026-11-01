@@ -462,7 +462,7 @@ Result -- all nine modules, both toolchains:
 | File | `(check-sat)` | `assert (not ...)` | Observed
 
 | `proofs/z3/copy_move_operations.smt2` | 11 | 17 | the 4 named theorems: `unsat` (i.e. the negated goal is unsatisfiable)
-| `proofs/z3/filesystem_operations.smt2` | 2 | 1 | consistency check `sat`, then `unsat`
+| `proofs/z3/filesystem_operations.smt2` | 2 | 1 | consistency check `sat`; `unsat` only because the negated instance conflicts with the asserted reversibility formula
 | `proofs/z3/permission_operations.smt2` | 5 | 5 | 5x `unsat`
 | `proofs/z3/rmo_operations.smt2` | 4 | 4 | 4 named theorems `unsat`
 | `proofs/z3/symlink_operations.smt2` | 1 | 0 | **one bare `sat`; the file never negates a goal, so it proves nothing**
