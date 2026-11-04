@@ -1,0 +1,727 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= valence-shell: route plan (proof-first), architecture, and ultracode session plan
+Jonathan Jewell (hyperpolymath)
+:toc: left
+:toc-title: Contents
+:doctype: article
+:icons: font
+:sectanchors:
+
+*Date:* 2026-11-04
+*Status:* PLAN. Nothing in it is implemented yet.
+*Basis:* valence-shell `main` @ `295c3ca`, plus 14 sibling repos (read-only).
+
+*How the evidence was gathered:*
+
+* An ultracode workflow ran 50 agents, all of which completed:
+** 8 repo readers;
+** 4 route architects (proof-first, engineering-first, verified-subset, contrarian);
+** 3 judges;
+** a synthesis, followed by an adversarial pass. That pass extracted 16 load-bearing claims and gave each to 2 independent skeptics. 12 claims survived, and 4 were refuted in part (C06, C07, C11, C14; corrections are applied below).
+** A final critic, which found 3 new high-severity runtime bugs.
+* I re-ran those 3 bugs, plus two others, in the planning session.
+
+*Evidence grades used throughout:*
+
+* *Measured*: a command was run or a file read in the planning session.
+* *Inference*: reasoned from measured facts.
+* *Unverified*: not checked. This includes every prover-side claim. Only `cargo` and `rustc` were installed, so no Lean, Coq, Agda, Idris2 or Z3 run happened during planning.
+
+== Owner rulings (2026-11-04)
+
+[cols=",,",options="header",]
+|===
+|# |Ruling |Effect on this plan
+|*OD-0* |*Proof-first* is the spine. This is the elegant arm (judges' mean E 8.7 / D 6.7). |One canonical, decidable, finite spec in Lean. The shipped Rust core is to be mechanically proven to refine it (Aeneas). A second, independent, in-repo witness comes from a `--safe --without-K` Agda finite-map mirror. A golden-trace corpus is the explicit seam, checked by Rust, Lean `decide` and Agda `refl`. Coq, Isabelle and Mizar are archived *only after* their unique content is ported and the witness threshold holds without them.
+|*OD-22* |The v1 gate "all reversible operations proven across the six proof systems" becomes a *witness-coverage threshold*. |Every `OperationType` needs *≥2 independent CI-gated provers plus the differential oracle*. The count is computed from a generated `proofs/MANIFEST.toml` (frontier D-5). This is the formal guard on archival.
+|*OD-23* |*No theory-feeder import until G1–G5 are green.* After that, use echo-types `EchoResidueCell` + `EchoDeniability` if the Agda pin experiment passes, otherwise residual-evidence `Core` + epistemic `Warrant`. |The in-repo Agda mirror is not a feeder import, so it proceeds. absolute-zero `CNOInterface`, echo-types, residual-evidence and epistemic edges move to the session *after* G1–G5.
+|— |Commit this plan and open a draft PR. Wait for the owner's go before running the implementation workflows. |This document.
+|===
+
+*Why proof-first still fixes runtime holes first.* The proof-first architect's own thesis orders the work as "holes come first (rungs 0–1), wiring next (CI lanes before claims), features last". It also argues that the drift guard and the WAL are _proof-necessary_: they discharge, at runtime, the one hypothesis a refinement proof cannot cover, namely that the real OS state equals the abstract state. So the Rust hole fixes (Phase 1) are part of the spine, not a departure from it. They also touch disjoint files from the Lean work (Phase 2), so the two run in parallel and the proofs are not held up.
+
+'''''
+
+== 0. Bottom line
+
+[arabic]
+. *The spec has to mean what it says.*
+* The Lean `isEmptyDir` quantifies over ancestors, so `RmdirPrecondition` is (Inference) uninhabited and the Lean rmdir theorems are vacuous.
+* The same vacuity class exists in Idris2 (the hypothesis equals the conclusion), Agda (emptiness is missing) and Z3 (the predicate is uninterpreted).
+* CI builds at most 4 of the 12 Lean libraries, and 4 libraries are self-declared broken.
++
+Fix all of this first, and make every precondition carry a checked non-vacuity witness.
+. *One canonical finite spec.* `FinFS` is a Mathlib-free, decidable finite map with a proved refinement to the current function model. Three things run over it:
+* the differential oracle, extended with undo, redo and transactions;
+* a golden-trace corpus checked three ways (Rust tests, Lean `decide`, Agda `refl`);
+* an in-repo Agda mirror, which serves as the second independent witness.
+. *Prove that the shipped Rust refines the spec.* Extract a pure `vsh-core` crate. Run a Charon/Aeneas spike with a 2-session kill rule. If it passes, the refinement theorem becomes F-1's closure.
+. *The runtime must discharge what the proof assumes.* Nine safety failures reproduce today through ordinary `vsh -c` commands (§3.2):
+* undo after `cd` deletes the wrong file;
+* `cd ..` escapes the sandbox;
+* a 0600 file comes back as 0644, and its bytes sit in a world-readable state file;
+* obliterate in a transaction is reported as rolled back;
+* three arithmetic expressions panic;
+* obliterate writes its audit record after the irreversible step.
++
+These are fixed in Phase 1, in parallel with the Lean work, together with the drift guard and a single shared inverse table. The durability journal (WAL) and its crash-recovery theorem follow in the next session.
+. *Feeders wait for G1–G5.* The estate theory attaches later through the same Agda layer.
+. *Archival is gated by witnesses.* Coq, Isabelle and Mizar are archived (never deleted) only once Lean and Agda between them give every op ≥2 witnesses.
+
+'''''
+
+== 1. The done-definition: "valence-shell v1.0-honest" (proof-first)
+
+Every gate below is a required CI check on `main` with a recorded job id. No admin override is allowed. *Session* is the first session in which the gate can close.
+
+[cols=",,,",options="header",]
+|===
+|Gate |Done when |Status today (Measured) |Session
+|*G1 Safety* |Every case in §3.2 passes through the parsed `vsh -c` path. There is one inverse table for undo, redo and rollback. Ops with no inverse are hard failures in rollback. Obliterate is refused inside a txn. The drift guard verifies a post-state fingerprint before undo or redo. The undo payload carries mode, owner and mtime. The session root is fixed and separate from cwd. `eval_arith` never panics (proptest under both debug and release profiles). |9 safety regressions reproduce |1
+|*G2 Durability* |State lives in `$XDG_STATE_HOME/vsh/<sha256(session_root)>/`, mode 0700, files 0600. Writes are atomic. A corrupt state is a hard error. `flock` makes a second vsh fail closed. An intent/commit journal recovers on startup. Crash injection: 100 kills per PR and ≥1000 nightly. *`JournalModel.recover_sound`* is proved, and its \{pre, post} state set is the crash harness's oracle. |Non-atomic, in cwd, corruption swallowed, no lock |1 does the quick part (0600, atomic write, fail-loud load); 2 does the rest
+|*G3 Honest UI* |Printed proof status is derived only from `proofs/MANIFEST.toml`. A `proof_refs_resolve` test passes. No "N systems" strings remain. ECHIDNA properties no longer `Pass` unconditionally. |4 overclaim sites, and 1 cited theorem that exists nowhere |1
+|*G4 Spec* |`isEmptyDir` uses the child direction. `NonVacuity.lean` holds one witness per `*Precondition` (count-checked). *All 12 Lean libs* build as named CI targets, none quarantined; the 4 broken libs are repaired and the Coq RMO theorems are ported into Lean. Sorry and axiom counts are gated (`#print axioms` allow-list). A precondition-faithfulness table covers every prover: Idris2 gets NoDupKeys, and Z3 gets `is-empty-dir` defined. |Ancestor direction; 1 default target; 4 libs broken |1
+|*G5 Oracle + seam* |`FinFS` refines the function model (`abs (finOp s) = op (abs s)`). The oracle runs over FinFS with undo, redo, txn and ERR verdicts, using every sequence of length ≤4 over 3 paths plus ≥1000 random ones, with 0 disagreements. A negative control must fail. A golden corpus of ≥200 sequences, including precondition-violating ones, is checked by Rust, Lean `decide` and Agda `refl`, and CI fails if any of the three disagrees. |4 of 17 op kinds, forward only; no corpus |1 (4 verbs), then 2 (all verbs)
+|*G6 Witness coverage* (OD-22) |The MANIFEST shows *≥2 independent CI-gated provers plus the oracle* for every `OperationType` in scope. Coq stays gated (`pipefail`, per-theorem assumption allow-lists) until its witnesses are replaced. Isabelle, Mizar and legacy Agda are labelled _unchecked_ until archived. |No theorem has 6 witnesses; Coq is not gated |1 measures it; 2+ closes it
+|*G7 RMO + audit* |Obliterate writes its residue first (write-ahead), and a residue failure aborts before the overwrite. It scrubs prior undo payloads of the target. The non-identification claim is stated over the joint observer. The residue stores a path commitment. The log lives outside the root and is keyed (OD-24). `vsh audit verify` detects 6 tamper classes. `secure_erase_file` is private and returns `Err` on HDD. |Unsigned, in the root, written after the unlink |1 does ordering, scrub and `secure_erase`; 2 does keying and verify
+|*G8 Docs + hygiene* |`regen-status.sh` is idempotent. `just test && just quality` pass. A non-root job runs a security test that asserts something. The ROADMAP_TO_V1 v1 gate is amended per OD-22. |Counts drift; the security test asserts nothing |1
+|*G9 Refinement* |*Aeneas:* `VshRefine` proves `core_refines_spec` and `core_undo_refines` for the declared op set. The trusted base is listed (Charon/Aeneas, `PosixAx`). |Not started |1 does the spike (GO/NO-GO); later sessions prove it
+|*G10 Estate theory* (after G1–G5) |The Agda mirror instantiates absolute-zero `CNOInterface` (T7). It imports the OD-23 edge, with every library pinned to a SHA in its own CI lane. |No mechanised feeder import exists |3+
+|_G11 (later)_ |ShellEvent v0 JSONL is a projection of the journal. |No emitter |later
+|===
+
+*Non-goals (never claimed):*
+
+* full POSIX;
+* crash consistency beyond the journal model and the OS-assumption ledger;
+* CoW/SSD erasure;
+* linearizability (#90);
+* multi-process serializability beyond the leaf-disjoint diamond;
+* MCP and Ochrance receipts in this programme window.
+
+'''''
+
+== 2. Architecture
+
+....
+                    PRINTED CLAIMS  (derived from proofs/MANIFEST.toml, never hard-coded)
+                                     |
+ +-----------------------------------v------------------------------------------+
+ | L1  vsh shell: parser / REPL / -c / externals      [effects only]            |
+ |     session_root fixed at start  !=  cwd                                     |
+ |       | Op                                                                   |
+ |       v                                                                      |
+ | L1a vsh-core crate (pure, no std::fs/anyhow/PathBuf)  == Aeneas input        |
+ |     Pre / step / inverse / undo / redo / txn over a Vec-backed FinFS mirror  |
+ |     ONE inverse table | fingerprint | loss-grade table (lossless/lossy/obl.) |
+ |       |                                                                      |
+ |       |  drift guard = runtime discharge of the refinement hypothesis        |
+ |       |                 abs(real OS state) == recorded post-state            |
+ |       v                                                                      |
+ | L2  Journal = WAL = undo history = audit chain = receipts   [session 2]      |
+ |     XDG/<sha256(session_root)>/ 0700; intent->mutate->commit; recover; flock |
+ | L2a CAS blobs (pre AND post content)   L3 keyed audit + verify + anchors     |
+ +-------|------------------------------|---------------------------------------+
+         | Charon/Aeneas                | golden corpus (>=200 seqs)    crash injection
+         v                              v
+ +------------------------------------------------------------------------------+
+ | P1  Lean v4.34.1  VshSpec  (Mathlib-free, canonical)                         |
+ |     FilesystemModel (isEmptyDir FIXED) + NonVacuity + all 12 libs built      |
+ |     FinModel  ==refines==>  function model                                   |
+ |     ModelOracle (undo/redo/txn/ERR)    GoldenTraces (decide)                 |
+ |     JournalModel.recover_sound  [session 2]                                  |
+ |       ^ require                                                              |
+ | P1r VshRefine (separate package; Mathlib allowed only here)                  |
+ |     core_refines_spec, core_undo_refines   [spike in session 1; KILL @ 2]    |
+ +------------------------------------------------------------------------------+
+ | P2  Agda --safe --without-K finite-map MIRROR of VshSpec  (in-repo witness)  |
+ |     FinModel.agda + GoldenTraces.agda (refl)            [session 1]          |
+ |     VshCNO (absolute-zero CNOInterface, T7)  + OD-23 edge  [after G1-G5]     |
+ +------------------------------------------------------------------------------+
+ | P3  Z3: SAT non-vacuity + bounded crash relation (solver rung)               |
+ | P4  Coq: gated witness until its content is ported and the witness           |
+ |     threshold holds without it; then archive/ (never deleted)                |
+ | P5  Isabelle, Mizar, legacy Agda: labelled "unchecked" -> archive/           |
+ | P6  Idris2: NoDupKeys fix; ABI seam kept (src/abi -> januskey/ochrance Ph.3) |
+ +------------------------------------------------------------------------------+
+ Seams that are explicit and machine-checked: (1) Aeneas extraction,
+ (2) golden corpus Rust / Lean / Agda, (3) differential oracle,
+ (4) MANIFEST witness count.
+ Feeders (L5) parked until G1-G5: absolute-zero, echo-types, residual-evidence,
+ epistemic, januskey CAS, typell, others citation-level.
+....
+
+=== Layer table
+
+[cols=",,,",options="header",]
+|===
+|Layer |Where |Responsibility |Interface
+|L0 host OS |`docs/OS-ASSUMPTIONS.adoc` (new) |The trusted base. Each entry later becomes one `PosixAx` Lean axiom. |syscalls
+|L1 shell |`impl/rust-cli` |Parser, REPL, externals, effects. A fixed `session_root`. |`vsh` binary
+|L1a vsh-core |`impl/vsh-core` (new workspace crate) |The pure decision core and the Aeneas input. One inverse table, fingerprints, loss grades. |`plan`, `step`, `inverse`, `fingerprint`
+|L2/L2a/L3 |`src/{journal,blobs,commitment,anchor}.rs` |WAL = history = audit = receipts; CAS; keyed audit (session 2) |`append_intent/commit/recover`, `vsh audit verify`
+|P1 VshSpec |`proofs/lean4` |The canonical spec, non-vacuity, FinFS, oracle, golden traces, journal model |named lake targets
+|P1r VshRefine |`proofs/lean4-refine` (new package) |Aeneas output plus the refinement proof |`core_refines_spec`
+|P2 Agda mirror |`proofs/agda` (rewritten; the legacy tree moves to `archive/`) |The second independent witness, golden `refl`, and later the estate CNO and feeder instances |`agda --safe --without-K All.agda` in its own CI lane
+|P3 Z3 |`proofs/z3` |SAT non-vacuity, bounded crash relation |`verify-z3.sh`
+|P4–P6 |`proofs/{coq,isabelle,mizar,idris2}` |Coq is a gated witness until replaced. Isabelle and Mizar are unchecked. Idris2 gets NoDupKeys. |existing workflows
+|Seams |`scripts/gen-golden`, `scripts/gen-proof-manifest` |The golden corpus and the witness count |`tests/golden/`, `proofs/MANIFEST.toml`
+|===
+
+=== Mechanised edges
+
+[cols=",",options="header",]
+|===
+|Edge |State
+|Rust ↔ Lean `model_oracle` (differential) |*Exists*, green, 4 of 17 op kinds, forward only. Extended in G5.
+|`FinModel.lean` ⇒ `FilesystemModel.lean` (refinement) |New, session 1
+|`GoldenTraces.{lean,agda}` ↔ `tests/golden` (same sequence ids, scripted set equality) |New, session 1
+|`proofs/agda/FinModel.agda` ≅ `FinModel.lean` (transcription, checked through the golden corpus) |New, session 1. Graded "checked", never "mechanised".
+|`vsh-core` → Charon/Aeneas → `VshRefine` → `VshSpec` |Spike in session 1
+|`JournalModel.lean` ↔ `journal.rs` (barrier table + crash injection) |Session 2
+|Agda mirror → absolute-zero `CNOInterface.agda` (T7) |After G1–G5
+|Agda mirror → echo-types `EchoResidueCell`/`EchoDeniability`, or residual + epistemic |After G1–G5 (OD-23)
+|===
+
+'''''
+
+== 3. Measured current state
+
+=== 3.1 What is green
+
+* `cargo test` in `impl/rust-cli` passes *827, fails 0, ignores 15* across 23 result lines.
+* `cargo fmt --check` and `clippy -D warnings` are clean.
+* `ffi/rust` passes 24 tests.
+* januskey `reversible-core` passes 43 tests.
+* CI on `295c3ca`: Rust CLI, Lean Verification (including the oracle differential), Idris2, Correspondence, CodeQL, Dogfood, Secret Scanner and Bridge Forbidden Phrases are all green.
+* CI red: Governance (`actions.lock` verify), Mirror, weekly ECHIDNA (NW-2/#162), scorecard, and one Hypatia run. Compilation Tests had its macOS beta/nightly jobs cancelled.
+
+=== 3.2 Runtime holes
+
+Each was reproduced through the parsed `vsh -c` path. Five were confirmed by the skeptics, and I re-ran the rest in this session.
+
+[cols=",,,",options="header",]
+|===
+|# |Repro (`vsh -r $ROOT -c …`) |Observed |Root cause
+|a |`touch g; echo hi > g; undo` |"Undo write failed: No such file or directory" |`redirection.rs:415/428` records an absolute path, and undo re-resolves it under the root
+|b |`touch f; sh -c 'echo precious > f'; undo` |Deletes the externally written data |No drift guard
+|c |`begin; touch a; obliterate a --force; rollback` |Reports "rolled back" |`commands.rs:1397` `if let Some(inverse)` has no `else`
+|d |`echo a>f; echo b>f; obliterate f --force` |Prior content of `f` survives in `.vsh_state.json` |No scrub of undo payloads
+|e |`x=$(( (-9223372036854775807-1) / -1 ))`, the same with `%`, and `x=$(( -(-9223372036854775807-1) ))` |*Panic* (rc 101) |Unchecked i64 `/`, `%` and unary minus (`arith.rs:607,646,653`)
+|f |Pre-existing `sub/f` containing KEEP; `touch f; cd sub; undo` |Prints "undo rm f", rc 0. *Deletes the user's `sub/f`* and leaves the created `f`. |`executable.rs:404-411` reassigns `state.root` on every `cd`; history paths are relative
+|g |`vsh -r $S/box -c 'cd ..; touch escaped'` |Creates `$S/escaped`, rc 0. *Sandbox escape.* |Same as (f)
+|h |`chmod 600 s; rm s; undo` |Content comes back, but *mode 0600 becomes 0644*. The state file is *0644 and holds the secret bytes* (`undo_data:[84,79,80,…]` = "TOP…"). |The payload stores content only; no `set_permissions` anywhere
+|i |obliterate |It overwrites and unlinks *before* recording the op and writing the residue. A residue failure is only an `eprintln!` warning. |`secure_deletion.rs:325-339`, `:67-79`
+|— |`echo $((1+2))` (builtin echo) |Prints `$((1+2))` literally. Assignment and `/bin/echo` expand it. |A-7: arithmetic expansion is missing on the builtin path. This is a POSIX bug, not a safety bug, but it means any arith test must use assignment form or it passes vacuously.
+|===
+
+Other measured defects:
+
+*Code defects*
+
+* `secure_erase_file` is public and unused. It would erase a whole device with no confirmation, and returns `Ok` as a no-op on HDD.
+* The audit is unsigned: the only production caller passes `None` for the key. The audit log lives inside the root, follows `cd`, and logs the plaintext path, `$USER` and pid.
+* Variables are journalled in history but not persisted, so undoing them in a later session is incoherent.
+* Checkpoint indices are not adjusted when history is trimmed.
+
+*Test and documentation defects*
+
+* `security_no_privilege_escalation` *has no assertion in any branch*, so it passes as root and as non-root. Adding a non-root CI job would therefore add zero signal until the test is given a real check.
+* CLAUDE.md lists 15 security tests; 17 exist.
+
+=== 3.3 Proof-side state
+
+These were read from source. *No prover ran here.*
+
+*Lean*
+
+* `isEmptyDir` quantifies over ancestors (`FilesystemModel.lean:69-71`). Coq (`filesystem_model.v:107-111`) and Isabelle (`FilesystemModel.thy:70-72`) state the correct child direction.
+* Only `FilesystemModel` is `@[default_target]`. `lean-verification.yml` builds `Extraction` plus `model_oracle`. Of the 12 `lean_lib`s, the rest are not CI-built except transitively.
+* 4 libs are self-declared broken: CopyMove, FileContent, RMO and Permission.
+
+*The same vacuity class in other provers*
+
+* Idris2: `rmdirMkdirReversible` and `rmTouchReversible` take a `canonical` hypothesis that is the conclusion (`Operations.idr:173-180, 216-223`).
+* Legacy Agda: `IsEmptyDir` has no emptiness field (`FilesystemModel.agda:88-93`).
+* Z3: `is-empty-dir` is uninterpreted, so a satisfiability check cannot detect a wrong direction.
+
+*Coq*
+
+* The whole `_CoqProject` builds in CI.
+* `Print Assumptions` goes through `tee` with no `pipefail`, so it gates nothing.
+* The proposed allow-list `{functional_extensionality_dep, classic}` is wrong in both directions.
+** `is_empty_dir_dec` is a theorem resting on `excluded_middle_informative`, which also pulls in `constructive_indefinite_description`.
+** The owner's D-1 text allows only FunctionalExtensionality.
+
+*Op coverage and doc drift*
+
+* `OperationType` has *17* variants. In my earlier message I said 19; that was wrong. The Lean oracle covers 4 of them, and januskey covers 7 of 17.
+* `proof_refs.rs` hard-codes names and line numbers. `variable_assignment_reversible` exists in no proof file, yet the UI says "all proven in 6 systems".
+
+*Feeder and cross-repo facts*
+
+* Agda pins disagree across at least 2 Agda versions and at least 4 stdlib sources:
+** `2.6.4.3-1+b2` with Debian stdlib `2.1-4` (epistemic, choreographic);
+** `2.6.4.3` with a git-commit stdlib (residual-evidence);
+** unpinned apt with stdlib `v2.3` (echo-types);
+** `2.6.3` with stdlib `1.7.3` (absolute-zero);
+** `2.6.3-1build1` (one januskey workflow).
+* absolute-zero's T7 Agda CNO interface (ruled D204) *does not exist yet*. Governance conflicts on whether it is Agda (T7) or Coq (ULTRAPLAN Q10).
+* januskey: `ReversibleExecutor` has 0 implementors. The "merkle root" is a linear chain, and its root does not commit the full op record, so a measured collision exists. `MetadataStore::save` is non-atomic. It emits A2ML, which is retired estate-wide.
+* januskey already has `--safe --without-K` Agda prior art the synthesis missed: `TransactionAtomicity.agda` (`rollback-restores`, `at-most-one-active`) and `Reversibility.agda` (`obliterate-absorbs`, graded by a Loss resource algebra).
+
+'''''
+
+== 4. Engineering route
+
+The engineering route serves the spine. Each step either closes a measured hole or builds what the proof needs from the code: a pure core to extract, and runtime discharge of the refinement hypothesis.
+
+[cols=",,,",options="header",]
+|===
+|Step |What |Size |Session
+|*E0* |`tests/regressions_parsed_path.rs` holds *9 fail-first safety tests* (§3.2 a–i). They must fail on `295c3ca` for the documented reason. Also rewrite `security_no_privilege_escalation` with real assertions (no euid elevation, no setuid files, created-file uid equals the invoker), and make the root skip a visible `#[ignore]`. |hours |1
+|*E1* |Local fixes: redirection records a root-relative path (a); checked `/`, `%` and unary minus, with an explicit pow policy and a never-panics proptest under debug and release (e); `secure_erase_file` private, with confirmation, `Err` on HDD; builtin `echo` arithmetic expansion (A-7); the `>` vs `>>` property (A-10). |1 day |1
+|*E1b* |*Session root ≠ cwd* (f, g). Fix the root at start, confine `cd` to it (OD-26), and store paths relative to the session root. |1 day |1
+|*E1c* |RMO ordering (i): the residue is written and fsynced before the overwrite, and a failure aborts. Scrub prior payloads of the target (d). Refuse obliterate inside a txn (c). Inverse-less ops become a hard rollback failure. Rollback is resumable (OD-11). |1 day |1
+|*E1d* |Quick durability (h): the state file is written 0600 with an atomic temp-fsync-rename, a corrupt load fails loudly, and the undo payload carries mode, uid, gid and mtime. |hours |1
+|*E2* |*Extract `vsh-core`*: a pure workspace crate with `Pre`, `step`, `inverse`, undo, redo and txn over plain data, one inverse table, fingerprints and loss grades. *Drift guard* (b): undo and redo verify the post-state fingerprint before acting (refuse, or an explicit recorded `--force`). This is the Aeneas input and the runtime discharge of `abs(OS) = recorded`. |days |1
+|*E5* |Honest UI plus witness counting: a `gen-proof-manifest` script produces `MANIFEST.toml` (theorem id, prover, file, CI target, status, op kind); `proof_refs` reads it; a `proof_refs_resolve` test; delete the "N systems" strings; ECHIDNA returns Skip, not Pass; `docs/PROOF-SYSTEM-STATUS.adoc` with a *per-op witness table* (OD-22). |1 day |1
+|*E-golden* |`scripts/gen-golden` writes one corpus (≥200 sequences, including precondition-violating ones with expected `Err`), emitted as a Rust test, Lean `decide` checks and Agda `refl` checks. |1 day |1
+|*E8* |Docs: `regen-status.sh`; THEORY-FEED corrections (NW-1 → T7 Agda; NW-3 mappings; bridge `.md` → `.adoc`); the ROADMAP_TO_V1 gate amendment (OD-22); a PROOF_HOLES_AUDIT entry for the vacuity; remove `impl/mcp/deno.lock` and the dead recipes. Licence text is not touched. |1 day |1
+|*E9* |CI to green: Governance `actions.lock`, Mirror, ECHIDNA `--library` roots (advisory until a tri-state verdict exists), fuzz runs all targets. *Proposed* required checks are applied by the owner. |1 day |1
+|E3 |Full durable store: XDG dir 0700, `flock`, redo and checkpoints persisted by id, backup-then-migrate. |days |2
+|E4 |Journal = WAL; CAS blobs (pre and post content; unblocks redo of writes, C-1); `recover()`; segment rotation; crash points including between unlink and record. Designed together with `JournalModel`. |~1 week |2
+|E6/E7 |Path commitments; log outside the root; `KeySource`; keyed chain (OD-24); `vsh audit verify` with 6 tamper classes; anchors. |~1–2 weeks |2
+|E10–E14 |ShellEvent v0; resource bounds (#190/#191); januskey CAS swap (after JK-1..4); typell txn monitor; MCP (OD-17). |— |later
+|===
+
+'''''
+
+== 5. Proof route (the spine)
+
+[cols=",,,",options="header",]
+|===
+|Step |What |Size |Session
+|*P0* |*EXP-1:* prove the current `RmdirPrecondition` uninhabited, so the defect is recorded as a theorem. Then fix `isEmptyDir` to the child direction. Add `NonVacuity.lean` with one `example` per precondition, count-checked by a script. Re-check the dependents (`rmdir_mkdir_reversible`, `rmdirPreservesEquiv`, the Composition `.rmdirOp` branches). EXP-2 measures the blast radius. |hours to 1 day |1
+|*P0b* |*Faithfulness table across provers.* Idris2 gets *NoDupKeys*, so `canonical` stops being the conclusion. Z3 defines `is-empty-dir` instead of leaving it uninterpreted, and adds SAT checks. The legacy Agda gap (no emptiness field) is noted, and that tree is archived when P5 lands. |1 day |1
+|*P1* |*All 12 Lean libs as named CI targets* plus `model_oracle`. Gate on sorry/axiom counts via `#print axioms`. |hours |1
+|*P1b* |*Repair the 4 broken libs* (CopyMove, FileContent, RMO, Permission), starting from the nonexistent namespace opens (`CopyMoveOperations.lean:19-20`). *Port the Coq `obliterate_overwrites_all_blocks` and `obliterate_not_injective` into Lean*, so Lean carries the RMO chain. Time-box: if a lib needs more than a day, quarantine it visibly and report. |1–3 days |1
+|*P2* |*Coq stays an honest witness until replaced:* `set -o pipefail` and per-theorem allow-lists. `{functional_extensionality_dep}` covers the reversibility theorems. A scoped `{classic, constructive_indefinite_description}` exception covers `is_empty_dir_dec` and its dependents; this is labelled a D-1 departure for the owner. |hours |1
+|*P3* |*FinFS canonical model:* a Mathlib-free sorted association list, decidable `isEmptyDir`, `abs`, and the refinement `abs (finOp s) = op (abs s)`. Do mkdir, rmdir, touch and rm first, then the rest of the op set O (write, truncate, append, cp, mv, symlink, chmod, chown). Transport lemmas so the existing theorems hold for FinFS. Use the Idris2 `Filesystem/Model.idr` theorem shapes (`undoRedoIdentity`, `TraceReversible`) as the checklist. C-5 (`well_formed` preserved) is the FinFS invariant. Kill rule: if 4 verbs need more than ~600 LoC, fall back to `decide` checks and re-plan. |days |1 (4 verbs), 2 (O)
+|*P4* |*Oracle v2* over FinFS: UNDO and REDO via `reverseOp`, BEGIN/COMMIT/ROLLBACK, precondition verdicts, content and permission probes. Bounded-exhaustive plus random generation. Negative control EXP-6. *GoldenTraces.lean* (`decide`) over the E-golden corpus. |days |1
+|*P5* |*Agda mirror (the second witness):* `proofs/agda/{FinModel,Ops,Inverse,GoldenTraces}.agda` in `--safe --without-K`. Preferably *builtins-only* (`--no-libraries`; `Agda.Builtin.{String,List,Nat,Bool,Equality}`), which sidesteps the estate's Agda/stdlib pin skew. The fallback is the interim pin chosen by EXP-agda. Mirror the Lean preconditions, inverses and reversibility theorems for the 4 core verbs. `GoldenTraces.agda` holds the same sequence ids, checked by `refl`. The legacy tree, which has no OPTIONS pragma and postulates funext, moves to `archive/`. Est. 400–700 LoC. |days |1 (4 verbs), 2 (O)
+|*P6* |*Aeneas spike:* a 50–150 line slice of `vsh-core` (mkdir, rmdir, touch, rm, undo stack over a Vec FinFS, paths as `Vec<u32>` ids) → Charon → Aeneas → Lean, in the separate `lean4-refine` package. Prove `core_mkdir_refines`. *GO* = the build passes on a toolchain reconcilable with v4.34.1, with no Mathlib in VshSpec. *NO-GO* = a written record of the blocking pins. *Kill after 2 sessions in total.* |≤2 sessions |1 (first attempt)
+|P7 |Tier-C items: C-1, C-3, C-4, C-8, C-10, and C-9 over path independence. |≤1 day |1–2
+|P8 |*JournalModel:* state is FS × IntentLog. `recover_sound` says the in-flight op ends in \{pre, post} and committed ops survive. Do mkdir first, then generalise over the inverse table. Its \{pre, post} set is the crash harness's oracle. A bounded SMT encoding (k ≤ 4) cross-checks it. |~1 week |2
+|P9 |*Full refinement* (if P6 is GO): `core_refines_spec` and `core_undo_refines` for O, RMR-only rollback, redo. The `#print axioms` allow-list is \{propext, Quot.sound, Classical.choice?, Aeneas library axioms, PosixAx}. *If NO-GO:* an owner decision between the proof-first architect's fallback (Lean `@[export]` FinFS ops linked into Rust as the decision core; the judges scored it E 5 / D 5 for its unsafe FFI seam and the Lean runtime in every build) and a declared terminal state of "differential vs proven-refining FinFS" (E 6 / D 7). |weeks |2+
+|P10 |*Archival* (when G6 holds without them): move Coq, Isabelle and Mizar to `archive/proofs/`, with a README mapping every theorem to its Lean or Agda successor. Never delete. |1 day |2+
+|P11 |*Estate theory* (after G1–G5): absolute-zero `CNOInterface.agda` (T7, setoid-parametric, so no funext) plus a `VshCNO` instance over the mirror. The OD-23 edge comes next. Then epistemic `AuditLog`/`AuditReceipt` for the keyed audit. Never use the vacuous `copyFile → A↔ΣEcho` pairing or the nonexistent `const-fibre-↔-domain`. |~1–2 weeks |3+
+|===
+
+'''''
+
+== 6. The ladders
+
+*Theory*
+
+* T0: RMR/RMO boundary as a rule.
+* T1: OS-assumption ledger.
+* T2: refinement relation written in prose before any proof.
+* T3: event-log semantics (state is a fold; checkpoints are event ids).
+* T4: crash relation.
+* T5: commitment semantics (touched subtree, not a global hash).
+* T6: audit trust model (Opaque / Designated / Public).
+* T7: C-9 over path independence, with occupancy high-water-mark grades excluded from serializability.
+* T8 _(later)_: residue vocabulary after echo-types ET-RESCLASS-1.
+* T9 _(optional)_: verified script subset.
+* T10 _(not this window)_: tropical, occupancy, anytype, choreographic, secret-types.
+
+*Proving*
+
+* R0: EXP-1 then the fix.
+* R1: named CI targets and the Coq gate.
+* R2: broken libs.
+* R3: Tier-C.
+* R4: FinFS refinement.
+* R5: undo laws on FinFS.
+* R6: `recover_sound`.
+* R7: Aeneas spike.
+* R8: one feeder edge.
+* R9: audit receipts.
+* R10: CNO and echo edges.
+* R11: script-subset theorems.
+
+*Solving*
+
+* S0: Z3 satisfiability non-vacuity.
+* S1: Lean `decide` over FinFS with ≤4 paths, as a cheap model checker compared against `verification.rs`.
+* S2: bounded-exhaustive differential.
+* S3: bounded SMT encoding of the crash relation (k ≤ 4).
+* S4: Kani on L1a (arith panic-freedom, totality of `inverse`, JCS determinism).
+* S5: ECHIDNA tri-state, where "unknown" is not green.
+
+*Testing and benching*
+
+* B0: floor of 827/0/15 plus the 9 fail-first tests.
+* B1: property tests (`inverse ∘ apply = id`, arith never panics, mixed RMR/RMO rollback never reports success, mode preserved over undo).
+* B2: oracle v2 as a required check.
+* B3: crash injection, 100 per PR and ≥1000 nightly. EXP-4 first measures today's loss window.
+* B4: a second vsh fails closed within 1 s.
+* B5: audit tamper suite, plus "no `.vsh*` file under root after e2e".
+* B6: fuzz baseline for the 7 targets, plus `journal_recover`, `redirection_parse`, `audit_verify` and `event_parse`.
+* B7: benches for `record_operation` at 10/1k/10k history (today O(history)), fsync p50/p95, HMAC verify at 100k events, and blob dedup ratio.
+* B8: a non-root job, after the security test is given an assertion.
+* B9: `regen-status` idempotency, and a grep gate on unsupported "M" link claims.
+
+'''''
+
+== 7. What else needs creating
+
+*In valence-shell (whole programme):*
+
+* `tests/regressions_parsed_path.rs`, `durability_tests.rs`, `crash_injection.rs`, `audit_integrity_tests.rs`
+* `src/journal.rs`, `src/blobs.rs`, `src/commitment.rs`, `src/anchor.rs`
+* `proofs/lean4/{NonVacuity,FinModel,JournalModel}.lean`
+* `proofs/MANIFEST.toml` and `scripts/gen-proof-manifest`
+* `docs/{OS-ASSUMPTIONS,REFINEMENT-RELATION,PROOF-SYSTEM-STATUS}.adoc`
+* `scripts/regen-status.sh`, Justfile `test`/`quality` recipes, `deny.toml`
+* Session 1 (proof-first): `impl/vsh-core/` (pure workspace crate; the Aeneas input); the rewritten `proofs/agda/{FinModel,Ops,Inverse,GoldenTraces,All}.agda` (legacy tree to `archive/`); `proofs/lean4/GoldenTraces.lean`; the `proofs/lean4-refine/` spike package; `scripts/{gen-golden,toolchain-check.sh}`; `tests/golden/`; `docs/TOOLCHAIN.adoc`; `docs/decisions/` (kill and GO/NO-GO records)
+* Session 2+: the journal, blobs, commitment and anchor modules; `JournalModel.lean`; `archive/proofs/` with a successor table
+* Later: `schemas/shell-event.v0.json`, `docs/SHELL-EVENT-SPEC.adoc`, and the Agda feeder instances (after G1–G5)
+
+*In other repos* (all later or parked; see §11):
+
+* absolute-zero `CNOInterface.agda` (T7)
+* januskey JK-1..JK-4
+* residual-evidence `Examples/VshObliterate.agda`
+* epistemic `Applications/AuditLog/AuditReceipt.agda`
+* typell `vsh-txn` spec and session monitor
+* one shared estate Agda pin
+
+'''''
+
+== 8. Owner decisions, rated
+
+Scores are *E = elegance and correctness*, then *D = dependability and security/privacy*, out of 10.
+
+* OD-0 to OD-21 are the synthesis's options, scored as the mean of 3 judges for OD-0 and by the synthesis for the rest.
+* OD-22 to OD-29 come from the critique, are scored by me, and are labelled so.
+* *[ELEGANT]* marks the default arm.
+* *RULED* marks the 2026-11-04 rulings.
+
+=== Ruled
+
+[cols=",,",options="header",]
+|===
+|# |Decision |Ruling
+|*OD-0* |Overall strategy. Options: A proof-first [ELEGANT] 8.7 / 6.7 · B engineering-first 7.7 / 9.0 (most dependable) · C verified script subset 7.3 / 5.7 · D contrarian 7.0 / 7.7 · S synthesis |*RULED: A, proof-first.* Its dependability gap is closed by running the Phase 1 hole fixes in parallel with the proof work, which A's own rung order requires.
+|*OD-22* |v1 gate "all reversible operations proven across six systems" |*RULED: witness threshold* [ELEGANT] 9 / 8. ≥2 independent CI-gated provers plus the oracle per op, computed from the MANIFEST.
+|*OD-23* |First feeder edge |*RULED: none until G1–G5.* After that, echo-types `EchoResidueCell` + `EchoDeniability` [ELEGANT] 9 / 7 if EXP-agda passes, otherwise residual + epistemic (5 files / 284 lines) 7 / 8.
+|*OD-1* |Prover stack |*Follows from OD-0:* Lean canonical, plus the Agda mirror as second witness, plus Z3. Archive Coq, Isabelle and Mizar after porting [ELEGANT] 9 / 7. The archive step is gated by OD-22, which closes the risk the synthesis flagged (archiving the best-gated tree too early).
+|===
+
+=== Open, with provisional defaults the session can use
+
+[cols=",,,",options="header",]
+|===
+|# |Decision |Options (E / D) |Recommendation (provisional default)
+|*OD-24* _(critique)_ |Audit authentication |(a) HMAC chain only: designated-verifier, so the key holder can rewrite 6 / 7 · (b) *Ed25519 chain over JCS bytes plus anchors*: the audited party can verify, matching MAA's "no party above audit" [ELEGANT] 9 / 9 · (c) HMAC per event plus Ed25519-signed checkpoints, like a certificate-transparency "signed tree head" 8 / 8 |(b) if a signing-key story is acceptable, otherwise (c). Needed only in session 2 (E7).
+|OD-2 |F-1 route |(a) Aeneas spike [ELEGANT] 9 / 8 · (b) Lean `@[export]` linked into Rust 5 / 5 · (c) Coq FMaps extraction 5 / 6 · (d) differential-only, honestly labelled 6 / 7 |(a) with a 2-session kill; on NO-GO, owner decides between the proof-first fallback and (d) — see P9. Reject (b): it adds an unsafe seam and proves nothing about Rust. _Note:_ the owner's ROADMAP_TO_V1 D2 says "tested correspondence for v1.0, verified kernel for v2.0", so the spike is a labelled departure in timing only.
+|OD-3 |RMO inside a txn |(a) refuse 8 / 9 · (b) typed Irrevocable protocol state [ELEGANT] 9 / 8 · (c) implicit commit 6 / 7 |(a) now, (b) when the typell spec lands
+|OD-4 |Obliterate scrubs prior payloads |(a) yes, scrub and record [ELEGANT] 9 / 9 · (b) audit-only claim 5 / 4 |(a)
+|OD-5 |Persistence |(a) journal is the single source of truth [ELEGANT] 9 / 9 · (b) WAL beside the state file 6 / 7 · (c) embedded DB 5 / 7 |(a), staged after E3
+|OD-6 |januskey dependency |(a) local CAS now, swap later 8 / 9 · (b) git dependency now 8 / 5 · (c) widen its enum 4 / 6 · (d) a versioned crate with a generic op kind [ELEGANT] 9 / 8 |(a), moving to (d)
+|OD-7 |Event format |(a) JSONL + JCS 7 / 8 · (b) deterministic CBOR + COSE [ELEGANT] 9 / 8 · (c) A2ML 3 / 5 (retired) · (d) defer 6 / 6 |(d) until E10, then (a) with a path to (b)
+|OD-8 |Digest |(a) alg-tagged, SHA-256 default [ELEGANT] 9 / 9 · (b) SHA-256 only 6 / 8 · (c) BLAKE3 only 6 / 7 |(a). Reserve a `blake3-merkle` form for ochrance compatibility (januskey "Deferred").
+|OD-9 |Key lifecycle |(a) key file, fail closed when configured 8 / 8 · (b) mandatory key 6 / 9 · (c) januskey KeyManager [ELEGANT] 9 / 9 · (d) OS keyring 7 / 8 |(a) now, (c) later
+|OD-10 |Anchor target |(a) pluggable sinks (file, git, later ochrance) [ELEGANT] 8 / 8 · (b) RFC 3161 TSA 7 / 9 · (c) none 6 / 6 |(c) until E7, then (a)
+|OD-11 |Rollback partial failure |(a) resumable [ELEGANT] 9 / 9 · (b) clear and report (current) 4 / 5 |(a)
+|OD-12 |State location |(a) XDG keyed by session root [ELEGANT] 9 / 9 · (b) `<root>/.vsh/` 6 / 5 · (c) cwd (current) 2 / 2 |(a). Must key by the *session root*, not the cwd-tracking root (critique).
+|OD-14 |Estate Agda pin |(a) 2.6.4.3 + Debian stdlib 2.1-4 7 / 8 · (b) 2.6.4.3 + stdlib v2.3 7 / 6 · (c) Guix-pinned by SHA [ELEGANT] 9 / 9 |(a) after EXP-agda, (c) as the target
+|OD-15 |Verified-script subset |(a) later, optional 8 / 6 · (b) now 7 / 5 · (c) never 5 / 7. *Sub-choice:* *Oblibeny* as the subset (the owner's named NW-6 route, also MAA's reference language) [ELEGANT] vs a vsh `Script.lean` |(a). Prefer Oblibeny if inspectable (not cloned; Unverified). Use jtv-halting-islands-ct's "grammar membership = termination certificate" as the design pattern.
+|OD-16 |Parked layers |(a) archive with a README 8 / 8 · (b) keep, labelled parked 5 / 6 · (c) wire the Idris2 ABI now 7 / 6 · (d) *archive everything except `src/abi`, kept as the januskey Phase-3 ochrance ABI seam* (mine) 8 / 8 |(d). Departure from the synthesis's (a): ROADMAP v2.0 keeps `src/abi` and Zig FFI as planned surfaces.
+|OD-17 |MCP runtime |(a) Rust over L1a+L2 8 / 9 · (b) AffineScript + Bun once affinescript#746 adds hashing/HMAC [ELEGANT per the estate language policy] 8 / 4 |(a). Departure: `impl/mcp` today is an in-flight AffineScript port (only `.affine` files, with a stale `deno.lock`).
+|OD-18 |NW-1 canonical record |(a) T7 Agda, setoid-parametric [ELEGANT] 9 / 8 · (b) Q10 Coq 4 / 6 |(a), and mark Q10 superseded
+|OD-19 |Mathlib policy |(a) only in `lean4-refine` [ELEGANT] 9 / 8 · (b) everywhere 6 / 6 · (c) none 7 / 7 |(a)
+|OD-20 |`residue_class` vocabulary |(a) local exploratory enum 6 / 7 · (b) wait for ET-RESCLASS-1 [ELEGANT] 9 / 7 · (c) residual-evidence verdicts 7 / 7 |(a), labelled exploratory. Keep the bridge field name `echo_residue_class`.
+|OD-21 |Resource bound numbers |(a) the owner picks depth, per-op cap and byte budget [ELEGANT] 9 / 9 · (b) count-only 3 / 3 |(a)
+|OD-25 _(mine)_ |Rollback admissibility rule |(a) `inverse()==None` means hard failure 7 / 8 · (b) *loss grade*: rollback admissible iff `traceGrade = fin 0`, mirroring januskey `Reversibility.agda`, with `explain` printing the grade [ELEGANT] 9 / 8 |(a) now, with the grade table as data so that (b) is a refactor, not a rewrite. (b) depends on `resource-algebra` (not cloned).
+|OD-26 _(mine)_ |`cd` and the sandbox |(a) confine `cd` to the session root 8 / 9 · (b) allow `cd` out, but refuse journalled mutations outside the root [ELEGANT] 9 / 8 · (c) absolute paths, no sandbox 5 / 4 |(a) now (closes the escape in hours), (b) later.
+|OD-27 _(mine)_ |Variable ops in history |(a) persist variables 7 / 7 · (b) mark variable ops session-scoped and not journalled 8 / 8 |(b)
+|OD-28 _(critique)_ |Placement of proofs that import two or more feeders |(a) vsh `proofs/agda/feeds` 7 / 7 · (b) `nextgen-typing/verification/proofs` per its placement rule [ELEGANT per estate boundary] 8 / 6 (that repo has no Agda CI yet) |Avoid the question by choosing a single-feeder edge (OD-23 (a)). Otherwise (b), plus a CI lane there.
+|OD-29 _(mine)_ |Idris2 role |(a) "no new scope" 6 / 7 · (b) Idris2 list model as the reference finite model 6 / 7 · (c) Lean FinFS using the Idris2 theorem shapes as its spec, with Idris2 as a second differential oracle if codegen works [ELEGANT] 9 / 8 |(c). Resolves the frontier question "promote Idris2 to load-bearing?".
+|===
+
+'''''
+
+== 9. The ultracode session plan (session 1, proof-first)
+
+*Goal:* close the holes, then make the spec sound and fully CI-built. Stand up FinFS with refinement for 4 verbs, oracle v2 with undo, the golden seam, and the Agda mirror as second witness. Record an Aeneas GO or NO-GO. Out of scope for this session: feeder imports (OD-23), archival, the journal, receipts and MCP.
+
+*Size:* the default workflow size guideline is under 10 agents per workflow. The plan uses 2 resumable workflows:
+
+* Workflow A covers Phases 0–2, with about 9 agents.
+* Workflow B covers Phases 3–6, with about 9 agents.
+
+Gate checks run in the coordinating context between phases.
+
+*Reference cost:* the planning run used 50 agents, ~10.9 M subagent tokens and ~65 minutes. Implementation agents cost more each, because they compile and test.
+
+*Branch and PR discipline:*
+
+* Work on `claude/laughing-hawking-pibzji`, in *one PR per phase*, all signed.
+* Any change to a sibling repo (absolute-zero, echo-types and so on) is out of scope for session 1.
+
+[cols=",,,",options="header",]
+|===
+|Phase |Agents |Gate (machine-checked) |Parallel
+|*0 Provision + ground truth* |toolchain-provisioner (elan + Lean v4.34.1; z3; coqc 8.18; Agda 2.6.4.3 with `--no-libraries` and, for EXP-agda, Debian stdlib 2.1-4; opam + Charon/Aeneas at a recorded rev; cargo-fuzz + nightly; cargo-deny; write `docs/TOOLCHAIN.adoc`); ground-truther (cargo test/fmt/clippy; `lake build` per lib, recording the exit code and first error; Coq build; verify-z3) |`scripts/toolchain-check.sh` prints each tool's exact version, or marks it *unavailable* (never reported as passed). `docs/audits/BASELINE-<date>.adoc` lists exit codes for all 12 Lean libs and the cargo summary (827/0/15 expected). If Lean is unavailable, Phases 2–5 are skipped and reported Unverified. |yes
+|*1 Runtime holes* (Rust; runs in parallel with Phase 2) |bug-reproducer (E0: 9 fail-first tests, plus the security test with real assertions); fixer-A (E1); fixer-B (E1b session root); fixer-C (E1c RMO ordering, scrub, txn refusal, resumable rollback; E1d 0600 + atomic + fail-loud + inode metadata); core-extractor (E2: `vsh-core` crate, one inverse table, drift guard); adversarial-reviewer |On `295c3ca` the 9 tests fail for the documented reasons (the run is recorded). After the fixes, all 9 pass. `cargo test` has 0 failures and a total ≥ 827 plus the new tests. Clippy is clean. `grep -rn 'std::fs\|anyhow\|PathBuf' impl/vsh-core/src` returns 0. A proptest of `eval_arith` runs 10k cases under debug and release with no panic. The state file is 0600. |yes
+|*2 Spec soundness* (Lean, Coq, Z3, Idris2) |lean-prover-1 (EXP-1, P0, NonVacuity, EXP-2); lean-prover-2 (P1b: repair the 4 libs, port the Coq RMO theorems); ci-wirer (P1 named targets, axiom gate; P2 Coq `pipefail` + per-theorem allow-lists; Z3 SAT checks); faithfulness-prover (P0b: Idris2 NoDupKeys, Z3 `is-empty-dir` definition, faithfulness table) |`lake build` over all 12 libs plus `NonVacuity` and `model_oracle` exits 0. Zero non-comment `sorry` or `axiom`. Witness count equals precondition count (scripted). `#print axioms` stays within the allow-list. The Coq Print Assumptions step fails the job on an unlisted axiom (tested with a deliberately bad allow-list). The Idris2 build stays `--total` with 0 holes. |yes
+|*3 FinFS + oracle v2 + golden seam* |lean-prover-3 (P3: FinModel with refinement for mkdir, rmdir, touch, rm); oracle-engineer (P4: oracle v2 + Rust generator; EXP-6 negative control); seam-engineer (E-golden: the corpus, the Rust test, GoldenTraces.lean) |`lake build FinModel ModelOracle GoldenTraces` exits 0. `cargo test --test model_oracle_correspondence -- --ignored` passes on bounded-exhaustive plus ≥1000 random sequences, including undo, redo and txn, with 0 disagreements. The negative control fails as expected. The golden Rust test passes. `#print axioms` on the refinement theorems stays within the allow-list. |partly (seam waits on P3's model shape)
+|*4 Second witness + honest UI* |agda-prover (P5: the builtins-only mirror for the 4 verbs + `GoldenTraces.agda`; legacy Agda moved to `archive/`); ci-wirer-2 (an Agda CI lane with pinned versions); honesty-engineer (E5: MANIFEST, `proof_refs` reads it, delete the overclaims, per-op witness table) |`agda --safe --without-K --no-libraries proofs/agda/All.agda` exits 0 in CI. `grep -rn postulate proofs/agda` is empty. The sequence ids in `GoldenTraces.agda` equal the set in `tests/golden` (scripted). `grep -rn 'in 6 systems' impl` returns 0. `proof_refs_resolve` passes. The MANIFEST shows ≥2 witnesses (Lean + Agda) plus the oracle for mkdir, rmdir, touch and rm. |yes
+|*5 Experiments* (report only) |aeneas-spiker (P6: GO or NO-GO); agda-prober (EXP-agda: echo-types `EchoResidueCell`/`EchoDeniability` cone, and residual + epistemic, under 2.6.4.3 + stdlib 2.1-4. This decides OD-23's post-G5 arm. Nothing is imported.); bench-runner (EXP-persist: `record_operation` at 10/1k/10k; EXP-fsync p50/p95 on ext4 and tmpfs, input to E4 in session 2); crash-prober (EXP-4: the loss window on current code); spec-drafter (DRAFT `OS-ASSUMPTIONS`, `REFINEMENT-RELATION`, `JOURNAL-PROTOCOL` docs) |A written report: Aeneas GO (`lake build VshRefine` with `core_mkdir_refines` proved and axioms recorded) or NO-GO (pins and errors); the Agda pin verdict for both OD-23 arms; bench numbers; the crash-loss window; 3 DRAFT docs. *Decision rules:* fsync p95 ≤ 2 ms on ext4 means per-op fsync in E4, otherwise group commit per command line. NO-GO goes to the owner for the P9 fallback decision. |yes
+|*6 Consolidate + cold verify* |doc-reconciler (E8: regen counts; THEORY-FEED NW-1/NW-3 fixes; PROOF-OPEN-FRONTIER updates (F-2 closed, the Lean vacuity recorded and closed, C-9 restated); the ROADMAP_TO_V1 witness-gate amendment; PROOF_HOLES_AUDIT; CLAUDE.md); verifier (re-runs every gate from a fresh clone: `lake clean`, a fresh cargo target, `--ignore-interfaces` for Agda) |All Phase 1–4 gates pass from cold. `regen-status.sh` run twice gives an empty diff. `check-bridge-forbidden-phrases.sh` passes. No "M" cell is claimed without a CI-built import. |no
+|===
+
+*Session 2 (sequenced; each item starts after its predecessor's gate):*
+
+[arabic]
+. FinFS and the Agda mirror extended to all of O (G5, G6).
+. E3 and E4: the full durable store and the journal, designed together with P8 `JournalModel.recover_sound`. Then crash injection, 100 per PR and ≥1000 nightly (G2).
+. E6 and E7: the keyed audit (OD-24) and verify (G7).
+. P9 full refinement if P6 was GO; otherwise the owner's fallback ruling.
+. P10 archival, once the MANIFEST shows G6 holding without Coq, Isabelle and Mizar.
+
+*Session 3+ (after G1–G5):* P11 estate theory (T7 `CNOInterface` in absolute-zero, needing that repo's own PR; the `VshCNO` instance; the OD-23 edge; epistemic audit receipts). After that: ShellEvent, the januskey CAS swap, the typell monitor, MCP.
+
+*Toolchain prerequisites:*
+
+* Present during planning: rustc 1.97.0 and cargo only.
+* Everything else installs through the agent proxy. A failed install is recorded as *unavailable* and the dependent phases are skipped. A failure is never reported as a pass.
+
+*Stop rules:*
+
+_Tooling and proofs_
+
+* No proof file is committed unless it was checked. If a toolchain is missing, the phase is reported Unverified.
+* Stop any proof slice that needs `sorry`, a postulate, `believe_me` or an axiom outside the allow-list, and report it instead.
+
+_Tests and safety_
+
+* Revert any change that drops `cargo test` below the floor. Never `#[ignore]` a test to get green; the only exception is the root skip, and only once the test has real assertions and a non-root job exists.
+* An on-disk format change without backup-then-migrate means stop and escalate. In session 1 the format changes only by adding fields, and old files must still load.
+* New data loss found on an unchanged path means fix or document it before anything else.
+
+_Kill rules (recorded in `docs/decisions/`)_
+
+* Aeneas: 2 sessions in total, or an incompatible pin.
+* Lean lib repair: 1 day each, then a visible quarantine.
+* FinFS: ~600 LoC for 4 verbs, then re-plan.
+* Agda mirror: ~700 LoC for 4 verbs, then re-plan.
+* EXP-2: if more than half the composition theorems break after the `isEmptyDir` fix, re-plan before building FinFS on top.
+
+_Feeders and archival_
+
+* No feeder import before G1–G5 (OD-23).
+* No archival before G6 holds without the archived provers (OD-22).
+
+_Repository and owner boundaries_
+
+* Never: admin-merge, force-push, delete branches or layers (archive instead), edit licence text, SPDX headers or third-party code, push unsigned commits, or promote a claim from a status document rather than a run.
+* Outward-facing actions (sibling-repo PRs, required-check changes, anchor publication) happen only with owner confirmation.
+
+*Experiments that decide the long routes:*
+
+* EXP-1: vacuity as a theorem.
+* EXP-2: blast radius of the fix.
+* EXP-4: crash-loss window.
+* EXP-5: Lean `decide` over FinFS vs `verification.rs`.
+* EXP-6: oracle negative control.
+* EXP-aeneas (P6).
+* EXP-agda: decides the OD-23 arm and the mirror's pin.
+* EXP-fsync and EXP-persist: inputs to E4.
+* EXP-fuzz-baseline: 10 minutes per existing target.
+* EXP-cas: API frictions with januskey `reversible-core`; no dependency is added.
+
+'''''
+
+== 10. Tropes, types and logics that may give a more final solution
+
+*Engineering and persistence*
+
+* *Event sourcing* (Inference). One append-only log, with state as a fold. This makes WAL, undo, audit and export a single object with a single recovery proof (P8, `JournalModel`), instead of four that drift apart.
+* *Transparency-log Merkle tree* (RFC 6962/9162 style). It replaces the "hash chain called a merkle root" in januskey and in the vsh audit, and gives O(log n) inclusion and consistency proofs. Truncation becomes detectable relative to any signed tree head. This is the principled form of OD-10/OD-24.
+
+*Rust types and grades*
+
+* *Affine types for undo payloads* (Inference, Rust-native). An undo payload is a linear resource: undo consumes it, and obliterate destroys it. In Rust that is a non-`Clone` `UndoToken` that `undo` and `obliterate` take by value. The current `redo_stack` clone (`state.rs:478-486`) is exactly the violation. This mirrors echo-types `EchoResidueCell` (`once-only`) and januskey's Loss grade at the type level, so it is checked by the Rust compiler with no prover.
+* *Loss-graded resource algebra.* A single semiring grading each op as lossless, lossy or obliterating. It also carries cost (MaxPlus, tropical `hub_ceiling_le`). One algebra then covers OD-25 (reversibility) and #190/#191 (bounds).
+
+*Proof patterns*
+
+* *Refinement with a runtime-discharged abstraction hypothesis.* The drift guard checks at runtime that the OS state abstracts to the recorded post-state. This is what makes any refinement theorem (P9) say something about the real system.
+* *Non-vacuity as a mandatory pattern.* Every precondition gets an inhabitation witness in every prover. This turns a whole defect class into build failures.
+
+*Semantics and observers*
+
+* *Choreographic `two-thread-diamond`* (proved in choreographic-types). This is the theorem shape for F-4's first slice, with independence defined as path non-prefix. It is better than a fresh Lean statement.
+* *Noninterference* (secret-types TINI over a down-closed observer lattice). This is the eventual statement form for "an observer at trust tier _t_ cannot learn obliterated content". Combined with absolute-zero's `OND5-composition-leaks`, the claim must be made over the joint observer.
+* *Grammar membership as a termination certificate* (jtv-halting-islands-ct pattern). This is the cheap totality story for a verified script subset or arithmetic island.
+
+'''''
+
+== 11. Beyond this repo (for the maintained list)
+
+*januskey*
+
+* JK-1: the manifest root must commit the full canonical op record (measured collision).
+* JK-2: atomic `MetadataStore`; the `save()` side has no size cap, so the store can become unopenable.
+* JK-3: first `ReversibleExecutor` implementor.
+* JK-4: a generic op kind.
+* JK-5: move HMAC into `reversible-core`.
+* Remove `python3` from e2e.
+* Make the Agda and Idris CI lanes required.
+* Fix the stale ARCHITECTURE Phase-2 claims.
+* Phases 3 and 4 (ochrance ABI; cross-references).
+* Deferred: BLAKE3 Merkle compatibility.
+
+*absolute-zero*
+
+* Write T7 `CNOInterface.agda` plus an Idris2 mirror.
+* Mark Q10 superseded.
+* Move the Agda pin off 2.6.3 / stdlib 1.7.3.
+* Register or discharge the 5 measured `believe_me` sites (the docs say 10).
+* Fix the PROOF-STATUS banner and the ECHIDNA "Production-ready" claim.
+* Finish the #175 rename.
+
+*echo-types*
+
+* #322: pin Agda (CI uses unpinned apt; the cited `flake.guix` does not exist).
+* Make `EchoJanusBridge` content-bearing, and stop naming obliterate "Reversible".
+* ET-GEN-1 and ET-RESCLASS-1.
+* Add a valence-shell row to `cross-repo-bridge-status.adoc`.
+* The bridge doc cites `bridge-status.md`; the real file is `.adoc`.
+* Promote the `accountable-shell` exploration (THEORY-FEED:346).
+
+*residual-evidence-types*
+
+* RE-1 `VshObliterate` (only if OD-23 picks (b)).
+* DECISION-002 (family vs view).
+* RE-2 generic checker.
+
+*epistemic-types*
+
+* `AuditLog`/`AuditReceipt` plus 5 reject fixtures.
+* Record a hosted run id.
+
+*secret-types*
+
+* Identity metadata still says rsr-template-repo.
+* The doc contradicts PROOF-STATUS.
+* No declassification exists yet.
+
+*typell*
+
+* `vsh-txn` spec plus session monitor.
+* Stale AFFIRMATION (the workspace now builds; 447/0/3).
+* README overclaims "cryptographic proof certificates".
+
+*nextgen-typing*
+
+* Add a vsh consumer row.
+* Amend D-2026-10-12 with the vsh scope ruling.
+* Record D204/T7.
+* Add Agda CI for `verification/proofs` (it has none).
+* Migrate the placement routing off retired A2ML.
+* Fix the banned-language line in CLAUDE.md/AGENTS.md.
+
+*tropical, occupancy, choreographic*
+
+* Parked. Lean toolchain skew (v4.13/4.15 vs v4.34.1).
+* Occupancy `check-agda.sh` is not wired to CI.
+* Choreographic proofs CI is not required.
+
+*anytype and jtv-halting-islands-ct*
+
+* Citation-level only. JtV's Rust rewrite has 0 tests, and its Creusot `ensures(true)` is vacuous.
+
+*maa-framework*
+
+* The absolute-zero submodule pin `87902bb` predates T7.
+* The aletheia README overclaims.
+* Its PMPL licence is an owner-only flag.
+
+*Not cloned, so everything about them is Unverified:* ochrance, echidna and echidnabot, proof-burrower, oblibeny, affinescript (#746), systemet, resource-algebra, tangle.
+
+*Estate-wide*
+
+* A2ML retirement vs load-bearing vsh files: `ECHO_TYPES_OCHRANCE_BRIDGE.a2ml` is required by `check-bridge-forbidden-phrases.sh`, and `IDRIS2_AXIOMS.a2ml` sits in the idris workflow paths. This needs an owner ruling before CI is touched.
+* One Guix-pinned Agda (OD-14).
+* Branch protection and required checks are owner-only.
+* Commit hygiene: 47 of 58 commits authored as "Test" (use `.mailmap`, never force-push).
+* Licence flags (never automated): alkahest PMPL badge, aletheia PMPL licence, `ffi/rust` author line.
+
+*Owner's charter to reconcile:* `docs/ROADMAP_TO_V1.adoc`.
+
+* D1–D5.
+* Lanes A–G: security tests 15→75 and fuzz targets 7→20, a 24-hour fuzz soak, a MAA guide and man page.
+* The six-system gate (OD-22).
+
+*Issues to keep linked:* valence-shell #51 #62 #63–#66 #90–#93 #162 #189–#192 #210; januskey#137; absolute-zero#167/#175; echo-types#322/#329; nextgen-typing#118; typell#62; tropical-types#57/#58.
+
+'''''
+
+== 12. Risks
+
+*Specific to the proof-first spine*
+
+* *Slower to a dependable shell.* Durability (the journal) lands in session 2. This is mitigated by fixing the 9 measured holes, plus a 0600 atomic state file, in session 1, in parallel with the Lean work.
+* *Lean↔Agda transcription drift.* The mirror is a transcription, not a proof of equivalence. It is mitigated by the golden corpus, which both provers check against the same sequence ids. It is graded "checked", never "mechanised".
+* *Archiving the best-gated tree (Coq) too early.* Mitigated by the OD-22 witness gate, plus porting the Coq RMO theorems into Lean first.
+* *The Aeneas fallback* (Lean `@[export]` linked into Rust) would add an unsafe FFI seam and a Lean runtime to every build. It is not taken automatically; on NO-GO it is put to the owner.
+
+*Proof-side*
+
+* *Vacuity fallout.* The `isEmptyDir` fix will break Lean theorems that relied on vacuity. That is good, but it will look like a regression. EXP-2 sizes it.
+* *Testing is not proof.* The oracle and golden traces test equivalence; they do not prove it. Any Lean↔Agda seam is labelled "checked", never "mechanised".
+* *Aeneas sink.* Toolchain pins can eat weeks. The kill rule and separate package are the mitigations.
+* *Agda pin skew* makes every cross-repo edge brittle.
+* *Evidence provenance.* Every proof-side fact here comes from source reads. The "~34 → ~65 checked Lean theorems" figure is a grep estimate.
+
+*Runtime and persistence*
+
+* *State-format migration* breaks existing state files. Backup-then-migrate is mandatory.
+* *Journal recovery bugs are worse than no journal.* The crash harness and fuzzing must be green before it is on by default.
+* *Drift guard* has false positives on benign touches, and an unavoidable TOCTOU window. Mitigations: `O_NOFOLLOW`, a re-check, and documenting the bound.
+* *OS semantics.* fsync and rename behaviour vary by filesystem. Claims hold only under the OS-assumption ledger.
+* *Concurrency.* `flock` is same-host advisory only. F-4 and #90 stay open.
+* *CoW/SSD.* Obliterate stays best-effort. The scrub fixes the shell-level leak, not storage remanence.
+
+*Security and privacy*
+
+* *Crypto overclaim.* HMAC is designated-verifier. Truncation after the last anchor is undetectable.
+* *Privacy.* Until E1d (session 1) lands, secret file bytes sit in a 0644 state file in cwd. Until E6 (session 2) lands, the residue holds plaintext paths, user and pid. No export or MCP may ship before path commitments.
+* *Latent catastrophic API.* `secure_erase_file` stays a hole until E1.
+
+*Process and owner*
+
+* *Owner bandwidth.* About 30 decisions. Phases 0–4 run on labelled provisional defaults, which may need reverting.
+* *CI churn.* Governance, Mirror and ECHIDNA are red. Fix or isolate them before adding required checks.
+* *Status-doc drift recurs.* Without `regen-status` in CI, this plan's counts will drift too.
+* *Parallel sessions* rebase branches in estate repos. Re-fetch, use `--only` paths, never force-push.
+
+'''''
+
+== 13. What was not verified
+
+* No Lean, Coq, Agda, Idris2, Isabelle, Mizar or Z3 run happened here. Specifically Unverified:
+** that `RmdirPrecondition` is uninhabited (needs EXP-1);
+** the 0-admits claim for Coq;
+** the 0-holes claim for Idris2;
+** the existence and buildability of every feeder theorem cited;
+** whether echo-types builds under `2.6.4.3` + stdlib 2.1-4.
+* The CI run states come from `gh` snapshots taken by the readers on 2026-10-27, not re-queried today.
+* Not cloned: ochrance, echidna, oblibeny, affinescript, resource-algebra, systemet, tangle.
+* The raw workflow output (synthesis, judgements, critique and per-claim skeptic evidence) stayed in the planning session's container and is not committed. Every measured claim here gives its file and line, or the command used to reproduce it, so it can be re-checked from the repo.
