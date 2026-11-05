@@ -61,7 +61,7 @@ is intentionally left manual for now so wiki changes remain a deliberate act.)
 ## Editing rules
 
 - **Honesty first.** Every page must stay consistent with
-  `Verification-Status.md`, `docs/PROOF_HOLES_AUDIT.md`, and the repository's
+  `Verification-Status.md`, `docs/PROOF_HOLES_AUDIT.adoc`, and the repository's
   self-assessed status (v0.9.0, research prototype, not production-ready). If you
   update the status anywhere, update it everywhere — grep for the version string.
 - Prose is licensed **CC-BY-SA-4.0** (SPDX header on every file).

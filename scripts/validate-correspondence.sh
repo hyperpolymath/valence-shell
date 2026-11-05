@@ -3,7 +3,7 @@
 # Validate Lean 4 ↔ Rust Correspondence
 #
 # This script validates that Rust implementation matches Lean 4 specifications
-# as documented in docs/LEAN4_RUST_CORRESPONDENCE.md
+# as documented in docs/LEAN4_RUST_CORRESPONDENCE.adoc
 
 set -euo pipefail
 
@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 IMPL_DIR="$PROJECT_ROOT/impl/rust-cli"
 PROOF_DIR="$PROJECT_ROOT/proofs/lean4"
-CORRESPONDENCE_DOC="$PROJECT_ROOT/docs/LEAN4_RUST_CORRESPONDENCE.md"
+CORRESPONDENCE_DOC="$PROJECT_ROOT/docs/LEAN4_RUST_CORRESPONDENCE.adoc"
 
 echo "=== Lean 4 ↔ Rust Correspondence Validation ==="
 echo
@@ -164,23 +164,23 @@ echo -e "${YELLOW}WARN${NC}: $warn_count"
 echo -e "${RED}FAIL${NC}: $fail_count"
 echo
 
-# Calculate confidence percentage
-total=$((pass_count + warn_count + fail_count))
-if [ $total -gt 0 ]; then
-    confidence=$(( (pass_count * 100 + warn_count * 50) / total ))
-    echo "Correspondence Confidence: ${confidence}%"
-
-    if [ $confidence -ge 85 ]; then
-        echo -e "${GREEN}✓ High confidence in correspondence${NC}"
-        exit 0
-    elif [ $confidence -ge 70 ]; then
-        echo -e "${YELLOW}⚠ Moderate confidence in correspondence${NC}"
-        exit 0
-    else
-        echo -e "${RED}✗ Low confidence in correspondence - needs improvement${NC}"
-        exit 1
-    fi
-else
-    echo "No checks performed"
+# Report outcome.
+#
+# There is deliberately no confidence percentage here. These checks are filename
+# and property-test presence checks: they do not test correspondence between the
+# model and the Rust code, and turning their pass rate into a percentage presents
+# a mechanical check as assurance. mathesis section 6 forbids the percentage form
+# outright. The correspondence claim lives in EXPLAINME.adoc section Proof Ledger
+# and is `argued` plus `tested-only`.
+echo "=== Outcome ==="
+if [ "$fail_count" -gt 0 ]; then
+    echo -e "${RED}FAIL${NC}: $fail_count structural check(s) failed - see above"
     exit 1
 fi
+if [ "$warn_count" -gt 0 ]; then
+    echo -e "${YELLOW}WARN${NC}: $warn_count check(s) incomplete - see above"
+fi
+echo "Structural checks passed ($pass_count)."
+echo "This proves file and property-test presence, NOT model-to-code correspondence."
+echo "Correspondence status: 'argued' + 'tested-only' (EXPLAINME.adoc, Proof Ledger)."
+exit 0

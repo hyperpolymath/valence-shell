@@ -1,7 +1,14 @@
 (** Valence Shell - Code Extraction
 
-    Extracts verified Coq code to OCaml for execution.
-    This bridges the gap between formal proofs and real implementation.
+    Extracts Coq definitions to OCaml for execution experiments.
+
+    ASSURANCE NOTE: extraction does not bridge the gap between the proofs and a
+    running system. This file is a *placeholder* extraction: [Filesystem] is
+    extracted as [unit -> unit] (see below), so the extracted module cannot
+    represent a filesystem state at all. Even a faithful extraction would only
+    remove the hand-transcription gap; the extractor and the POSIX/FFI layer it
+    calls remain outside the proofs. The trust boundary is unchanged until a
+    machine-checked refinement relates the running implementation to the model.
 *)
 
 Require Import String.

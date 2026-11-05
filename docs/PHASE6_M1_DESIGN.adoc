@@ -577,7 +577,7 @@ vsh> echo "Hello $NAME"
 
 * `+docs/POSIX_COMPLIANCE.md+` - Full 14-milestone roadmap
 * `+docs/ARCHITECTURE.md+` - Hybrid Rust+BEAM architecture
-* `+docs/LEAN4_RUST_CORRESPONDENCE.md+` - Verification mapping
+* `+docs/LEAN4_RUST_CORRESPONDENCE.adoc+` - Verification mapping
 * `+docs/ECHIDNA_INTEGRATION.md+` - Automated validation
 
 '''''

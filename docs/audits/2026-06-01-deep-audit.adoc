@@ -127,7 +127,7 @@ audit-log baseline; future audits should append rather than rewrite.
 |"Proof holes"
 |`CLAUDE.md:85`
 |`10 across 8 files (4 gaps, 4 axioms, 2 structural)`
-|`3 total: 1 real gap + 1 justified axiom + 1 structural axiom` (matches `docs/PROOF_HOLES_AUDIT.md`)
+|`3 total: 1 real gap + 1 justified axiom + 1 structural axiom` (matches `docs/PROOF_HOLES_AUDIT.adoc`)
 
 |"Real proof gaps" (Critical Priority)
 |`CLAUDE.md:92`
@@ -189,7 +189,7 @@ audit-log baseline; future audits should append rather than rewrite.
 
 * `CLAUDE.md` — 5 numeric-drift sites reconciled; internal contradiction
   (`33/21k` vs `30/15.7k` source files) resolved; proof-holes count
-  synced to `docs/PROOF_HOLES_AUDIT.md`; directory tree updated (now
+  synced to `docs/PROOF_HOLES_AUDIT.adoc`; directory tree updated (now
   shows `idris2/`, `zig/`, `mcp/`, `audits/`, `fuzz/`); "Last Updated"
   bumped.
 
@@ -225,7 +225,7 @@ Per the issue #44 framing (mirrors verisimdb#81):
 * [x] Fix the 33-vs-30 source-file internal contradiction in
   `CLAUDE.md`
 * [x] Refresh `CLAUDE.md:85` "10 proof holes" → 3 (matching
-  `docs/PROOF_HOLES_AUDIT.md`)
+  `docs/PROOF_HOLES_AUDIT.adoc`)
 * [x] Add `FAQ.adoc`
 * [x] Delete `MAINTAINERS.md` (keep `.adoc`); same for `CHANGELOG`
 * [x] Add `docs/audits/2026-06-01-deep-audit.adoc`
@@ -322,7 +322,7 @@ This audit followed the verisimdb#81 shape:
 . Locate placeholder strings (`{{...}}`) in `.machine_readable/`.
 . Cross-check numeric claims (theorem count, test count, source-file
   count, fuzz-target count, proof-hole count) against actual reality
-  via `find`/`wc -l`/`grep` and the `PROOF_HOLES_AUDIT.md`.
+  via `find`/`wc -l`/`grep` and the `PROOF_HOLES_AUDIT.adoc`.
 . Diff dual-source pairs (`MAINTAINERS.adoc` vs `.md`, `CHANGELOG.adoc`
   vs `.md`) and consolidate on the estate-convention winner.
 . Walk the open-issue tail (#41–#46, #49, #51) and capture each as

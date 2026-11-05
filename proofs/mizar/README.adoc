@@ -54,5 +54,5 @@ outstanding.
 * `../README.md` — overall proof-stack design + the 5-system
   reversibility theorem
 * `../lean4/README.adoc` — primary source of truth
-* `../../docs/PROOF_HOLES_AUDIT.md` — proof-debt status across all
+* `../../docs/PROOF_HOLES_AUDIT.adoc` — proof-debt status across all
   systems

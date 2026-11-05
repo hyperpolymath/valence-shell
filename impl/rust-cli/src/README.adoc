@@ -125,4 +125,4 @@ Tests live in `../tests/`; the FFI library lives in `../../../ffi/rust/`
 
 * `../tests/README.adoc` — test-suite breakdown
 * `../../../proofs/` — formal specs
-* `../../../docs/PROOF_HOLES_AUDIT.md` — proof-debt status
+* `../../../docs/PROOF_HOLES_AUDIT.adoc` — proof-debt status

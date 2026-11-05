@@ -10,7 +10,10 @@ module FilesystemEquivalence where
 open import FilesystemModel
 open import FileOperations
 open import FilesystemComposition
+open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Product using (_×_; _,_)
+open import Data.List using (List; []; _∷_)
+open import Relation.Nullary using (Dec; yes; no)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; cong)
 
 -- Filesystem Equivalence
@@ -114,14 +117,17 @@ equivSubstitution = applyOpPreservesEquiv
 
 -- Reversibility and Equivalence
 
+-- NOTE (2026-11-01): stated over ReversibleDP, not the weaker Reversible.
+-- singleOpReversible genuinely needs the default-permissions witness, because
+-- mkdir/createFile always recreate nodes with defaultPerms.
 reversibleCreatesEquiv : ∀ (op : Operation) (fs : Filesystem) →
-  Reversible op fs →
+  ReversibleDP op fs →
   applyOp (reverseOp op) (applyOp op fs) ≈ fs
 reversibleCreatesEquiv op fs rev p =
   cong (λ x → x p) (singleOpReversible op fs rev)
 
 sequenceReversibleEquiv : ∀ (ops : List Operation) (fs : Filesystem) →
-  AllReversible ops fs →
+  AllReversibleDP ops fs →
   applySequence (reverseSequence ops) (applySequence ops fs) ≈ fs
 sequenceReversibleEquiv ops fs hrev p =
   cong (λ x → x p) (operationSequenceReversible ops fs hrev)
@@ -131,12 +137,12 @@ sequenceReversibleEquiv ops fs hrev p =
 -- A reversible operation followed by its reverse is equivalent to identity
 -- This is the CNO = identity element property from Absolute Zero
 cnoIdentityElement : ∀ (op : Operation) (fs : Filesystem) →
-  Reversible op fs →
+  ReversibleDP op fs →
   applyOp (reverseOp op) (applyOp op fs) ≈ fs
 cnoIdentityElement = reversibleCreatesEquiv
 
 sequenceCnoIdentity : ∀ (ops : List Operation) (fs : Filesystem) →
-  AllReversible ops fs →
+  AllReversibleDP ops fs →
   applySequence (reverseSequence ops) (applySequence ops fs) ≈ fs
 sequenceCnoIdentity = sequenceReversibleEquiv
 

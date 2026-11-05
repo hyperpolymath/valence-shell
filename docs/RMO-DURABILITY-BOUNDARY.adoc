@@ -1,5 +1,15 @@
 = RMO Durability and Assurance Boundary
 
+This document is the canonical statement of what `obliterate` establishes and
+what it does not. It was re-audited on 2026-11-01 with no change to its claims;
+see `docs/audits/2026-11-01-assurance-boundary-audit.adoc`.
+
+Two axes are easy to confuse, so they are stated separately. *Reversibility* here
+means algorithmic reversibility (`F⁻¹(F(s)) = s` in the model), never
+thermodynamic reversibility (Landauer/Bennett). *Irreversibility* means the
+operation is deliberately not undoable in the model; it does not mean the bytes
+are gone from the device.
+
 Valence Shell's experimental `obliterate` command performs three overwrite
 passes on a regular file, calls `fsync` after each pass, unlinks the path, and
 on Unix syncs the containing directory. This is a concrete local I/O sequence;

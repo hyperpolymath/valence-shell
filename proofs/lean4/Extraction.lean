@@ -3,6 +3,12 @@
 
    Lean 4 compiles to C, which we can call from OCaml via FFI.
    This file defines the extraction interface and C-compatible wrappers.
+
+   ASSURANCE NOTE: compiling the proven definitions to C makes the *model's*
+   executable behaviour available to callers. It does not prove that the caller,
+   the C ABI, or the syscalls it eventually performs refine the model, and the
+   shipped CLI is Rust, not OCaml. Extraction relocates work; it does not close
+   the refinement gap.
 -/
 
 import FilesystemModel
@@ -19,7 +25,8 @@ import FilesystemComposition
   4. OCaml Ctypes bindings to C library
   5. OCaml wrapper providing ergonomic API
 
-  This gives us verified logic (Lean 4) callable from OCaml.
+  This makes the proven *model* callable from C/OCaml. It does not make the
+  calling program verified.
 -/
 
 namespace ValenceShell.Extraction

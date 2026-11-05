@@ -1,6 +1,9 @@
 == Zig + Lean 4 Extraction Guide
 
-*Status*: Implementation Ready *Version*: 0.1.0 *Updated*: 2026-01-28
+*Status*: Design sketch. `impl/zig/` exists as a separate FFI and audit layer;
+the Zig binary described below is **not** the shipped `vsh` (that is the Rust CLI
+in `impl/rust-cli/`), and no mechanised refinement connects either to the proven
+model. *Version*: 0.1.0 *Updated*: 2026-11-01 (status corrected; 2026-01-28 draft)
 
 '''''
 
@@ -31,12 +34,14 @@ Zig via C FFI.
          │ Zig @cImport
          ↓
 ┌──────────────────┐
-│ Zig Application  │  ← Type-safe, verified ops
-│ (vsh binary)     │     Fast native execution
+│ Zig application  │  ← Type-safe; ops transcribed from
+│ (not the shipped │     the model, not proven to refine it
+│  vsh binary)     │
 └──────────────────┘
 ....
 
-*Key Benefits*: - ✅ Formally verified preconditions (Lean 4 proofs) -
+*Key Benefits*: - ✅ Preconditions are transcribed from the Lean 4 model (the
+transcription itself is reviewed, not proven) -
 ✅ Zero runtime overhead (native code, no interpreter) - ✅ Type-safe
 FFI (Zig’s excellent C interop) - ✅ Optional verification (build flag
 to enable/disable) - ✅ Fast compilation (Lean → C is cached, Zig is
@@ -483,7 +488,7 @@ compilation is: - More mature than Lean → OCaml - Better optimized
 (native code) - Standard Lean workflow
 
 Coq extraction to OCaml is also available (see
-`+docs/OCAML_EXTRACTION.md+`).
+`+docs/OCAML_EXTRACTION.adoc+`).
 
 ==== What’s the trust chain?
 
@@ -494,8 +499,9 @@ Coq extraction to OCaml is also available (see
 . *Zig FFI* (HIGH TRUST) - Type-safe, compile-time checked
 . *POSIX* (LOW TRUST) - OS dependent
 
-*Weakest link*: C wrapper (manual review). To strengthen: - Thorough
-code review - Property-based testing - Fuzzing - Runtime assertions
+*Weakest link*: not the C wrapper but the *refinement step* — nothing proves
+that the C/OCaml/Zig code computes what the Lean model specifies. Review, testing,
+fuzzing and runtime assertions reduce that risk; they do not close it.
 
 ==== Can I use Lean verification in other languages?
 

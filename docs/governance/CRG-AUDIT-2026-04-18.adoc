@@ -101,11 +101,11 @@ Publication requires B+. Long alpha is discipline, not shame.
 | SUBSTANTIAL (50+ files)
 | `docs/` carries ARCHITECTURE.md, ARCHITECTURE_DIAGRAMS.md,
   COMPREHENSIVE_EXAMPLES.md, ECHIDNA_INTEGRATION.md,
-  LEAN4_RUST_CORRESPONDENCE.md, POSIX_COMPLIANCE.md,
-  PROOF_HOLES_AUDIT.md (well-maintained), PROOF_OVERVIEW.md,
+  LEAN4_RUST_CORRESPONDENCE.adoc, POSIX_COMPLIANCE.md,
+  PROOF_HOLES_AUDIT.adoc (well-maintained), PROOF_OVERVIEW.md,
   PROPERTY_TESTING.md, SEAM_ANALYSIS_AND_IDRIS2_PLAN.md,
   VERIFICATION_STRATEGY_ANALYSIS.md, USER_GUIDE.md,
-  ZIG_LEAN_EXTRACTION.md, 10× `PHASE6_M*_DESIGN.md` documents, plus
+  ZIG_LEAN_EXTRACTION.adoc, 10× `PHASE6_M*_DESIGN.md` documents, plus
   session notes. No `docs/governance/` subtree until this audit lands.
   No `docs/architecture/` / `docs/decisions/` / `docs/practice/`
   subtree organisation — files are flat under `docs/`.
@@ -210,7 +210,7 @@ on six-verb rename), both primary and sub-project carry a full
 | 5 additional directories
 | `proofs/agda/`, `proofs/isabelle/`, `proofs/mizar/`, `proofs/z3/`,
   `proofs/idris2/` (with `valence-shell.ipkg`). Per
-  `docs/PROOF_HOLES_AUDIT.md` (2026-04-12): *3 total holes* across all
+  `docs/PROOF_HOLES_AUDIT.adoc` (2026-04-12): *3 total holes* across all
   proof systems — 1 real gap (`obliterate_overwrites_all_blocks`),
   1 justified axiom (`is_empty_dir_dec` — infinite-domain), 1 structural
   (`funext` — standard). Down from 31 holes pre-2026-04 sweep. Disciplined.
@@ -251,7 +251,7 @@ on six-verb rename), both primary and sub-project carry a full
 | *81 grep hits across 26 files*, but **0 actual uses** on inspection
 | All hits are in docstrings, policy files, audit logs, and the
   `MUST.contractile` block itself declaring these patterns banned. Per-
-  `PROOF_HOLES_AUDIT.md` and audit-2026-04-04: zero actual uses. Clean
+  `PROOF_HOLES_AUDIT.adoc` and audit-2026-04-04: zero actual uses. Clean
   on this axis.
 
 | `.expect("TODO: handle error")` pattern
@@ -376,9 +376,9 @@ v2.0 C requires **per-file and per-directory orientation**. Evidence:
 
 - **Root `docs/` tree**: *50+ markdown files* under a flat `docs/`
   without subtree organisation. Substantial in volume — particularly
-  `PROOF_HOLES_AUDIT.md` (well-maintained, dated 2026-04-12),
+  `PROOF_HOLES_AUDIT.adoc` (well-maintained, dated 2026-04-12),
   `POSIX_COMPLIANCE.md`, `ARCHITECTURE.md`, 10 Phase 6 milestone
-  design docs, `LEAN4_RUST_CORRESPONDENCE.md`, and
+  design docs, `LEAN4_RUST_CORRESPONDENCE.adoc`, and
   `VERIFICATION_STRATEGY_ANALYSIS.md`. Thin on organisation: no
   `docs/governance/`, `docs/architecture/`, `docs/decisions/`,
   `docs/practice/`, `docs/wikis/` subtrees. This audit adds the first
@@ -422,7 +422,7 @@ v2.0 C requires **per-file and per-directory orientation**. Evidence:
   "v1.0.0 production-ready" (Sonnet's prior claim) to "v0.9.0
   research prototype". File Map cites 30+ paths — spot-check: all
   cited impl/rust-cli source files exist, proofs directories exist,
-  `docs/PROOF_HOLES_AUDIT.md` and `docs/POSIX_COMPLIANCE.md` exist.
+  `docs/PROOF_HOLES_AUDIT.adoc` and `docs/POSIX_COMPLIANCE.md` exist.
   *No File Map fabrication detected* — strongest EXPLAINME honesty of
   the session's C-candidates.
 
@@ -713,7 +713,7 @@ The D grade is earned on four positive signals:
 2. *EXPLAINME honesty*: no File Map fabrication; explicit caveats on
    every major claim; explicit downgrade of version/production claims
    against earlier Sonnet-era inflation.
-3. *Proof-debt discipline*: `docs/PROOF_HOLES_AUDIT.md` is active,
+3. *Proof-debt discipline*: `docs/PROOF_HOLES_AUDIT.adoc` is active,
    dated, and tracks the 31→3 hole reduction over 2026-04. Six proof
    systems (Coq/Lean4/Agda/Isabelle/Mizar/Z3) plus Idris2 stubs; the
    2026-04-12 Coq sweep closed 2 real debts.
@@ -916,7 +916,7 @@ removes the single largest memory-rule violation in the estate.
   `compilation_tests.yml` — red across last 30 runs.
 - `.github/workflows/validation.yml:50` — `verify-proofs if: false`
   gate; enable incrementally.
-- `docs/PROOF_HOLES_AUDIT.md` — good discipline; keep on the same
+- `docs/PROOF_HOLES_AUDIT.adoc` — good discipline; keep on the same
   update cadence.
 - `docs/reports/audit/audit-2026-04-04.md` — prior audit; 3 repairs
   still open.

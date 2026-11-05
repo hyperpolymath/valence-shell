@@ -247,7 +247,7 @@ Other properties: 5+ tests
 * Quote processing semantics
 * Glob expansion guarantees
 . *Mechanized correspondence proofs*
-* Currently: Manual documentation + property tests (85% confidence)
+* Currently: `argued` (correspondence document) + `tested-only` (property tests, differential oracle)
 * Needed: Mechanized proofs that Rust matches Lean 4 (99%+ confidence)
 * Approach: Echidna integration (planned) or manual Lean ↔ Rust proofs
 . *Complete file content operation proofs*

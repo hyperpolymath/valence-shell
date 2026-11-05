@@ -17,7 +17,7 @@ high-priority gaps remain.
 [arabic]
 . *Lean->Rust correspondence unproven* — Testing-based validation only
 (~85% confidence), no mechanized correspondence proof
-. *4 proof gaps documented* — PROOF_HOLES_AUDIT.md lists completion gaps
+. *4 proof gaps documented* — PROOF_HOLES_AUDIT.adoc lists completion gaps
 across 8 proof files (4 genuine gaps, 4 axioms, 2 structural)
 . *NOT production-ready* — Explicit disclaimer in CLAUDE.md, README, and
 docs/INTEGRATION.md
@@ -46,7 +46,7 @@ deletion not implemented
 . *Elixir NIF broken* — Reference implementation build broken (low
 priority, slated for removal)
 . *10 proof holes* — Mix of genuine gaps, axioms, structural issues (see
-PROOF_HOLES_AUDIT.md)
+PROOF_HOLES_AUDIT.adoc)
 
 === RSR Compliance
 
@@ -82,7 +82,7 @@ property-based testing via proptest
 
 *Status: SIGNIFICANT DEBT, ACTIVELY MANAGED*
 
-From PROOF_HOLES_AUDIT.md: - 4 genuine proof gaps (need completion work)
+From PROOF_HOLES_AUDIT.adoc: - 4 genuine proof gaps (need completion work)
 - 4 axioms (assumed truths, not proven) - 2 structural issues
 (architectural, not logical) - 10 holes total across 8 files
 
@@ -136,7 +136,7 @@ ONLY with corrected claims:
 "`formally specified`" (Lean4) with "`property-tested implementation`"
 (Rust) 2. Fix commit author metadata (re-sign 47 commits attributed to
 "`Test test@example.com`") 3. Document 4 proof gaps explicitly in README
-(not hidden in PROOF_HOLES_AUDIT.md) 4. Implement Echidna CI integration
+(not hidden in PROOF_HOLES_AUDIT.adoc) 4. Implement Echidna CI integration
 (currently manual/optional) 5. Remove dead code (lean_ffi.rs,
 daemon_client.rs, unused job control methods)
 

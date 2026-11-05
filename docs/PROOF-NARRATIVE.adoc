@@ -73,7 +73,7 @@ directions:
 | All 7 closed during the 2026-04-03 closure session. Only `funext`
   remains, annotated as a standard axiom.
 
-| `docs/PROOF_HOLES_AUDIT.md`
+| `docs/PROOF_HOLES_AUDIT.adoc`
 | 2026-04-12
 | 1 real gap: Coq `obliterate_overwrites_all_blocks` requires mechanical
   induction
@@ -368,7 +368,7 @@ contract in `proof_refs.rs`) cite the strengthened form.
 
 * `writeFileReversible` — writing content `c` after capturing the prior
   state `c0` and restoring `c0` is the identity. Proven in 5 assistants
-  via the `content-restore-lemma` + `just-injective` chain (Agda) and
+  via the write-back-is-identity chain (`writeContent-same`, Agda 2026-11-01) and
   `String.toList_append` + `List.take_left` (Lean 4).
 
 * `captureRestoreIdentity` — `restore(capture(fs)) = fs` for any `fs`.
@@ -646,5 +646,5 @@ function equality, and *nothing else* — once the `admit.` is closed.
 == Changelog
 
 * 2026-06-01 — this document created. Reconciles `PROOF-NEEDS.md`
-  (overstated debt) and `PROOF_HOLES_AUDIT.md` (understated by missing
+  (overstated debt) and `PROOF_HOLES_AUDIT.adoc` (understated by missing
   the model-gap admit).

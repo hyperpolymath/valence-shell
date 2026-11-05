@@ -18,7 +18,8 @@ open import Relation.Nullary using (¬_; Dec; yes; no)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; cong; subst)
 open import Function using (_∘_)
 open import Axiom.Extensionality.Propositional using (Extensionality)
-open import Level using (lzero)
+open import Agda.Primitive using (lzero)
+open import Data.Empty using (⊥-elim)
 
 -- Path Model
 PathComponent : Set
@@ -96,6 +97,10 @@ record IsEmptyDir (p : Path) (fs : Filesystem) : Set where
 pathExists-emptyFS-root : pathExists rootPath emptyFS
 pathExists-emptyFS-root = mkFSNode Directory defaultPerms , refl
 
+-- Maybe-level lemma: nothing is never just
+nothing≢just : ∀ {A : Set} {x : A} → ¬ (nothing ≡ just x)
+nothing≢just ()
+
 -- Filesystem Operations
 _path-≟_ : (p₁ p₂ : Path) → Dec (p₁ ≡ p₂)
 [] path-≟ [] = yes refl
@@ -111,11 +116,23 @@ fsUpdate p n fs p' with p path-≟ p'
 ... | yes _ = n
 ... | no _ = fs p'
 
+-- fsUpdate at the same path returns the inserted value
+fsUpdate-at : ∀ p n fs → fsUpdate p n fs p ≡ n
+fsUpdate-at p n fs with p path-≟ p
+... | yes _ = refl
+... | no p≢p = ⊥-elim (p≢p refl)
+
+-- fsUpdate at a different path leaves the filesystem untouched
+fsUpdate-other : ∀ p p' n fs → ¬ (p ≡ p') → fsUpdate p n fs p' ≡ fs p'
+fsUpdate-other p p' n fs p≢p' with p path-≟ p'
+... | yes p≡p' = ⊥-elim (p≢p' p≡p')
+... | no _ = refl
+
 -- mkdir: Create a directory
 record MkdirPrecondition (p : Path) (fs : Filesystem) : Set where
   field
     notExists : ¬ pathExists p fs
-    parentExists : parentExists p fs
+    parent-path-exists : parentExists p fs
     parentIsDir : isDirectory (parentPath p) fs
     -- parentWritable could be added
 
@@ -149,7 +166,7 @@ mkdir-path-exists p fs pre with p path-≟ p
 
 rmdir-removes-path : ∀ p fs → RmdirPrecondition p fs → ¬ pathExists p (rmdir p fs)
 rmdir-removes-path p fs pre (node , eq) with p path-≟ p
-... | yes refl = λ ()
+... | yes refl = nothing≢just eq
 ... | no p≢p = ⊥-elim (p≢p refl)
   where
     open import Data.Empty using (⊥-elim)
@@ -178,13 +195,15 @@ mkdir-rmdir-reversible p fs pre = funext helper
     open import Data.Empty using (⊥-elim)
 
     helper : ∀ p' → rmdir p (mkdir p fs) p' ≡ fs p'
-    helper p' with p path-≟ p'
-    ... | yes refl with p path-≟ p
-        ... | yes _ = not-path-exists-nothing (MkdirPrecondition.notExists pre)
-        ... | no p≢p = ⊥-elim (p≢p refl)
-    ... | no p≢p' with p path-≟ p'
-        ... | yes p≡p' = ⊥-elim (p≢p' p≡p')
-        ... | no _ = refl
+    helper p' = case-split (p path-≟ p')
+      where
+        case-split : Dec (p ≡ p') → rmdir p (mkdir p fs) p' ≡ fs p'
+        case-split (yes refl) =
+          trans (fsUpdate-at p nothing (mkdir p fs))
+                (sym (not-path-exists-nothing {p} {fs} (MkdirPrecondition.notExists pre)))
+        case-split (no p≢p') =
+          trans (fsUpdate-other p p' nothing (mkdir p fs) p≢p')
+                (fsUpdate-other p p' (just (mkFSNode Directory defaultPerms)) fs p≢p')
 
 -- Additional Theorems
 mkdir-preserves-other-paths : ∀ p p' fs →

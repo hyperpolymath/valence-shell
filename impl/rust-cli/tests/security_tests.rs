@@ -122,12 +122,14 @@ fn security_path_traversal_protection() {
 // ============================================================
 //
 // The headline theorem `PathTraversal.path_traversal_containment` in
-// `proofs/lean4/PathTraversal.lean` proves that the Rust normaliser's
-// loop-body invariant holds for arbitrary component sequences. This
-// property test is the Rust-side validation that the implementation
-// matches the Lean model: regardless of how many `..` / `.` / normal
-// components appear (or in what order), `resolve_path` always returns
-// a `PathBuf` that starts with the sandbox root.
+// `proofs/lean4/PathTraversal.lean` proves the containment invariant for
+// arbitrary component sequences *in the Lean model of the normaliser*. It does
+// not prove anything about the Rust code: the correspondence between the Lean
+// model and `resolve_path` is not mechanically established. This property test
+// is the Rust-side evidence for that correspondence, not a proof of it:
+// regardless of how many `..` / `.` / normal components appear (or in what
+// order), `resolve_path` always returns a `PathBuf` that starts with the
+// sandbox root.
 //
 // Regression-guard for the 2026-02-12 CVE-class audit fix
 // (`resolve_path("../../etc/passwd")` previously escaped the sandbox).

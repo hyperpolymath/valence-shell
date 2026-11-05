@@ -7,16 +7,17 @@
 module FileOperations where
 
 open import FilesystemModel
+open import Data.Maybe using (just; nothing)
 open import Data.Product using (_×_; _,_)
-open import Relation.Nullary using (¬_)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl)
+open import Relation.Nullary using (¬_; Dec; yes; no)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans)
 
 -- File Operations
 
 record CreateFilePrecondition (p : Path) (fs : Filesystem) : Set where
   field
     notExists : ¬ pathExists p fs
-    parentExists : parentExists p fs
+    parent-path-exists : parentExists p fs
     parentIsDir : isDirectory (parentPath p) fs
 
 createFile : Path → Filesystem → Filesystem
@@ -24,7 +25,7 @@ createFile p fs = fsUpdate p (just (mkFSNode File defaultPerms)) fs
 
 record DeleteFilePrecondition (p : Path) (fs : Filesystem) : Set where
   field
-    isFile : isFile p fs
+    deletedIsFile : isFile p fs
 
 deleteFile : Path → Filesystem → Filesystem
 deleteFile p fs = fsUpdate p nothing fs
@@ -47,7 +48,7 @@ createFile-path-exists p fs pre with p path-≟ p
 
 deleteFile-removes-path : ∀ p fs → DeleteFilePrecondition p fs → ¬ pathExists p (deleteFile p fs)
 deleteFile-removes-path p fs pre (node , eq) with p path-≟ p
-... | yes refl = λ ()
+... | yes refl = nothing≢just eq
 ... | no p≢p = ⊥-elim (p≢p refl)
   where
     open import Data.Empty using (⊥-elim)
@@ -62,13 +63,15 @@ createFile-deleteFile-reversible p fs pre = funext helper
     open import Data.Empty using (⊥-elim)
 
     helper : ∀ p' → deleteFile p (createFile p fs) p' ≡ fs p'
-    helper p' with p path-≟ p'
-    ... | yes refl with p path-≟ p
-        ... | yes _ = not-path-exists-nothing (CreateFilePrecondition.notExists pre)
-        ... | no p≢p = ⊥-elim (p≢p refl)
-    ... | no p≢p' with p path-≟ p'
-        ... | yes p≡p' = ⊥-elim (p≢p' p≡p')
-        ... | no _ = refl
+    helper p' = case-split (p path-≟ p')
+      where
+        case-split : Dec (p ≡ p') → deleteFile p (createFile p fs) p' ≡ fs p'
+        case-split (yes refl) =
+          trans (fsUpdate-at p nothing (createFile p fs))
+                (sym (not-path-exists-nothing {p} {fs} (CreateFilePrecondition.notExists pre)))
+        case-split (no p≢p') =
+          trans (fsUpdate-other p p' nothing (createFile p fs) p≢p')
+                (fsUpdate-other p p' (just (mkFSNode File defaultPerms)) fs p≢p')
 
 -- Additional Theorems
 
@@ -89,7 +92,8 @@ file-isolation : ∀ p1 p2 fs →
   pathExists p2 fs →
   pathExists p2 (createFile p1 fs) × pathExists p2 (deleteFile p1 fs)
 file-isolation p1 p2 fs p1≢p2 (node , prf) =
-  ((node , createFile-preserves-other p1≢p2) , (node , deleteFile-preserves-other p1≢p2))
+  ( (node , trans (sym (createFile-preserves-other p1≢p2)) prf)
+  , (node , trans (sym (deleteFile-preserves-other p1≢p2)) prf) )
   where
     createFile-preserves-other : ¬ (p1 ≡ p2) → fs p2 ≡ createFile p1 fs p2
     createFile-preserves-other h = createFile-preserves-other-paths p1 p2 fs h

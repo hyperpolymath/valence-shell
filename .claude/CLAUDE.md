@@ -11,6 +11,8 @@ Before making claims about reversibility, obliteration, Lean↔Rust mechanisatio
 
 The bridge is **documentation-and-orientation-only**, not a mechanised dependency. Keep RMR (reversible) and RMO (irreversible + audit residue) distinct.
 
+The same discipline applies to `hyperpolymath/januskey` and its `reversible-core` crate: **not imported, not a dependency** (measured 2026-11-01 — no import under `proofs/`, no `Cargo.toml` entry, no `.gitmodules`). JanusKey's integration is planned on its side ("Phase 2 — NEXT") and the D204 ruling is a decision, not an implementation. If a change adds `reversible-core`, it is an *implementation* dependency and does not move any claim across the extraction gap. Reversibility here is *algorithmic*, not thermodynamic. Audit record: `docs/audits/2026-11-01-assurance-boundary-audit.adoc`.
+
 ## Machine-Readable Artefacts
 
 The following files in `.machine_readable/` contain structured project metadata:

@@ -2,8 +2,8 @@
 = Theory Feed: how the maths, types and prover repos feed valence-shell
 :toc: macro
 :toclevels: 2
-:revdate: 2026-09-30
-:status: DRAFT (direction document, not yet adopted)
+:revdate: 2026-11-01
+:status: DRAFT (direction document, not yet adopted; boundary claims re-measured 2026-11-01)
 
 toc::[]
 
@@ -30,7 +30,9 @@ Evidence conventions:
 
 == Headline finding
 
-*valence-shell has zero mechanised dependencies on any feeder.* On `origin/main` @ `0355246` (2026-09-27) there is no `Require`, `import`, `open import` or Lake/`_CoqProject` entry naming any feeder anywhere under `proofs/`. Every existing link is one of three kinds:
+*valence-shell has zero mechanised dependencies on any feeder.* On `origin/main` @ `0355246` (2026-09-27) there is no `Require`, `import`, `open import` or Lake/`_CoqProject` entry naming any feeder anywhere under `proofs/`.
+
+Re-measured for this document on 2026-11-01 (`valence-shell` @ `295c3ca`, `januskey` @ `4afb710`, `epistemic-types` @ `5422cd5`): the finding is unchanged. `proofs/coq/_CoqProject`, `proofs/lean4/lakefile.lean`, `proofs/agda/valence-shell.agda-lib` and `proofs/idris2/valence-shell.ipkg` name only valence-shell modules and standard libraries; there is no `.gitmodules`; and no `Cargo.toml` in the repo depends on `januskey` or `reversible-core`. Every existing link is one of three kinds:
 
 * a comment, e.g. 9 proof files that credit "Absolute Zero" CNO in comments;
 * a documentation obligation, e.g. `docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc`, which states it is not a mechanised dependency;
@@ -138,7 +140,7 @@ Priority reflects two things: how directly the item unblocks a named valence-she
 *** The dependency edge runs feeder→consumer, as in echo-types `EchoCNOBridge.agda`.
 *** `FilesystemCNO.v` and the 21 Lean opaque ops then become redundant. #167 becomes "retire, or keep as a toy instance".
 ** *Arm B:* absolute-zero keeps its own FS model and ports it to Lean per #167 as written. Two FS models are then maintained indefinitely, and valence-shell still imports nothing.
-** januskey#137 gets its answer under either arm: januskey's operations refine valence-shell's model.
+** januskey#137 gets an *answer* under either arm: the ruling says januskey's operations are to refine valence-shell's model. The refinement itself is unwritten in both repos; until a proof file states it, treat "januskey refines valence-shell" as a decision, not a result.
 ** This is an owner decision because it moves a dependency edge between repos. Record the ruling in nextgen-typing#118.
 . *NW-2: ECHIDNA tri-state verdict plus project context* (echidna, valence-shell#162). Two independent defects combine to report 15 known-good proofs "invalid":
 ** *valence-shell side:* `scripts/validate-with-echidna.sh:77` invokes `echidna verify <file> --prover <p> --timeout 120 --format <f>` with no `--library` or project root. echidna's verify already accepts `library: Vec<PathBuf>`. Pass `_CoqProject`, `lakefile.lean` and the `.agda-lib` roots.
@@ -149,13 +151,13 @@ Priority reflects two things: how directly the item unblocks a named valence-she
 ** `operationSequenceReversible` → `EchoNoSectionGeneric` / `EchoOFSUnivF5`
 ** `copyFile_reversible` → `EchoTotalCompletion`
 ** *Prerequisite in echo-types:* fix #329 (Agda red on main, `EchoHaplotypeCollapsing`) and #322 (unpinned apt `agda`). Otherwise valence-shell imports a library that does not build.
-. *NW-4: januskey becomes a proof consumer, and its engineering feeds valence-shell.*
-** Replace the placeholder theorems in `src/abi/Proofs.idr` with statements over the NW-1 model. Examples of the placeholders: `memoryDefeatsGPU : So (65536>=65536)`, `cnoPairCompose _ _ = Unit`, `tamperDetectable _ _ = Unit`.
+. *NW-4 (proposal, nothing started): januskey becomes a proof consumer, and its engineering feeds valence-shell.*
+** Proposed, not done: replace the placeholder theorems in `src/abi/Proofs.idr` with statements over the NW-1 model. Examples of the placeholders: `memoryDefeatsGPU : So (65536>=65536)`, `cnoPairCompose _ _ = Unit`, `tamperDetectable _ _ = Unit`.
 ** Sync `echo-types/proofs/agda/EchoJanusBridge.agda`, which has a local 4-variant enum, to januskey's 8-variant `OpKind`.
 ** In the other direction, januskey's content-addressed store, append-only log and HMAC attestation (#59) are the engineering pattern for valence-shell B-7.
 . *NW-5: A resource-bound feed for glob and history* (tropical-types → valence-shell #191, #190, A-6). Graded `Resource.*` transport and `hub_ceiling` give the vocabulary for "glob depth/resources are bounded", with static grade equal to dynamic cost. This is an inference. Pair it with tropical-types#58, which removes the banned `deno.lock`.
 . *NW-6: Oblibeny as vsh's verified reversible script subset* (inference, strong). Oblibeny's constrained form has five relevant properties: it is Turing-incomplete, has a total evaluator, reversible ops, an accountability trace and a first-class linear `echo[A,B]`. That is the shape a provably reversible, auditable vsh script would need. The target lands in oblibeny#78 (metatheory toward verified extraction).
-. *NW-7: Epistemic receipts for the audit log* (epistemic-types → valence-shell B-7, #190, #192). `SoundWarrant`, `ReadConsistency` (stale caches, forked histories) and the reject suite are directly reusable as negative controls for audit-log anchoring. Relevant rejects include `ForkedHistory`, `ReplayedArtifact` and `FakeFreshness`. Inference.
+. *NW-7: Epistemic types for the audit log* (epistemic-types → valence-shell B-7, #190, #192). This is an inference, and nothing is importable today. `SoundWarrant`, `ReadConsistency` (stale caches, forked histories) and the reject suite could serve as negative controls for audit-log anchoring; relevant rejects include `ForkedHistory`, `ReplayedArtifact` and `FakeFreshness`. Keep the three levels apart when writing this up: warrant ≠ proof, receipt ≠ certificate, and an orientation doc ≠ a mechanised dependency.
 . *NW-8: Residual evidence for `explain` and history analysis* (residual-evidence-types → valence-shell#192). The target claim: the candidate pre-states consistent with a log exist, and the log does not identify them. That is the honest RMO/audit claim, and `Candidate observe r E` is its type. Inference.
 . *NW-9: AffineScript primitives that the MCP port needs* (affinescript → valence-shell `impl/mcp`). The MCP server is now in AffineScript (`impl/mcp/src/{Main,Server,State}.affine`). It still carries `impl/mcp/src/bindings/Deno.affine`. That file is a stub (`module Deno;` plus a TODO), named after a banned runtime. Replace it with a real bun binding. An AffineScript audit log is blocked by affinescript#746 (no hashing/HMAC). Note also affinescript#642 (module search path) and echidna#266/#117 (AffineScript primitives).
 . *NW-10: Registry and naming hygiene* (nextgen-typing, echidnabot, proof-burrower → valence-shell D-1, D-3).
@@ -182,6 +184,38 @@ Each of these waits on the feeder having content, or on NW-1.
 . *Progress is judged at mechanisation, not at documentation.* A feeder link moves from C to D when a bridge doc exists. It moves to M only when a valence-shell proof file imports the feeder module *and* that file builds in CI.
 . Provenance and registries go in `.k9` / `.deed`. Never register feeder provenance in A2ML files; see <<caveats>>.
 
+[[assurance-boundary]]
+=== Assurance boundary: what a feeder link may claim
+
+Four levels, in ascending strength. No statement about a feeder may claim a level it has not reached.
+
+[cols="1,3,3",options="header"]
+|===
+| Level | What it is | What it is not
+
+| *C — conceptual*
+| Prose in one or both repos proposes a fit.
+| Not a dependency. Not evidence of correctness. Keep the word "inference" attached.
+
+| *D — documented*
+| A bridge or orientation document exists and is maintained.
+| **Not a mechanised dependency.** A document that describes a correspondence, however precisely, adds no theorem and no import. This is why `docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc` is graded D and says so in its own first section.
+
+| *T — tooling*
+| A tool is invoked in CI or locally (ECHIDNA, AffineScript).
+| Not a proof of anything the tool does not check. An ECHIDNA run that passes after a missing-import failure is a parser result, not a proof result (NW-2).
+
+| *M — mechanised*
+| A valence-shell proof file imports the feeder module and the file builds in CI.
+| Not a claim about the Rust runtime. Even at M, the model→implementation refinement gap remains; see the next point.
+|===
+
+Three further separations that this document must not blur:
+
+. *A test is not a refinement proof.* Property tests, fuzz targets and the compiled-model differential oracle (`just test-correspondence-model`) all raise confidence that the Rust code behaves like the proven model. None of them is a machine-checked refinement relation, and none may be cited as one. The trust boundary in this repo is Lean/Coq/Agda/Idris2 *model* → Rust/POSIX *execution*, and it is still open.
+. *Proving more does not reach the physical world.* Reversibility here is *algorithmic* (an inverse operation exists in the model). It is not thermodynamic reversibility (Landauer/Bennett). Likewise RMO proves facts about an abstract obliteration transition; it does not prove that bytes are absent from CoW extents, journals, snapshots, device spares, replicas or backups, and it is not a legal compliance determination. See `docs/RMO-DURABILITY-BOUNDARY.adoc`.
+. *A decision is not an implementation.* Rulings such as D204 bind intent. They do not create imports, theorems or dependencies, and prose about them must say "planned", "proposed" or "ruled" rather than "integrated".
+
 == Per-feeder sections
 
 === Proof and kernel
@@ -199,24 +233,37 @@ Each of these waits on the feeder having content, or on NW-1.
 * Measured: 93 tests, 6 proptests, 7 `.idr` files. januskey#134 records conflicting published test counts.
 * Main is red on 7 of 12 workflows (#135). #133 records decorative gates and banned `python3`.
 
-*What it feeds, or should feed, valence-shell.* The link runs in both directions:
+*What it feeds, or should feed, valence-shell.* Nothing today; two *separate*
+proposals, which must not be merged into one claim:
 
-* *januskey → valence-shell (engineering):*
+* *januskey → valence-shell (engineering, proposed).* This is what `reversible-core`,
+  januskey's shared Rust crate, would supply:
 ** the inversion-metadata log and content-addressed store, relevant to RMR undo;
 ** the attestation chain with HMAC (#59), relevant to B-7;
 ** the 8-variant `OpKind` (Copy|Move|Delete|Modify|Obliterate|KeyGen|KeyRotate|KeyRevoke). It includes key-lifecycle operations that valence-shell's RMO key provisioning does not model.
-* *valence-shell → januskey (proof):* valence-shell's reversibility theorems are the formal home januskey#137 is asking for.
+* *valence-shell → januskey (proof, proposed).* Under the D204 ruling, januskey's
+  operations would refine valence-shell's filesystem model. **That refinement does
+  not exist.** No theorem in either repo states it, and no import carries it.
 
-*Existing links.*
+*Existing links (measured twice, 2026-09-30 and 2026-11-01).*
 
-* valence-shell → januskey: 0 references.
-* echo-types has `docs/bridges/EchoJanusBridge.adoc` and `proofs/agda/EchoJanusBridge.agda`. This is a *name* bridge over a local 4-variant enum, and it has drifted from the 8-variant `OpKind` (echo-types `cross-repo-bridge-status.adoc`, 2026-06-21).
+* valence-shell → januskey: 0 references, 0 imports. The only mentions of the word
+  "januskey" in this repo are in this document and in `.claude/CLAUDE.md`, which
+  states the same zero-dependency fact for agents.
+* `reversible-core` does not appear in valence-shell at all: no `Cargo.toml` entry,
+  no `path` or `git` dependency, no `.gitmodules`, no build step, no CI workflow.
+* januskey → valence-shell: no code link. Its `ARCHITECTURE.adoc` lists
+  "Phase 2: valence-shell integration — NEXT", and `crates/reversible-core/src/content_store.rs`
+  says the store is "what both januskey-cli and valence-shell use". Both are
+  statements of intent about a consumer; nothing in valence-shell implements them.
+* *Upstream only (no valence-shell edge):* echo-types has `docs/bridges/EchoJanusBridge.adoc` and `proofs/agda/EchoJanusBridge.agda`. This is a *name* bridge over a local 4-variant enum, and it has drifted from the 8-variant `OpKind` (echo-types `cross-repo-bridge-status.adoc`, 2026-06-21).
 
-*Missing links.* No shared model, no import, and no statement of which valence-shell operation each `OpKind` refines.
+*Missing links.* No shared model, no import, and no statement of which valence-shell operation each `OpKind` refines. Adding `reversible-core` as a Cargo dependency would be an *implementation* edge only: it would not move any cell of the matrix from C to M, because mere code reuse is not a mechanised proof link.
 
 *Next direction.*
 
-. Resolve #137 under NW-1 (owner decision). Restate the `Proofs.idr` placeholders as theorems over the chosen model, or delete them.
+. Resolve #137 under NW-1 (owner decision). Restate the `Proofs.idr` placeholders as theorems over the chosen model, or delete them. A ruling is a decision, not an implementation: record it as such.
+. If the `reversible-core` engineering dependency is wanted, land it as its own PR with its own review, and label it an implementation dependency — not a proof or refinement dependency. Until that PR exists, describe the integration as planned.
 . Get main green (#135) and remove `python3` (#133) before any proof work, so that proof CI means something.
 . Publish the log, store and attestation design as the B-7 reference for valence-shell. Sync EchoJanusBridge to the 8 variants.
 
@@ -363,11 +410,19 @@ The mapping is in valence-shell#51.
 * `UncheckedSkip`, `UnderstatedBound` and `FakeFreshness`;
 * others not listed here.
 
-*What it feeds valence-shell.* Inference: the type of an audit receipt. The goal is to show that a history entry is *known* (factive) rather than *believed*, and that anchoring (B-7) cannot be satisfied by a replayed or forked log. The reject tests are ready-made negative controls.
+*What it feeds valence-shell.* Inference only: a vocabulary for the type of an audit entry. The goal would be to show that a history entry is *known* (factive) rather than *believed*, and that anchoring (B-7) cannot be satisfied by a replayed or forked log. The reject tests are candidate negative controls for such a model.
 
-*Existing links.* None from valence-shell.
+The distinction the vocabulary must preserve, straight from `epistemic-types` @ `5422cd5`:
 
-*Missing links.* Everything. The fit is conceptual.
+* a source-level `Proof` type-checks under `--safe --without-K` with zero postulates;
+* a `Warrant`/`Epi` is *non-factive*: holding one does not yield the claim, and `SoundWarrant` adds `sound : Evidence -> A` as a separate interface;
+* a `Receipt` never certifies — `verifyReceiptIsGap` says a receiver's receipt does not carry the sender's proofhood.
+
+Applied here: a valence-shell audit-log entry that *describes* itself as a warrant would be a modelling claim. It would not make the entry true, and it would not be a proof about either the Rust writer or the storage stack.
+
+*Existing links.* None from valence-shell. `epistemic-types` is named in exactly one valence-shell file — this one.
+
+*Missing links.* Everything. The fit is conceptual, and `epistemic-types`' own orientation docs are not mechanised dependencies of anything.
 
 *Next direction.*
 
@@ -627,4 +682,5 @@ The mapping is in valence-shell#51.
 ** `alkahest-shell-transmuter/examples/web-project-deno.json`;
 ** tropical-types `deno.lock` (#58);
 ** januskey `python3` (#133).
-* *Snapshot dates.* valence-shell was read at `origin/main` `0355246` (2026-09-27). Feeder state was read on 2026-09-30. Red/green status and issue numbers decay; re-check before acting.
+* *Snapshot dates.* valence-shell was read at `origin/main` `0355246` (2026-09-27); feeder state on 2026-09-30. Re-measured 2026-11-01 at valence-shell `295c3ca`, januskey `4afb710`, epistemic-types `5422cd5`, with the zero-mechanised-dependency finding unchanged. Red/green status and issue numbers decay; re-check before acting.
+* *No feeder is imported, and no feeder's orientation document is a dependency.* If a future revision of this document needs to say otherwise, it must cite the importing file and the CI job that builds it. See <<assurance-boundary>>.

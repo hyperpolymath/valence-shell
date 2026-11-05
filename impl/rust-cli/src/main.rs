@@ -307,21 +307,26 @@ fn execute_script_content(content: &str, state: &mut state::ShellState) -> Resul
     std::process::exit(state.last_exit_code);
 }
 
+/// Print the interactive shell banner and command hints to standard output.
+///
+/// # Panics
+///
+/// Panics if writing to standard output fails.
 fn print_banner() {
     println!(
         "{}",
         r#"
-╔═══════════════════════════════════════════════════════════╗
+╔══════════════════════════════════════════════════════════════╗
 ║  ██╗   ██╗ █████╗ ██╗     ███████╗███╗   ██╗ ██████╗███████╗ ║
 ║  ██║   ██║██╔══██╗██║     ██╔════╝████╗  ██║██╔════╝██╔════╝ ║
 ║  ██║   ██║███████║██║     █████╗  ██╔██╗ ██║██║     █████╗   ║
 ║  ╚██╗ ██╔╝██╔══██║██║     ██╔══╝  ██║╚██╗██║██║     ██╔══╝   ║
 ║   ╚████╔╝ ██║  ██║███████╗███████╗██║ ╚████║╚██████╗███████╗ ║
 ║    ╚═══╝  ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝ ║
-║                                                               ║
-║  The Thermodynamic Shell - Every operation is reversible     ║
-║  Backed by 200+ formal theorems across 6 verification systems ║
-╚═══════════════════════════════════════════════════════════╝
+║                                                              ║
+║  Algorithmic reversibility - not thermodynamic (Landauer)    ║
+║  Backed by 478 theorem candidates across 6 proof systems     ║
+╚══════════════════════════════════════════════════════════════╝
 "#
         .bright_blue()
     );

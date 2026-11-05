@@ -80,7 +80,7 @@ code examples - Verification strategy (Lean 4 correspondence) - Security
 considerations - Performance targets - Timeline: 10 weeks total (now
 complete in 1 session!)
 
-==== 2. LEAN4_RUST_CORRESPONDENCE.md
+==== 2. LEAN4_RUST_CORRESPONDENCE.adoc
 
 Documents the mapping between Lean 4 theorems and Rust implementation: -
 mkdir/rmdir correspondence - touch/rm correspondence - undo/redo
@@ -208,7 +208,7 @@ These are planned for future milestones (M2-M14).
 * `+impl/rust-cli/src/parser.rs+` (212 lines)
 * `+impl/rust-cli/src/external.rs+` (118 lines)
 * `+docs/PHASE6_M1_DESIGN.md+` (568 lines)
-* `+docs/LEAN4_RUST_CORRESPONDENCE.md+` (348 lines)
+* `+docs/LEAN4_RUST_CORRESPONDENCE.adoc+` (348 lines)
 * `+docs/ECHIDNA_INTEGRATION.md+` (433 lines)
 * `+docs/ARCHITECTURE.md+` (366 lines)
 * `+docs/POSIX_COMPLIANCE.md+` (621 lines)

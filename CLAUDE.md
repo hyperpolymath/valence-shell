@@ -48,13 +48,35 @@ The Rust CLI is a functional interactive shell with these features:
 - `diff` (state comparison between checkpoints or current state)
 - `replay` (animated history with proof narration)
 
+### Proof policy (normative, estate-wide)
+
+`hyperpolymath/standards` `3-practice/PROOF-POLICY.adoc` (owner ruling 2026-10-26) is
+normative for this repository; this section is a short map for agents and changes in
+the same change as that file. Which verifier carries which obligation:
+
+* *Rust code* → Creusot, on the code itself (no Creusot contracts exist in
+  `impl/rust-cli/` yet). Kani is the standing exception for `unsafe`/FFI seams; Aeneas
+  only where Rust implements a theorem proved in Agda.
+* *Ada code* → SPARK (none in this repo).
+* *APIs, ABIs, wire formats, engineering properties* → Idris2 (`proofs/idris2/`).
+* *Theory* → Agda as the source of truth, rechecked in Rocq and Lean. This repo's
+  theory rows are currently Coq/Lean-sourced, which is the reverse of that order; see
+  `docs/audits/2026-11-01-assurance-boundary-audit.adoc` AP-3.
+* Isabelle/Mizar/Z3 are §4 exceptions and need a recorded exception note.
+
+Status vocabulary is closed (`PROOF-POLICY` §5): `proven`,
+`proven-with-postulates`, `argued`, `tested-only`, `open`. Every obligation's status
+lives in `EXPLAINME.adoc#proof-ledger`. *Do not quote a confidence percentage* —
+mathesis §6 forbids the form (Grades 3/2i/2ii/1 instead), and this repo holds no
+Grade 2 or Grade 1 obligation.
+
 ### What Does NOT Work
 
 - NOT a full POSIX shell (word splitting in external command args, $IFS in all contexts, full function nesting still incomplete)
-- NOT formally verified end-to-end (Lean -> Rust is ~95% confidence via property testing, not proven)
+- NOT formally verified end-to-end: the Lean -> Rust correspondence row is `argued`, with `tested-only` evidence, never `proven` (estate vocabulary: standards `3-practice/PROOF-POLICY.adoc` §5). No confidence percentage is quoted; see `EXPLAINME.adoc#proof-ledger`
 - NOT a replacement for bash/zsh in current state
 - Partial GDPR/RMO: the `obliterate` secure-deletion command is implemented and wired (3-pass overwrite + unlink + append-only audit residue), best-effort on in-place filesystems only — CoW/SSD need hardware erase and audit HMAC signing is still pending, so this is NOT a full GDPR compliance framework
-- No mechanized correspondence proof (property testing only; a compiled-Lean-model differential oracle now backstops it — see `docs/LEAN4_RUST_CORRESPONDENCE.md`)
+- No mechanized correspondence proof (property testing only; a compiled-Lean-model differential oracle now backstops it — see `docs/LEAN4_RUST_CORRESPONDENCE.adoc`)
 - Elixir NIF build broken (low priority)
 - BEAM daemon not implemented (planned, not built)
 
@@ -86,7 +108,7 @@ The Rust CLI is a functional interactive shell with these features:
 
 - 21,331 lines of Rust across 32 source files (`find impl/rust-cli/src -name '*.rs' | wc -l`; `wc -l` aggregate, measured 2026-06-01)
 - ~478 theorem candidates across 6 proof systems + Idris2 ABI layer (per issue #42 deep-audit inventory, 2026-06-01)
-- 2 proof holes remaining, **0 real gaps**: 1 justified axiom (Coq `is_empty_dir_dec` — infinite-domain decidability), 1 structural axiom (Agda `funext` — standard in intensional TT). The former real gap (Coq `obliterate_overwrites_all_blocks`) is CLOSED — re-verified 2026-07-16 via `Print Assumptions` (*Closed under the global context*) under Coq 8.18.0 — see `docs/PROOF_HOLES_AUDIT.md`
+- 2 proof holes remaining, **0 real gaps**: 1 justified axiom (Coq `is_empty_dir_dec` — infinite-domain decidability), 1 structural axiom (Agda `funext` — standard in intensional TT). The former real gap (Coq `obliterate_overwrites_all_blocks`) is CLOSED — re-verified 2026-07-16 via `Print Assumptions` (*Closed under the global context*) under Coq 8.18.0 — see `docs/PROOF_HOLES_AUDIT.adoc`
 - Idris2 ABI layer: **0 proof holes** (all closed 2026-07-01, issue #151 root — builds under `--total`), 0 `partial` markers, 2 registered primitive-eq axioms (`axStringEqRefl`, `axBits8EqRefl`; gated by `.github/scripts/check-idris2-believe-me.sh`)
 - 7 fuzz targets in `impl/rust-cli/fuzz/fuzz_targets/` (parser, arith, job-spec, signal-parse, path-ops, glob-expansion, state-machine)
 
@@ -94,8 +116,8 @@ The Rust CLI is a functional interactive shell with these features:
 
 ### Critical Priority
 
-1. **No mechanized Lean -> Rust correspondence** — testing only, ~85% confidence
-2. **0 real proof gaps** — the former Coq `obliterate_overwrites_all_blocks` gap is CLOSED (re-verified 2026-07-16, *Closed under the global context*); 2 documented axioms remain (1 justified decidability + 1 structural funext) — see `docs/PROOF_HOLES_AUDIT.md`
+1. **No mechanized Lean -> Rust correspondence** — `argued` + `tested-only`, never `proven`; the v1.0 blocker
+2. **0 real proof gaps** — the former Coq `obliterate_overwrites_all_blocks` gap is CLOSED (re-verified 2026-07-16, *Closed under the global context*); 2 documented axioms remain (1 justified decidability + 1 structural funext) — see `docs/PROOF_HOLES_AUDIT.adoc`
 3. **NOT production-ready** — research prototype only
 
 ### High Priority
@@ -197,7 +219,7 @@ valence-shell/
     mizar/              # Set theory proofs (63 theorems)
     z3/                 # SMT proofs (125 asserts)
     idris2/             # ABI carrier (0 holes, 0 partials, 2 primitive-eq axioms)
-  docs/                 # Design docs, roadmaps, PROOF_HOLES_AUDIT.md
+  docs/                 # Design docs, roadmaps, PROOF_HOLES_AUDIT.adoc
     audits/             # Deep-audit log (per estate standards)
   .machine_readable/    # INTENT/MUST/TRUST/ADJUST contractiles + a2ml agent state
   .well-known/          # ai.txt, humans.txt, security.txt (RFC 9116)
@@ -312,7 +334,7 @@ cargo run
   (the MAA attestation that survives the deletion). Parser+executor →
   `commands::secure_deletion::obliterate_path`. Tests:
   `tests/obliterate_rmo_tests.rs`.
-- **Honest limits** (still not full GDPR): best-effort on in-place filesystems
+- **Honest limits** (not a GDPR compliance framework): best-effort on in-place filesystems
   only — CoW (btrfs/ZFS/APFS)/SSD FTL defeat overwrite (use `secure_erase` for
   hardware NIST SP 800-88 Purge); audit-log HMAC signing is still a TODO.
 

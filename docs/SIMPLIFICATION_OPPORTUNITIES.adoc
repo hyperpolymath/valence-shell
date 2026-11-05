@@ -191,9 +191,11 @@ fn prop_mkdir_undo_inverse() {
 }
 ----
 
-*You don’t need to understand the proof.* Just know: 1. The proof
-guarantees correctness 2. Property tests verify the Rust code matches
-the proof 3. If property tests pass, the Rust code is probably correct
+*You don’t need to understand the proof.* Just know: 1. The proof guarantees
+correctness *of the abstract model* 2. Property tests and the compiled-model
+differential oracle exercise the Rust code against that model, and passing them
+raises confidence 3. They do not verify that the Rust code matches the proof —
+that refinement is the open extraction gap.
 
 ....
 

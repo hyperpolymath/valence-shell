@@ -27,7 +27,7 @@ or deployment-wide GDPR compliance.
 [IMPORTANT]
 ====
 **Current Status**: v0.9.0 — Advanced Research Prototype +
-**NOT production-ready.** Functional shell with formally proven reversibility, but POSIX compliance is incomplete and Lean→Rust correspondence is testing-based (~85% confidence), not mechanized. +
+**NOT production-ready.** Functional shell with formally proven in-model reversibility, but POSIX compliance is incomplete and the Lean→Rust correspondence is `argued` plus `tested-only` (never `proven`). Per-obligation statuses are in link:EXPLAINME.adoc#proof-ledger[the Proof Ledger]. +
 **Progress**: ~78% of full roadmap complete, 794 tests passing (0 failures, 14 ignored) +
 See <<_verification_status>> and link:CHANGELOG.adoc[CHANGELOG] for details.
 ====
@@ -45,7 +45,7 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 == Formal Verification
 * [x] Formally Proven Reversibility: `rmdir(mkdir(p, fs)) = fs`
 * [x] Polyglot Verification: 6 proof systems (Coq, Lean 4, Agda, Isabelle, Mizar, Z3)
-* [x] ~478 Theorem Candidates: Proven across different logical foundations (0 real gaps; 1 justified axiom + 1 structural axiom remain — see `docs/PROOF_HOLES_AUDIT.md`)
+* [x] ~478 Theorem Candidates: Proven across different logical foundations (0 real gaps; 1 justified axiom + 1 structural axiom remain — see `docs/PROOF_HOLES_AUDIT.adoc`)
 * [x] Content Operations: File read/write with proven reversibility
 * [x] MAA Framework: Mutually Assured Accountability with audit trails
 
@@ -63,7 +63,7 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 * [x] Friendly Errors: fish-style helpful error messages
 * [x] Smart Pager: Auto-paging for long output
 * [x] 3-Tier Help: Quick/verbose/man page documentation
-* [x] 794 Tests Passing: Unit, correspondence, integration, property, security, doctests (0 failures, 14 ignored)
+* [x] 794 Tests Passing: Unit, correspondence, integration, property, security, doctests (0 failures, 14 ignored) — `tested-only` in the proof ledger, not proofs
 
 == Implementation
 * [x] Advanced-prototype Rust CLI: 95% feature-complete shell (NOT production-ready — see <<_verification_status>>)
@@ -306,12 +306,13 @@ Valence Shell uses **polyglot verification** across 6 proof systems:
 ----
 ┌─────────────────────────────────────┐
 │ Formal Proofs (HIGH TRUST)          │ ← Mathematical guarantees
-│ ~478 candidates, ~4,280 lines       │
+│ ~478 candidates, ~4,280 lines       │   about the abstract model
 └─────────────┬───────────────────────┘
-              │ Extraction (GAP) ⚠️
+              │ Refinement (GAP) ⚠️   ← the trust boundary
 ┌─────────────▼───────────────────────┐
-│ OCaml Implementation (MEDIUM TRUST) │ ← Type safe, memory safe
-│ FFI to POSIX, audit logging         │
+│ Rust CLI (MEDIUM TRUST)             │ ← Type/memory safe, tested
+│ impl/rust-cli/ → libc / POSIX       │   (Coq→OCaml extraction and the
+│ (ffi/rust is a separate crate)      │    ffi/rust shim are also unproven)
 └─────────────┬───────────────────────┘
               │ FFI (GAP) ⚠️
 ┌─────────────▼───────────────────────┐
@@ -322,15 +323,18 @@ Valence Shell uses **polyglot verification** across 6 proof systems:
 
 [WARNING]
 ====
-**Verification Gap**: The formal proofs operate on abstract models. The implementation (OCaml FFI + POSIX) is **not formally connected** to the proofs.
+**Verification Gap**: The formal proofs operate on abstract models. The shipped implementation (Rust CLI over libc/POSIX, plus the separate `ffi/rust` helper crate and the Coq→OCaml extraction path) is **not formally connected** to the proofs.
 
 **This means:**
 
 * Proofs guarantee *model* correctness ✅
 * Implementation *may have bugs* ⚠️
-* Extraction *may introduce errors* ⚠️
+* Extraction or hand-transcription *may introduce errors* ⚠️
 
-To reach production: Close extraction gap (Coq → OCaml verification).
+To reach production: close the extraction/refinement gap — a machine-checked
+proof that the Rust/POSIX implementation refines the proven model. Property
+tests and the compiled-model differential oracle reduce this risk; they do not
+close it.
 ====
 
 == Bridge to Echo Types + Ochrance
@@ -361,7 +365,7 @@ Valence Shell sits inside a three-layer architecture; the other two layers are u
 * If preconditions hold, `write(p, old, write(p, new, fs)) = fs`
 * Operations on `p1` don't affect `p2` (when `p1 ≠ p2`)
 * Composition: sequences of operations reverse correctly
-* ~478 theorem candidates proven across 6 verification systems (0 real gaps; 2 justified/structural axioms remain — see `docs/PROOF_HOLES_AUDIT.md`)
+* ~478 theorem candidates proven across 6 verification systems (0 real gaps; 2 justified/structural axioms remain — see `docs/PROOF_HOLES_AUDIT.adoc`)
 * 2026-07-16 re-verification: `proofs/coq/` compiles with **0 admits** under Coq 8.18.0; `Print Assumptions` on the load-bearing theorems reports *Closed under the global context* or dependence only on standard `functional_extensionality`. Idris2 0.8.0 keyword/parse fixes landed earlier (#112/#113/#115/#117), the build oracle is strict (#118), and the Idris2 layer is hole-free (#151/#152).
 
 === ❌ What Is NOT Guaranteed
@@ -536,7 +540,7 @@ Different logical foundations increase confidence. If all 6 systems prove the sa
 
 === Is this ready to put in production?
 
-**No.** Version 0.9.0 is an advanced research prototype with a working shell (~78% complete), but the extraction gap (Lean → Rust → POSIX) is not formally verified. The Rust CLI is functional and extensively tested (794 tests passing, 0 failures), but lacks a mechanised proof of correspondence to the Lean theorems (~85% confidence via property testing). Use for research, education, and experimentation only.
+**No.** Version 0.9.0 is an advanced research prototype with a working shell (~78% complete), but the extraction gap (Lean → Rust → POSIX) is not closed. The Rust CLI is functional and extensively tested (794 tests passing, 0 failures), but no `proven` row connects it to the Lean theorems: the correspondence row is `argued`, the differential-oracle row `tested-only` (link:EXPLAINME.adoc#proof-ledger[Proof Ledger]). Use for research, education, and experimentation only.
 
 === Can I use this in my project?
 

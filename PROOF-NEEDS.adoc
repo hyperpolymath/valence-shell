@@ -12,6 +12,43 @@ cross-system witness matrix) and *docs/PROOF-OPEN-FRONTIER.adoc* (every
 valuable but unproven theorem, with tractability classification).
 ____
 
+=== Reproduction state (2026-11-01)
+
+This file records what is *needed*; this block records what has actually been
+*run*. The full receipt is
+`docs/audits/2026-11-01-assurance-boundary-audit.adoc`, "Verification round,
+2026-11-01".
+
+[cols="2,2,6",options="header"]
+|===
+| Leg | State | Evidence
+
+| Agda (`proofs/agda/`, 9 modules)
+| *reproduced, with waiver*
+| `agda --library-file=<stdlib> --library=valence-shell <Module>.agda` type-checks
+9/9 under Agda 2.6.4.3 + stdlib 2.1.1 and under 2.7.0.1 + stdlib 2.2. One
+postulate (`funext`), no holes. The estate invocation is *not* satisfied:
+`--safe` gives `Cannot postulate funext with safe flag` (FilesystemModel:179) and
+`--without-K` gives `Cannot eliminate reflexive equation p = p of type List
+String because K has been disabled` (FilesystemModel:155)
+| Z3 (`proofs/z3/`, 5 files)
+| *4 reproduced, 1 open*
+| z3-solver 5.3.3, one process per file, each `(check-sat)` parsed: `unsat` for the
+named theorems in `copy_move_operations`, `filesystem_operations`,
+`permission_operations`, `rmo_operations`; `symlink_operations` contains a single
+`sat` and never negates a goal, so it proves nothing
+| Coq, Lean, Creusot, Idris2, Isabelle, Mizar
+| *not reproducible here*
+| No toolchain channel is reachable in the audit environment (no apt, no rustup,
+no opam, no release assets). These rows still rest on the repository's own
+recorded evidence
+|===
+
+Reading rule: "reproduced" means the compiler agreed under *some* documented
+invocation, not that the row is `proven` under the estate invocation. The Agda
+rows are one postulate and one K-dependency away from mathesis grade 3; both are
+proof problems, listed here as work, not as prose to be softened.
+
 === Current State (2026-06-02)
 
 * *LOC*: ~11,000 lines of formal proof (Coq 4,500 + Lean 4 2,400 + Agda
@@ -273,7 +310,8 @@ blocker is relevant.
 
 [arabic]
 . *Lean → Rust mechanised refinement* (F-1) — biggest verification gap;
-today’s link is property tests at ~85% confidence. Tractable slice:
+today’s link is `argued` plus `tested-only` property tests, never `proven`
+(estate vocabulary; see `EXPLAINME.adoc#proof-ledger`). Tractable slice:
 `+mkdir+` + `+rmdir+` only, ~1 week.
 . *Crash-consistency for begin/commit/rollback* (F-3) — gated on
 modelling `+Filesystem × UndoLog+` first.
@@ -340,11 +378,12 @@ are research-level work; the bigger frontier is real.
 `+secureDeleteNotInjective+` (closes #60) and `+gdprDeletionCompliant+`
 (closes #61) shipped 2026-06-02 via PR #105 with corrected theorem
 shapes (the prior holes had non-theorem signatures refutable by
-`+recovery = id+` / `+recovery = const empty+`). The MAA/GDPR claims now
-rest on these closed theorems plus `+?overwriteIrreversibleProof+`
-(still open as Cat-D placeholder) and axiomatic NIST SP 800-88 /
-Shannon-entropy / physical-world assumptions which should be made
-explicit (see narrative §10).
+`+recovery = id+` / `+recovery = const empty+`). The *model-level* deletion
+claims rest on these closed theorems. A GDPR claim would additionally require
+`+?overwriteIrreversibleProof+` (still open as Cat-D placeholder) and the
+axiomatic NIST SP 800-88 / Shannon-entropy / physical-world assumptions, which
+must be stated as assumptions rather than theorems (see narrative §10). No
+theorem in this repo establishes that bytes are absent from a device.
 
 The three Coq admits (#56 / #57 / #58) closed in the 2026-06-02 PM
 session bring the Coq layer to *zero `+Admitted+` markers* — only the

@@ -85,7 +85,7 @@ usage guide (350+ lines) 2. ✅ `+docs/PROPERTY_TESTING.md+` - Seam 0↔1
 validation guide 3. ✅ `+docs/SEAM_SEALING_REPORT.md+` - This file
 
 *Previously Complete*: - ✅ `+docs/ARCHITECTURE.md+` - ✅
-`+docs/LEAN4_RUST_CORRESPONDENCE.md+` - ✅
+`+docs/LEAN4_RUST_CORRESPONDENCE.adoc+` - ✅
 `+docs/ECHIDNA_INTEGRATION.md+` - ✅ `+docs/POSIX_COMPLIANCE.md+` - ✅
 `+docs/PHASE6_M1_DESIGN.md+` - ✅ `+docs/SIGINT_TESTING.md+` - ✅
 `+docs/DEMO_EXTERNAL_COMMANDS.md+` - ✅
@@ -506,7 +506,7 @@ fn test_2() {
 
 *Formal Proof*: ❌ Not mechanized (future: Coq extraction) *Property
 Tests*: ✅ 10/10 theorems validated with 3,584 random cases *Manual
-Review*: ✅ LEAN4_RUST_CORRESPONDENCE.md documents mapping *Integration
+Review*: ✅ LEAN4_RUST_CORRESPONDENCE.adoc documents mapping *Integration
 Tests*: ✅ 14 tests verify POSIX behavior matches specs
 
 *Confidence*: Medium-High (strong empirical evidence, not formal proof)

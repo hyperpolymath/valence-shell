@@ -144,7 +144,7 @@ echo "5. Validating Lean 4 → Rust correspondence..."
 echidna validate-correspondence \
   --spec proofs/lean4/ \
   --impl impl/rust-cli/src/ \
-  --mapping docs/LEAN4_RUST_CORRESPONDENCE.md
+  --mapping docs/LEAN4_RUST_CORRESPONDENCE.adoc
 
 echo "=== Validation Complete ==="
 ----
@@ -262,7 +262,7 @@ echidna fuzz \
 ECHIDNA can parse both Lean 4 and Rust to validate correspondence
 claims:
 
-*Input*: `+docs/LEAN4_RUST_CORRESPONDENCE.md+`
+*Input*: `+docs/LEAN4_RUST_CORRESPONDENCE.adoc+`
 
 [source,markdown]
 ----
@@ -457,7 +457,7 @@ jobs:
 === Related Documentation
 
 * `+docs/ARCHITECTURE.md+` - Hybrid Rust+BEAM architecture
-* `+docs/LEAN4_RUST_CORRESPONDENCE.md+` - Manual correspondence proofs
+* `+docs/LEAN4_RUST_CORRESPONDENCE.adoc+` - Manual correspondence proofs
 * `+docs/POSIX_COMPLIANCE.md+` - Incremental roadmap
 * `+STATE.scm+` - Current project state
 

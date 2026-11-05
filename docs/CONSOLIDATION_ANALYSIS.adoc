@@ -34,7 +34,7 @@ identify polish opportunities, plan Phase 6
 ===== Layer 3: Documentation
 
 * ✅ Architecture design (ARCHITECTURE.md)
-* ✅ Lean 4 → Rust correspondence map (LEAN4_RUST_CORRESPONDENCE.md)
+* ✅ Lean 4 → Rust correspondence map (LEAN4_RUST_CORRESPONDENCE.adoc)
 * ✅ Echidna integration plan (ECHIDNA_INTEGRATION.md)
 * ✅ POSIX compliance roadmap (POSIX_COMPLIANCE.md)
 * ✅ Implementation specs (PHASE6_M1_DESIGN.md)
@@ -186,7 +186,7 @@ identify polish opportunities, plan Phase 6
 
 ==== Layer 0 ↔ Layer 1: Proofs ↔ Implementation
 
-*Current Seam*: Documentation only (LEAN4_RUST_CORRESPONDENCE.md)
+*Current Seam*: Documentation only (LEAN4_RUST_CORRESPONDENCE.adoc)
 
 *Gaps*: 1. No automated correspondence checking 2. Manual proofs not
 mechanized 3. Rust code can drift from spec

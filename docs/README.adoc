@@ -43,11 +43,11 @@ This README provides orientation; individual files are self-describing.
 | `ARCHITECTURE.md` + `ARCHITECTURE_DIAGRAMS.md`
 | System-level architecture overview.
 
-| `LEAN4_RUST_CORRESPONDENCE.md`
+| `LEAN4_RUST_CORRESPONDENCE.adoc`
 | Design of the Lean → Rust correspondence (currently
   property-tested, not mechanised; ~85% confidence per CLAUDE.md).
 
-| `PROOF_HOLES_AUDIT.md`
+| `PROOF_HOLES_AUDIT.adoc`
 | Active proof-debt ledger across the 6-system stack
   (Coq/Lean4/Agda/Isabelle/Mizar/Z3 + Idris2 ABI). Source of truth for
   the `[coq-proof-status]` block in `../.machine_readable/6a2/STATE.a2ml`.
@@ -59,7 +59,7 @@ This README provides orientation; individual files are self-describing.
 | `PROOF_OVERVIEW.md` + `PROPERTY_TESTING.md` + `VERIFICATION_STRATEGY_ANALYSIS.md`
 | Verification approach + property-testing discipline.
 
-| `SEAM_ANALYSIS_AND_IDRIS2_PLAN.md` + `ZIG_LEAN_EXTRACTION.md`
+| `SEAM_ANALYSIS_AND_IDRIS2_PLAN.md` + `ZIG_LEAN_EXTRACTION.adoc`
 | Future-direction designs (Idris2 extraction; Zig-Lean integration).
 
 | `ECHIDNA_INTEGRATION.md`
@@ -79,7 +79,7 @@ This README provides orientation; individual files are self-describing.
 | `CONTRIBUTOR_GUIDE_TIER1.md`
 | Tier-1 contribution guide.
 
-| `OCAML_EXTRACTION.md`
+| `OCAML_EXTRACTION.adoc`
 | OCaml extraction design (companion to `../impl/ocaml/README.adoc`).
 
 | `INTEGRATION.md`

@@ -116,10 +116,14 @@ Reversible operations with proof - FileModificationRecord tracking
 Higher-order logic - OCaml: Strong static typing - Elixir: Pattern
 matching, guards
 
-==== Planned
+==== Implemented, best-effort (not a compliance claim)
 
-🔄 *RMO (Remove-Match-Obliterate)* - GDPR "`right to be forgotten`"
-compliance - Cryptographic erasure guarantees - Secure overwrite proof
+🔄 *RMO (Remove-Match-Obliterate)* - `obliterate`: 3-pass overwrite + unlink +
+an unsigned audit residue on cooperating in-place filesystems - Abstract model
+proves the transition is non-injective (loss), not that bytes are absent from
+CoW extents, journals, snapshots, device spares or replicas - No cryptographic
+erasure guarantee and no GDPR compliance determination; see
+link:docs/RMO-DURABILITY-BOUNDARY.adoc[RMO durability and assurance boundary]
 
 🔄 *Access Control* - POSIX permissions modeling - Capability-based
 security - Principle of least privilege
@@ -137,13 +141,15 @@ Current status: *Research Prototype*
 Security-sensitive applications - Unverified/untrusted environments
 
 *Verification Gap:* The formal proofs operate on abstract models. The
-implementation (OCaml FFI + POSIX) is *not formally connected* to the
+shipped implementation (Rust CLI over libc/POSIX, plus the separate `ffi/rust`
+crate and the Coq→OCaml extraction path) is *not formally connected* to the
 proofs. This gap means: - Proofs guarantee model correctness -
-Implementation may have bugs - Extraction may introduce errors
+Implementation may have bugs - Extraction or hand-transcription may introduce
+errors
 
-*To reach production:* 1. Close extraction gap (Coq → OCaml
-verification) 2. Verify FFI layer 3. Complete security audit 4. Fuzzing
-campaign 5. Formal verification of full stack
+*To reach production:* 1. Close the extraction/refinement gap (machine-checked
+Lean/Coq model → Rust/POSIX refinement) 2. Verify the FFI layer 3. Complete
+security audit 4. Fuzzing campaign 5. Formal verification of full stack
 
 === Security Boundaries
 
@@ -228,12 +234,15 @@ acknowledged here (with permission).
 compliance)
 * ✅ *Offline-First*: No network dependencies
 * ✅ *Type Safety*: All 6 proof systems provide strong typing
-* ✅ *Memory Safety*: Rust-equivalent via OCaml (no manual memory
-management)
+* ✅ *Memory Safety*: safe Rust in `impl/rust-cli/`, with `unsafe` confined to
+audited POSIX FFI sites (see `audits/assail-classifications.a2ml`)
 
 ==== Planned
 
-* 🔄 *GDPR*: RMO (Remove-Match-Obliterate) for right to erasure
+* 🔄 *GDPR*: RMO (Remove-Match-Obliterate) provides best-effort local
+overwrite + unlink + audit residue; erasure evidence and any legal
+determination remain deployment-layer work (see
+link:docs/RMO-DURABILITY-BOUNDARY.adoc[the boundary])
 * 🔄 *Common Criteria*: EAL4 equivalent (formal methods)
 * 🔄 *ISO 27001*: Information security management
 * 🔄 *NIST Cybersecurity Framework*: When production-ready
