@@ -15,7 +15,7 @@ image:https://img.shields.io/badge/License-MPL--2.0-blue[License: MPL-2.0,link="
 
 image:https://img.shields.io/badge/RSR-PLATINUM-blueviolet[RSR Compliance]
 image:https://img.shields.io/badge/Proofs-478%20candidates-brightgreen[Formal Proofs]
-image:https://img.shields.io/badge/Systems-6%20proof%20assistants-orange[Proof Systems]
+image:https://img.shields.io/badge/Checked-Agda%20%7C%20Lean%204%20%7C%20Coq%20%7C%20Z3-orange[Proof Systems]
 
 **Research shell exploring formally specified reversible operations and the MAA (Mutually Assured Accountability) Framework.**
 
@@ -372,7 +372,7 @@ Valence Shell sits inside a three-layer architecture; the other two layers are u
 * If preconditions hold, `write(p, old, write(p, new, fs)) = fs`
 * Operations on `p1` don't affect `p2` (when `p1 ≠ p2`)
 * Composition: sequences of operations reverse correctly
-* ~478 theorem candidates proven across 6 verification systems (0 real gaps; 2 justified/structural axioms remain — see `docs/PROOF_HOLES_AUDIT.adoc`)
+* ~478 theorem candidates in the 2026-06-01 census, which counted six systems; Isabelle/HOL and Mizar were archived unchecked on 2026-11-09 and no longer count. Current per-obligation status: link:EXPLAINME.adoc#proof-ledger[the Proof Ledger]. 0 real gaps; 1 justified classical dependency (Coq `is_empty_dir_dec`) — see `docs/PROOF_HOLES_AUDIT.adoc`
 * 2026-07-16 re-verification: `proofs/coq/` compiles with **0 admits** under Coq 8.18.0; `Print Assumptions` on the load-bearing theorems reports *Closed under the global context* or dependence only on standard `functional_extensionality`. Idris2 0.8.0 keyword/parse fixes landed earlier (#112/#113/#115/#117), the build oracle is strict (#118), and the Idris2 layer is hole-free (#151/#152).
 
 === ❌ What Is NOT Guaranteed

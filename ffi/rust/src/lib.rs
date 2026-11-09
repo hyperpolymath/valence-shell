@@ -16,7 +16,7 @@
 //! ```text
 //! ┌─────────────────────────────────────┐
 //! │ Coq Proofs (HIGH TRUST)             │ ← Mathematical guarantees
-//! │ ~256 theorems across 6 systems      │
+//! │ Agda/Lean/Coq; see proof ledger     │
 //! └─────────────┬───────────────────────┘
 //!               │ Extraction (trusted)
 //! ┌─────────────▼───────────────────────┐

@@ -1,5 +1,11 @@
 == RSR Compliance Report
 
+NOTE: The proof-system claims in this report (six systems, theorem totals,
+"all proofs compile") predate the 2026-11-09 audit. Isabelle/HOL and Mizar were
+archived unchecked that day, and the current status of each proof obligation is
+in `EXPLAINME.adoc#proof-ledger` and
+`docs/audits/2026-11-09-proof-ground-truth.adoc`.
+
 *Rhodium Standard Repository (RSR) Framework*
 
 *Project*: Valence Shell (vsh) *Version*: see `+CHANGELOG.md+` (release
@@ -13,7 +19,7 @@ characteristics)
 
 Valence Shell achieves *Bronze-level RSR compliance* with several
 *Silver-level characteristics*. The project exceeds RSR requirements in
-formal verification (6 proof systems vs typical 0-1) while meeting all
+formal verification (several proof systems vs typical 0-1) while meeting all
 Bronze-tier documentation, safety, and offline-first requirements.
 
 *Overall Score*: 95/100 (Bronze tier: 80-89, Silver tier: 90-94,
@@ -28,8 +34,8 @@ Bronze-tier documentation, safety, and offline-first requirements.
 [width="100%",cols="43%,25%,32%",options="header",]
 |===
 |Requirement |Status |Evidence
-|*Type Safety* |✅ EXCEEDS |6 proof systems (Coq, Lean 4, Agda,
-Isabelle, Mizar, Z3) all provide strong type guarantees
+|*Type Safety* |✅ EXCEEDS |Checked proof systems (Agda, Lean 4, Coq) are
+typed; Z3 is supplementary; Isabelle/Mizar archived
 
 |*Memory Safety* |✅ EXCEEDS |OCaml (no manual memory management),
 Elixir (BEAM VM), zero unsafe blocks
@@ -166,7 +172,7 @@ contribute)
 |Metric |Status |Evidence
 |*Test Pass Rate* |✅ 100% |All proofs compile, demo scripts pass
 
-|*Formal Verification* |✅ EXCEEDS |6 proof systems, ~256 theorems
+|*Formal Verification* |✅ EXCEEDS |Agda source; Lean 4 and Coq rechecks; see the proof ledger
 
 |*Cross-Validation* |✅ EXCEEDS |Polyglot verification (different
 foundations)
@@ -180,7 +186,7 @@ foundations)
 3. Agda 2.6.4+ - ~50 theorems 4. Isabelle/HOL 2024 - ~50 theorems 5.
 Mizar - ~16 theorems 6. Z3 SMT - 15 theorems
 
-*Total*: ~256 formal theorems across 6 systems
+*Total*: historical figure; Isabelle and Mizar are archived unchecked, see the proof ledger
 
 *Score*: 10/10 (Exceeds - formal verification far beyond typical
 testing)
@@ -342,7 +348,7 @@ Valence Shell provides features beyond standard RSR requirements:
 
 ==== 1. Polyglot Verification (Unique)
 
-* *6 proof systems* (typical: 0-1)
+* *Several proof systems* (typical: 0-1)
 * *Different logical foundations* (CIC, HOL, ITT, TG set theory, SMT)
 * *Cross-validation* across systems
 * *~256 theorems* (typical: 0)
@@ -417,8 +423,8 @@ compliant) - [x] .well-known/ai.txt (ML training policy) - [x]
 [x] flake.nix for Nix builds - [x] Containerfile for containerized
 builds - [x] .gitlab-ci.yml for CI/CD
 
-*Code Quality Checklist*: - [x] Type-safe (6 proof systems guarantee
-this) - [x] Memory-safe (OCaml, Elixir, no unsafe) - [x] Zero runtime
+*Code Quality Checklist*: - [x] Type-safe (checked proof systems are
+typed) - [x] Memory-safe (OCaml, Elixir, no unsafe) - [x] Zero runtime
 dependencies - [x] Offline-first (no network calls) - [x] 100% test pass
 rate (formal proofs)
 
@@ -492,7 +498,7 @@ through:
 . *Comprehensive .well-known/* directory (RFC 9116 + community
 standards)
 . *Multiple build systems* (just + Nix + container + CI)
-. *Formal verification* (6 proof systems, ~256 theorems)
+. *Formal verification* (Agda source; Lean 4 and Coq rechecks)
 . *Zero runtime dependencies* (OCaml stdlib only)
 . *Offline-first* (all proofs air-gapped verifiable)
 . *Graduated trust* (TPCF with 3 perimeters)

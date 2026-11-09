@@ -21,13 +21,16 @@ below.
 
 ==== Formal Verification Status
 
-Valence Shell uses *polyglot verification* across 6 proof systems:
+Valence Shell uses *polyglot verification*: Agda is the theory source, Lean 4 and
+Rocq/Coq are recheck legs, and Z3 is a supplementary check. Isabelle/HOL and Mizar
+were archived unchecked on 2026-11-09 (`archive/proofs/`). Per-obligation status is
+in `EXPLAINME.adoc#proof-ledger`; the list below is the scope of the in-model proofs,
+not a claim that every system proves every item:
 
 ✅ *Formally Proven* (Mathematical Guarantees): - Directory operations
 (mkdir/rmdir) reversibility - File operations (create/delete)
 reversibility - File content operations (read/write) reversibility -
-Operation independence - Composition correctness - ~250+ theorems across
-Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3 (4 gaps remain)
+Operation independence - Composition correctness
 
 ⚠️ *Not Verified* (Manual Review Required): - OCaml FFI layer
 (filesystem_ffi.ml) - Elixir reference implementation - POSIX syscall
@@ -233,7 +236,7 @@ acknowledged here (with permission).
 * ✅ *RSR Framework*: Bronze level (this security policy = part of
 compliance)
 * ✅ *Offline-First*: No network dependencies
-* ✅ *Type Safety*: All 6 proof systems provide strong typing
+* ✅ *Type Safety*: the checked proof systems (Agda, Lean 4, Coq) are typed
 * ✅ *Memory Safety*: safe Rust in `impl/rust-cli/`, with `unsafe` confined to
 audited POSIX FFI sites (see `audits/assail-classifications.a2ml`)
 

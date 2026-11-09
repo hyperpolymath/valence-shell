@@ -91,7 +91,7 @@ deep-audit inventory in `docs/audits/2026-06-01-deep-audit.adoc`.
 
 What is solid:
 
-* The 6-system proofs of the model-layer operations. ~478 theorem candidates;
+* The machine-checked proofs of the model-layer operations (Agda (theory source), Lean 4 and Rocq/Coq (rechecks), Z3 (supplementary); Isabelle/HOL and Mizar archived unchecked). ~478 theorem candidates in the 2026-06-01 census;
   0 real gaps (Coq `obliterate_overwrites_all_blocks` CLOSED, re-verified
   2026-07-16 via `Print Assumptions` under Coq 8.18.0) + 2 documented axioms
   (1 justified decidability + 1 structural funext).

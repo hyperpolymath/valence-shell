@@ -299,3 +299,14 @@ reports 0 axioms, 5 holes and 0 policy violations, down from 1, 5 and 9. The 5 h
 are the 3 `alkahest-shell-transmuter` Idris2 holes and the 2 registered `believe_me`
 axioms. The census still counts the archived `.thy` files as Isabelle, because it
 does not exclude `archive/`; that is a change for mathesis, not this repository.
+
+Documents that still describe six proof systems. This PR corrects the current-status
+files (`README.adoc`, `FAQ.adoc`, `QUICKSTART-DEV.adoc`, `QUICKSTART-USER.adoc`,
+`SECURITY.adoc`, `TOPOLOGY.adoc`, `RSR_COMPLIANCE.adoc`, `ROADMAP.adoc`, `CLAUDE.md`)
+and the CLI and FFI output. About sixty older mentions remain, in dated reports and
+session records under `docs/` (for example `PHASE2_REPORT`, `PHASE3_INITIAL_REPORT`,
+`SEAM_SEALING_REPORT`, `VERIFICATION_STRATEGY_ANALYSIS`) and in `docs/wiki/`,
+`REVERSIBILITY.adoc` and `PROVEN-INTEGRATION.adoc`. Dated records stay as written.
+The wiki pages, `REVERSIBILITY.adoc` and `PROVEN-INTEGRATION.adoc` need a separate
+sweep, because correcting them means checking which system proves each listed
+theorem, not only changing the system count.

@@ -41,7 +41,7 @@ CI on `rust-cli.yml`, dogfood evidence, structural compliance.
   enumerated in the audit).
 * [ ] Add `[dogfooding-status]` to STATE.a2ml with concrete daily-use
   entries.
-* [ ] Add 3+ ADRs to META.a2ml (six-system proof stack, Rust as primary
+* [ ] Add 3+ ADRs to META.a2ml (proof stack: Agda source, Lean/Rocq rechecks, Rust as primary
   implementation, property-testing as correspondence-gap mitigation) and
   populate `[development-practices]`.
 * [x] Resolved 2026-04-19: `impl/rust-ffi/` deleted; `ffi/rust/` is
