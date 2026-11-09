@@ -51,12 +51,14 @@ defmodule VSH.State do
   }
 
   # Proof references matching Coq theorems
+  # Isabelle and Mizar entries point into archive/proofs/: archived unchecked
+  # on 2026-11-09, not checked by CI.
   @mkdir_rmdir_proof %{
     theorem: "mkdir_rmdir_reversible",
     coq: "proofs/coq/filesystem_model.v:L45-L62",
     lean4: "proofs/lean4/FilesystemModel.lean:L38-L52",
     agda: "proofs/agda/FilesystemModel.agda:L41-L58",
-    isabelle: "proofs/isabelle/FilesystemModel.thy:L35-L50",
+    isabelle: "archive/proofs/isabelle/FilesystemModel.thy:L35-L50",
     description: "rmdir(mkdir(path, fs)) = fs when preconditions hold"
   }
 
@@ -65,7 +67,7 @@ defmodule VSH.State do
     coq: "proofs/coq/file_operations.v:L32-L48",
     lean4: "proofs/lean4/FileOperations.lean:L28-L42",
     agda: "proofs/agda/FileOperations.agda:L30-L45",
-    isabelle: "proofs/isabelle/FileOperations.thy:L25-L40",
+    isabelle: "archive/proofs/isabelle/FileOperations.thy:L25-L40",
     description: "delete_file(create_file(path, fs)) = fs when preconditions hold"
   }
 
@@ -74,15 +76,15 @@ defmodule VSH.State do
     coq: "proofs/coq/filesystem_composition.v:L28-L52",
     lean4: "proofs/lean4/FilesystemComposition.lean:L24-L45",
     agda: "proofs/agda/FilesystemComposition.agda:L26-L48",
-    isabelle: "proofs/isabelle/FilesystemComposition.thy:L22-L42",
+    isabelle: "archive/proofs/isabelle/FilesystemComposition.thy:L22-L42",
     description: "apply_sequence(reverse(ops), apply_sequence(ops, fs)) = fs"
   }
 
   @content_ops_proof %{
     theorem: "write_file_reversible",
     coq: "proofs/coq/file_content_operations.v:L118-L135",
-    isabelle: "proofs/isabelle/FileContentOperations.thy:L98-L134",
-    mizar: "proofs/mizar/file_content_operations.miz:L118-L135",
+    isabelle: "archive/proofs/isabelle/FileContentOperations.thy:L98-L134",
+    mizar: "archive/proofs/mizar/file_content_operations.miz:L118-L135",
     description: "write(p, old, write(p, new, fs)) = fs when preconditions hold"
   }
 
@@ -91,8 +93,8 @@ defmodule VSH.State do
     z3: "proofs/z3/copy_move_operations.smt2:L140-L163",
     lean4: "proofs/lean4/CopyMoveOperations.lean:L78-L102",
     agda: "proofs/agda/CopyMoveOperations.agda:L85-L115",
-    isabelle: "proofs/isabelle/CopyMoveOperations.thy:L92-L128",
-    mizar: "proofs/mizar/copy_move_operations.miz:L95-L125",
+    isabelle: "archive/proofs/isabelle/CopyMoveOperations.thy:L92-L128",
+    mizar: "archive/proofs/mizar/copy_move_operations.miz:L95-L125",
     description: "copy(src, dst, fs) preserves src unchanged, creates dst with same content"
   }
 
@@ -101,8 +103,8 @@ defmodule VSH.State do
     z3: "proofs/z3/copy_move_operations.smt2:L254-L269",
     lean4: "proofs/lean4/CopyMoveOperations.lean:L145-L175",
     agda: "proofs/agda/CopyMoveOperations.agda:L158-L188",
-    isabelle: "proofs/isabelle/CopyMoveOperations.thy:L165-L195",
-    mizar: "proofs/mizar/copy_move_operations.miz:L168-L198",
+    isabelle: "archive/proofs/isabelle/CopyMoveOperations.thy:L165-L195",
+    mizar: "archive/proofs/mizar/copy_move_operations.miz:L168-L198",
     description: "move(dst, src, move(src, dst, fs)) = fs"
   }
 
@@ -111,8 +113,8 @@ defmodule VSH.State do
     coq: "proofs/coq/rmo_operations.v:L85-L115",
     lean4: "proofs/lean4/RMOOperations.lean:L78-L108",
     agda: "proofs/agda/RMOOperations.agda:L82-L112",
-    isabelle: "proofs/isabelle/RMO_Operations.thy:L75-L105",
-    mizar: "proofs/mizar/rmo_operations.miz:L80-L110",
+    isabelle: "archive/proofs/isabelle/RMO_Operations.thy:L75-L105",
+    mizar: "archive/proofs/mizar/rmo_operations.miz:L80-L110",
     z3: "proofs/z3/rmo_operations.smt2:L95-L125",
     description: "RMO operations are provably irreversible - no inverse exists"
   }

@@ -127,14 +127,16 @@ pub const ProofBackingCheck = struct {
         create_file,
         delete_file,
 
+        // Isabelle (i) and Mizar (m) files were archived unchecked on 2026-11-09
+        // and live under archive/proofs/; no CI lane checks them.
         pub fn proofFile(self: Operation, prover_system: []const u8) []const u8 {
             return switch (self) {
                 .mkdir, .rmdir => switch (prover_system[0]) {
                     'c' => "proofs/coq/filesystem_model.v",
                     'l' => "proofs/lean4/FilesystemModel.lean",
                     'a' => "proofs/agda/FilesystemModel.agda",
-                    'i' => "proofs/isabelle/FilesystemModel.thy",
-                    'm' => "proofs/mizar/filesystem_model.miz",
+                    'i' => "archive/proofs/isabelle/FilesystemModel.thy",
+                    'm' => "archive/proofs/mizar/filesystem_model.miz",
                     'z' => "proofs/z3/filesystem_operations.smt2",
                     else => "proofs/coq/filesystem_model.v",
                 },
@@ -142,8 +144,8 @@ pub const ProofBackingCheck = struct {
                     'c' => "proofs/coq/file_operations.v",
                     'l' => "proofs/lean4/FileOperations.lean",
                     'a' => "proofs/agda/FileOperations.agda",
-                    'i' => "proofs/isabelle/FileOperations.thy",
-                    'm' => "proofs/mizar/file_operations.miz",
+                    'i' => "archive/proofs/isabelle/FileOperations.thy",
+                    'm' => "archive/proofs/mizar/file_operations.miz",
                     'z' => "proofs/z3/filesystem_operations.smt2",
                     else => "proofs/coq/file_operations.v",
                 },

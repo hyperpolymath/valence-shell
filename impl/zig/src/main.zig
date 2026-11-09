@@ -38,6 +38,8 @@ pub const ProofRef = struct {
     coq: ?[]const u8 = null,
     lean4: ?[]const u8 = null,
     agda: ?[]const u8 = null,
+    // Isabelle and Mizar were archived unchecked on 2026-11-09; these
+    // references point into archive/proofs/ and are not checked by CI.
     isabelle: ?[]const u8 = null,
     mizar: ?[]const u8 = null,
     z3: ?[]const u8 = null,
@@ -50,8 +52,8 @@ pub const proofs = struct {
         .coq = "proofs/coq/filesystem_model.v:L45-L62",
         .lean4 = "proofs/lean4/FilesystemModel.lean:L38-L52",
         .agda = "proofs/agda/FilesystemModel.agda:L41-L58",
-        .isabelle = "proofs/isabelle/FilesystemModel.thy:L35-L50",
-        .mizar = "proofs/mizar/filesystem_model.miz:L38-L55",
+        .isabelle = "archive/proofs/isabelle/FilesystemModel.thy:L35-L50",
+        .mizar = "archive/proofs/mizar/filesystem_model.miz:L38-L55",
         .z3 = "proofs/z3/filesystem_operations.smt2:L28-L45",
     };
 
@@ -60,8 +62,8 @@ pub const proofs = struct {
         .coq = "proofs/coq/file_operations.v:L32-L48",
         .lean4 = "proofs/lean4/FileOperations.lean:L28-L42",
         .agda = "proofs/agda/FileOperations.agda:L30-L45",
-        .isabelle = "proofs/isabelle/FileOperations.thy:L25-L40",
-        .mizar = "proofs/mizar/file_operations.miz:L28-L43",
+        .isabelle = "archive/proofs/isabelle/FileOperations.thy:L25-L40",
+        .mizar = "archive/proofs/mizar/file_operations.miz:L28-L43",
         .z3 = "proofs/z3/filesystem_operations.smt2:L55-L72",
     };
 
@@ -70,8 +72,8 @@ pub const proofs = struct {
         .coq = "proofs/coq/rmo_operations.v:L85-L115",
         .lean4 = "proofs/lean4/RMOOperations.lean:L78-L108",
         .agda = "proofs/agda/RMOOperations.agda:L82-L112",
-        .isabelle = "proofs/isabelle/RMO_Operations.thy:L75-L105",
-        .mizar = "proofs/mizar/rmo_operations.miz:L80-L110",
+        .isabelle = "archive/proofs/isabelle/RMO_Operations.thy:L75-L105",
+        .mizar = "archive/proofs/mizar/rmo_operations.miz:L80-L110",
         .z3 = "proofs/z3/rmo_operations.smt2:L95-L125",
     };
 };

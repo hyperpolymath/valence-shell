@@ -223,7 +223,7 @@ pub const VARIABLE_ASSIGNMENT_REVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/environment_model.v:pending",
     lean_location: "proofs/lean4/EnvironmentModel.lean:pending",
     agda_location: "proofs/agda/EnvironmentModel.agda:pending",
-    isabelle_location: "archive/proofs/isabelle/EnvironmentModel.thy:pending",
+    isabelle_location: "none (no Isabelle theory was written before the archive)",
     description: "set(name, old, set(name, new, env)) = env (pre-state capture)",
 };
 
@@ -236,7 +236,7 @@ pub const HARDWARE_ERASE_IRREVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/rmo_operations.v:L45-L68",
     lean_location: "proofs/lean4/RMOOperations.lean:L52-L73",
     agda_location: "proofs/agda/RMOOperations.agda:L48-L70",
-    isabelle_location: "archive/proofs/isabelle/RMOOperations.thy:L44-L65",
+    isabelle_location: "archive/proofs/isabelle/RMO_Operations.thy:L44-L65",
     description: "∀ fs device. ¬∃ op. apply(op, hardware_erase(device, fs)) = fs",
 };
 
@@ -250,7 +250,7 @@ pub const OBLITERATE_IRREVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/rmo_operations.v:L70-L95",
     lean_location: "proofs/lean4/RMOOperations.lean:L75-L98",
     agda_location: "proofs/agda/RMOOperations.agda:L72-L96",
-    isabelle_location: "archive/proofs/isabelle/RMOOperations.thy:L67-L89",
+    isabelle_location: "archive/proofs/isabelle/RMO_Operations.thy:L67-L89",
     description: "∀ fs file. ¬∃ op. apply(op, obliterate(file, fs)) = fs",
 };
 
