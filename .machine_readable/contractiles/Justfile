@@ -25,17 +25,20 @@ build-coq:
     @echo "✓ Coq proofs compiled"
 
 # Build Lean 4 proofs
+# Same named libraries as CI (.github/workflows/rust-cli.yml). A bare `lean File.lean`
+# cannot resolve imports outside `lake env`, and a bare `lake build` builds only the
+# default target. FileContentOperations, RMOOperations, CopyMoveOperations and
+# PermissionOperations do not build on the pinned toolchain and are excluded.
 build-lean4:
     @echo "Building Lean 4 proofs..."
-    cd proofs/lean4 && lean FilesystemModel.lean
-    cd proofs/lean4 && lean FileOperations.lean
-    @echo "✓ Lean 4 proofs checked"
+    cd proofs/lean4 && lake build FilesystemModel FileOperations FilesystemComposition FilesystemEquivalence SymlinkOperations Extraction CrashConsistency PathTraversal PreconditionWitnesses
+    @echo "✓ Lean 4 proofs checked (CI library set)"
 
 # Build Agda proofs
 build-agda:
     @echo "Building Agda proofs..."
-    cd proofs/agda && agda --safe --without-K --cubical-compatible All.agda
-    @echo "✓ Agda proofs checked (estate invocation, all modules)"
+    bash scripts/check-agda.sh
+    @echo "✓ Agda proofs checked (estate invocation, all modules in the import graph)"
 
 # Isabelle and Mizar were archived to archive/proofs/ on 2026-11-09 (owner
 # ruling; see archive/proofs/README.adoc). They have no build recipe.
