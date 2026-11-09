@@ -41,7 +41,7 @@ interface - Extraction correctness (Coq → OCaml)
 ....
 ┌─────────────────────────────────────┐
 │ Formal Proofs (HIGH TRUST)          │
-│ - Coq/Lean/Agda/Isabelle/Mizar      │
+│ - Agda (source); Lean, Coq rechecks │
 │ - Mathematical guarantees            │
 └─────────────┬───────────────────────┘
               │ Extraction (GAP)

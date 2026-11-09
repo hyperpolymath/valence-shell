@@ -21,10 +21,17 @@
 //! |---------|-----|-------|------|----|
 //! | mkdir_rmdir_reversible | ✓ | ✓ | ✓ | ✓ |
 //! | create_delete_reversible | ✓ | ✓ | ✓ | ✓ |
-//! | write_file_reversible | ✓ | ✓ | ✓ | ✓ |
-//! | copy_preserves_source | ✓ | ✓ | ✓ | ✓ |
-//! | move_reversible | ✓ | ✓ | ✓ | ✓ |
-//! | obliterate_irreversible | ✓ | ✓ | ✓ | ✓ |
+//! | write_file_reversible | ✓ | ✗ | ✓ | — |
+//! | copy_preserves_source | ✓ | ✗ | ✓ | A |
+//! | move_reversible | ✓ | ✗ | ✓ | A |
+//! | obliterate_irreversible | ✓ | ✗ | ✓ | A |
+//!
+//! ✓: the proof builds in that system (the Lean and Coq statements are not yet
+//! compared one by one with the Agda source). ✗: the Lean library
+//! (`FileContentOperations`, `CopyMoveOperations`, `RMOOperations`) does not
+//! build on the pinned toolchain, so CI does not check it. A: the Z3 query runs
+//! over asserted axioms (PROOF-POLICY §5 `ASSUMED`). —: no Z3 encoding.
+//! Per-obligation status: `EXPLAINME.adoc#proof-ledger`.
 
 use crate::{FfiConfig, FfiContext, FfiResult};
 use std::path::PathBuf;
