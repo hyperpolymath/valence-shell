@@ -144,10 +144,8 @@ echo ""
 # Agda Verification
 if check_command agda; then
     log_info "Agda detected"
-    run_test "Agda: FilesystemModel.agda" \
-        "cd proofs/agda && agda FilesystemModel.agda"
-    run_test "Agda: FileOperations.agda" \
-        "cd proofs/agda && agda FileOperations.agda"
+    run_test "Agda: All.agda (--safe --without-K --cubical-compatible)" \
+        "cd proofs/agda && agda --safe --without-K --cubical-compatible All.agda"
 else
     log_skip "Agda not installed"
     ((TOTAL_TESTS += 2))
@@ -156,31 +154,8 @@ fi
 
 echo ""
 
-# Isabelle Verification
-if check_command isabelle; then
-    log_info "Isabelle/HOL detected"
-    run_test "Isabelle: FilesystemModel.thy" \
-        "cd proofs/isabelle && isabelle build -D ."
-else
-    log_skip "Isabelle not installed"
-    TOTAL_TESTS=$((TOTAL_TESTS + 1))
-    SKIPPED_TESTS=$((SKIPPED_TESTS + 1))
-fi
-
-echo ""
-
-# Mizar Verification
-if check_command mizf; then
-    log_info "Mizar detected"
-    run_test "Mizar: filesystem_model.miz" \
-        "cd proofs/mizar && mizf filesystem_model.miz"
-    run_test "Mizar: file_operations.miz" \
-        "cd proofs/mizar && mizf file_operations.miz"
-else
-    log_skip "Mizar not installed (complex setup required)"
-    ((TOTAL_TESTS += 2))
-    ((SKIPPED_TESTS += 2))
-fi
+# Isabelle and Mizar were archived to archive/proofs/ on 2026-11-09 and are
+# not verified here (see archive/proofs/README.adoc).
 
 echo ""
 

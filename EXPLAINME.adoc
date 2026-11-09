@@ -15,7 +15,9 @@ claims, and the second is a count of *candidates*, not of proved theorems.
 
 **Evidence**:
 `impl/rust-cli/` is where the tests live (`cargo test --all-features`); the
-proof trees are `proofs/{coq,lean4,agda,idris2,isabelle,mizar,z3}/`. The Coq
+proof trees are `proofs/{agda,coq,lean4,idris2,z3}/` (Agda is the theory source since the
+2026-11-09 owner ruling; Isabelle and Mizar were archived to `archive/proofs/` the
+same day). The Coq
 tree alone declares 133 `Theorem`/`Lemma` commands and contains no
 `admit`/`Admitted`.
 
@@ -33,7 +35,8 @@ code, and no percentage is quoted for that correspondence: it is `argued` plus
 **Evidence**: `proofs/coq/filesystem_model.v:207`
 (`mkdir_rmdir_reversible`), with the same property restated in
 `proofs/lean4/FilesystemModel.lean`, `proofs/agda/FilesystemModel.agda`,
-`proofs/isabelle/`, `proofs/mizar/` and `proofs/z3/`. The composition lemma is
+and `proofs/z3/` (the Isabelle and Mizar restatements are archived in
+`archive/proofs/`). The composition lemma is
 `proofs/coq/filesystem_composition.v:352` (`operation_sequence_reversible`).
 
 **Caveat**: this is a theorem about an abstract `Filesystem` function, not about
@@ -117,11 +120,11 @@ reproduce. Absence of a tool is an open obligation, not a passing leg
 | `proofs/agda/` (ten modules via `All.agda`)
 | No postulates, no holes, the estate invocation. Filesystem equality is pointwise (`_≗_`). Grade `PWG-3` is derived from the CI receipt on the merge head, not asserted here. See `docs/audits/2026-11-09-proof-ground-truth.adoc`
 
-| Same theorems restated in Isabelle / Mizar / Z3
-| proven-with-postulates (Isabelle) / open (Mizar) / Z3: reproduced for 4 of 5 files, `open` for `symlink_operations.smt2`
-| `isabelle build -D .`; `mizf` (failure-swallowing target); z3-solver 5.3.3, one process per file, parsing each `(check-sat)`
-| `proofs/isabelle/`, `proofs/mizar/`, `proofs/z3/`
-| §4 exceptions to PROOF-POLICY §1 with no recorded exception note yet; the Mizar target ends in `|| echo`, so a failing Mizar build is not distinguishable from a pass
+| Same theorems restated in Z3 (Isabelle and Mizar archived 2026-11-09)
+| Z3: ASSUMED (no proof certificate)
+| `scripts/verify-z3.sh`, exact result sequence per file
+| `proofs/z3/` (`archive/proofs/` for Isabelle and Mizar)
+| §4 exception notes are now recorded in each `.smt2` header. `filesystem_operations` and `symlink_operations` were rewritten on 2026-11-09 to define the operations as array `store`s and negate each goal; the other three still rest on asserted axioms. Isabelle and Mizar were never CI-checked and are archived, unchecked, with a successor map
 
 | Sandbox path normalisation never escapes the root
 | proven (model) / tested-only (code)
@@ -180,7 +183,7 @@ reproduce. Absence of a tool is an open obligation, not a passing leg
 
 == Dogfooded Across The Account
 
-Uses polyglot formal verification stack (Coq + Lean 4 + Agda + Isabelle + Mizar + Z3). Same pattern across:
+Uses a multi-prover stack (Agda as theory source, Rocq and Lean 4 as recheck legs, Idris2 for the ABI, Z3 as a supplementary check). Same pattern across:
 - https://github.com/hyperpolymath/absolute-zero[absolute-zero] — Compositional algebra with CNO (Certified Null Operation) theory
 - https://github.com/hyperpolymath/proven-servers[proven-servers] — Protocol verification (Idris2 ABI)
 - https://github.com/hyperpolymath/burble[burble] — Telecom control plane (Lean 4 core)
@@ -231,9 +234,7 @@ All share: *Multiple proof systems for cross-validation, honest status reporting
 
 | `proofs/agda/` | Agda proofs: ~700 lines. Intensional type theory foundation.
 
-| `proofs/isabelle/` | Isabelle/HOL proofs: ~650 lines. Higher-order logic approach.
-
-| `proofs/mizar/` | Mizar proofs: ~400 lines. Tarski-Grothendieck set theory.
+| `archive/proofs/` | Isabelle/HOL and Mizar trees, archived unchecked on 2026-11-09, with a theorem-by-theorem successor map.
 
 | `proofs/z3/` | Z3 SMT proofs: ~150 lines. Automated first-order logic verification.
 

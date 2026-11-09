@@ -128,20 +128,8 @@ verify_file "Agda: FilesystemComposition"   "proofs/agda/FilesystemComposition.a
 verify_file "Agda: FilesystemEquivalence"   "proofs/agda/FilesystemEquivalence.agda"  "agda"
 echo ""
 
-# ─── Step 4: Verify Isabelle proofs ───
-echo "── Step 4: Isabelle/HOL Proofs ──"
-verify_file "Isabelle: FilesystemModel"     "proofs/isabelle/FilesystemModel.thy"     "isabelle"
-verify_file "Isabelle: FileOperations"      "proofs/isabelle/FileOperations.thy"      "isabelle"
-verify_file "Isabelle: FilesystemComposition" "proofs/isabelle/FilesystemComposition.thy" "isabelle"
-verify_file "Isabelle: FilesystemEquivalence" "proofs/isabelle/FilesystemEquivalence.thy" "isabelle"
-echo ""
-
-# ─── Step 5: Verify Mizar proofs ───
-echo "── Step 5: Mizar Proofs ──"
-verify_file "Mizar: filesystem_model"       "proofs/mizar/filesystem_model.miz"       "mizar"
-verify_file "Mizar: file_operations"        "proofs/mizar/file_operations.miz"        "mizar"
-verify_file "Mizar: filesystem_composition" "proofs/mizar/filesystem_composition.miz"  "mizar"
-echo ""
+# Isabelle and Mizar were archived to archive/proofs/ on 2026-11-09 (owner
+# ruling); they are not validated here. Steps 4 and 5 were removed.
 
 # ─── Step 6: Verify Z3 SMT proofs ───
 echo "── Step 6: Z3 SMT Proofs ──"

@@ -1,4 +1,12 @@
 ; SPDX-License-Identifier: MPL-2.0
+;
+; PROOF-POLICY §4 exception note (2026-11-09). Tool: Z3. The operations here
+; are uninterpreted functions characterised by *asserted* axioms, so an `unsat`
+; result shows the theorem follows from those axioms, not that the axioms match
+; the Agda model (the theory source, proofs/agda) or the Rust code. Status under
+; §5: ASSUMED. The definitional array encoding used in filesystem_operations.smt2
+; and symlink_operations.smt2 is the pattern to port this file to.
+;
 ; Valence Shell - RMO (Remove-Match-Obliterate) Operations in Z3/SMT-LIB
 ;
 ; This module formalizes the logical block-mapping model of secure deletion.

@@ -1,0 +1,173 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Archived proof trees: Isabelle/HOL and Mizar
+:toc: preamble
+
+These trees moved here from `proofs/isabelle/` and `proofs/mizar/` on 2026-11-09,
+by owner ruling (see `docs/audits/2026-11-09-proof-ground-truth.adoc`). They are
+kept, never deleted.
+
+*Why.* Under the estate proof policy (`hyperpolymath/standards`
+`3-practice/PROOF-POLICY.adoc`) Agda is the theory source, rechecked in Rocq and
+Lean. Isabelle is supplementary evidence only (§3) and Mizar is a §4 exception.
+Neither could be run in the 2026-11-09 audit (Isabelle's distribution server was
+unavailable; Mizar's installer was not permitted in the session), and neither had
+a CI lane. They are *unchecked*: nothing below says these files were ever accepted
+by their checker.
+
+*What still uses them.* Nothing. The Justfiles, `scripts/verify-proofs.sh` and
+`scripts/validate-with-echidna.sh` were updated in the same change.
+
+== Successor map
+
+Each row names the archived theorem and the theorem that carries the same claim
+today. Matching is *by name* (case, `_` and `-` ignored; Mizar's `Th_` prefix
+dropped), so a match says where to look, not that the two statements were
+compared. Statement comparison is the §2.2 reconciliation work and is open. The
+Agda column is the source of truth; `lean:` and `rocq:` are recheck legs.
+
+[cols="1,2,3,5",options="header"]
+|===
+|Prover |File |Archived theorem |Successor
+|isabelle |`CopyMoveOperations.thy` |`copy_file_creates_destination` |agda:copyFile-creates-destination lean:copyFile_creates_destination rocq:copy_file_creates_destination
+|isabelle |`CopyMoveOperations.thy` |`copy_file_preserves_source` |agda:copyFile-preserves-source lean:copyFile_preserves_source rocq:copy_file_preserves_source
+|isabelle |`CopyMoveOperations.thy` |`copy_file_same_content` |agda:copyFile-same-content lean:copyFile_same_content rocq:copy_file_same_content
+|isabelle |`CopyMoveOperations.thy` |`copy_file_reversible` |agda:copyFile-reversible lean:copyFile_reversible rocq:copy_file_reversible
+|isabelle |`CopyMoveOperations.thy` |`move_creates_destination` |lean:move_creates_destination rocq:move_creates_destination
+|isabelle |`CopyMoveOperations.thy` |`move_removes_source` |lean:move_removes_source rocq:move_removes_source
+|isabelle |`CopyMoveOperations.thy` |`move_preserves_content` |lean:move_preserves_content rocq:move_preserves_content
+|isabelle |`CopyMoveOperations.thy` |`move_reversible` |lean:move_reversible rocq:move_reversible
+|isabelle |`CopyMoveOperations.thy` |`copy_preserves_other_paths` |lean:copy_preserves_other_paths rocq:copy_preserves_other_paths
+|isabelle |`CopyMoveOperations.thy` |`move_preserves_other_paths` |lean:move_preserves_other_paths rocq:move_preserves_other_paths
+|isabelle |`CopyMoveOperations.thy` |`copy_then_move` |lean:copy_then_move rocq:copy_then_move
+|isabelle |`FileContentOperations.thy` |`read_file_preserves_fs` |agda:readFilePreservesFs lean:readFilePreservesFs rocq:read_file_preserves_fs
+|isabelle |`FileContentOperations.thy` |`write_file_reversible` |agda:writeFileReversible lean:writeFileReversible rocq:write_file_reversible
+|isabelle |`FileContentOperations.thy` |`write_file_independence` |agda:writeFileIndependence lean:writeFileIndependence rocq:write_file_independence
+|isabelle |`FileContentOperations.thy` |`write_file_last_write_wins` |agda:writeFileLastWriteWins lean:writeFileLastWriteWins rocq:write_file_last_write_wins
+|isabelle |`FileContentOperations.thy` |`write_file_commute` |agda:writeFileCommute lean:writeFileCommute rocq:write_file_commute
+|isabelle |`FileContentOperations.thy` |`create_file_empty_content` |lean:createFileEmptyContent rocq:create_file_empty_content
+|isabelle |`FileContentOperations.thy` |`capture_restore_identity` |agda:captureRestoreIdentity lean:captureRestoreIdentity rocq:capture_restore_identity
+|isabelle |`FileContentOperations.thy` |`modification_reversible` |agda:modificationReversible lean:modificationReversible rocq:modification_reversible
+|isabelle |`FileOperations.thy` |`create_file_creates_file` |agda:createFile-creates-file lean:createFile_creates_file rocq:create_file_creates_file
+|isabelle |`FileOperations.thy` |`create_file_path_exists` |agda:createFile-path-exists lean:createFile_path_exists rocq:create_file_path_exists
+|isabelle |`FileOperations.thy` |`delete_file_removes_path` |agda:deleteFile-removes-path lean:deleteFile_removes_path rocq:delete_file_removes_path
+|isabelle |`FileOperations.thy` |`create_file_delete_file_reversible` |agda:createFile-deleteFile-reversible lean:createFile_deleteFile_reversible
+|isabelle |`FileOperations.thy` |`create_file_preserves_other_paths` |agda:createFile-preserves-other-paths lean:createFile_preserves_other_paths rocq:create_file_preserves_other_paths
+|isabelle |`FileOperations.thy` |`create_file_preserves_directories` |lean:createFile_preserves_directories rocq:create_file_preserves_directories
+|isabelle |`FileOperations.thy` |`mkdir_preserves_files` |lean:mkdir_preserves_files rocq:mkdir_preserves_files
+|isabelle |`FileOperations.thy` |`rmdir_mkdir_reversible` |agda:rmdir-mkdir-reversible lean:rmdir_mkdir_reversible
+|isabelle |`FileOperations.thy` |`delete_file_create_file_reversible` |agda:deleteFile-createFile-reversible lean:deleteFile_createFile_reversible
+|isabelle |`FileOperations.thy` |`file_isolation` |agda:file-isolation lean:file_isolation rocq:file_isolation
+|isabelle |`FilesystemComposition.thy` |`apply_sequence_append` |agda:applySequence-append lean:applySequence_append
+|isabelle |`FilesystemComposition.thy` |`single_mkdir_reversible` |lean:singleMkdirReversible rocq:single_mkdir_reversible
+|isabelle |`FilesystemComposition.thy` |`single_create_file_reversible` |lean:singleCreateFileReversible rocq:single_create_file_reversible
+|isabelle |`FilesystemComposition.thy` |`operation_sequence_reversible` |agda:operationSequenceReversible lean:operationSequenceReversible rocq:operation_sequence_reversible
+|isabelle |`FilesystemEquivalence.thy` |`fs_equiv_refl` |agda:fsEquivRefl lean:fsEquivRefl rocq:fs_equiv_refl
+|isabelle |`FilesystemEquivalence.thy` |`fs_equiv_sym` |agda:fsEquivSym lean:fsEquivSym rocq:fs_equiv_sym
+|isabelle |`FilesystemEquivalence.thy` |`fs_equiv_trans` |agda:fsEquivTrans lean:fsEquivTrans rocq:fs_equiv_trans
+|isabelle |`FilesystemEquivalence.thy` |`fs_equiv_is_equivalence` |agda:fsEquivIsEquivalence lean:fsEquivIsEquivalence rocq:fs_equiv_is_equivalence
+|isabelle |`FilesystemEquivalence.thy` |`mkdir_preserves_equiv` |agda:mkdirPreservesEquiv lean:mkdirPreservesEquiv rocq:mkdir_preserves_equiv
+|isabelle |`FilesystemEquivalence.thy` |`rmdir_preserves_equiv` |agda:rmdirPreservesEquiv lean:rmdirPreservesEquiv rocq:rmdir_preserves_equiv
+|isabelle |`FilesystemEquivalence.thy` |`create_file_preserves_equiv` |agda:createFilePreservesEquiv lean:createFilePreservesEquiv rocq:create_file_preserves_equiv
+|isabelle |`FilesystemEquivalence.thy` |`delete_file_preserves_equiv` |agda:deleteFilePreservesEquiv lean:deleteFilePreservesEquiv rocq:delete_file_preserves_equiv
+|isabelle |`FilesystemEquivalence.thy` |`apply_op_preserves_equiv` |agda:applyOpPreservesEquiv lean:applyOpPreservesEquiv rocq:apply_op_preserves_equiv
+|isabelle |`FilesystemEquivalence.thy` |`equiv_substitution` |agda:equivSubstitution lean:equivSubstitution rocq:equiv_substitution
+|isabelle |`FilesystemEquivalence.thy` |`reversible_creates_equiv` |agda:reversibleCreatesEquiv lean:reversibleCreatesEquiv rocq:reversible_creates_equiv
+|isabelle |`FilesystemEquivalence.thy` |`sequence_reversible_equiv` |agda:sequenceReversibleEquiv lean:sequenceReversibleEquiv rocq:sequence_reversible_equiv
+|isabelle |`FilesystemEquivalence.thy` |`cno_identity_element` |agda:cnoIdentityElement lean:cnoIdentityElement rocq:cno_identity_element
+|isabelle |`FilesystemEquivalence.thy` |`sequence_cno_identity` |agda:sequenceCnoIdentity lean:sequenceCnoIdentity rocq:sequence_cno_identity
+|isabelle |`FilesystemEquivalence.thy` |`equiv_cong_apply_op` |agda:equivCongApplyOp lean:equivCongApplyOp rocq:equiv_cong_apply_op
+|isabelle |`FilesystemEquivalence.thy` |`ops_equiv_refl` |agda:opsEquivRefl lean:opsEquivRefl rocq:ops_equiv_refl
+|isabelle |`FilesystemEquivalence.thy` |`ops_equiv_sym` |agda:opsEquivSym lean:opsEquivSym rocq:ops_equiv_sym
+|isabelle |`FilesystemModel.thy` |`path_exists_empty_fs_root` |agda:pathExists-emptyFS-root lean:pathExists_emptyFS_root rocq:path_exists_empty_fs_root
+|isabelle |`FilesystemModel.thy` |`not_path_exists_empty_fs` |lean:not_pathExists_emptyFS rocq:not_path_exists_empty_fs
+|isabelle |`FilesystemModel.thy` |`mkdir_creates_directory` |agda:mkdir-creates-directory lean:mkdir_creates_directory rocq:mkdir_creates_directory
+|isabelle |`FilesystemModel.thy` |`mkdir_path_exists` |agda:mkdir-path-exists lean:mkdir_path_exists rocq:mkdir_path_exists
+|isabelle |`FilesystemModel.thy` |`rmdir_removes_path` |agda:rmdir-removes-path lean:rmdir_removes_path rocq:rmdir_removes_path
+|isabelle |`FilesystemModel.thy` |`mkdir_rmdir_reversible` |agda:mkdir-rmdir-reversible lean:mkdir_rmdir_reversible rocq:mkdir_rmdir_reversible
+|isabelle |`FilesystemModel.thy` |`mkdir_preserves_other_paths` |agda:mkdir-preserves-other-paths lean:mkdir_preserves_other_paths rocq:mkdir_preserves_other_paths
+|isabelle |`FilesystemModel.thy` |`rmdir_preserves_other_paths` |agda:rmdir-preserves-other-paths lean:rmdir_preserves_other_paths rocq:rmdir_preserves_other_paths
+|isabelle |`FilesystemModel.thy` |`mkdir_parent_still_exists` |lean:mkdir_parent_still_exists rocq:mkdir_parent_still_exists
+|isabelle |`PermissionOperations.thy` |`chmod_reversible` |agda:chmod-reversible lean:chmod_reversible rocq:chmod_reversible
+|isabelle |`PermissionOperations.thy` |`chmod_same_mode` |agda:chmod-same-mode lean:chmod_same_mode rocq:chmod_same_mode
+|isabelle |`PermissionOperations.thy` |`chmod_commute` |lean:chmod_commute rocq:chmod_commute
+|isabelle |`PermissionOperations.thy` |`chmod_preserves_other` |agda:chmod-preserves-other lean:chmod_preserves_other rocq:chmod_preserves_other
+|isabelle |`PermissionOperations.thy` |`chown_reversible` |agda:chown-reversible lean:chown_reversible rocq:chown_reversible
+|isabelle |`PermissionOperations.thy` |`chown_same_owner` |agda:chown-same-owner lean:chown_same_owner rocq:chown_same_owner
+|isabelle |`PermissionOperations.thy` |`chmod_chown_commute` |lean:chmod_chown_commute rocq:chmod_chown_commute
+|isabelle |`PermissionOperations.thy` |`chown_preserves_other` |agda:chown-preserves-other lean:chown_preserves_other rocq:chown_preserves_other
+|isabelle |`RMO_Operations.thy` |`obliterate_removes_path` |agda:obliterate-removes-path lean:obliterate_removes_path rocq:obliterate_removes_path
+|isabelle |`RMO_Operations.thy` |`obliterate_removes_mapping` |agda:obliterate-removes-mapping lean:obliterate_removes_mapping rocq:obliterate_removes_mapping
+|isabelle |`RMO_Operations.thy` |`obliterate_not_injective` |lean:obliterate_not_injective rocq:obliterate_not_injective
+|isabelle |`RMO_Operations.thy` |`obliterate_preserves_other_paths` |agda:obliterate-preserves-other-paths lean:obliterate_preserves_other_paths rocq:obliterate_preserves_other_paths
+|isabelle |`RMO_Operations.thy` |`obliterate_preserves_other_mappings` |rocq:obliterate_preserves_other_mappings
+|isabelle |`RMO_Operations.thy` |`obliterate_leaves_no_trace` |lean:obliterate_leaves_no_trace rocq:obliterate_leaves_no_trace
+|isabelle |`SymlinkOperations.thy` |`symlink_creates_path` |agda:symlink-creates-path lean:symlink_creates_path rocq:symlink_creates_path
+|isabelle |`SymlinkOperations.thy` |`unlink_removes_path` |agda:unlink-removes-path lean:unlink_removes_path rocq:unlink_removes_path
+|isabelle |`SymlinkOperations.thy` |`symlink_unlink_reversible` |agda:symlink-unlink-reversible lean:symlink_unlink_reversible rocq:symlink_unlink_reversible
+|mizar |`copy_move_operations.miz` |`Th_copy_creates_destination` |agda:copyFile-creates-destination (name differs: copy/copyFile)
+|mizar |`copy_move_operations.miz` |`Th_copy_preserves_source` |agda:copyFile-preserves-source (name differs)
+|mizar |`copy_move_operations.miz` |`Th_copy_same_content` |agda:copyFile-same-content (name differs)
+|mizar |`copy_move_operations.miz` |`Th_copy_reversible` |agda:copyFile-reversible (name differs)
+|mizar |`copy_move_operations.miz` |`Th_move_creates_destination` |lean:move_creates_destination rocq:move_creates_destination
+|mizar |`copy_move_operations.miz` |`Th_move_removes_source` |lean:move_removes_source rocq:move_removes_source
+|mizar |`copy_move_operations.miz` |`Th_move_preserves_content` |lean:move_preserves_content rocq:move_preserves_content
+|mizar |`copy_move_operations.miz` |`Th_move_reversible` |lean:move_reversible rocq:move_reversible
+|mizar |`copy_move_operations.miz` |`Th_copy_preserves_other_paths` |lean:copy_preserves_other_paths rocq:copy_preserves_other_paths
+|mizar |`copy_move_operations.miz` |`Th_move_preserves_other_paths` |lean:move_preserves_other_paths rocq:move_preserves_other_paths
+|mizar |`copy_move_operations.miz` |`Th_copy_then_move` |lean:copy_then_move rocq:copy_then_move
+|mizar |`file_content_operations.miz` |`Th_read_file_preserves_fs` |agda:readFilePreservesFs lean:readFilePreservesFs rocq:read_file_preserves_fs
+|mizar |`file_content_operations.miz` |`Th_write_file_reversible` |agda:writeFileReversible lean:writeFileReversible rocq:write_file_reversible
+|mizar |`file_content_operations.miz` |`Th_write_file_independence` |agda:writeFileIndependence lean:writeFileIndependence rocq:write_file_independence
+|mizar |`file_content_operations.miz` |`Th_write_file_last_write_wins` |agda:writeFileLastWriteWins lean:writeFileLastWriteWins rocq:write_file_last_write_wins
+|mizar |`file_content_operations.miz` |`Th_write_file_commute` |agda:writeFileCommute lean:writeFileCommute rocq:write_file_commute
+|mizar |`file_content_operations.miz` |`Th_capture_restore_identity` |agda:captureRestoreIdentity lean:captureRestoreIdentity rocq:capture_restore_identity
+|mizar |`file_content_operations.miz` |`Th_modification_reversible` |agda:modificationReversible lean:modificationReversible rocq:modification_reversible
+|mizar |`file_operations.miz` |`CreateFileCreatesFile` |agda:createFile-creates-file lean:createFile_creates_file rocq:create_file_creates_file
+|mizar |`file_operations.miz` |`CreateFilePathExists` |agda:createFile-path-exists lean:createFile_path_exists rocq:create_file_path_exists
+|mizar |`file_operations.miz` |`DeleteFileRemovesPath` |agda:deleteFile-removes-path lean:deleteFile_removes_path rocq:delete_file_removes_path
+|mizar |`file_operations.miz` |`CreateFileDeleteFileReversible` |agda:createFile-deleteFile-reversible lean:createFile_deleteFile_reversible
+|mizar |`file_operations.miz` |`FileIsolation` |agda:file-isolation lean:file_isolation rocq:file_isolation
+|mizar |`filesystem_composition.miz` |`SingleOpReversible` |agda:singleOpReversible lean:singleOpReversible rocq:single_op_reversible
+|mizar |`filesystem_composition.miz` |`OperationSequenceReversible` |agda:operationSequenceReversible lean:operationSequenceReversible rocq:operation_sequence_reversible
+|mizar |`filesystem_composition.miz` |`ReversibleCreatesCNO` |lean:reversibleCreatesCNO rocq:reversible_creates_CNO
+|mizar |`filesystem_equivalence.miz` |`FsEquivRefl` |agda:fsEquivRefl lean:fsEquivRefl rocq:fs_equiv_refl
+|mizar |`filesystem_equivalence.miz` |`FsEquivSym` |agda:fsEquivSym lean:fsEquivSym rocq:fs_equiv_sym
+|mizar |`filesystem_equivalence.miz` |`FsEquivTrans` |agda:fsEquivTrans lean:fsEquivTrans rocq:fs_equiv_trans
+|mizar |`filesystem_equivalence.miz` |`FsEquivIsEquivalence` |agda:fsEquivIsEquivalence lean:fsEquivIsEquivalence rocq:fs_equiv_is_equivalence
+|mizar |`filesystem_equivalence.miz` |`MkdirPreservesEquiv` |agda:mkdirPreservesEquiv lean:mkdirPreservesEquiv rocq:mkdir_preserves_equiv
+|mizar |`filesystem_equivalence.miz` |`RmdirPreservesEquiv` |agda:rmdirPreservesEquiv lean:rmdirPreservesEquiv rocq:rmdir_preserves_equiv
+|mizar |`filesystem_equivalence.miz` |`CreateFilePreservesEquiv` |agda:createFilePreservesEquiv lean:createFilePreservesEquiv rocq:create_file_preserves_equiv
+|mizar |`filesystem_equivalence.miz` |`DeleteFilePreservesEquiv` |agda:deleteFilePreservesEquiv lean:deleteFilePreservesEquiv rocq:delete_file_preserves_equiv
+|mizar |`filesystem_equivalence.miz` |`ApplyOpPreservesEquiv` |agda:applyOpPreservesEquiv lean:applyOpPreservesEquiv rocq:apply_op_preserves_equiv
+|mizar |`filesystem_equivalence.miz` |`EquivSubstitution` |agda:equivSubstitution lean:equivSubstitution rocq:equiv_substitution
+|mizar |`filesystem_equivalence.miz` |`ReversibleCreatesEquiv` |agda:reversibleCreatesEquiv lean:reversibleCreatesEquiv rocq:reversible_creates_equiv
+|mizar |`filesystem_equivalence.miz` |`CnoIdentityElement` |agda:cnoIdentityElement lean:cnoIdentityElement rocq:cno_identity_element
+|mizar |`filesystem_equivalence.miz` |`EquivCongApplyOp` |agda:equivCongApplyOp lean:equivCongApplyOp rocq:equiv_cong_apply_op
+|mizar |`filesystem_equivalence.miz` |`OpsEquivRefl` |agda:opsEquivRefl lean:opsEquivRefl rocq:ops_equiv_refl
+|mizar |`filesystem_equivalence.miz` |`OpsEquivSym` |agda:opsEquivSym lean:opsEquivSym rocq:ops_equiv_sym
+|mizar |`filesystem_model.miz` |`LemmaMembershipUnion` |none needed: Mizar set-theory encoding helper
+|mizar |`filesystem_model.miz` |`LemmaMembershipSingleton` |none needed: Mizar set-theory encoding helper
+|mizar |`filesystem_model.miz` |`LemmaNonMembershipSingleton` |none needed: Mizar set-theory encoding helper
+|mizar |`filesystem_model.miz` |`LemmaSubsetSelf` |none needed: Mizar set-theory encoding helper
+|mizar |`filesystem_model.miz` |`LemmaSubsetUnion` |none needed: Mizar set-theory encoding helper
+|mizar |`filesystem_model.miz` |`LemmaSubsetDifference` |none needed: Mizar set-theory encoding helper
+|mizar |`filesystem_model.miz` |`MAAReversibility` |related, not equivalent: agda:operationSequenceReversible
+|mizar |`permission_operations.miz` |`Th_chmod_reversible` |agda:chmod-reversible lean:chmod_reversible rocq:chmod_reversible
+|mizar |`permission_operations.miz` |`Th_chmod_same_mode` |agda:chmod-same-mode lean:chmod_same_mode rocq:chmod_same_mode
+|mizar |`permission_operations.miz` |`Th_chmod_preserves_other` |agda:chmod-preserves-other lean:chmod_preserves_other rocq:chmod_preserves_other
+|mizar |`permission_operations.miz` |`Th_chown_reversible` |agda:chown-reversible lean:chown_reversible rocq:chown_reversible
+|mizar |`permission_operations.miz` |`Th_chown_same_owner` |agda:chown-same-owner lean:chown_same_owner rocq:chown_same_owner
+|mizar |`permission_operations.miz` |`Th_chown_preserves_other` |agda:chown-preserves-other lean:chown_preserves_other rocq:chown_preserves_other
+|mizar |`permission_operations.miz` |`Th_chmod_chown_commute` |lean:chmod_chown_commute rocq:chmod_chown_commute
+|mizar |`rmo_operations.miz` |`Th_obliterate_removes_path` |agda:obliterate-removes-path lean:obliterate_removes_path rocq:obliterate_removes_path
+|mizar |`rmo_operations.miz` |`Th_obliterate_removes_mapping` |agda:obliterate-removes-mapping lean:obliterate_removes_mapping rocq:obliterate_removes_mapping
+|mizar |`rmo_operations.miz` |`Th_obliterate_not_reversible` |related, not equivalent: rocq:obliterate_not_injective; idris2 ObliterationProof
+|mizar |`rmo_operations.miz` |`Th_obliterate_preserves_other_paths` |agda:obliterate-preserves-other-paths lean:obliterate_preserves_other_paths rocq:obliterate_preserves_other_paths
+|mizar |`rmo_operations.miz` |`Th_obliterate_leaves_no_trace` |lean:obliterate_leaves_no_trace rocq:obliterate_leaves_no_trace
+|mizar |`symlink_operations.miz` |`Th_symlink_creates_path` |agda:symlink-creates-path lean:symlink_creates_path rocq:symlink_creates_path
+|mizar |`symlink_operations.miz` |`Th_unlink_removes_path` |agda:unlink-removes-path lean:unlink_removes_path rocq:unlink_removes_path
+|mizar |`symlink_operations.miz` |`Th_symlink_unlink_reversible` |agda:symlink-unlink-reversible lean:symlink_unlink_reversible rocq:symlink_unlink_reversible
+|===
+
+Counts: 139 theorems; 103 name an Agda successor; 29 name only a Lean or Rocq successor; 2 are only related; 6 are Mizar encoding helpers with no counterpart needed.

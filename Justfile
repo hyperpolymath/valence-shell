@@ -11,7 +11,7 @@ default:
     @just --list
 
 # Build all proofs across all systems
-build-all: build-coq build-lean4 build-agda build-isabelle build-mizar build-idris2
+build-all: build-coq build-lean4 build-agda build-idris2
     @echo "✓ All proofs built"
 
 # Verify all proofs
@@ -59,21 +59,11 @@ test-correspondence-model: build-model-oracle
 # Build Agda proofs
 build-agda:
     @echo "Building Agda proofs..."
-    cd proofs/agda && agda FilesystemModel.agda
-    cd proofs/agda && agda FileOperations.agda
-    @echo "✓ Agda proofs type-checked"
+    cd proofs/agda && agda --safe --without-K --cubical-compatible All.agda
+    @echo "✓ Agda proofs checked (estate invocation, all modules)"
 
-# Build Isabelle proofs
-build-isabelle:
-    @echo "Building Isabelle proofs..."
-    cd proofs/isabelle && isabelle build -D .
-    @echo "✓ Isabelle proofs verified"
-
-# Build Mizar proofs (requires Mizar setup)
-build-mizar:
-    @echo "Building Mizar proofs..."
-    cd proofs/mizar && mizf filesystem_model.miz || echo "⚠ Mizar not configured"
-    cd proofs/mizar && mizf file_operations.miz || echo "⚠ Mizar not configured"
+# Isabelle and Mizar were archived to archive/proofs/ on 2026-11-09 (owner
+# ruling; see archive/proofs/README.adoc). They have no build recipe.
 
 # Requires Idris2 0.8.0. Install via:
 #   nix-shell -p idris2     # recommended for reproducibility
@@ -271,8 +261,8 @@ ci: clean build-all verify-all test-all
 stats:
     @echo "=== Valence Shell Statistics ==="
     @echo ""
-    @echo "Proof Code (Coq/Lean/Agda/Isabelle/Mizar):"
-    @find proofs -name "*.v" -o -name "*.lean" -o -name "*.agda" -o -name "*.thy" -o -name "*.miz" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 || echo "  0 total"
+    @echo "Proof Code (Agda/Rocq/Lean; Isabelle and Mizar archived):"
+    @find proofs -name "*.v" -o -name "*.lean" -o -name "*.agda" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 || echo "  0 total"
     @echo ""
     @echo "Zig FFI Code:"
     @find impl/zig -name "*.zig" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 || echo "  0 total"
@@ -304,7 +294,7 @@ watch:
 echidna-verify:
     @if command -v echidna &> /dev/null; then \
         echo "Running ECHIDNA multi-prover verification..."; \
-        echidna verify --all --targets coq,lean4,agda,isabelle,mizar; \
+        echidna verify --all --targets coq,lean4,agda; \
     else \
         echo "⚠ ECHIDNA not installed. Using built-in verification."; \
         just verify-all; \
@@ -327,7 +317,7 @@ certify:
       "version": "${VERSION}",
       "generated": "${TIMESTAMP}",
       "prover": "valence-shell",
-      "proof_systems": ["coq", "lean4", "agda", "isabelle", "mizar", "z3"],
+      "proof_systems": ["coq", "lean4", "agda", "z3"],
       "verified_properties": [
         {
           "theorem": "mkdir_rmdir_reversible",
@@ -375,8 +365,6 @@ certify:
     - Coq (primary)
     - Lean 4 (cross-verification)
     - Agda (dependent types)
-    - Isabelle/HOL (classical logic)
-    - Mizar (mathematical proofs)
     - Z3 (SMT verification)
 
     ### Key Theorems Verified
@@ -423,8 +411,6 @@ help:
     @echo "  just build-coq        - Build Coq proofs"
     @echo "  just build-lean4      - Build Lean 4 proofs"
     @echo "  just build-agda       - Build Agda proofs"
-    @echo "  just build-isabelle   - Build Isabelle proofs"
-    @echo "  just build-mizar      - Build Mizar proofs"
     @echo "  just build-idris2     - Build Idris2 proofs"
     @echo "  just verify-idris2    - Build + hole-count Idris2 proofs"
     @echo ""

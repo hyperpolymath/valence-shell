@@ -63,7 +63,8 @@ the same change as that file. Which verifier carries which obligation:
   ruling 2026-11-09 adopts this order here: the Agda tree is the source and checks
   under the canonical invocation; the existing Lean and Rocq proofs are target-only
   evidence until compared (`docs/audits/2026-11-09-proof-ground-truth.adoc`).
-* Isabelle/Mizar/Z3 are §4 exceptions and need a recorded exception note.
+* Z3 is a §4 exception; its notes are recorded in each `.smt2` header. Isabelle and
+  Mizar were archived unchecked to `archive/proofs/` (owner ruling 2026-11-09).
 
 Status vocabulary is closed (`PROOF-POLICY` §5): `proven`,
 `proven-with-postulates`, `argued`, `tested-only`, `open`. Every obligation's status
@@ -188,9 +189,8 @@ deep-audit session). The corresponding Phase 4C design docs under
 - Agda — theory source of truth (owner ruling 2026-11-09)
 - Lean 4 — recheck leg; also the executable model oracle
 - Coq — CIC foundation, extraction to OCaml
-- Isabelle/HOL — cross-validation
-- Mizar — set theory foundation
-- Z3 SMT — automated verification
+- Z3 SMT — automated checks (ASSUMED under PROOF-POLICY §5)
+- Isabelle/HOL and Mizar — archived unchecked 2026-11-09 (`archive/proofs/`)
 
 **Runtime**:
 - Rust — primary shell implementation (`impl/rust-cli/`)
@@ -216,9 +216,7 @@ valence-shell/
     lean4/              # Lean recheck leg + executable model oracle (101 theorems)
     coq/                # CIC proofs + extraction (131 theorems, 0 admits — re-verified 2026-07-16, Coq 8.18.0)
     agda/               # Theory source of truth (owner ruling 2026-11-09); 10 modules, 0 postulates, --safe --without-K --cubical-compatible
-    isabelle/           # HOL proofs (76 theorems)
-    mizar/              # Set theory proofs (63 theorems)
-    z3/                 # SMT proofs (125 asserts)
+    z3/                 # SMT checks (ASSUMED; 2 files definitional, 3 axiomatic)
     idris2/             # ABI carrier (0 holes, 0 partials, 2 primitive-eq axioms)
   docs/                 # Design docs, roadmaps, PROOF_HOLES_AUDIT.adoc
     audits/             # Deep-audit log (per estate standards)

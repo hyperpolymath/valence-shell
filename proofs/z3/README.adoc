@@ -4,7 +4,7 @@
 
 Z3 (SMT-LIB v2 scripts) provides automated verification for the
 filesystem operation invariants. Unlike the interactive proof systems
-(Lean 4 / Coq / Agda / Isabelle) and the structural foundation (Mizar),
+(Agda, the theory source, and the Lean 4 / Rocq recheck legs),
 Z3 discharges decidable fragments via SAT-modulo-theories solving.
 
 == Files
