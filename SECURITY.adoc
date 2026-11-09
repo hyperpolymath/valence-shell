@@ -115,8 +115,8 @@ of undo capability
 ✅ *MAA Framework Foundation* - Audit trail for modifications -
 Reversible operations with proof - FileModificationRecord tracking
 
-✅ *Type Safety* - Coq/Lean 4/Agda: Dependent types - Isabelle/HOL:
-Higher-order logic - OCaml: Strong static typing - Elixir: Pattern
+✅ *Type Safety* - Coq/Lean 4/Agda: Dependent types (Isabelle/HOL proofs
+archived unchecked 2026-11-09) - OCaml: Strong static typing - Elixir: Pattern
 matching, guards
 
 ==== Implemented, best-effort (not a compliance claim)
@@ -185,8 +185,9 @@ NIST/IETF standards - Disclose any custom primitives
 
 ==== Current Dependencies (Minimal)
 
-*Proof Systems* (development only): - Coq 8.18+ - Lean 4.3+ - Agda
-2.6.4+ - Isabelle/HOL 2024 - Mizar (optional) - Z3 4.12+
+*Proof Systems* (development only): - Agda 2.7.0.1 with agda-stdlib v2.2 -
+Lean 4 (pinned in `proofs/lean4/lean-toolchain`) - Coq 8.18+ - Z3 4.12+.
+Isabelle/HOL and Mizar are no longer needed (archived unchecked 2026-11-09)
 
 *Runtime* (OCaml implementation): - OCaml 5.0+ (compiler + stdlib only)
 - Zero external runtime dependencies ✅
