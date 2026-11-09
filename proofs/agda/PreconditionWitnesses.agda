@@ -85,3 +85,8 @@ mkdir-reversibleDP-inhabited = record
   ; reversePrecondition = rmdir-pre-inhabited
   ; permsWitness        = mkdirPerms refl
   }
+
+-- A one-step sequence satisfies `AllReversibleDP`, so
+-- `operationSequenceReversible` has a non-empty instance.
+mkdir-sequence-reversibleDP : AllReversibleDP (mkdirOp a ∷ []) emptyFS
+mkdir-sequence-reversibleDP = consReversibleDP mkdir-reversibleDP-inhabited nilReversibleDP

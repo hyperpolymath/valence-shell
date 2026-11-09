@@ -50,7 +50,7 @@ verify_file() {
 # These sequences are part of the checked proof contract. Consistency queries
 # intentionally return sat; theorem queries assert the negation and must be
 # unsat. Any unknown, missing result, extra result, or parse error fails.
-verify_file proofs/z3/filesystem_operations.smt2 "sat,sat,unsat,unsat,unsat,unsat,unsat,unsat,unsat,unsat,unsat"
+verify_file proofs/z3/filesystem_operations.smt2 "sat,sat,unsat,unsat,unsat,unsat,unsat,unsat,unsat,unsat,unsat,unsat"
 verify_file proofs/z3/copy_move_operations.smt2 "unsat,unsat,unsat,unsat,unsat,unsat,unsat,unsat,unsat,unsat,unsat"
 verify_file proofs/z3/permission_operations.smt2 "unsat,unsat,unsat,unsat,unsat"
 verify_file proofs/z3/rmo_operations.smt2 "unsat,unsat,unsat,unsat"

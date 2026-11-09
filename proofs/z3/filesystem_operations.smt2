@@ -28,7 +28,7 @@
 ; makes trivially true by omitting them.
 ;
 ; Expected result sequence (scripts/verify-z3.sh):
-;   sat, sat, unsat x 9
+;   sat, sat, unsat x 10
 ; The two `sat` results are non-vacuity checks: the mkdir and rmdir
 ; preconditions are satisfiable, so the theorems below are not vacuous.
 
@@ -77,6 +77,15 @@
 (pop)
 
 (push)
+(assert (rmdir-pre p fs))
+(check-sat)
+(pop)
+
+; Negative control: a directory with an existing strict descendant does not
+; satisfy rmdir-pre (expected: unsat).
+(push)
+(assert (child-of p1 p))
+(assert (exists-at p1 fs))
 (assert (rmdir-pre p fs))
 (check-sat)
 (pop)
