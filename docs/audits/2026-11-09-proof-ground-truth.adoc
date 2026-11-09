@@ -173,6 +173,18 @@ direction. After the fix:
   oracle seam.
 * *Agda `IsEmptyDir` is a stub* (see the table). Removing `funext` (route plan
   P5) should also complete this record.
+* *Three Idris2 holes sit outside the proof ledger.* The mathesis hole scanner
+  (`scripts/census/proof-holes.sh`) finds `?fieldsAlignedProof`,
+  `?exampleFieldsAligned` and `?offsetInBoundsProof` in
+  `alkahest-shell-transmuter/src/abi/Layout.idr` (lines 140, 161, 178).
+  `PROOF-NEEDS.adoc` and `CLAUDE.md` count only `proofs/idris2/`, so they report
+  zero Idris2 holes. `offsetInBounds` is also unprovable as stated: it quantifies
+  over every `Field`, not only the fields of the layout.
+* *The census and the ledger classify `believe_me` differently.* mathesis counts
+  the 2 registered primitive-equality axioms as `hole`; this repo registers them
+  as axioms. Its row today reads axioms 1 (Agda `funext`), holes 5 (those 3 plus
+  the 2 `believe_me`), policy 9 (Agda files without `--safe`). A local scan of this
+  branch gives the same counts, so this change leaves the row as it is.
 * *Mizar proofs look unfinished.* For example
   `copy_move_operations.miz:200-201` discharges a reversibility equation with
   `by A1`, the bare precondition. This cannot be confirmed without running the
