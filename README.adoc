@@ -45,7 +45,7 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 == Formal Verification
 * [x] Formally Proven Reversibility: `rmdir(mkdir(p, fs)) = fs`
 * [x] Polyglot Verification: Agda (theory source), rechecked in Lean 4 and Rocq/Coq, plus supplementary Z3 checks; Isabelle/HOL and Mizar archived unchecked (`archive/proofs/`)
-* [x] ~478 Theorem Candidates: Proven across different logical foundations (0 real gaps; 1 justified classical dependency remains, Coq `is_empty_dir_dec`; the Agda `funext` postulate was removed 2026-11-09 — see `docs/PROOF_HOLES_AUDIT.adoc`)
+* [x] ~478 Theorem Candidates (2026-06-01 census, six systems then; Isabelle/Mizar since archived unchecked, so current checked evidence is narrower — see link:EXPLAINME.adoc#proof-ledger[the Proof Ledger]) (0 real gaps; 1 justified classical dependency remains, Coq `is_empty_dir_dec`; the Agda `funext` postulate was removed 2026-11-09 — see `docs/PROOF_HOLES_AUDIT.adoc`)
 * [x] Content Operations: File read/write with proven reversibility
 * [x] MAA Framework: Mutually Assured Accountability with audit trails
 
