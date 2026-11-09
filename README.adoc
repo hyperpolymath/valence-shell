@@ -209,7 +209,12 @@ just --list
 
 == What's Proven?
 
-=== Core Theorems (All 5 Manual Proof Systems)
+Statements are shown in Coq syntax. The theory source is the Agda tree
+(`proofs/agda/`); Lean 4 and Rocq/Coq are recheck legs. Which system proves which
+statement, and with what status, is in link:EXPLAINME.adoc#proof-ledger[the Proof
+Ledger]; Isabelle/HOL and Mizar are archived unchecked and not counted.
+
+=== Core Theorems
 
 [source,coq]
 ----
@@ -230,7 +235,7 @@ Theorem write_file_reversible :
     write_file p old_content (write_file p new_content fs) = fs.
 ----
 
-=== Composition (Proven in 5 Systems)
+=== Composition
 
 [source,coq]
 ----
@@ -241,7 +246,7 @@ Theorem operation_sequence_reversible :
                    (apply_sequence ops fs) = fs.
 ----
 
-=== Equivalence (Proven in 4 Systems)
+=== Equivalence
 
 [source,coq]
 ----

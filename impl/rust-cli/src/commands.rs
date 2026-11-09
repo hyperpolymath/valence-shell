@@ -2128,7 +2128,8 @@ pub fn hardware_erase(state: &mut ShellState, device: &str, method: Option<&str>
 // ============================================================================
 
 /// Explain: proof-annotated dry run showing preconditions, state transition,
-/// inverse operation, and proof references across all 6 verification systems.
+/// inverse operation, and proof references (Agda source, Lean 4 and Coq rechecks;
+/// Isabelle archived, unchecked).
 pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Result<()> {
     use crate::executable::ExecutableCommand;
     use crate::proof_refs::ProofReference;
@@ -2406,7 +2407,7 @@ pub fn restore(state: &mut ShellState, name: &str) -> Result<()> {
 
     println!();
     println!(
-        "{} Restored to '{}' — {} operations reversed, all proven in 6 systems",
+        "{} Restored to '{}' — {} operations reversed (in-model reversibility proofs; see EXPLAINME.adoc#proof-ledger)",
         "✓".bright_green(),
         name.bright_cyan().bold(),
         ops_to_undo

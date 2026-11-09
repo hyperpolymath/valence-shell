@@ -455,7 +455,7 @@ pub enum Command {
 
     // Wow-factor features (unique to verified reversible shell)
     /// Explain: proof-annotated dry run showing preconditions, state transition,
-    /// inverse operation, and proof references across all 6 verification systems
+    /// inverse operation, and proof references (Agda source, Lean 4 and Coq rechecks)
     Explain {
         inner: Box<Command>,
     },

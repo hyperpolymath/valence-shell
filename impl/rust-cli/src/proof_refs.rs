@@ -285,8 +285,14 @@ pub fn print_verification_summary() {
         "═══ Formal Verification Status ═══".bright_blue().bold()
     );
     println!();
-    println!("{}: ~250+ theorems proven", "Total Proofs".bright_green());
-    println!("{}: 6", "Proof Systems".bright_green());
+    println!(
+        "{}: per obligation in EXPLAINME.adoc#proof-ledger (no total is claimed)",
+        "Proof status".bright_green()
+    );
+    println!(
+        "{}: Agda (theory source); Lean 4 and Coq (recheck legs); Z3 (supplementary)",
+        "Checked systems".bright_green()
+    );
     println!();
 
     println!("{}", "Verification Systems:".bright_yellow());
