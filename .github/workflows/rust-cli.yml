@@ -86,7 +86,15 @@ jobs:
 
       - name: Build Lean proofs
         working-directory: proofs/lean4
-        run: lake build
+        # A bare `lake build` builds only the default target (FilesystemModel),
+        # so the other libraries were never checked here. Build every library
+        # that compiles on v4.34.1, by name. FileContentOperations,
+        # RMOOperations, CopyMoveOperations and PermissionOperations do not
+        # build (see lakefile.lean); they are open work, not silently green.
+        run: |
+          lake build FilesystemModel FileOperations FilesystemComposition \
+            FilesystemEquivalence SymlinkOperations Extraction \
+            CrashConsistency PathTraversal PreconditionWitnesses
 
       - name: Check for proof completeness
         working-directory: proofs/lean4

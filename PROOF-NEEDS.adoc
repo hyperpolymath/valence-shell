@@ -12,7 +12,60 @@ cross-system witness matrix) and *docs/PROOF-OPEN-FRONTIER.adoc* (every
 valuable but unproven theorem, with tractability classification).
 ____
 
-=== Reproduction state (2026-11-01)
+=== Reproduction state (2026-11-09)
+
+Every leg was re-run on `main` at `2d798b8`. Full record, with tool versions,
+digests and the policy reading: `docs/audits/2026-11-09-proof-ground-truth.adoc`.
+Status words are PROOF-POLICY §5; grades are §8.
+
+[cols="2,2,6",options="header"]
+|===
+| Leg | Status | Evidence
+
+| Agda (theory source)
+| `OPEN` under §2.1
+| 9/9 modules check with plain `agda` (2.7.0.1, stdlib 2.2); 9/9 fail under
+`--safe --without-K --cubical-compatible` (`funext` postulate). No theory
+theorem reaches `PWG-3`; all are `ungraded`. `IsEmptyDir` lacks its emptiness field
+
+| Lean (recheck leg)
+| target-only, `AGDA-PENDING`
+| Lean 4.34.1: 8 libraries + `model_oracle` + the new `PreconditionWitnesses`
+build; `FileContentOperations`, `RMOOperations`, `CopyMoveOperations`,
+`PermissionOperations` do not. `RmdirPrecondition` was uninhabited (ancestor/descendant
+prefix reversed in `isEmptyDir`), making every theorem that assumed it vacuous;
+fixed 2026-11-09 and guarded by `PreconditionWitnesses`
+
+| Rocq/Coq (recheck leg)
+| target-only, `AGDA-PENDING`
+| Coq 8.18.0: 11/11 files build; 133 theorems, 98 closed under the global
+context, 35 on standard-library axioms only (funext 30, `classic` 6,
+`constructive_indefinite_description` 6). No custom `Axiom`
+
+| Z3 (§4 exception, unrecorded)
+| `ASSUMED`
+| Z3 4.8.12: all 5 files axiomatic; `filesystem_operations` is circular,
+`symlink_operations` proves nothing
+
+| Idris2 (engineering/ABI)
+| `PROVEN-WITH-AXIOMS`
+| Idris2 0.8.0: 5/5 modules under `--total`; 2 registered primitive-eq axioms
+
+| Isabelle, Mizar
+| unchecked
+| not run this round (Isabelle server unavailable; Mizar installer not
+permitted in the audit session)
+
+| Rust
+| `TESTED`; Creusot/Pearlite and Verus `OPEN`
+| `cargo test`: 827 passed, 0 failed, 15 ignored. No Creusot, Pearlite or
+Verus contracts exist
+|===
+
+The toolchains above were installed outside Guix for this audit; each is an
+open §6 `deviation`, listed in the audit record.
+
+=== Reproduction state (2026-11-01, superseded by 2026-11-09)
 
 This file records what is *needed*; this block records what has actually been
 *run*. The full receipt is
@@ -68,7 +121,7 @@ Z3) + 1 ABI-stub tier (Idris2)
 |`+proofs/agda/FilesystemModel.agda:161-162+` |Standard intensional-TT
 axiom; provable under `+--cubical+`
 
-|Coq |`+Axiom is_empty_dir_dec+` (justified)
+|Coq |`+is_empty_dir_dec+` (a `Theorem` proved by `Classical.classic`; corrected 2026-11-09, it is not an `Axiom`)
 |`+proofs/coq/posix_errors.v+` |Infinite-domain universal quantification
 
 |Coq |(closed) `+mkdir_two_dirs_reversible+`
@@ -387,7 +440,7 @@ theorem in this repo establishes that bytes are absent from a device.
 
 The three Coq admits (#56 / #57 / #58) closed in the 2026-06-02 PM
 session bring the Coq layer to *zero `+Admitted+` markers* — only the
-single justified `+Axiom is_empty_dir_dec+` remains.
+single justified classical theorem `+is_empty_dir_dec+` remains (not an `Axiom`; corrected 2026-11-09).
 `+obliterate_not_injective+` — the formal grounding for the
 "`mathematically irreversible secure deletion`" marketing claim — is now
 soundly proven (under the strengthened `+block_overwritten+`-aware
