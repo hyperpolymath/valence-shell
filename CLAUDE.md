@@ -54,9 +54,11 @@ The Rust CLI is a functional interactive shell with these features:
 normative for this repository; this section is a short map for agents and changes in
 the same change as that file. Which verifier carries which obligation:
 
-* *Rust code* → Creusot, on the code itself (no Creusot contracts exist in
-  `impl/rust-cli/` yet). Kani is the standing exception for `unsafe`/FFI seams; Aeneas
-  only where Rust implements a theorem proved in Agda.
+* *Rust code* → Creusot with Pearlite contracts, and Verus (ruling 2026-11-07), on
+  the code itself; no contracts exist in `impl/rust-cli/` yet. Kani is the standing
+  exception for `unsafe`/FFI seams. Aeneas runs only as an optional, labelled side
+  lane (route plan OD-31): it never gates or grades anything, and its Rust-to-model
+  row is `ASSUMED`.
 * *Ada code* → SPARK (none in this repo).
 * *APIs, ABIs, wire formats, engineering properties* → Idris2 (`proofs/idris2/`).
 * *Theory* → Agda as the source of truth, rechecked in Rocq and Lean. Owner

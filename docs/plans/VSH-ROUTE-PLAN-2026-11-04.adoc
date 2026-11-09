@@ -23,6 +23,8 @@ Review findings at that level of detail are recorded here as gate requirements a
 
 *Revision 2026-11-05:* this revision adds the symlink-escape failure (j) found in review. It also scopes G6, defines nested-root locking, makes the G5 write alphabet finite, and builds P5 on the Agda tree that #221 repaired.
 
+*Revision 2026-11-09:* owner rulings OD-30 to OD-34 bring the plan into line with the estate proof policy (`hyperpolymath/standards` `3-practice/PROOF-POLICY.adoc`). Where they conflict with anything below, the 2026-11-09 rulings win. The section "Owner rulings (2026-11-09)" lists each superseded part. Ground truth for the same day: `docs/audits/2026-11-09-proof-ground-truth.adoc`.
+
 *How the evidence was gathered:*
 
 * An ultracode workflow ran 50 agents, all of which completed:
@@ -49,6 +51,67 @@ Review findings at that level of detail are recorded here as gate requirements a
 |*OD-23* |*No theory-feeder import until G1–G5 are green.* After that, use echo-types `EchoResidueCell` + `EchoDeniability` if the Agda pin experiment passes, otherwise residual-evidence `Core` + epistemic `Warrant`. |The in-repo Agda mirror is not a feeder import, so it proceeds. absolute-zero `CNOInterface`, echo-types, residual-evidence and epistemic edges move to the session *after* G1–G5.
 |*OD-22a* (2026-11-05) |*HardwareErase is excluded from G6 until it is wired* into the parser and executor. This is the elegant arm (E 9 / D 8), chosen over approving an oracle exemption (E 6 / D 7), wiring it in session 2 (E 8 / D 6) and retiring the variant (E 7 / D 9). |G6 counts only operations the shell runs; there is no `exempt` oracle column. The Lean port of the Idris2 HardwareErase statement is dropped from session 1. HardwareErase re-enters G6 with the full gate (≥2 provers plus the oracle) once it is wired.
 |— |Commit this plan and open a draft PR. Wait for the owner's go before running the implementation workflows. |This document.
+|===
+
+== Owner rulings (2026-11-09)
+
+These rulings follow a re-run of every prover leg against PROOF-POLICY (rulings
+2026-10-26, 2026-11-04 and 2026-11-07). They supersede the parts of this plan named
+in the right-hand column.
+
+[cols="1,4,5",options="header"]
+|===
+|# |Ruling |Supersedes, and what changes
+
+|*OD-30* |*Agda is the canonical theory spec.* Rocq and Lean are recheck legs: Dedukti
+transport first, hand re-proof as fallback, each leg recorded as "transported" or
+"re-proved" (policy §1, §3). This is the elegant arm (E 9 / D 7).
+|OD-0 and OD-1 ("one canonical spec in Lean", "Agda as second witness"). FinFS is
+written in Agda first. The Lean FinFS keeps one engineering role: the executable model
+oracle that the Rust differential tests drive. The existing Lean and Rocq theorems
+are target-only evidence (§3) until each is compared with its Agda statement (§2.2).
+P5 is done: the Agda tree checks under the canonical invocation (`b8e4c7f`).
+
+|*OD-31* |*Rust is verified with Creusot, Pearlite and Verus* on `vsh-core` (policy
+§1.2). *Aeneas runs as an optional side lane*, labelled as such: it never gates a
+session, never counts toward a grade or G6, and records two rows per §4.1, the model
+theorem (`PROVEN`) and the Rust-to-model correspondence (`ASSUMED`; its Lean backend
+needs Mathlib).
+|OD-2, P6 and P9 (Aeneas as the refinement route), G9. G9 becomes "Creusot/Pearlite
+and Verus contracts on `vsh-core` prove `step` and `inverse` meet the Agda-derived
+specification for the declared op set". The Aeneas spike keeps its kill rule but moves
+to the side lane. *Lightweight release, heavy development*: contracts are ghost code
+erased at compile time, so the shipped binary should not grow. Session 1 tests that
+claim by building `vsh-core` with and without contracts and comparing the artefacts;
+until then it is a design intent, not a result.
+
+|*OD-32* |*Agda `funext` removed by pointwise equality* (elegant arm, E 9 / D 8),
+plus a Dedukti transport experiment whose findings feed mathesis and echidna.
+|P5 ("K-free refactor", "fallback: builtins-only mirror"). Done in this PR: no
+postulates, `IsEmptyDir` completed, CI lane `.github/workflows/agda.yml`. The
+Dedukti findings are recorded in `docs/audits/2026-11-09-proof-ground-truth.adoc`.
+
+|*OD-33* |*Archive Isabelle and Mizar now; keep Z3 with §4 notes and fix its broken
+files* (E 8 / D 8).
+|OD-1 and P10 ("archive only once G6 holds without them"). Done in this PR:
+`archive/proofs/` with a 139-theorem successor map; all consumers updated. Coq
+(Rocq) is *not* archived: it is a recheck leg under the policy, not an archival
+candidate.
+
+|*OD-34* |*G6 counts Proof Witness Grades, not prover tallies.* A theory theorem
+counts toward G6 at `PWG-2i` or better: the Agda proof checks under §2.1 and at
+least one recheck leg is kernel-checked *and* `RECONCILED` (§2.2, §8). Grades are
+derived from CI receipts, never asserted. Engineering statements (Idris2) and Rust
+contracts are not graded; they count as their own rows.
+|OD-22 and G6 ("≥2 independent CI-gated provers plus the oracle"; the #221 ledger
+words). MANIFEST statuses use the policy §5 vocabulary (`PROVEN`,
+`PROVEN-WITH-AXIOMS`, `TESTED`, `ASSUMED`, `OPEN`). Z3 rows are `ASSUMED` and never
+count toward G6.
+
+|— |*Toolchains outside Guix carry a §6 deviation record* in `PROOF-NEEDS.adoc` and
+in the installing workflow, naming the leg, tool, version, digest, reason and state.
+|The session-1 provisioner (Phase 0). It installs the pinned versions *and* writes
+the deviation records; a lane that installs a prover without one fails review.
 |===
 
 *Why proof-first still fixes runtime holes first.* The proof-first architect's own thesis orders the work as "holes come first (rungs 0–1), wiring next (CI lanes before claims), features last". It also argues that the drift guard and the WAL are _proof-necessary_: they discharge, at runtime, the one hypothesis a refinement proof cannot cover, namely that the real OS state equals the abstract state. So the Rust hole fixes (Phase 1) are part of the spine, not a departure from it. They also touch disjoint files from the Lean work (Phase 2), so the two run in parallel and the proofs are not held up.

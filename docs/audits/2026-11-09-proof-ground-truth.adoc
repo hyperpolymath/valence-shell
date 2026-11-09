@@ -204,8 +204,11 @@ change.
 == 5. Route plan against PROOF-POLICY
 
 The plan merged in #222 predates the 2026-11-07 Rust ruling. In places it also
-departs from the 2026-10-26 theory mapping. Each gap below needs an owner ruling
-before session 1 runs.
+departs from the 2026-10-26 theory mapping. The owner ruled on every gap below on
+2026-11-09 (route plan OD-30 to OD-34): G-1 Agda canonical; G-2 Creusot/Pearlite and
+Verus, with Aeneas as an optional side lane; G-3 the canonical invocation, now met;
+G-4 G6 by Proof Witness Grade; G-5 Isabelle and Mizar archived, Z3 kept with §4
+notes; G-6 deviation records.
 
 [cols="1,4,4",options="header"]
 |===
@@ -252,5 +255,5 @@ only.
 * `CLAUDE.md`: the same correction.
 * This record.
 
-It does not change the route plan. The six gaps in section 5 wait for owner
-rulings.
+The owner rulings of 2026-11-09 are recorded in the route plan (OD-30 to OD-34), and
+the follow-up commits on this PR carry them out (section 7).
