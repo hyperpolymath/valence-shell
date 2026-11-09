@@ -84,7 +84,7 @@ impl ProofReference {
     /// Format with all proof system locations for detailed display.
     ///
     /// Returns multi-line string with theorem name, description, and locations
-    /// in Coq, Lean 4, Agda, and Isabelle.
+    /// in Coq, Lean 4, Agda, and Isabelle, marking Isabelle as archived and unchecked.
     pub fn format_full(&self) -> String {
         format!(
             "{}\n  {}\n  Coq:      {}\n  Lean 4:   {}\n  Agda:     {}\n  Isabelle: {} (archived, unchecked)",
@@ -277,8 +277,8 @@ pub fn all_proofs() -> Vec<ProofReference> {
 
 /// Print a formatted summary of formal verification status.
 ///
-/// Displays proof count, verification systems, and coverage information
-/// with colored terminal output.
+/// Displays the proof ledger reference, verification systems, core theorem
+/// references, and trust limitations with coloured terminal output.
 pub fn print_verification_summary() {
     println!(
         "{}",

@@ -320,6 +320,8 @@ fn handlePwd() !void {
     try std.io.getStdOut().writer().print("{s}\n", .{cwd});
 }
 
+/// Write command usage and proof system status to standard output.
+/// Propagates output errors.
 fn printUsage() !void {
     const usage =
         \\vsh - Valence Shell (Formally Verified)
@@ -357,6 +359,8 @@ fn printUsage() !void {
     try std.io.getStdOut().writeAll(usage);
 }
 
+/// Write the version, proof system summary, and licence to standard output.
+/// Propagates output errors.
 fn printVersion() !void {
     const version =
         \\vsh 0.1.0 (Valence Shell)

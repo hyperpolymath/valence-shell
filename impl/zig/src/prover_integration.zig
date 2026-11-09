@@ -129,6 +129,10 @@ pub const ProofBackingCheck = struct {
 
         // Isabelle (i) and Mizar (m) files were archived unchecked on 2026-11-09
         // and live under archive/proofs/; no CI lane checks them.
+        /// Return the operation's proof path, selecting the prover by the first
+        /// byte of `prover_system`: c, l, a, i, m, or z. Other bytes select Coq.
+        /// The string must be non-empty. Isabelle and Mizar paths refer to the
+        /// unchecked archive; returning a path does not verify the proof.
         pub fn proofFile(self: Operation, prover_system: []const u8) []const u8 {
             return switch (self) {
                 .mkdir, .rmdir => switch (prover_system[0]) {

@@ -158,7 +158,10 @@ impl HelpEntry {
         Ok(())
     }
 
-    /// Tier 3: Full man page (formatted)
+    /// Tier 3: Display a formatted man page through the smart pager.
+    ///
+    /// Returns terminal output or input errors from the pager. A failed system
+    /// pager falls back to the built-in pager.
     fn display_manpage(&self) -> Result<()> {
         let mut output = String::new();
 
