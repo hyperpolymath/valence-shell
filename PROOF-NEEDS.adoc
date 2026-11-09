@@ -67,7 +67,9 @@ Verus contracts exist
 |===
 
 The toolchains above were installed outside Guix for this audit; each is an
-open §6 `deviation`, listed in the audit record.
+open §6 `deviation`, listed in the audit record. The Dedukti experiment adds two more,
+Lambdapi 4.0.0 and Dedukti, both from opam on an OCaml 4.14.2 switch (`open`; see
+`docs/experiments/2026-11-09-dedukti-transport/`).
 
 === Reproduction state (2026-11-01, superseded by 2026-11-09)
 

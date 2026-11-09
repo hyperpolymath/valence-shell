@@ -264,3 +264,36 @@ only.
 
 The owner rulings of 2026-11-09 are recorded in the route plan (OD-30 to OD-34), and
 the follow-up commits on this PR carry them out (section 7).
+
+== 7. Follow-up after the owner rulings (same day, same PR)
+
+[cols="2,5",options="header"]
+|===
+|Ruling |What was done, with the check that shows it
+
+|OD-30, OD-32: Agda canonical, `funext` removed
+|All 10 Agda modules check under `agda --safe --without-K --cubical-compatible
+All.agda` (Agda 2.7.0.1, agda-stdlib v2.2): no postulates, no escape pragmas.
+Filesystem equality is pointwise (`_≗_`). `IsEmptyDir` now has its emptiness field.
+Positive and negative precondition witnesses exist in Agda and Lean; weakening the
+Lean `isEmptyDir` to `True` breaks the build. New CI lane: `.github/workflows/agda.yml`.
+
+|OD-33: Isabelle and Mizar archived; Z3 fixed
+|`archive/proofs/` holds both trees with a successor map for all 139 theorems. The
+two broken Z3 files now define their operations as array `store`s, check
+non-vacuity (`sat`) and negate each goal (`unsat`); dropping a precondition gives
+`sat`. `scripts/verify-z3.sh` passes all five files.
+
+|OD-32: Dedukti transport experiment
+|`docs/experiments/2026-11-09-dedukti-transport/`. Transport to Rocq or Lean does not
+work today: Agda2Dedukti has no `--cubical-compatible` and predates agda-stdlib 2.x;
+Lambdapi's Rocq export drops rewrite rules, so a computed proof is rejected by
+`coqc`; Lambdapi 4.0.0 has no Lean export. Dedukti itself checks the same encoding.
+The recheck legs are therefore "re-proved", not "transported", for now.
+|===
+
+The mathesis hole scanner (`scripts/census/proof-holes.sh`) on this branch now
+reports 0 axioms, 5 holes and 0 policy violations, down from 1, 5 and 9. The 5 holes
+are the 3 `alkahest-shell-transmuter` Idris2 holes and the 2 registered `believe_me`
+axioms. The census still counts the archived `.thy` files as Isabelle, because it
+does not exclude `archive/`; that is a change for mathesis, not this repository.
