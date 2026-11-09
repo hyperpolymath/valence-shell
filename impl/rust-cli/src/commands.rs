@@ -1695,8 +1695,8 @@ pub fn show_graph(state: &ShellState) -> Result<()> {
 
 /// Display formal verification status and proof system coverage.
 ///
-/// Shows all proof references with their locations in Coq, Lean 4, Agda,
-/// Isabelle, and other verification systems. Provides verification statistics.
+/// Shows all proof references with their locations in Coq, Lean 4 and Agda, and
+/// the archived (unchecked) Isabelle location. Provides verification statistics.
 ///
 /// # Examples
 /// ```no_run

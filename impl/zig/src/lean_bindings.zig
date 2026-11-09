@@ -325,7 +325,7 @@ test "verified mkdir integration" {
 /// This module establishes the following trust chain:
 ///
 /// 1. Lean 4 Proofs (HIGH TRUST)
-///    - ~256 theorems proven across 6 systems
+///    - Rechecks of the Agda theory source; per-obligation status in the proof ledger
 ///    - Formal guarantees on reversibility, composition
 ///    - Independently verified by different proof assistants
 ///

@@ -229,7 +229,7 @@ export fn vsh_get_version() [*:0]const u8 {
 // ====================
 //
 // Trust Chain (Zig-based):
-// 1. Lean 4 proofs (256+ theorems) - High trust (formally verified)
+// 1. Lean 4 proofs (recheck leg of the Agda source) - High trust (formally verified)
 // 2. Lean 4 → C compiler - Medium trust (standard Lean compiler)
 // 3. Zig wrapper (this file) - High trust (memory-safe, compile-time checks)
 // 4. Zig → C FFI - High trust (Zig's safe C interop)

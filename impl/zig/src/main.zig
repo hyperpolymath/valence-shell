@@ -8,7 +8,7 @@
 //! # Trust Architecture
 //! ```
 //! ┌─────────────────────────────────┐
-//! │ Formal Proofs (HIGH TRUST)      │ ← Coq/Lean4/Agda/Isabelle/Mizar/Z3
+//! │ Formal Proofs (HIGH TRUST)      │ ← Agda source; Lean 4/Coq rechecks; Z3
 //! └─────────────┬───────────────────┘
 //!               │
 //! ┌─────────────▼───────────────────┐
@@ -347,8 +347,9 @@ fn printUsage() !void {
         \\  --help, -h        Show this help
         \\  --version, -v     Show version
         \\
-        \\All operations are backed by formal proofs in:
-        \\  Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3
+        \\Model-level proofs: Agda (theory source), Lean 4 and Coq (rechecks),
+        \\Z3 (supplementary). Isabelle/HOL and Mizar are archived, unchecked.
+        \\Per-obligation status: EXPLAINME.adoc#proof-ledger
         \\
         \\See: https://github.com/hyperpolymath/valence-shell
         \\
@@ -361,7 +362,7 @@ fn printVersion() !void {
         \\vsh 0.1.0 (Valence Shell)
         \\
         \\Formally verified shell operations.
-        \\Proofs: ~256 theorems across 6 verification systems
+        \\Proofs: Agda source, Lean 4 and Coq rechecks; see the proof ledger
         \\License: MPL-2.0
         \\
     ;

@@ -9,13 +9,12 @@ defmodule VSH do
   that are modelled as reversible, undo is proven in the abstract model.
   This is not thermodynamic (Landauer/Bennett) reversibility, and the
   irreversible `obliterate` operation is deliberately not undoable.
-  Backed by ~478 theorem candidates across 6 proof systems:
-  - Coq (Calculus of Inductive Constructions)
-  - Lean 4 (Dependent Type Theory)
-  - Agda (Intensional Type Theory)
-  - Isabelle/HOL (Higher-Order Logic)
-  - Mizar (Tarski-Grothendieck Set Theory)
-  - Z3 (SMT Automated Verification)
+  Checked proof systems (per-obligation status: EXPLAINME.adoc#proof-ledger):
+  - Agda (Intensional Type Theory) — theory source
+  - Lean 4 (Dependent Type Theory) — recheck leg
+  - Coq (Calculus of Inductive Constructions) — recheck leg
+  - Z3 (SMT) — supplementary
+  Isabelle/HOL and Mizar were archived unchecked on 2026-11-09.
 
   ## Architecture
 
@@ -97,14 +96,17 @@ defmodule VSH do
   def version, do: "0.1.0"
 
   @doc """
-  Get the number of theorems across all proof systems.
+  Theorem-candidate count from the 2026-06-01 census, which counted six proof
+  systems. Isabelle/HOL and Mizar have since been archived unchecked, so this is
+  a historical figure, not current checked evidence; see
+  EXPLAINME.adoc#proof-ledger.
   """
-  def theorem_count, do: 256
+  def theorem_count, do: 478
 
   @doc """
-  Get the list of proof systems used.
+  Get the list of proof systems that are currently checked.
   """
   def proof_systems do
-    ["Coq", "Lean 4", "Agda", "Isabelle/HOL", "Mizar", "Z3"]
+    ["Agda", "Lean 4", "Coq", "Z3"]
   end
 end
