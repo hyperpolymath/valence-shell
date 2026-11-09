@@ -21,14 +21,14 @@ while IFS= read -r f; do
   m="${f#./}"
   m="${m%.agda}"
   m="${m//\//.}"
-  [ "$m" = "All" ] && continue
+  [[ "$m" == "All" ]] && continue
   if ! grep -Fq "label=\"${m}\"" "$graph"; then
     echo "ERROR: ${m} is not in the import graph of All.agda" >&2
     missing=1
   fi
 done < <(find . -name '*.agda' -not -path './_build/*' | sort)
 
-if [ "$missing" -eq 0 ]; then
+if [[ "$missing" -eq 0 ]]; then
   echo "All Agda modules are in the import graph of All.agda."
 fi
 exit "$missing"
