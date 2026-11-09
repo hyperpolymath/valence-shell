@@ -125,7 +125,7 @@ Z3) + 1 ABI-stub tier (Idris2)
 |`+proofs/agda/FilesystemModel.agda+` |Removed: filesystem equality is
 now pointwise, so no extensionality is needed
 
-|Coq |`+is_empty_dir_dec+` (a `Theorem` proved by `Classical.classic`; corrected 2026-11-09, it is not an `Axiom`)
+|Coq |`+is_empty_dir_dec+` (a `Theorem`, not an `Axiom`; corrected 2026-11-09). It depends on two standard-library axioms: `Classical_Prop.classic` and `ClassicalEpsilon.constructive_indefinite_description`
 |`+proofs/coq/posix_errors.v+` |Infinite-domain universal quantification
 
 |Coq |(closed) `+mkdir_two_dirs_reversible+`

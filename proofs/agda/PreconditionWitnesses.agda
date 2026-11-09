@@ -64,3 +64,13 @@ symlink-pre-inhabited = record
   ; parentIsDir        = defaultPerms , refl
   ; parentWritable     = mkFSNode Directory defaultPerms , refl , refl
   }
+
+-- Negative control: a directory with a child does not satisfy the precondition.
+-- Guards against a weakening of `IsEmptyDir` that `rmdir-pre-inhabited` alone
+-- would not catch.
+rmdir-pre-rejects-nonempty :
+  ¬ RmdirPrecondition a (mkdir ("a" ∷ "b" ∷ []) (mkdir a emptyFS))
+rmdir-pre-rejects-nonempty pre =
+  IsEmptyDir.noChildren (RmdirPrecondition.isEmpty pre)
+    ("a" ∷ "b" ∷ []) (⊑-∷ ⊑-[]) (λ ())
+    (_ , fsUpdate-at ("a" ∷ "b" ∷ []) _ (mkdir a emptyFS))

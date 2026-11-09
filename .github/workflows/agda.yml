@@ -46,7 +46,7 @@ jobs:
       - name: Install Agda (pinned release, digest-checked)
         run: |
           set -euo pipefail
-          curl -sSfL -o agda.tar.xz \
+          curl --proto '=https' --tlsv1.2 -sSfL -o agda.tar.xz \
             "https://github.com/agda/agda/releases/download/v${AGDA_VERSION}/Agda-v${AGDA_VERSION}-linux.tar.xz"
           echo "${AGDA_SHA256}  agda.tar.xz" | sha256sum -c -
           mkdir -p "$HOME/agda"
@@ -79,7 +79,7 @@ jobs:
         working-directory: proofs/agda
         run: |
           set -euo pipefail
-          if grep -nE '^[[:space:]]*postulate|TERMINATING|NON_TERMINATING|NO_POSITIVITY_CHECK|NO_UNIVERSE_CHECK' *.agda; then
+          if grep -nE '^[[:space:]]*postulate|TERMINATING|NON_TERMINATING|NO_POSITIVITY_CHECK|NO_UNIVERSE_CHECK' ./*.agda; then
             echo "::error::postulate or escape pragma found"; exit 1
           fi
 
@@ -88,8 +88,8 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for f in *.agda; do
-            m="${f%.agda}"
+          for f in ./*.agda; do
+            m="$(basename "$f" .agda)"
             [ "$m" = "All" ] && continue
             grep -qx "import ${m}" All.agda || { echo "::error::${m} is not imported by All.agda"; missing=1; }
           done

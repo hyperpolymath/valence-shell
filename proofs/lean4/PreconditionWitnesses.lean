@@ -34,6 +34,15 @@ theorem rmdir_pre_inhabited : RmdirPrecondition ["a"] (mkdir ["a"] emptyFS) := b
   | _ :: _ :: _, _, _, hn =>
       simp [mkdir, fsUpdate, emptyFS] at hn
 
+-- Negative control: a directory with a child does not satisfy the precondition.
+-- Guards against a weakening of `isEmptyDir` that `rmdir_pre_inhabited` alone
+-- would not catch.
+theorem rmdir_pre_rejects_nonempty :
+    ¬ RmdirPrecondition ["a"] (mkdir ["a", "b"] (mkdir ["a"] emptyFS)) := by
+  intro h
+  exact h.isEmpty.2 ["a", "b"] (by simp [List.isPrefixOf]) (by simp)
+    ⟨⟨FSNodeType.directory, defaultPerms⟩, by simp [mkdir, fsUpdate]⟩
+
 theorem createFile_pre_inhabited : CreateFilePrecondition ["a"] emptyFS :=
   ⟨by simp [pathExists, emptyFS], ⟨_, rfl⟩, ⟨_, rfl⟩, ⟨_, rfl, rfl⟩⟩
 
