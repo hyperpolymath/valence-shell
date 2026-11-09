@@ -187,7 +187,7 @@ deep-audit session). The corresponding Phase 4C design docs under
 
 ### Technology Stack
 
-**Formal Verification (6 systems)**:
+**Formal Verification (4 active systems; Isabelle/HOL and Mizar archived)**:
 - Agda — theory source of truth (owner ruling 2026-11-09)
 - Lean 4 — recheck leg; also the executable model oracle
 - Coq — CIC foundation, extraction to OCaml

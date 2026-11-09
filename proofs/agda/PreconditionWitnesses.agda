@@ -14,6 +14,7 @@ module PreconditionWitnesses where
 open import FilesystemModel
 open import FileOperations
 open import SymlinkOperations
+open import FilesystemComposition
 open import Data.List using (List; []; _∷_)
 open import Data.Maybe using (just; nothing)
 open import Data.Product using (_,_)
@@ -74,3 +75,13 @@ rmdir-pre-rejects-nonempty pre =
   IsEmptyDir.noChildren (RmdirPrecondition.isEmpty pre)
     ("a" ∷ "b" ∷ []) (⊑-∷ ⊑-[]) (λ ())
     (_ , fsUpdate-at ("a" ∷ "b" ∷ []) _ (mkdir a emptyFS))
+
+-- The composition theorems quantify over `ReversibleDP`; this shows the
+-- record is inhabited, so `operationSequenceReversible` is not vacuous for a
+-- sequence containing mkdir (its reverse precondition is the rmdir one).
+mkdir-reversibleDP-inhabited : ReversibleDP (mkdirOp a) emptyFS
+mkdir-reversibleDP-inhabited = record
+  { precondition        = mkdir-pre-inhabited
+  ; reversePrecondition = rmdir-pre-inhabited
+  ; permsWitness        = mkdirPerms refl
+  }

@@ -362,10 +362,10 @@ certify:
     to ensure correctness of filesystem operations.
 
     ### Proof Systems Used
-    - Coq (primary)
-    - Lean 4 (cross-verification)
-    - Agda (dependent types)
-    - Z3 (SMT verification)
+    - Agda (theory source of truth)
+    - Rocq/Coq and Lean 4 (recheck legs)
+    - Z3 (SMT checks; ASSUMED, no proof certificate)
+    - Isabelle/HOL and Mizar: archived unchecked (archive/proofs/)
 
     ### Key Theorems Verified
 
@@ -374,10 +374,10 @@ certify:
     3. **operation_sequence_reversible** - Operation sequences can be undone
     4. **transaction_atomicity** - Transactions maintain ACID properties
 
-    ### Total Coverage
-    - 256 theorems verified across 6 proof systems
-    - 100% precondition checking for all filesystem operations
-    - Memory safety verified via Zig implementation
+    ### Coverage
+    This certificate asserts no theorem count or percentage. Current coverage,
+    with each obligation's status, is in EXPLAINME.adoc#proof-ledger and
+    docs/audits/2026-11-09-proof-ground-truth.adoc.
 
     EOF
 

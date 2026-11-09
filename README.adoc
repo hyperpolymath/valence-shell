@@ -201,8 +201,8 @@ just verify-proofs
 # Build specific proof system
 just build-coq      # Coq proofs
 just build-lean4    # Lean 4 proofs
-just build-agda     # Agda proofs
-just build-isabelle # Isabelle proofs
+just build-agda     # Agda proofs (theory source)
+# Isabelle and Mizar are archived: see archive/proofs/README.adoc
 
 # Show available commands
 just --list

@@ -32,6 +32,17 @@ Manifest:
 
 == Build
 
+`valence-shell.agda-lib` depends on `standard-library`, so Agda must know where
+agda-stdlib v2.2 lives. Register it once (CI does the same):
+
+```bash
+git clone --depth 1 --branch v2.2 https://github.com/agda/agda-stdlib.git ~/agda-stdlib
+mkdir -p ~/.agda
+echo ~/agda-stdlib/standard-library.agda-lib >> ~/.agda/libraries
+```
+
+Then check every module:
+
 ```bash
 cd proofs/agda
 agda --safe --without-K --cubical-compatible All.agda

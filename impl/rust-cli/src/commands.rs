@@ -2325,11 +2325,14 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
 
     // Full proof references
     if let Some(ref proof) = proof_ref {
-        println!("  {}", "Verification (6 systems):".bright_yellow().bold());
+        println!("  {}", "Proof references:".bright_yellow().bold());
         println!("    Coq:      {}", proof.coq_location);
         println!("    Lean 4:   {}", proof.lean_location);
         println!("    Agda:     {}", proof.agda_location);
-        println!("    Isabelle: {}", proof.isabelle_location);
+        println!(
+            "    Isabelle: {} (archived, unchecked)",
+            proof.isabelle_location
+        );
         println!();
     }
 

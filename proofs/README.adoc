@@ -141,8 +141,8 @@ lake build
 [source,bash]
 ----
 cd proofs/agda
-agda FilesystemModel.agda
-# Produces: FilesystemModel.agdai
+agda --safe --without-K --cubical-compatible All.agda
+# Checks every module (interface files go under _build/, not committed)
 ----
 
 ==== Isabelle/HOL and Mizar

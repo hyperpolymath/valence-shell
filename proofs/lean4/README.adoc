@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
 // Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-= proofs/lean4/ — Lean 4 Filesystem Proofs (Primary Source of Truth)
+= proofs/lean4/ — Lean 4 Filesystem Proofs (Recheck Leg and Model Oracle)
 
-Lean 4 (dependent type theory) is the **primary source of truth** for
-the valence-shell formal specs (per `../../CLAUDE.md` "Technology
-Stack"). The other proof systems (Coq, Agda, Isabelle, Mizar, Z3 SMT)
-cross-validate; the parent `../README.md` discusses why polyglot.
+Since the 2026-11-09 owner ruling, Agda (`../agda/`) is the theory source of truth
+(standards PROOF-POLICY §1). This Lean tree is a *recheck leg*: its theorems are
+target-only evidence until each is compared with its Agda statement. It is also the
+executable model oracle (`model_oracle`) that the Rust differential tests drive.
+Rocq (`../coq/`) is the other recheck leg; Z3 is a supplementary SMT check; Isabelle
+and Mizar are archived (`../../archive/proofs/`).
 
 == Files
 

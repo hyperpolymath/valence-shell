@@ -87,7 +87,7 @@ impl ProofReference {
     /// in Coq, Lean 4, Agda, and Isabelle.
     pub fn format_full(&self) -> String {
         format!(
-            "{}\n  {}\n  Coq:      {}\n  Lean 4:   {}\n  Agda:     {}\n  Isabelle: {}",
+            "{}\n  {}\n  Coq:      {}\n  Lean 4:   {}\n  Agda:     {}\n  Isabelle: {} (archived, unchecked)",
             self.theorem.bright_cyan().bold(),
             self.description.bright_black(),
             self.coq_location,
@@ -107,7 +107,7 @@ pub const MKDIR_RMDIR_REVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/filesystem_model.v:L45-L62",
     lean_location: "proofs/lean4/FilesystemModel.lean:L38-L52",
     agda_location: "proofs/agda/FilesystemModel.agda:L41-L58",
-    isabelle_location: "proofs/isabelle/FilesystemModel.thy:L35-L50",
+    isabelle_location: "archive/proofs/isabelle/FilesystemModel.thy:L35-L50",
     description: "rmdir(mkdir(path, fs)) = fs when preconditions hold",
 };
 
@@ -120,7 +120,7 @@ pub const CREATE_DELETE_REVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/file_operations.v:L32-L48",
     lean_location: "proofs/lean4/FileOperations.lean:L28-L42",
     agda_location: "proofs/agda/FileOperations.agda:L30-L45",
-    isabelle_location: "proofs/isabelle/FileOperations.thy:L25-L40",
+    isabelle_location: "archive/proofs/isabelle/FileOperations.thy:L25-L40",
     description: "delete_file(create_file(path, fs)) = fs when preconditions hold",
 };
 
@@ -133,7 +133,7 @@ pub const WRITE_FILE_REVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/file_content_operations.v:L67-L85",
     lean_location: "proofs/lean4/FileContentOperations.lean:L58-L74",
     agda_location: "proofs/agda/FileContentOperations.agda:L62-L78",
-    isabelle_location: "proofs/isabelle/FileContentOperations.thy:L55-L72",
+    isabelle_location: "archive/proofs/isabelle/FileContentOperations.thy:L55-L72",
     description: "write_file(path, old, write_file(path, new, fs)) = fs",
 };
 
@@ -146,7 +146,7 @@ pub const COMPOSITION_REVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/filesystem_composition.v:L28-L52",
     lean_location: "proofs/lean4/FilesystemComposition.lean:L24-L45",
     agda_location: "proofs/agda/FilesystemComposition.agda:L26-L48",
-    isabelle_location: "proofs/isabelle/FilesystemComposition.thy:L22-L42",
+    isabelle_location: "archive/proofs/isabelle/FilesystemComposition.thy:L22-L42",
     description: "apply_sequence(reverse(ops), apply_sequence(ops, fs)) = fs",
 };
 
@@ -159,7 +159,7 @@ pub const COPY_FILE_REVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/copy_move_operations.v:L148",
     lean_location: "proofs/lean4/CopyMoveOperations.lean:L101",
     agda_location: "proofs/agda/CopyMoveOperations.agda:L95",
-    isabelle_location: "proofs/isabelle/CopyMoveOperations.thy:L90",
+    isabelle_location: "archive/proofs/isabelle/CopyMoveOperations.thy:L90",
     description: "deleteFile(copyFile(src, dst, fs)) = fs when preconditions hold",
 };
 
@@ -172,7 +172,7 @@ pub const MOVE_REVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/copy_move_operations.v:L239",
     lean_location: "proofs/lean4/CopyMoveOperations.lean:L156",
     agda_location: "proofs/agda/CopyMoveOperations.agda:L150",
-    isabelle_location: "proofs/isabelle/CopyMoveOperations.thy:L145",
+    isabelle_location: "archive/proofs/isabelle/CopyMoveOperations.thy:L145",
     description: "move(dst, src, move(src, dst, fs)) = fs when preconditions hold",
 };
 
@@ -185,7 +185,7 @@ pub const SYMLINK_UNLINK_REVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/symlink_operations.v:L45",
     lean_location: "proofs/lean4/SymlinkOperations.lean:L45",
     agda_location: "proofs/agda/SymlinkOperations.agda:L42",
-    isabelle_location: "proofs/isabelle/SymlinkOperations.thy:L40",
+    isabelle_location: "archive/proofs/isabelle/SymlinkOperations.thy:L40",
     description: "unlink(symlink(path, fs)) = fs when preconditions hold",
 };
 
@@ -197,7 +197,7 @@ pub const CHMOD_REVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/permission_operations.v:L67",
     lean_location: "proofs/lean4/PermissionOperations.lean:L52",
     agda_location: "proofs/agda/PermissionOperations.agda:L70",
-    isabelle_location: "proofs/isabelle/PermissionOperations.thy:L67",
+    isabelle_location: "archive/proofs/isabelle/PermissionOperations.thy:L67",
     description: "chmod(old_mode, chmod(new_mode, path, fs)) = fs when preconditions hold",
 };
 
@@ -209,7 +209,7 @@ pub const CHOWN_REVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/permission_operations.v:L149",
     lean_location: "proofs/lean4/PermissionOperations.lean:L135",
     agda_location: "proofs/agda/PermissionOperations.agda:L119",
-    isabelle_location: "proofs/isabelle/PermissionOperations.thy:L166",
+    isabelle_location: "archive/proofs/isabelle/PermissionOperations.thy:L166",
     description: "chown(old_uid/gid, chown(new_uid/gid, path, fs)) = fs when preconditions hold",
 };
 
@@ -223,7 +223,7 @@ pub const VARIABLE_ASSIGNMENT_REVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/environment_model.v:pending",
     lean_location: "proofs/lean4/EnvironmentModel.lean:pending",
     agda_location: "proofs/agda/EnvironmentModel.agda:pending",
-    isabelle_location: "proofs/isabelle/EnvironmentModel.thy:pending",
+    isabelle_location: "archive/proofs/isabelle/EnvironmentModel.thy:pending",
     description: "set(name, old, set(name, new, env)) = env (pre-state capture)",
 };
 
@@ -236,7 +236,7 @@ pub const HARDWARE_ERASE_IRREVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/rmo_operations.v:L45-L68",
     lean_location: "proofs/lean4/RMOOperations.lean:L52-L73",
     agda_location: "proofs/agda/RMOOperations.agda:L48-L70",
-    isabelle_location: "proofs/isabelle/RMOOperations.thy:L44-L65",
+    isabelle_location: "archive/proofs/isabelle/RMOOperations.thy:L44-L65",
     description: "∀ fs device. ¬∃ op. apply(op, hardware_erase(device, fs)) = fs",
 };
 
@@ -250,7 +250,7 @@ pub const OBLITERATE_IRREVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/rmo_operations.v:L70-L95",
     lean_location: "proofs/lean4/RMOOperations.lean:L75-L98",
     agda_location: "proofs/agda/RMOOperations.agda:L72-L96",
-    isabelle_location: "proofs/isabelle/RMOOperations.thy:L67-L89",
+    isabelle_location: "archive/proofs/isabelle/RMOOperations.thy:L67-L89",
     description: "∀ fs file. ¬∃ op. apply(op, obliterate(file, fs)) = fs",
 };
 
@@ -295,9 +295,12 @@ pub fn print_verification_summary() {
     );
     println!("  2. {} - Dependent Type Theory", "Lean 4".bright_cyan());
     println!("  3. {} - Intensional Type Theory", "Agda".bright_cyan());
-    println!("  4. {} - Higher-Order Logic", "Isabelle/HOL".bright_cyan());
     println!(
-        "  5. {} - Tarski-Grothendieck Set Theory",
+        "  4. {} - Higher-Order Logic (archived 2026-11-09, unchecked)",
+        "Isabelle/HOL".bright_cyan()
+    );
+    println!(
+        "  5. {} - Tarski-Grothendieck Set Theory (archived 2026-11-09, unchecked)",
         "Mizar".bright_cyan()
     );
     println!("  6. {} - SMT Automated Verification", "Z3".bright_cyan());

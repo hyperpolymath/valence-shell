@@ -122,8 +122,6 @@ impl VerificationSuite {
             "proofs/coq/filesystem_model.v",
             "proofs/lean4/FilesystemModel.lean",
             "proofs/agda/FilesystemModel.agda",
-            "proofs/isabelle/FilesystemModel.thy",
-            "proofs/mizar/filesystem_model.miz",
             "proofs/z3/filesystem_operations.smt2",
         ];
 
@@ -173,8 +171,6 @@ impl VerificationSuite {
             "proofs/coq/file_operations.v",
             "proofs/lean4/FileOperations.lean",
             "proofs/agda/FileOperations.agda",
-            "proofs/isabelle/FileOperations.thy",
-            "proofs/mizar/file_operations.miz",
             "proofs/z3/filesystem_operations.smt2",
         ];
 
@@ -220,8 +216,6 @@ impl VerificationSuite {
 
         let locations = vec![
             "proofs/coq/file_content_operations.v",
-            "proofs/isabelle/FileContentOperations.thy",
-            "proofs/mizar/file_content_operations.miz",
         ];
 
         let test_path = "verify_write.txt";
@@ -281,8 +275,6 @@ impl VerificationSuite {
             "proofs/z3/copy_move_operations.smt2",
             "proofs/lean4/CopyMoveOperations.lean",
             "proofs/agda/CopyMoveOperations.agda",
-            "proofs/isabelle/CopyMoveOperations.thy",
-            "proofs/mizar/copy_move_operations.miz",
         ];
 
         let src_path = "verify_copy_src.txt";
@@ -331,8 +323,6 @@ impl VerificationSuite {
             "proofs/z3/copy_move_operations.smt2",
             "proofs/lean4/CopyMoveOperations.lean",
             "proofs/agda/CopyMoveOperations.agda",
-            "proofs/isabelle/CopyMoveOperations.thy",
-            "proofs/mizar/copy_move_operations.miz",
         ];
 
         let src_path = "verify_move_src.txt";
@@ -400,7 +390,6 @@ impl VerificationSuite {
             "proofs/coq/filesystem_model.v",
             "proofs/lean4/FilesystemModel.lean",
             "proofs/agda/FilesystemModel.agda",
-            "proofs/isabelle/FilesystemModel.thy",
         ];
 
         // Create two separate files

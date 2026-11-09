@@ -67,9 +67,8 @@ just verify-proofs
 # Or per-system
 just build-coq      # produces .vo certificates
 just build-lean4    # compiles to executable
-just build-agda     # type-checks, generates interface files
-just build-isabelle # builds heap image
-just build-mizar    # set-theoretic foundation
+just build-agda     # type-checks All.agda under --safe --without-K --cubical-compatible
+# Isabelle and Mizar are archived (archive/proofs/README.adoc has the successor map)
 just build-z3       # SMT SAT/UNSAT queries
 ----
 

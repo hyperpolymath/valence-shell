@@ -173,10 +173,12 @@ direction. After the fix:
   oracle seam.
 * *Agda `IsEmptyDir` is a stub* (see the table). Removing `funext` (route plan
   P5) should also complete this record.
-* *No model states filesystem well-formedness.* Nothing in the Lean, Agda or Coq
-  model says that the parent of an existing path is a directory, so a state where
-  `["a"]` is a file and `["a","b"]` is a directory is admitted (raised in review on
-  #223). This is an invariant of the whole model, not a precondition of one
+* *No model requires the parent of an existing path to be a directory.* Coq has a
+  partial invariant, `well_formed` (`filesystem_composition.v:437`: every existing
+  non-root path has an existing parent), used by several composition theorems. It
+  does not say the parent is a directory, and Lean and Agda have no invariant at
+  all, so a state where `["a"]` is a file and `["a","b"]` is a directory is admitted
+  (raised in review on #223). This is an invariant of the whole model, not a precondition of one
   operation, so it belongs in the Agda FinFS spec (route plan OD-30), with each
   operation proved to preserve it, and is then carried to the recheck legs. Adding
   it to the Lean rmdir alone would make the three models disagree.

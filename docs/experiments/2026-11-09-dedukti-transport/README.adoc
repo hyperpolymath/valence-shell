@@ -69,10 +69,10 @@ only type-checks if `add` computes.
 [source,shell]
 ----
 lambdapi check Nat.lp                                  # accepted
-lambdapi export -o dk Nat.lp > Nat.dk && dk check Nat.dk
+lambdapi export --verbose 0 -o dk Nat.lp > Nat.dk && dk check Nat.dk
 # [SUCCESS] Nat.dk was successfully checked.
-lambdapi export -o raw_coq Nat.lp > Nat.v
-# [Nat.lp:12:0-13:39] Command not translated.   <- the rewrite rules
+lambdapi export --verbose 0 -o raw_coq Nat.lp > Nat.v
+# [Nat.lp:13:0-14:39] Command not translated.   <- the rewrite rules (on stderr)
 coqc Nat.v
 # Error: The term "refl (succ zero)" has type "El (Eq (succ zero) (succ zero))"
 # while it is expected to have type "El (Eq (add (succ zero) zero) (succ zero))".
@@ -129,7 +129,9 @@ only in an open Lambdapi pull request.
 == Reproduce
 
 From this directory, with Lambdapi and Dedukti on `PATH` and Rocq installed, run the
-four commands in Finding 2. Lambdapi 4.0.0 prints progress lines ("Start
-checking …", with colour codes) on standard output, so filter them out of the exported
-file before `dk check`, for example with `grep -v checking`. The `lambdapi.pkg` file
-makes this directory a Lambdapi package.
+four commands in Finding 2. Keep `--verbose 0`: without it Lambdapi 4.0.0 prints
+progress lines ("Start checking …", with colour codes) on standard output, into the
+exported file, and `dk check` then rejects it. With it, the exported files are clean and
+the "Command not translated" warning goes to standard error. Check that `Nat.dk` is not
+empty before trusting a `dk check` success: an empty file also checks. The
+`lambdapi.pkg` file makes this directory a Lambdapi package.

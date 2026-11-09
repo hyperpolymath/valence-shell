@@ -121,7 +121,7 @@ reproduce. Absence of a tool is an open obligation, not a passing leg
 | No postulates, no holes, the estate invocation. Filesystem equality is pointwise (`_≗_`). Grade `PWG-3` is derived from the CI receipt on the merge head, not asserted here. See `docs/audits/2026-11-09-proof-ground-truth.adoc`
 
 | Same theorems restated in Z3 (Isabelle and Mizar archived 2026-11-09)
-| Z3: ASSUMED (no proof certificate)
+| argued (the ledger word for PROOF-POLICY §5 `ASSUMED`: a direct SMT run with no proof certificate)
 | `scripts/verify-z3.sh`, exact result sequence per file
 | `proofs/z3/` (`archive/proofs/` for Isabelle and Mizar)
 | §4 exception notes are now recorded in each `.smt2` header. `filesystem_operations` and `symlink_operations` were rewritten on 2026-11-09 to define the operations as array `store`s and negate each goal; the other three still rest on asserted axioms. Isabelle and Mizar were never CI-checked and are archived, unchecked, with a successor map

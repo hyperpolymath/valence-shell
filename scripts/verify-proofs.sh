@@ -148,8 +148,7 @@ if check_command agda; then
         "cd proofs/agda && agda --safe --without-K --cubical-compatible All.agda"
 else
     log_skip "Agda not installed"
-    ((TOTAL_TESTS += 2))
-    ((SKIPPED_TESTS += 2))
+    ((TOTAL_TESTS += 1))
 fi
 
 echo ""

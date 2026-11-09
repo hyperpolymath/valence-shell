@@ -4,9 +4,13 @@
 ; PROOF-POLICY §4 exception note. Obligation: the mkdir/rmdir and
 ; createFile/deleteFile reversibility, postcondition, independence and
 ; composition properties, on a finite-map model. Tool: Z3 (SMT, theory of
-; arrays + datatypes). Why: these are quantifier-free array identities that an
-; SMT solver decides automatically; the theory source of truth is the Agda tree
-; (proofs/agda), and this file is a supplementary automated check. Status under
+; arrays + datatypes). Why: the goals are array identities an SMT solver checks
+; automatically; the theory source of truth is the Agda tree (proofs/agda), and this
+; file is a supplementary automated check. The queries are *not* quantifier-free:
+; the strictness assertion on `child-of` and the `forall` in `rmdir-pre` add
+; quantifiers, so termination is not guaranteed by a decision procedure. Z3 4.8.12
+; returns every expected result in well under a second, and scripts/verify-z3.sh
+; fails any `unknown` or timeout (30 s), so a non-terminating query cannot pass. Status under
 ; §5: ASSUMED, because a direct SMT run without a proof certificate is not a
 ; kernel-checked witness.
 ;

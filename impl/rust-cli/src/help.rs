@@ -208,7 +208,7 @@ impl HelpEntry {
             output.push_str(&format!("         Lean 4:   {}\n", proof_ref.lean_location));
             output.push_str(&format!("         Agda:     {}\n", proof_ref.agda_location));
             output.push_str(&format!(
-                "         Isabelle: {}\n\n",
+                "         Isabelle: {} (archived, unchecked)\n\n",
                 proof_ref.isabelle_location
             ));
         }

@@ -66,6 +66,7 @@ sweep.
 == See also
 
 * `../README.md` — overall proof-stack design
-* `../lean4/README.adoc` — primary source of truth (interactive)
+* `../agda/README.adoc` — theory source of truth (owner ruling 2026-11-09)
+* `../lean4/README.adoc` — Lean recheck leg and executable model oracle
 * `../coq/README.adoc` — interactive CIC foundation
 * `../../docs/PROOF_HOLES_AUDIT.adoc` — proof-debt status

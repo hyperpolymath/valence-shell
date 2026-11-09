@@ -46,10 +46,12 @@ fixed 2026-11-09 and guarded by `PreconditionWitnesses`
 context, 35 on standard-library axioms only (funext 30, `classic` 6,
 `constructive_indefinite_description` 6). No custom `Axiom`
 
-| Z3 (§4 exception, unrecorded)
+| Z3 (§4 exception)
 | `ASSUMED`
-| Z3 4.8.12: all 5 files axiomatic; `filesystem_operations` is circular,
-`symlink_operations` proves nothing
+| Z3 4.8.12. On `main`: all 5 files axiomatic, `filesystem_operations` circular,
+`symlink_operations` proving nothing, no exception notes. In PR #223: those two files
+define their operations as array `store`s, check non-vacuity and negate each goal;
+all 5 carry a §4 note; `scripts/verify-z3.sh` passes. Still `ASSUMED` (no certificate)
 
 | Idris2 (engineering/ABI)
 | `PROVEN-WITH-AXIOMS`

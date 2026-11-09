@@ -259,8 +259,6 @@ impl FfiContext {
     /// - Z3: proofs/z3/copy_move_operations.smt2
     /// - Lean4: proofs/lean4/CopyMoveOperations.lean
     /// - Agda: proofs/agda/CopyMoveOperations.agda
-    /// - Isabelle: proofs/isabelle/CopyMoveOperations.thy
-    /// - Mizar: proofs/mizar/copy_move_operations.miz
     pub fn copy_file(&mut self, src: &str, dst: &str) -> FfiResult<()> {
         let src_path = self.resolve_path(src)?;
         let dst_path = self.resolve_path(dst)?;
@@ -289,8 +287,6 @@ impl FfiContext {
     /// - Z3: proofs/z3/copy_move_operations.smt2
     /// - Lean4: proofs/lean4/CopyMoveOperations.lean
     /// - Agda: proofs/agda/CopyMoveOperations.agda
-    /// - Isabelle: proofs/isabelle/CopyMoveOperations.thy
-    /// - Mizar: proofs/mizar/copy_move_operations.miz
     pub fn move_path(&mut self, src: &str, dst: &str) -> FfiResult<()> {
         let src_path = self.resolve_path(src)?;
         let dst_path = self.resolve_path(dst)?;
@@ -358,8 +354,6 @@ impl FfiContext {
     /// - Coq: proofs/coq/rmo_operations.v
     /// - Lean4: proofs/lean4/RMOOperations.lean
     /// - Agda: proofs/agda/RMOOperations.agda
-    /// - Isabelle: proofs/isabelle/RMO_Operations.thy
-    /// - Mizar: proofs/mizar/rmo_operations.miz
     /// - Z3: proofs/z3/rmo_operations.smt2
     pub fn obliterate(&mut self, path: &str) -> FfiResult<()> {
         let full_path = self.resolve_path(path)?;

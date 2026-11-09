@@ -15,8 +15,11 @@ unavailable; Mizar's installer was not permitted in the session), and neither ha
 a CI lane. They are *unchecked*: nothing below says these files were ever accepted
 by their checker.
 
-*What still uses them.* Nothing. The Justfiles, `scripts/verify-proofs.sh` and
-`scripts/validate-with-echidna.sh` were updated in the same change.
+*What still uses them.* Nothing checks them. The Justfiles, `scripts/verify-proofs.sh`
+and `scripts/validate-with-echidna.sh` no longer run them. The shell's proof
+references (`impl/rust-cli/src/proof_refs.rs`) point here and label the Isabelle
+entries "archived, unchecked". The FFI verification suite (`ffi/rust`) no longer lists
+them as evidence.
 
 == Successor map
 
@@ -170,4 +173,4 @@ Agda column is the source of truth; `lean:` and `rocq:` are recheck legs.
 |mizar |`symlink_operations.miz` |`Th_symlink_unlink_reversible` |agda:symlink-unlink-reversible lean:symlink_unlink_reversible rocq:symlink_unlink_reversible
 |===
 
-Counts: 139 theorems; 103 name an Agda successor; 29 name only a Lean or Rocq successor; 2 are only related; 6 are Mizar encoding helpers with no counterpart needed.
+Counts: 139 theorems; 102 name an Agda successor; 29 name only a Lean or Rocq successor; 2 are only related (one of them names an Agda theorem); 6 are Mizar encoding helpers with no counterpart needed.
