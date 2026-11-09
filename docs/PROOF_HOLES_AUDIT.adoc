@@ -1,6 +1,11 @@
 == Proof Holes Audit - Valence Shell
 
 ____
+*SUPERSEDED IN PART 2026-11-09.* The Agda `funext` postulate is gone and the
+Agda tree now checks under `--safe --without-K --cubical-compatible`; the Lean
+`RmdirPrecondition` was found uninhabited and fixed. Current state:
+`docs/audits/2026-11-09-proof-ground-truth.adoc`.
+
 *CORRECTED 2026-11-01.* This file records the state as believed on 2026-07-16.
 It has since been measured and parts of it were wrong. When the Agda tree was
 first actually compiled (Agda 2.7.0.1 + stdlib 2.2, then 2.6.4.3 + stdlib 2.1.1),

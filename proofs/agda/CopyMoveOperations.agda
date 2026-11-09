@@ -1,3 +1,4 @@
+{-# OPTIONS --safe --without-K --cubical-compatible #-}
 -- SPDX-License-Identifier: MPL-2.0
 {-
   Valence Shell - Copy and Move Operations in Agda
@@ -22,7 +23,7 @@ open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Product using (_×_; _,_; proj₁; proj₂; ∃; ∃-syntax)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.String using (String)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; sym; trans; subst)
+open import Relation.Binary.PropositionalEquality using (_≡_; _≗_; refl; cong; sym; trans; subst)
 open import Relation.Nullary using (¬_; Dec; yes; no)
 open import Data.Empty using (⊥; ⊥-elim)
 open import Data.Unit using (⊤; tt)
@@ -100,11 +101,11 @@ moveFile-nothing-eq src dst fs h with fs src
 -- moveFile is reversible: moving back restores the original filesystem
 moveFile-reversible : ∀ src dst fs →
   movePrecondition src dst fs →
-  moveFile dst src (moveFile src dst fs) ≡ fs
-moveFile-reversible src dst fs ((node , hsrc) , not-dst , parent-ex , notEq , rest) =
-  trans (cong (λ t → moveFile dst src t) (moveFile-just-eq src dst fs node hsrc))
-        (trans (moveFile-just-eq dst src fs1 node fs1-dst)
-               (funext fs2-is-fs))
+  moveFile dst src (moveFile src dst fs) ≗ fs
+moveFile-reversible src dst fs ((node , hsrc) , not-dst , parent-ex , notEq , rest) p' =
+  trans (cong (λ t → moveFile dst src t p') (moveFile-just-eq src dst fs node hsrc))
+        (trans (cong (λ g → g p') (moveFile-just-eq dst src fs1 node fs1-dst))
+               (fs2-is-fs p'))
   where
     fs1 : Filesystem
     fs1 = fsUpdate src nothing (fsUpdate dst (just node) fs)
@@ -150,8 +151,8 @@ pathExists-not-nothing p fs (node , eq) = node , eq
 
 -- Double fsUpdate at same path: second write wins
 fsUpdate-overwrite : ∀ p v1 v2 fs →
-  fsUpdate p v2 (fsUpdate p v1 fs) ≡ fsUpdate p v2 fs
-fsUpdate-overwrite p v1 v2 fs = funext helper
+  fsUpdate p v2 (fsUpdate p v1 fs) ≗ fsUpdate p v2 fs
+fsUpdate-overwrite p v1 v2 fs = helper
   where
     helper : ∀ p' → fsUpdate p v2 (fsUpdate p v1 fs) p' ≡ fsUpdate p v2 fs p'
     helper p' = case-split (p path-≟ p')
@@ -167,8 +168,8 @@ fsUpdate-overwrite p v1 v2 fs = funext helper
 -- fsUpdate p nothing fs ≡ fs when fs p ≡ nothing (path didn't exist)
 fsUpdate-nothing-noop : ∀ p fs →
   ¬ pathExists p fs →
-  fsUpdate p nothing fs ≡ fs
-fsUpdate-nothing-noop p fs notExists = funext helper
+  fsUpdate p nothing fs ≗ fs
+fsUpdate-nothing-noop p fs notExists = helper
   where
     helper : ∀ p' → fsUpdate p nothing fs p' ≡ fs p'
     helper p' with p path-≟ p'
@@ -230,11 +231,11 @@ copyFile-same-content src dst fs ((perms , hsrc) , _) =
 -- Theorem: copy is reversible by deleting destination
 copyFile-reversible : ∀ src dst fs →
   copyFilePrecondition src dst fs →
-  deleteFile dst (copyFile src dst fs) ≡ fs
-copyFile-reversible src dst fs ((perms , hsrc) , not-dst , _) =
-  trans (cong (λ t → deleteFile dst t) (copyFile-just src dst fs (mkFSNode File perms) hsrc))
-        (trans (fsUpdate-overwrite dst (just (mkFSNode File perms)) nothing fs)
-               (fsUpdate-nothing-noop dst fs not-dst))
+  deleteFile dst (copyFile src dst fs) ≗ fs
+copyFile-reversible src dst fs ((perms , hsrc) , not-dst , _) p' =
+  trans (cong (λ t → deleteFile dst t p') (copyFile-just src dst fs (mkFSNode File perms) hsrc))
+        (trans (fsUpdate-overwrite dst (just (mkFSNode File perms)) nothing fs p')
+               (fsUpdate-nothing-noop dst fs not-dst p'))
 
 -- ============================================================================
 -- Move Operation Theorems

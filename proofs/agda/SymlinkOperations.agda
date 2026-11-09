@@ -1,3 +1,4 @@
+{-# OPTIONS --safe --without-K --cubical-compatible #-}
 {- Valence Shell - Symlink Operations (Agda)
 
    Abstract model of symbolic link creation and removal.
@@ -11,7 +12,7 @@ open import FilesystemModel
 open import Data.Maybe using (just; nothing)
 open import Data.Product using (_×_; _,_)
 open import Relation.Nullary using (¬_; Dec; yes; no)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans)
+open import Relation.Binary.PropositionalEquality using (_≡_; _≗_; refl; sym; trans)
 
 -- Preconditions for creating a symlink
 record SymlinkPrecondition (p : Path) (fs : Filesystem) : Set where
@@ -31,22 +32,15 @@ unlink p fs = fsUpdate p nothing fs
 
 -- Postcondition Lemmas
 symlink-creates-path : ∀ p fs → SymlinkPrecondition p fs → pathExists p (symlink p fs)
-symlink-creates-path p fs pre with p path-≟ p
-... | yes refl = mkFSNode File defaultPerms , refl
-... | no p≢p = ⊥-elim (p≢p refl)
-  where
-    open import Data.Empty using (⊥-elim)
+symlink-creates-path p fs pre = mkFSNode File defaultPerms , fsUpdate-at p _ _
 
 unlink-removes-path : ∀ p fs → pathExists p fs → ¬ pathExists p (unlink p fs)
-unlink-removes-path p fs (node , eq) with p path-≟ p
-... | yes refl = λ ()
-... | no p≢p = ⊥-elim (p≢p refl)
-  where
-    open import Data.Empty using (⊥-elim)
+unlink-removes-path p fs _ (node , eq) =
+  nothing≢just (trans (sym (fsUpdate-at p nothing fs)) eq)
 
 -- Reversibility Theorem
-symlink-unlink-reversible : ∀ p fs → SymlinkPrecondition p fs → unlink p (symlink p fs) ≡ fs
-symlink-unlink-reversible p fs pre = funext helper
+symlink-unlink-reversible : ∀ p fs → SymlinkPrecondition p fs → unlink p (symlink p fs) ≗ fs
+symlink-unlink-reversible p fs pre = helper
   where
     helper : ∀ p' → unlink p (symlink p fs) p' ≡ fs p'
     helper p' = case-split (p path-≟ p')

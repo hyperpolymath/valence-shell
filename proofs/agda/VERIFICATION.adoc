@@ -1,72 +1,65 @@
 = Agda proof verification record
 :toc: preamble
 
-This file is the receipt that `standards/3-practice/PROOF-POLICY.adoc` §4 asks for:
-the invocation, the exact versions, the result, and the *waiver* that records why
-this artefact does not yet meet the estate invocation.
+This file is the receipt that `standards/3-practice/PROOF-POLICY.adoc` §2.1 and
+§8 ask for: the invocation, the exact versions, the flags in force, the import
+cone and the result. Owner ruling 2026-11-09: Agda is this repository's theory
+source of truth; Lean and Rocq are recheck legs.
 
-== What was run
+== What was run (2026-11-09)
 
-[cols="3,1,1",options="header"]
+[cols="3,2",options="header"]
 |===
-| Invocation | Agda 2.6.4.3 + stdlib 2.1.1 | Agda 2.7.0.1 + stdlib 2.2
+| Invocation | Agda 2.7.0.1 + agda-stdlib v2.2 (`6cd04e46`)
 
-| `agda --library-file=<stdlib> --library=valence-shell <Module>.agda`, all nine modules
-| 9/9 type-check | 9/9 type-check
-
-| same, plus `--safe`
-| rejected | rejected
-
-| same, plus `--without-K`
-| rejected | rejected
-
-| same, plus `--cubical-compatible`
-| rejected | rejected
+| `agda --safe --without-K --cubical-compatible All.agda`
+| exit 0; all 10 modules checked
 |===
 
-Modules: `FilesystemModel`, `FileOperations`, `SymlinkOperations`,
-`PermissionOperations`, `FilesystemComposition`, `FilesystemEquivalence`,
-`CopyMoveOperations`, `FileContentOperations`, `RMOOperations`.
+Import cone (`All.agda`): `FilesystemModel`, `FileOperations`,
+`SymlinkOperations`, `PermissionOperations`, `FilesystemComposition`,
+`FilesystemEquivalence`, `CopyMoveOperations`, `FileContentOperations`,
+`RMOOperations`, `PreconditionWitnesses`. Each file also carries
+`{-# OPTIONS --safe --without-K --cubical-compatible #-}`. No `postulate` and
+no escape pragma remains; CI (`.github/workflows/agda.yml`) rejects either.
 
-== The two rejections, verbatim
+Toolchain digest: Agda release archive sha256
+`975b515a14877ab6bce5bfc641e16c4a3ee52ca5d7f846577dee80aa2145db8a`. It is
+installed from the upstream archive, not Guix: an open §6 `deviation`,
+recorded in the workflow and in `PROOF-NEEDS.adoc`.
 
-[source]
-----
-FilesystemModel.agda:179,3-38
-Cannot postulate funext with safe flag
-when scope checking the declaration
-  funext : Extensionality lzero lzero
-----
+== What changed to get there
 
-[source]
-----
-FilesystemModel.agda:155,11-15
-I'm not sure if there should be a case for the constructor refl,
-because I get stuck when trying to solve the following unification
-problems (inferred index ≟ expected index):
-  p ≟ p
-Possible reason why unification failed:
-  Cannot eliminate reflexive equation p = p of type List String
-  because K has been disabled.
-----
+* *`funext` removed.* Whole-filesystem equalities are now pointwise
+  (`_≗_`). Every former `funext helper` proof was already pointwise inside,
+  so the theorems keep their content and lose the postulate. Composition uses
+  two new congruence lemmas, `fsUpdate-cong` and `applyOp-cong` /
+  `applySequence-cong`.
+* *K removed.* Clauses that matched `refl` on `p ≡ p` (from `p path-≟ p`)
+  now use `fsUpdate-at`, which needs no K.
+* *`IsEmptyDir` completed.* It had only an `isDir` field. It now also has
+  `noChildren`: no strict descendant (`p ⊑ child`, `child ≢ p`) exists. The
+  descendant direction matches Coq and the fixed Lean model.
+* *Non-vacuity witnesses.* `PreconditionWitnesses` gives an inhabitant of the
+  mkdir, rmdir, createFile, deleteFile and symlink preconditions.
 
-The first is `postulate funext` in `FilesystemModel`. The second is *not* about
-`funext`: any case split on `Dec (p ≡ p)` needs K, because Agda cannot eliminate
-the reflexive equation on `List String` without it. Every `... | yes refl` clause
-over `p path-≟ p` depends on that, so removing the postulate alone would not make
-`--without-K` pass.
+== Warnings
 
-== Status and waiver
+The check prints `UnsupportedIndexedMatch` warnings. They come from matching
+`yes` / `no` on the standard library's `Dec`, whose `Reflects` index
+needs constructor injectivity that Cubical Agda does not support. The
+consequence is that these functions would not compute under cubical
+transport. Nothing here is used from Cubical Agda, so they do not affect the
+result. Removing them means replacing `Dec` with a non-indexed decision
+type throughout; that is recorded as optional clean-up, not done.
 
-* Status under PROOF-POLICY §5: `proven-with-postulates`.
-* Status under mathesis §5: *Claimed / reproduced*, **not** grade 3.
-* Waiver: this artefact is checked with the unflagged `agda` invocation because the
-  two blockers above are proof-engineering work, not documentation work. The waiver
-  expires when either (a) `funext` is discharged (state whole-filesystem
-  reversibility pointwise, or move the tree to a `--cubical` build), or (b) the path
-  decision is threaded through the operations instead of being re-asked with
-  `p ≟ p` at each site. Until then, no claim in this repository may say the Agda
-  layer is checked under `--safe --without-K --cubical-compatible`.
+== Status
+
+* PROOF-POLICY §5: `PROVEN` for every theorem in the cone.
+* PROOF-POLICY §8: `PWG-3` once this check runs green in CI on the current
+  head (receipts are per commit). No recheck leg counts yet: the Lean and Rocq
+  statements have not been compared with these (§2.2 `AGDA-VERIFIED`, legs
+  `BRIDGE-PENDING`).
 
 == History
 

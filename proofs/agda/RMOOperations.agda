@@ -1,3 +1,4 @@
+{-# OPTIONS --safe --without-K --cubical-compatible #-}
 -- SPDX-License-Identifier: MPL-2.0
 {-
   Valence Shell - RMO (Remove / Match / Obliterate) operations in Agda
@@ -29,7 +30,7 @@ open import Data.List using (List; []; _∷_; length; map)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Product using (_×_; _,_; proj₁; proj₂; ∃; ∃-syntax)
 open import Data.Maybe using (Maybe; just; nothing)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; sym; trans; subst)
+open import Relation.Binary.PropositionalEquality using (_≡_; _≗_; refl; cong; sym; trans; subst)
 open import Relation.Nullary using (¬_; Dec; yes; no)
 open import Data.Empty using (⊥; ⊥-elim)
 open import Data.List.Properties using (length-map)

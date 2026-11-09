@@ -1,3 +1,4 @@
+{-# OPTIONS --safe --without-K --cubical-compatible #-}
 {- Valence Shell - Filesystem Composition (Agda)
 
    Composition theorems for filesystem operations
@@ -11,7 +12,7 @@ open import Data.List using (List; []; _∷_; reverse; map; _++_)
 open import Data.Maybe using (just; nothing)
 open import Data.Product using (_×_; _,_)
 open import Relation.Nullary using (Dec; yes; no)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; cong)
+open import Relation.Binary.PropositionalEquality using (_≡_; _≗_; refl; sym; trans; cong)
 open import Data.Empty using (⊥-elim)
 
 -- Operation type
@@ -56,6 +57,17 @@ applySequence-append : ∀ xs ys fs →
 applySequence-append [] ys fs = refl
 applySequence-append (x ∷ xs) ys fs = applySequence-append xs ys (applyOp x fs)
 
+-- Operations and sequences respect pointwise equality
+applyOp-cong : ∀ op {fs₁ fs₂} → fs₁ ≗ fs₂ → applyOp op fs₁ ≗ applyOp op fs₂
+applyOp-cong (mkdirOp p) h = fsUpdate-cong p _ h
+applyOp-cong (rmdirOp p) h = fsUpdate-cong p _ h
+applyOp-cong (createFileOp p) h = fsUpdate-cong p _ h
+applyOp-cong (deleteFileOp p) h = fsUpdate-cong p _ h
+
+applySequence-cong : ∀ ops {fs₁ fs₂} → fs₁ ≗ fs₂ → applySequence ops fs₁ ≗ applySequence ops fs₂
+applySequence-cong [] h = h
+applySequence-cong (op ∷ ops) h = applySequence-cong ops (applyOp-cong op h)
+
 -- Precondition
 opPrecondition : Operation → Filesystem → Set
 opPrecondition (mkdirOp p) fs = MkdirPrecondition p fs
@@ -95,8 +107,8 @@ HasDefaultFilePerms p fs = fs p ≡ just (mkFSNode File defaultPerms)
 rmdir-mkdir-reversible : ∀ (p : Path) (fs : Filesystem) →
   RmdirPrecondition p fs →
   HasDefaultDirPerms p fs →
-  applyOp (mkdirOp p) (applyOp (rmdirOp p) fs) ≡ fs
-rmdir-mkdir-reversible p fs pre hperms = funext helper
+  applyOp (mkdirOp p) (applyOp (rmdirOp p) fs) ≗ fs
+rmdir-mkdir-reversible p fs pre hperms = helper
   where
     helper : ∀ p' → mkdir p (rmdir p fs) p' ≡ fs p'
     helper p' = case-split (p path-≟ p')
@@ -112,8 +124,8 @@ rmdir-mkdir-reversible p fs pre hperms = funext helper
 deleteFile-createFile-reversible : ∀ (p : Path) (fs : Filesystem) →
   DeleteFilePrecondition p fs →
   HasDefaultFilePerms p fs →
-  applyOp (createFileOp p) (applyOp (deleteFileOp p) fs) ≡ fs
-deleteFile-createFile-reversible p fs pre hperms = funext helper
+  applyOp (createFileOp p) (applyOp (deleteFileOp p) fs) ≗ fs
+deleteFile-createFile-reversible p fs pre hperms = helper
   where
     helper : ∀ p' → createFile p (deleteFile p fs) p' ≡ fs p'
     helper p' = case-split (p path-≟ p')
@@ -146,7 +158,7 @@ record ReversibleDP (op : Operation) (fs : Filesystem) : Set where
 -- Single operation reversibility (with default-perms constraint)
 singleOpReversible : ∀ (op : Operation) (fs : Filesystem) →
   ReversibleDP op fs →
-  applyOp (reverseOp op) (applyOp op fs) ≡ fs
+  applyOp (reverseOp op) (applyOp op fs) ≗ fs
 singleOpReversible (mkdirOp p) fs rev =
   mkdir-rmdir-reversible p fs (ReversibleDP.precondition rev)
 singleOpReversible (rmdirOp p) fs rev with ReversibleDP.permsWitness rev
@@ -169,10 +181,12 @@ data AllReversibleDP : List Operation → Filesystem → Set where
 -- Main composition theorem (with default-perms constraint)
 operationSequenceReversible : ∀ (ops : List Operation) (fs : Filesystem) →
   AllReversibleDP ops fs →
-  applySequence (reverseSequence ops) (applySequence ops fs) ≡ fs
-operationSequenceReversible [] fs nilReversibleDP = refl
-operationSequenceReversible (op ∷ ops) fs (consReversibleDP {op} {ops} {fs} rev revRest) =
-  trans (applySequence-append (reverseSequence ops) (reverseOp op ∷ []) (applySequence ops (applyOp op fs)))
-        (trans (cong (λ x → applyOp (reverseOp op) x)
-                     (operationSequenceReversible ops (applyOp op fs) revRest))
-               (singleOpReversible op fs rev))
+  applySequence (reverseSequence ops) (applySequence ops fs) ≗ fs
+operationSequenceReversible [] fs nilReversibleDP p' = refl
+operationSequenceReversible (op ∷ ops) fs (consReversibleDP {op} {ops} {fs} rev revRest) p' =
+  trans (cong (λ g → g p')
+          (applySequence-append (reverseSequence ops) (reverseOp op ∷ [])
+                                (applySequence ops (applyOp op fs))))
+        (trans (applyOp-cong (reverseOp op)
+                  (operationSequenceReversible ops (applyOp op fs) revRest) p')
+               (singleOpReversible op fs rev p'))

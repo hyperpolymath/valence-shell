@@ -1,3 +1,4 @@
+{-# OPTIONS --safe --without-K --cubical-compatible #-}
 {- Valence Shell - Filesystem Model (Agda)
 
    A formal model of POSIX-like filesystem operations for proving
@@ -15,10 +16,8 @@ open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Bool using (Bool; true; false)
 open import Data.Product using (_×_; ∃; _,_; proj₁; proj₂)
 open import Relation.Nullary using (¬_; Dec; yes; no)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; cong; subst)
+open import Relation.Binary.PropositionalEquality using (_≡_; _≗_; refl; sym; trans; cong; subst)
 open import Function using (_∘_)
-open import Axiom.Extensionality.Propositional using (Extensionality)
-open import Agda.Primitive using (lzero)
 open import Data.Empty using (⊥-elim)
 
 -- Path Model
@@ -86,12 +85,18 @@ parentExists p fs = pathExists (parentPath p) fs
 hasWritePermission : Path → Filesystem → Set
 hasWritePermission p fs = ∃ λ node → (fs p ≡ just node) × (Permissions.writable (FSNode.permissions node) ≡ true)
 
--- Note: isEmptyDir would require additional path prefix predicate
--- Simplified version for now
+-- `xs ⊑ ys`: xs is a prefix of ys (component-wise).
+data _⊑_ : Path → Path → Set where
+  ⊑-[] : ∀ {ys} → [] ⊑ ys
+  ⊑-∷  : ∀ {x xs ys} → xs ⊑ ys → (x ∷ xs) ⊑ (x ∷ ys)
+
+-- A directory is empty when no strict descendant exists. The prefix runs
+-- from p to the child (descendants), matching Coq `is_empty_dir` and the
+-- Lean model after its 2026-11-09 fix.
 record IsEmptyDir (p : Path) (fs : Filesystem) : Set where
   field
     isDir : isDirectory p fs
-    -- In full version: no children exist
+    noChildren : ∀ child → p ⊑ child → ¬ (child ≡ p) → ¬ pathExists child fs
 
 -- Basic Lemmas
 pathExists-emptyFS-root : pathExists rootPath emptyFS
@@ -128,6 +133,12 @@ fsUpdate-other p p' n fs p≢p' with p path-≟ p'
 ... | yes p≡p' = ⊥-elim (p≢p' p≡p')
 ... | no _ = refl
 
+-- fsUpdate respects pointwise equality of the filesystem it updates
+fsUpdate-cong : ∀ p n {fs₁ fs₂} → fs₁ ≗ fs₂ → fsUpdate p n fs₁ ≗ fsUpdate p n fs₂
+fsUpdate-cong p n h p' with p path-≟ p'
+... | yes _ = refl
+... | no _ = h p'
+
 -- mkdir: Create a directory
 record MkdirPrecondition (p : Path) (fs : Filesystem) : Set where
   field
@@ -151,32 +162,20 @@ rmdir p fs = fsUpdate p nothing fs
 
 -- Postcondition Theorems
 mkdir-creates-directory : ∀ p fs → MkdirPrecondition p fs → isDirectory p (mkdir p fs)
-mkdir-creates-directory p fs pre with p path-≟ p
-... | yes refl = defaultPerms , refl
-... | no p≢p = ⊥-elim (p≢p refl)
-  where
-    open import Data.Empty using (⊥-elim)
+mkdir-creates-directory p fs pre = defaultPerms , fsUpdate-at p _ fs
 
 mkdir-path-exists : ∀ p fs → MkdirPrecondition p fs → pathExists p (mkdir p fs)
-mkdir-path-exists p fs pre with p path-≟ p
-... | yes refl = mkFSNode Directory defaultPerms , refl
-... | no p≢p = ⊥-elim (p≢p refl)
-  where
-    open import Data.Empty using (⊥-elim)
+mkdir-path-exists p fs pre = mkFSNode Directory defaultPerms , fsUpdate-at p _ fs
 
 rmdir-removes-path : ∀ p fs → RmdirPrecondition p fs → ¬ pathExists p (rmdir p fs)
-rmdir-removes-path p fs pre (node , eq) with p path-≟ p
-... | yes refl = nothing≢just eq
-... | no p≢p = ⊥-elim (p≢p refl)
-  where
-    open import Data.Empty using (⊥-elim)
+rmdir-removes-path p fs pre (node , eq) =
+  nothing≢just (trans (sym (fsUpdate-at p nothing fs)) eq)
 
--- AXIOM: Functional extensionality at level 0.
--- Uses stdlib's canonical Extensionality type (Axiom.Extensionality.Propositional).
--- Consistent with standard Agda type theory; provable under --cubical.
--- See also: HoTT Book, Axiom 2.9.3.
-postulate
-  funext : Extensionality lzero lzero
+-- Filesystem equality is pointwise (`_≗_`): two filesystems are equal when
+-- they agree on every path. This needs no function extensionality, so the
+-- module checks under `--safe --without-K --cubical-compatible`. (Until
+-- 2026-11-09 these theorems were stated with `_≡_` on functions and closed
+-- with a postulated `funext`.)
 
 -- Helper: from ¬ pathExists, derive fs p ≡ nothing
 not-path-exists-nothing : ∀ {p : Path} {fs : Filesystem} →
@@ -189,8 +188,8 @@ not-path-exists-nothing {p} {fs} notEx with fs p
 
 mkdir-rmdir-reversible : ∀ p fs →
   MkdirPrecondition p fs →
-  rmdir p (mkdir p fs) ≡ fs
-mkdir-rmdir-reversible p fs pre = funext helper
+  rmdir p (mkdir p fs) ≗ fs
+mkdir-rmdir-reversible p fs pre = helper
   where
     open import Data.Empty using (⊥-elim)
 

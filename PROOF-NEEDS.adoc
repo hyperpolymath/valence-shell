@@ -22,11 +22,15 @@ Status words are PROOF-POLICY §5; grades are §8.
 |===
 | Leg | Status | Evidence
 
-| Agda (theory source)
-| `OPEN` under §2.1
-| 9/9 modules check with plain `agda` (2.7.0.1, stdlib 2.2); 9/9 fail under
-`--safe --without-K --cubical-compatible` (`funext` postulate). No theory
-theorem reaches `PWG-3`; all are `ungraded`. `IsEmptyDir` lacks its emptiness field
+| Agda (theory source, owner ruling 2026-11-09)
+| `PROVEN`; `PWG-3` once CI is green on the merge head
+| On `main` (2d798b8): 9/9 failed `--safe --without-K --cubical-compatible`
+(`funext` postulate, K-dependent clauses), and `IsEmptyDir` lacked its
+emptiness field. Fixed in PR #223: equalities are pointwise (`_≗_`), no
+postulates, `IsEmptyDir` complete, non-vacuity witnesses added; 10/10
+modules check through `All.agda` under that invocation (Agda 2.7.0.1, stdlib
+v2.2) and CI checks it (`.github/workflows/agda.yml`). §6 `deviation`
+(open): Agda comes from the upstream release archive, digest-checked, not Guix
 
 | Lean (recheck leg)
 | target-only, `AGDA-PENDING`
@@ -117,9 +121,9 @@ Z3) + 1 ABI-stub tier (Idris2)
 [width="100%",cols="25%,25%,25%,25%",options="header",]
 |===
 |Layer |Item |Location |Nature
-|Agda |`+postulate funext+`
-|`+proofs/agda/FilesystemModel.agda:161-162+` |Standard intensional-TT
-axiom; provable under `+--cubical+`
+|Agda |(closed 2026-11-09) `+postulate funext+`
+|`+proofs/agda/FilesystemModel.agda+` |Removed: filesystem equality is
+now pointwise, so no extensionality is needed
 
 |Coq |`+is_empty_dir_dec+` (a `Theorem` proved by `Classical.classic`; corrected 2026-11-09, it is not an `Axiom`)
 |`+proofs/coq/posix_errors.v+` |Infinite-domain universal quantification

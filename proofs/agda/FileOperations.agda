@@ -1,3 +1,4 @@
+{-# OPTIONS --safe --without-K --cubical-compatible #-}
 {- Valence Shell - File Operations (Agda)
 
    Extension of filesystem model to include file operations.
@@ -10,7 +11,7 @@ open import FilesystemModel
 open import Data.Maybe using (just; nothing)
 open import Data.Product using (_×_; _,_)
 open import Relation.Nullary using (¬_; Dec; yes; no)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans)
+open import Relation.Binary.PropositionalEquality using (_≡_; _≗_; refl; sym; trans)
 
 -- File Operations
 
@@ -33,32 +34,21 @@ deleteFile p fs = fsUpdate p nothing fs
 -- Postcondition Theorems
 
 createFile-creates-file : ∀ p fs → CreateFilePrecondition p fs → isFile p (createFile p fs)
-createFile-creates-file p fs pre with p path-≟ p
-... | yes refl = defaultPerms , refl
-... | no p≢p = ⊥-elim (p≢p refl)
-  where
-    open import Data.Empty using (⊥-elim)
+createFile-creates-file p fs pre = defaultPerms , fsUpdate-at p _ _
 
 createFile-path-exists : ∀ p fs → CreateFilePrecondition p fs → pathExists p (createFile p fs)
-createFile-path-exists p fs pre with p path-≟ p
-... | yes refl = mkFSNode File defaultPerms , refl
-... | no p≢p = ⊥-elim (p≢p refl)
-  where
-    open import Data.Empty using (⊥-elim)
+createFile-path-exists p fs pre = mkFSNode File defaultPerms , fsUpdate-at p _ _
 
 deleteFile-removes-path : ∀ p fs → DeleteFilePrecondition p fs → ¬ pathExists p (deleteFile p fs)
-deleteFile-removes-path p fs pre (node , eq) with p path-≟ p
-... | yes refl = nothing≢just eq
-... | no p≢p = ⊥-elim (p≢p refl)
-  where
-    open import Data.Empty using (⊥-elim)
+deleteFile-removes-path p fs pre (node , eq) =
+  nothing≢just (trans (sym (fsUpdate-at p nothing _)) eq)
 
 -- File Reversibility Theorem
 
 createFile-deleteFile-reversible : ∀ p fs →
   CreateFilePrecondition p fs →
-  deleteFile p (createFile p fs) ≡ fs
-createFile-deleteFile-reversible p fs pre = funext helper
+  deleteFile p (createFile p fs) ≗ fs
+createFile-deleteFile-reversible p fs pre = helper
   where
     open import Data.Empty using (⊥-elim)
 

@@ -59,9 +59,10 @@ the same change as that file. Which verifier carries which obligation:
   only where Rust implements a theorem proved in Agda.
 * *Ada code* → SPARK (none in this repo).
 * *APIs, ABIs, wire formats, engineering properties* → Idris2 (`proofs/idris2/`).
-* *Theory* → Agda as the source of truth, rechecked in Rocq and Lean. This repo's
-  theory rows are currently Coq/Lean-sourced, which is the reverse of that order; see
-  `docs/audits/2026-11-01-assurance-boundary-audit.adoc` AP-3.
+* *Theory* → Agda as the source of truth, rechecked in Rocq and Lean. Owner
+  ruling 2026-11-09 adopts this order here: the Agda tree is the source and checks
+  under the canonical invocation; the existing Lean and Rocq proofs are target-only
+  evidence until compared (`docs/audits/2026-11-09-proof-ground-truth.adoc`).
 * Isabelle/Mizar/Z3 are §4 exceptions and need a recorded exception note.
 
 Status vocabulary is closed (`PROOF-POLICY` §5): `proven`,
@@ -108,7 +109,7 @@ Grade 2 or Grade 1 obligation.
 
 - 21,331 lines of Rust across 32 source files (`find impl/rust-cli/src -name '*.rs' | wc -l`; `wc -l` aggregate, measured 2026-06-01)
 - ~478 theorem candidates across 6 proof systems + Idris2 ABI layer (per issue #42 deep-audit inventory, 2026-06-01)
-- 2 proof holes remaining, **0 real gaps**: 1 justified classical dependency (Coq `is_empty_dir_dec` — a `Theorem` proved with `Classical.classic` and `ClassicalEpsilon`, not a custom `Axiom`; corrected 2026-11-09), 1 structural axiom (Agda `funext` — standard in intensional TT). The former real gap (Coq `obliterate_overwrites_all_blocks`) is CLOSED — re-verified 2026-07-16 via `Print Assumptions` (*Closed under the global context*) under Coq 8.18.0 — see `docs/PROOF_HOLES_AUDIT.adoc`
+- 2 proof holes remaining, **0 real gaps**: 1 justified classical dependency (Coq `is_empty_dir_dec` — a `Theorem` proved with `Classical.classic` and `ClassicalEpsilon`, not a custom `Axiom`; corrected 2026-11-09), 0 Agda postulates (the structural `funext` was removed 2026-11-09: filesystem equality is now pointwise and the tree checks under `--safe --without-K --cubical-compatible`). The former real gap (Coq `obliterate_overwrites_all_blocks`) is CLOSED — re-verified 2026-07-16 via `Print Assumptions` (*Closed under the global context*) under Coq 8.18.0 — see `docs/PROOF_HOLES_AUDIT.adoc`
 - Idris2 ABI layer: **0 proof holes** (all closed 2026-07-01, issue #151 root — builds under `--total`), 0 `partial` markers, 2 registered primitive-eq axioms (`axStringEqRefl`, `axBits8EqRefl`; gated by `.github/scripts/check-idris2-believe-me.sh`)
 - 7 fuzz targets in `impl/rust-cli/fuzz/fuzz_targets/` (parser, arith, job-spec, signal-parse, path-ops, glob-expansion, state-machine)
 
@@ -117,7 +118,7 @@ Grade 2 or Grade 1 obligation.
 ### Critical Priority
 
 1. **No mechanized Lean -> Rust correspondence** — `argued` + `tested-only`, never `proven`; the v1.0 blocker
-2. **0 real proof gaps** — the former Coq `obliterate_overwrites_all_blocks` gap is CLOSED (re-verified 2026-07-16, *Closed under the global context*); 2 documented axioms remain (1 justified decidability + 1 structural funext) — see `docs/PROOF_HOLES_AUDIT.adoc`
+2. **0 real proof gaps** — the former Coq `obliterate_overwrites_all_blocks` gap is CLOSED (re-verified 2026-07-16, *Closed under the global context*); 1 documented classical dependency remains (Coq `is_empty_dir_dec`; the Agda `funext` postulate was removed 2026-11-09) — see `docs/PROOF_HOLES_AUDIT.adoc`
 3. **NOT production-ready** — research prototype only
 
 ### High Priority
@@ -184,10 +185,10 @@ deep-audit session). The corresponding Phase 4C design docs under
 ### Technology Stack
 
 **Formal Verification (6 systems)**:
-- Lean 4 — primary source of truth
+- Agda — theory source of truth (owner ruling 2026-11-09)
+- Lean 4 — recheck leg; also the executable model oracle
 - Coq — CIC foundation, extraction to OCaml
 - Isabelle/HOL — cross-validation
-- Agda — intensional type theory
 - Mizar — set theory foundation
 - Z3 SMT — automated verification
 
@@ -212,9 +213,9 @@ valence-shell/
     zig/                # Zig FFI scaffolding
     mcp/                # MCP server bindings
   proofs/
-    lean4/              # Primary proof source (101 theorems)
+    lean4/              # Lean recheck leg + executable model oracle (101 theorems)
     coq/                # CIC proofs + extraction (131 theorems, 0 admits — re-verified 2026-07-16, Coq 8.18.0)
-    agda/               # Type theory proofs (85 theorems, 3 postulates including funext)
+    agda/               # Theory source of truth (owner ruling 2026-11-09); 10 modules, 0 postulates, --safe --without-K --cubical-compatible
     isabelle/           # HOL proofs (76 theorems)
     mizar/              # Set theory proofs (63 theorems)
     z3/                 # SMT proofs (125 asserts)

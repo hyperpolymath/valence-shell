@@ -1,3 +1,4 @@
+{-# OPTIONS --safe --without-K --cubical-compatible #-}
 {- SPDX-License-Identifier: MPL-2.0 -}
 {- Valence Shell - File Content Operations (Agda)
 
@@ -25,7 +26,7 @@ open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Nat using (ℕ)
 open import Data.Product using (_×_; _,_; ∃; ∃-syntax)
 open import Relation.Binary.PropositionalEquality
-  using (_≡_; refl; sym; trans; cong; inspect; [_])
+  using (_≡_; _≗_; refl; sym; trans; cong; inspect; [_])
 open import Relation.Nullary using (¬_; Dec; yes; no)
 open import Data.Empty using (⊥-elim)
 
@@ -172,8 +173,8 @@ writeFileReversible : ∀ (p : Path) (fs : FilesystemWithContent)
   (oldContent newContent : FileContent) →
   WriteFilePrecondition p fs →
   readFile p fs ≡ just oldContent →
-  writeFile p oldContent (writeFile p newContent fs) ≡ fs
-writeFileReversible p fs oldContent newContent pre hold = funext helper
+  writeFile p oldContent (writeFile p newContent fs) ≗ fs
+writeFileReversible p fs oldContent newContent pre hold = helper
   where
     helper : ∀ p' → writeFile p oldContent (writeFile p newContent fs) p' ≡ fs p'
     helper p' = case-split (p path-≟ p')
@@ -204,8 +205,8 @@ writeFileIndependence p1 p2 content fs p1≢p2 =
 -- Last write wins: writing c2 after c1 at the same path = writing c2 directly
 writeFileLastWriteWins : ∀ (p : Path) (fs : FilesystemWithContent)
   (c1 c2 : FileContent) →
-  writeFile p c2 (writeFile p c1 fs) ≡ writeFile p c2 fs
-writeFileLastWriteWins p fs c1 c2 = funext helper
+  writeFile p c2 (writeFile p c1 fs) ≗ writeFile p c2 fs
+writeFileLastWriteWins p fs c1 c2 = helper
   where
     helper : ∀ p' → writeFile p c2 (writeFile p c1 fs) p' ≡ writeFile p c2 fs p'
     helper p' = case-split (p path-≟ p')
@@ -226,9 +227,9 @@ writeFileLastWriteWins p fs c1 c2 = funext helper
 writeFileCommute : ∀ (p1 p2 : Path) (fs : FilesystemWithContent)
   (c1 c2 : FileContent) →
   ¬ (p1 ≡ p2) →
-  writeFile p1 c1 (writeFile p2 c2 fs) ≡
+  writeFile p1 c1 (writeFile p2 c2 fs) ≗
   writeFile p2 c2 (writeFile p1 c1 fs)
-writeFileCommute p1 p2 fs c1 c2 p1≢p2 = funext helper
+writeFileCommute p1 p2 fs c1 c2 p1≢p2 = helper
   where
     p2≢p1 : ¬ (p2 ≡ p1)
     p2≢p1 = λ e → p1≢p2 (sym e)
@@ -263,8 +264,8 @@ writeFileCommute p1 p2 fs c1 c2 p1≢p2 = funext helper
 writeFileSameContent : ∀ (p : Path) (content : FileContent) (fs : FilesystemWithContent) →
   WriteFilePrecondition p fs →
   readFile p fs ≡ just content →
-  writeFile p content fs ≡ fs
-writeFileSameContent p content fs pre hold = funext helper
+  writeFile p content fs ≗ fs
+writeFileSameContent p content fs pre hold = helper
   where
     helper : ∀ p' → writeFile p content fs p' ≡ fs p'
     helper p' = case-split (p path-≟ p')
@@ -299,10 +300,10 @@ restoreFileState state fs =
 -- Capturing then restoring is identity for writable files
 captureRestoreIdentity : ∀ (p : Path) (fs : FilesystemWithContent) →
   WriteFilePrecondition p fs →
-  restoreFileState (captureFileState p fs) fs ≡ fs
+  restoreFileState (captureFileState p fs) fs ≗ fs
 captureRestoreIdentity p fs hpre with readFile p fs | inspect (readFile p) fs
 ... | just content | [ eq ] = writeFileSameContent p content fs hpre eq
-... | nothing | _ = refl
+... | nothing | _ = λ _ → refl
 
 -- ============================================================================
 -- Integration with MAA Framework
@@ -337,7 +338,7 @@ modificationReversible : ∀ (mrec : FileModificationRecord) (fs : FilesystemWit
   WriteFilePrecondition (FileModificationRecord.modPath mrec) fs →
   readFile (FileModificationRecord.modPath mrec) fs ≡
     just (FileModificationRecord.modOldContent mrec) →
-  reverseModification mrec (applyModification mrec fs) ≡ fs
+  reverseModification mrec (applyModification mrec fs) ≗ fs
 modificationReversible mrec fs hpre hold =
   writeFileReversible
     (FileModificationRecord.modPath mrec)

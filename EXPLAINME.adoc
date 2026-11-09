@@ -111,11 +111,11 @@ reproduce. Absence of a tool is an open obligation, not a passing leg
 | `proofs/lean4/FilesystemModel.lean`, `FileOperations.lean`, `FilesystemComposition.lean`
 | Independent restatement, *not* a translation of the Coq term, so it is not mathesis grade 2; the Lean model is also separately typed
 
-| Same theorems restated in Agda
-| proven-with-postulates (reproduced 2026-11-01)
-| `agda --library-file=<stdlib> <Module>.agda`, Agda 2.6.4.3 + stdlib 2.1.1 *and* 2.7.0.1 + stdlib 2.2: 9/9 modules type-check
-| `proofs/agda/` (all nine modules; `postulate funext` at `FilesystemModel.agda:179`)
-| One postulate (`funext`), no holes -- but *not* the estate invocation. `--safe` reports `Cannot postulate funext with safe flag`; `--without-K` reports `Cannot eliminate reflexive equation p = p ... K has been disabled`. So this row is reproduced under a waiver, is not mathesis grade 3, and the waiver must be recorded beside the artefact per PROOF-POLICY §4. See the audit's AP-6 and its verification round
+| Same theorems in Agda (the theory source since the 2026-11-09 owner ruling)
+| proven (2026-11-09)
+| `agda --safe --without-K --cubical-compatible All.agda`, Agda 2.7.0.1 + stdlib v2.2: 10/10 modules; CI `.github/workflows/agda.yml`
+| `proofs/agda/` (ten modules via `All.agda`)
+| No postulates, no holes, the estate invocation. Filesystem equality is pointwise (`_≗_`). Grade `PWG-3` is derived from the CI receipt on the merge head, not asserted here. See `docs/audits/2026-11-09-proof-ground-truth.adoc`
 
 | Same theorems restated in Isabelle / Mizar / Z3
 | proven-with-postulates (Isabelle) / open (Mizar) / Z3: reproduced for 4 of 5 files, `open` for `symlink_operations.smt2`
