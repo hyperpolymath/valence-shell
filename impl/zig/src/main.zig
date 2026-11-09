@@ -54,7 +54,7 @@ pub const proofs = struct {
         .agda = "proofs/agda/FilesystemModel.agda:L41-L58",
         .isabelle = "archive/proofs/isabelle/FilesystemModel.thy:L35-L50",
         .mizar = "archive/proofs/mizar/filesystem_model.miz:L38-L55",
-        .z3 = "proofs/z3/filesystem_operations.smt2:L28-L45",
+        .z3 = "proofs/z3/filesystem_operations.smt2:L119-L123",
     };
 
     pub const create_delete = ProofRef{
@@ -64,7 +64,7 @@ pub const proofs = struct {
         .agda = "proofs/agda/FileOperations.agda:L30-L45",
         .isabelle = "archive/proofs/isabelle/FileOperations.thy:L25-L40",
         .mizar = "archive/proofs/mizar/file_operations.miz:L28-L43",
-        .z3 = "proofs/z3/filesystem_operations.smt2:L55-L72",
+        .z3 = "proofs/z3/filesystem_operations.smt2:L131-L135",
     };
 
     pub const obliterate_irreversible = ProofRef{

@@ -28,9 +28,10 @@
 ; makes trivially true by omitting them.
 ;
 ; Expected result sequence (scripts/verify-z3.sh):
-;   sat, sat, unsat x 10
-; The two `sat` results are non-vacuity checks: the mkdir and rmdir
-; preconditions are satisfiable, so the theorems below are not vacuous.
+;   sat x 4, unsat x 11
+; The four `sat` results are non-vacuity checks: the mkdir, rmdir, createFile
+; and deleteFile preconditions are satisfiable, so the theorems below are not
+; vacuous.
 
 (set-logic ALL)
 
@@ -44,6 +45,9 @@
 ; `(child-of c p)`: c is a strict descendant of p; uninterpreted, but strict.
 (declare-fun child-of (Path Path) Bool)
 (assert (forall ((p Path)) (not (child-of p p))))
+; A path is a strict descendant of its parent (the root, whose parent is
+; itself, is excluded, which keeps this consistent with strictness).
+(assert (forall ((c Path)) (=> (not (= (parent c) c)) (child-of c (parent c)))))
 
 (define-fun exists-at ((p Path) (fs FS)) Bool (not (= (select fs p) Absent)))
 (define-fun is-dir ((p Path) (fs FS)) Bool (= (select fs p) (Present Directory)))
@@ -69,7 +73,7 @@
 (declare-const p3 Path)
 (declare-const fs FS)
 
-; ===== Non-vacuity (expected: sat, sat) =====
+; ===== Non-vacuity (expected: sat x 4) =====
 
 (push)
 (assert (mkdir-pre p fs))
@@ -81,10 +85,30 @@
 (check-sat)
 (pop)
 
+(push)
+(assert (create-file-pre p fs))
+(check-sat)
+(pop)
+
+(push)
+(assert (delete-file-pre p fs))
+(check-sat)
+(pop)
+
 ; Negative control: a directory with an existing strict descendant does not
 ; satisfy rmdir-pre (expected: unsat).
 (push)
 (assert (child-of p1 p))
+(assert (exists-at p1 fs))
+(assert (rmdir-pre p fs))
+(check-sat)
+(pop)
+
+; Negative control through `parent`: an existing path whose parent is p
+; keeps p from satisfying rmdir-pre (expected: unsat).
+(push)
+(assert (= (parent p1) p))
+(assert (not (= p1 p)))
 (assert (exists-at p1 fs))
 (assert (rmdir-pre p fs))
 (check-sat)

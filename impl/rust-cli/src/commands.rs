@@ -2310,7 +2310,9 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
                     .as_ref()
                     .map_or("(none)", |p| p.description)
                     .bright_white(),
-                "[QED in 6 systems]".bright_green().bold()
+                "[see proof references below; Isabelle archived, unchecked]"
+                    .bright_green()
+                    .bold()
             );
         } else {
             println!(

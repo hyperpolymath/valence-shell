@@ -60,31 +60,39 @@ Plus:
 
 == Build
 
+A bare `lake build` builds only the default target (`FilesystemModel`). To check
+what CI checks (`.github/workflows/rust-cli.yml`, job "Verify Lean 4 Proofs"),
+build every library by name:
+
 ```bash
 cd proofs/lean4
-lake build                       # full proof check
+lake build FilesystemModel FileOperations FilesystemComposition \
+  FilesystemEquivalence SymlinkOperations Extraction \
+  CrashConsistency PathTraversal PreconditionWitnesses
 lake build FilesystemModel       # single module
 ```
 
-NOTE: The `validation.yml verify-proofs` CI job is currently gated
-(`if: false`); enabling the Lean step is item 6 in the
-`docs/governance/CRG-AUDIT-2026-04-18.adoc` closure list. Local
-verification via `lake build` is unaffected.
+`FileContentOperations`, `RMOOperations`, `CopyMoveOperations` and
+`PermissionOperations` do not build under the pinned toolchain (v4.34.1) and are
+excluded; they are open work (`../../docs/audits/2026-11-09-proof-ground-truth.adoc`),
+not silently green.
 
 == Proof-debt status
 
-Per `../../docs/PROOF_HOLES_AUDIT.adoc` (last sweep 2026-04-12): 1 real
-gap, 1 justified axiom, 1 structural item across the full
-six-proof-system stack — the Lean layer specifically is clean.
-`../../STATE.a2ml` carries the canonical machine-readable status under
-`[coq-proof-status]`.
+The current per-obligation status is the proof ledger
+(`../../EXPLAINME.adoc#proof-ledger`), and the 2026-11-09 audit
+(`../../docs/audits/2026-11-09-proof-ground-truth.adoc`) records what was run.
+For this tree: the libraries above build, `PreconditionWitnesses` shows the
+operation preconditions are inhabited, and four libraries do not build. The Coq,
+Agda and Lean escape-hatch count is 0 real gaps with 1 justified classical
+dependency (Coq `is_empty_dir_dec`); see `../../docs/PROOF_HOLES_AUDIT.adoc`.
 
 == See also
 
-* `../README.md` — overall proof-stack design + the 5-system
-  reversibility theorem
-* `../coq/`, `../agda/`, `../isabelle/`, `../mizar/`, `../z3/` —
-  cross-validating proof systems (no per-subdir READMEs yet; tracked as
-  audit item 3)
+* `../README.adoc` — overall proof-stack design
+* `../agda/` — theory source of truth; `../coq/` — the other recheck leg;
+  `../z3/` — supplementary SMT checks
+* `../../archive/proofs/isabelle/`, `../../archive/proofs/mizar/` — archived
+  unchecked on 2026-11-09; not cross-validation evidence
 * `../../docs/LEAN4_RUST_CORRESPONDENCE.adoc` — Lean → Rust
   correspondence design

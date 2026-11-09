@@ -44,8 +44,8 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 
 == Formal Verification
 * [x] Formally Proven Reversibility: `rmdir(mkdir(p, fs)) = fs`
-* [x] Polyglot Verification: 6 proof systems (Coq, Lean 4, Agda, Isabelle, Mizar, Z3)
-* [x] ~478 Theorem Candidates: Proven across different logical foundations (0 real gaps; 1 justified axiom + 1 structural axiom remain — see `docs/PROOF_HOLES_AUDIT.adoc`)
+* [x] Polyglot Verification: Agda (theory source), rechecked in Lean 4 and Rocq/Coq, plus supplementary Z3 checks; Isabelle/HOL and Mizar archived unchecked (`archive/proofs/`)
+* [x] ~478 Theorem Candidates: Proven across different logical foundations (0 real gaps; 1 justified classical dependency remains, Coq `is_empty_dir_dec`; the Agda `funext` postulate was removed 2026-11-09 — see `docs/PROOF_HOLES_AUDIT.adoc`)
 * [x] Content Operations: File read/write with proven reversibility
 * [x] MAA Framework: Mutually Assured Accountability with audit trails
 
@@ -82,7 +82,7 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 
 |Verification
 |Testing only
-|*Formal proofs in 6 systems*
+|*Machine-checked proofs (Agda, Lean 4, Rocq/Coq; Z3 supplementary)*
 
 |Accountability
 |Logs (can be tampered)
@@ -112,7 +112,6 @@ Bash 4.0+
 Coq 8.18+
 Lean 4.3+
 Agda 2.6.4+
-Isabelle/HOL 2024
 Z3 4.12+
 Just (command runner)
 Nix (recommended)
@@ -263,7 +262,10 @@ This connects to Absolute Zero's composition theory.
 
 === Proof Systems
 
-Valence Shell uses **polyglot verification** across 6 proof systems:
+Valence Shell uses **polyglot verification**. Agda is the theory source of
+truth; Lean 4 and Rocq/Coq are recheck legs; Z3 is a supplementary SMT check.
+Isabelle/HOL and Mizar proofs were archived unchecked on 2026-11-09 (`archive/proofs/`); their rows
+are historical and not counted as evidence. Line counts are approximate.
 
 [cols="2,2,3"]
 |===
@@ -281,11 +283,11 @@ Valence Shell uses **polyglot verification** across 6 proof systems:
 |Intensional Type Theory
 |~700
 
-|Isabelle/HOL
+|Isabelle/HOL (archived, unchecked)
 |Higher-Order Logic
 |~650
 
-|Mizar
+|Mizar (archived, unchecked)
 |Tarski-Grothendieck Set Theory
 |~400
 
@@ -294,7 +296,7 @@ Valence Shell uses **polyglot verification** across 6 proof systems:
 |~150
 |===
 
-**Why 6 systems?**
+**Why several systems?**
 
 * Different logical foundations increase confidence
 * Cross-validation catches errors
@@ -517,7 +519,7 @@ Valence Shell achieves **PLATINUM-level** Rhodium Standard Repository (RSR) comp
 * ✅ .well-known/ directory (RFC 9116 compliant)
 * ✅ Build systems (Just + Nix + Container + CI/CD)
 * ✅ TPCF (Tri-Perimeter Contribution Framework)
-* ✅ Formal verification (6 proof systems, ~478 theorem candidates)
+* ✅ Formal verification (Agda source, Lean 4 and Rocq/Coq rechecks, Z3 supplementary; ~478 theorem candidates in the 2026-06-01 census, before Isabelle/Mizar were archived)
 * ✅ Zero runtime dependencies
 * ✅ Offline-first verification
 * ✅ Security guarantees (formal proofs + memory safety)
@@ -534,9 +536,9 @@ See link:RSR_COMPLIANCE.md[RSR_COMPLIANCE.md] for full report.
 
 == FAQ
 
-=== Why 6 proof systems?
+=== Why several proof systems?
 
-Different logical foundations increase confidence. If all 6 systems prove the same theorem, it's highly unlikely all have the same bug.
+Different logical foundations increase confidence: if independently checked systems prove the same statement, it is unlikely they all share the same bug. The checked systems are Agda (theory source), Lean 4 and Rocq/Coq (recheck legs), with Z3 as a supplementary check; Isabelle/HOL and Mizar are archived unchecked. Comparing the Lean and Rocq statements against Agda is open work (`docs/audits/2026-11-09-proof-ground-truth.adoc`).
 
 === Is this ready to put in production?
 
@@ -562,7 +564,6 @@ just verify-proofs
 # - Coq: generates .vo certificate files
 # - Lean 4: compiles to executable
 # - Agda: type-checks and generates interface files
-# - Isabelle: builds heap image
 # - Z3: checks SMT assertions
 ----
 
@@ -589,7 +590,7 @@ If you use Valence Shell in academic work:
   author = {{Valence Shell Contributors}},
   year = {2026},
   url = {https://github.com/Hyperpolymath/valence-shell},
-  note = {Polyglot verification across 6 proof systems},
+  note = {Polyglot verification: Agda source, Lean 4 and Rocq/Coq rechecks, Z3 supplementary},
   version = {0.9.0}
 }
 ----

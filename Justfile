@@ -344,7 +344,6 @@ certify:
           "description": "transactions are atomic - fully committed or fully rolled back"
         }
       ],
-      "total_theorems": 256,
       "signature": "sha256:$(sha256sum certs/verification-certificate.json 2>/dev/null | cut -d' ' -f1 || echo 'pending')"
     }
     EOF

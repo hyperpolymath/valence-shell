@@ -14,14 +14,17 @@
 //!
 //! # Theorem Coverage
 //!
-//! | Theorem | Coq | Lean4 | Agda | Isabelle | Mizar | Z3 |
-//! |---------|-----|-------|------|----------|-------|-----|
-//! | mkdir_rmdir_reversible | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-//! | create_delete_reversible | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-//! | write_file_reversible | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-//! | copy_preserves_source | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-//! | move_reversible | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-//! | obliterate_irreversible | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+//! Isabelle and Mizar were archived unchecked on 2026-11-09 (`archive/proofs/`)
+//! and are not counted here.
+//!
+//! | Theorem | Coq | Lean4 | Agda | Z3 |
+//! |---------|-----|-------|------|----|
+//! | mkdir_rmdir_reversible | ✓ | ✓ | ✓ | ✓ |
+//! | create_delete_reversible | ✓ | ✓ | ✓ | ✓ |
+//! | write_file_reversible | ✓ | ✓ | ✓ | ✓ |
+//! | copy_preserves_source | ✓ | ✓ | ✓ | ✓ |
+//! | move_reversible | ✓ | ✓ | ✓ | ✓ |
+//! | obliterate_irreversible | ✓ | ✓ | ✓ | ✓ |
 
 use crate::{FfiConfig, FfiContext, FfiResult};
 use std::path::PathBuf;

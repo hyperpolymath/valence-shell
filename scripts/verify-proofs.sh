@@ -129,14 +129,14 @@ echo ""
 # Lean 4 Verification
 if check_command lean; then
     log_info "Lean 4 detected"
-    run_test "Lean 4: FilesystemModel.lean" \
-        "cd proofs/lean4 && lean FilesystemModel.lean"
-    run_test "Lean 4: FileOperations.lean" \
-        "cd proofs/lean4 && lean FileOperations.lean"
+    # Same named libraries as CI (.github/workflows/rust-cli.yml); a bare
+    # `lean File.lean` cannot resolve imports outside `lake env`, and a bare
+    # `lake build` builds only the default target.
+    run_test "Lean 4: lake build (CI library set)" \
+        "cd proofs/lean4 && lake build FilesystemModel FileOperations FilesystemComposition FilesystemEquivalence SymlinkOperations Extraction CrashConsistency PathTraversal PreconditionWitnesses"
 else
     log_skip "Lean 4 not installed"
-    ((TOTAL_TESTS += 2))
-    ((SKIPPED_TESTS += 2))
+    ((TOTAL_TESTS += 1))
 fi
 
 echo ""
@@ -144,8 +144,8 @@ echo ""
 # Agda Verification
 if check_command agda; then
     log_info "Agda detected"
-    run_test "Agda: All.agda (--safe --without-K --cubical-compatible)" \
-        "cd proofs/agda && agda --safe --without-K --cubical-compatible All.agda"
+    run_test "Agda: All.agda (--safe --without-K --cubical-compatible) + module coverage" \
+        "bash scripts/check-agda.sh"
 else
     log_skip "Agda not installed"
     ((TOTAL_TESTS += 1))

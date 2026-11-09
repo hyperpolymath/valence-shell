@@ -17,10 +17,12 @@ on:
     paths:
       - 'proofs/agda/**'
       - '.github/workflows/agda.yml'
+      - 'scripts/check-agda.sh'
   pull_request:
     paths:
       - 'proofs/agda/**'
       - '.github/workflows/agda.yml'
+      - 'scripts/check-agda.sh'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -75,21 +77,10 @@ jobs:
             *) echo "::error::expected Agda ${AGDA_VERSION}, got: $ver"; exit 1 ;;
           esac
 
-      # Postulates and escape pragmas need no separate grep: `--safe` (below)
-      # rejects `postulate`, TERMINATING, NO_POSITIVITY_CHECK and the rest.
-      - name: Every module is imported by All.agda
-        working-directory: proofs/agda
-        run: |
-          set -euo pipefail
-          missing=0
-          while IFS= read -r f; do
-            m="${f#./}"; m="${m%.agda}"; m="${m//\//.}"
-            [ "$m" = "All" ] && continue
-            grep -Eq "^[[:space:]]*(open[[:space:]]+)?import[[:space:]]+${m//./\\.}([[:space:]]|\$)" All.agda \
-              || { echo "::error::${m} is not imported by All.agda"; missing=1; }
-          done < <(find . -name '*.agda' -not -path './_build/*' | sort)
-          exit "$missing"
-
-      - name: Check All.agda under the estate invocation
-        working-directory: proofs/agda
-        run: agda --safe --without-K --cubical-compatible All.agda
+      # Postulates and escape pragmas need no separate grep: `--safe` rejects
+      # `postulate`, TERMINATING, NO_POSITIVITY_CHECK and the rest. The script
+      # checks All.agda under the estate invocation, then fails if any module
+      # is missing from the import graph Agda reports (--dependency-graph), so
+      # a commented-out import cannot pass.
+      - name: Check All.agda and module coverage
+        run: bash scripts/check-agda.sh

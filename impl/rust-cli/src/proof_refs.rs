@@ -236,7 +236,7 @@ pub const HARDWARE_ERASE_IRREVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/rmo_operations.v:L45-L68",
     lean_location: "proofs/lean4/RMOOperations.lean:L52-L73",
     agda_location: "proofs/agda/RMOOperations.agda:L48-L70",
-    isabelle_location: "archive/proofs/isabelle/RMO_Operations.thy:L44-L65",
+    isabelle_location: "none (the archived RMO_Operations.thy has no hardware-erase theorem)",
     description: "∀ fs device. ¬∃ op. apply(op, hardware_erase(device, fs)) = fs",
 };
 
@@ -250,7 +250,8 @@ pub const OBLITERATE_IRREVERSIBLE: ProofReference = ProofReference {
     coq_location: "proofs/coq/rmo_operations.v:L70-L95",
     lean_location: "proofs/lean4/RMOOperations.lean:L75-L98",
     agda_location: "proofs/agda/RMOOperations.agda:L72-L96",
-    isabelle_location: "archive/proofs/isabelle/RMO_Operations.thy:L67-L89",
+    isabelle_location:
+        "archive/proofs/isabelle/RMO_Operations.thy:L158-L180 (obliterate_not_injective)",
     description: "∀ fs file. ¬∃ op. apply(op, obliterate(file, fs)) = fs",
 };
 

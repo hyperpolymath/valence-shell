@@ -309,7 +309,6 @@ certify:
           "description": "transactions are atomic - fully committed or fully rolled back"
         }
       ],
-      "total_theorems": 256,
       "signature": "sha256:$(sha256sum certs/verification-certificate.json 2>/dev/null | cut -d' ' -f1 || echo 'pending')"
     }
     EOF
@@ -339,10 +338,10 @@ certify:
     3. **operation_sequence_reversible** - Operation sequences can be undone
     4. **transaction_atomicity** - Transactions maintain ACID properties
 
-    ### Total Coverage
-    - 256 theorems verified across 6 proof systems
-    - 100% precondition checking for all filesystem operations
-    - Memory safety verified via Zig implementation
+    ### Coverage
+    This certificate asserts no theorem count or percentage. Current coverage,
+    with each obligation's status, is in EXPLAINME.adoc#proof-ledger and
+    docs/audits/2026-11-09-proof-ground-truth.adoc.
 
     EOF
 
