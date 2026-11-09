@@ -134,6 +134,8 @@ def mkdir (p : Path) (fs : Filesystem) : Filesystem :=
 structure RmdirPrecondition (p : Path) (fs : Filesystem) : Prop where
   isDir : isDirectory p fs
   isEmpty : isEmptyDir p fs
+  parentExists : parentExists p fs
+  parentIsDir : isDirectory (parentPath p) fs
   parentWritable : hasWritePermission (parentPath p) fs
   notRoot : p ≠ rootPath
 

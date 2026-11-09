@@ -24,6 +24,9 @@ theorem rmdir_pre_inhabited : RmdirPrecondition ["a"] (mkdir ["a"] emptyFS) := b
   refine ⟨⟨defaultPerms, by simp [mkdir, fsUpdate]⟩,
           ⟨⟨defaultPerms, by simp [mkdir, fsUpdate]⟩, ?_⟩,
           ⟨⟨FSNodeType.directory, defaultPerms⟩,
+            by simp [mkdir, fsUpdate, parentPath, emptyFS]⟩,
+          ⟨defaultPerms, by simp [mkdir, fsUpdate, parentPath, emptyFS]⟩,
+          ⟨⟨FSNodeType.directory, defaultPerms⟩,
             by simp [mkdir, fsUpdate, parentPath, emptyFS], rfl⟩,
           by simp [rootPath]⟩
   intro child hpre hne ⟨node, hn⟩
@@ -42,6 +45,13 @@ theorem rmdir_pre_rejects_nonempty :
   intro h
   exact h.isEmpty.2 ["a", "b"] (by simp [List.isPrefixOf]) (by simp)
     ⟨⟨FSNodeType.directory, defaultPerms⟩, by simp [mkdir, fsUpdate]⟩
+
+-- A writable file cannot serve as the parent of a removable directory.
+theorem rmdir_pre_rejects_file_parent :
+    ¬ RmdirPrecondition ["a", "b"] (mkdir ["a", "b"] (createFile ["a"] emptyFS)) := by
+  intro h
+  obtain ⟨perms, hp⟩ := h.parentIsDir
+  simp [parentPath, mkdir, createFile, fsUpdate] at hp
 
 theorem createFile_pre_inhabited : CreateFilePrecondition ["a"] emptyFS :=
   ⟨by simp [pathExists, emptyFS], ⟨_, rfl⟩, ⟨_, rfl⟩, ⟨_, rfl, rfl⟩⟩
