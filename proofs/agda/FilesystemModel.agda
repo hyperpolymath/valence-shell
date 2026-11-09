@@ -175,7 +175,7 @@ rmdir-removes-path p fs pre (node , eq) =
 -- they agree on every path. This needs no function extensionality, so the
 -- module checks under `--safe --without-K --cubical-compatible`. (Until
 -- 2026-11-09 these theorems were stated with `_≡_` on functions and closed
--- with a postulated `funext`.)
+-- with an assumed function-extensionality axiom.)
 
 -- Helper: from ¬ pathExists, derive fs p ≡ nothing
 not-path-exists-nothing : ∀ {p : Path} {fs : Filesystem} →

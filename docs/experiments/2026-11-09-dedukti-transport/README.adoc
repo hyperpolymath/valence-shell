@@ -45,7 +45,7 @@ Measured from the source, not by running the tool:
 * `stack.yaml` pins the Agda fork `Deducteam/agda` at `b026db1`, branch `to_dk`,
   whose `Agda.cabal` says version `2.6.3`: a development snapshot from before the
   2.6.3 release, on the Stackage LTS 18.21 resolver (GHC 8.10).
-* That fork's option parser (`src/full/Agda/Interaction/Options/Base.hs`) has
+* That fork's option parser (Haskell module `Agda.Interaction.Options.Base`) has
   `--safe` and `--without-K` but *no* `--cubical-compatible`. Agda added that flag
   in the 2.6.3 release (`CHANGELOG.md` at `v2.6.3`). Every module in `proofs/agda/`
   starts with `{-# OPTIONS --safe --without-K --cubical-compatible #-}`, so the
