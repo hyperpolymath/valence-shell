@@ -12,7 +12,68 @@ cross-system witness matrix) and *docs/PROOF-OPEN-FRONTIER.adoc* (every
 valuable but unproven theorem, with tractability classification).
 ____
 
-=== Reproduction state (2026-11-01)
+=== Reproduction state (2026-11-09)
+
+Every leg was re-run on `main` at `2d798b8`. Full record, with tool versions,
+digests and the policy reading: `docs/audits/2026-11-09-proof-ground-truth.adoc`.
+Status words are PROOF-POLICY §5; grades are §8.
+
+[cols="2,2,6",options="header"]
+|===
+| Leg | Status | Evidence
+
+| Agda (theory source, owner ruling 2026-11-09)
+| `PROVEN`; `PWG-3` once CI is green on the merge head
+| On `main` (2d798b8): 9/9 failed `--safe --without-K --cubical-compatible`
+(`funext` postulate, K-dependent clauses), and `IsEmptyDir` lacked its
+emptiness field. Fixed in PR #223: equalities are pointwise (`_≗_`), no
+postulates, `IsEmptyDir` complete, non-vacuity witnesses added; 10/10
+modules check through `All.agda` under that invocation (Agda 2.7.0.1, stdlib
+v2.2) and CI checks it (`.github/workflows/agda.yml`). §6 `deviation`
+(open): Agda comes from the upstream release archive, digest-checked, not Guix
+
+| Lean (recheck leg)
+| target-only, `AGDA-PENDING`
+| Lean 4.34.1: 8 libraries + `model_oracle` + the new `PreconditionWitnesses`
+build; `FileContentOperations`, `RMOOperations`, `CopyMoveOperations`,
+`PermissionOperations` do not. `RmdirPrecondition` was uninhabited (ancestor/descendant
+prefix reversed in `isEmptyDir`), making every theorem that assumed it vacuous;
+fixed 2026-11-09 and guarded by `PreconditionWitnesses`
+
+| Rocq/Coq (recheck leg)
+| target-only, `AGDA-PENDING`
+| Coq 8.18.0: 11/11 files build; 133 theorems, 98 closed under the global
+context, 35 on standard-library axioms only (funext 30, `classic` 6,
+`constructive_indefinite_description` 6). No custom `Axiom`
+
+| Z3 (§4 exception)
+| `ASSUMED`
+| Z3 4.8.12. On `main`: all 5 files axiomatic, `filesystem_operations` circular,
+`symlink_operations` proving nothing, no exception notes. In PR #223: those two files
+define their operations as array `store`s, check non-vacuity and negate each goal;
+all 5 carry a §4 note; `scripts/verify-z3.sh` passes. Still `ASSUMED` (no certificate)
+
+| Idris2 (engineering/ABI)
+| `PROVEN-WITH-AXIOMS`
+| Idris2 0.8.0: 5/5 modules under `--total`; 2 registered primitive-eq axioms
+
+| Isabelle, Mizar
+| unchecked
+| not run this round (Isabelle server unavailable; Mizar installer not
+permitted in the audit session)
+
+| Rust
+| `TESTED`; Creusot/Pearlite and Verus `OPEN`
+| `cargo test`: 827 passed, 0 failed, 15 ignored. No Creusot, Pearlite or
+Verus contracts exist
+|===
+
+The toolchains above were installed outside Guix for this audit; each is an
+open §6 `deviation`, listed in the audit record. The Dedukti experiment adds two more,
+Lambdapi 4.0.0 and Dedukti, both from opam on an OCaml 4.14.2 switch (`open`; see
+`docs/experiments/2026-11-09-dedukti-transport/`).
+
+=== Reproduction state (2026-11-01, superseded by 2026-11-09)
 
 This file records what is *needed*; this block records what has actually been
 *run*. The full receipt is
@@ -64,11 +125,11 @@ Z3) + 1 ABI-stub tier (Idris2)
 [width="100%",cols="25%,25%,25%,25%",options="header",]
 |===
 |Layer |Item |Location |Nature
-|Agda |`+postulate funext+`
-|`+proofs/agda/FilesystemModel.agda:161-162+` |Standard intensional-TT
-axiom; provable under `+--cubical+`
+|Agda |(closed 2026-11-09) `+postulate funext+`
+|`+proofs/agda/FilesystemModel.agda+` |Removed: filesystem equality is
+now pointwise, so no extensionality is needed
 
-|Coq |`+Axiom is_empty_dir_dec+` (justified)
+|Coq |`+is_empty_dir_dec+` (a `Theorem`, not an `Axiom`; corrected 2026-11-09). It depends on two standard-library axioms: `Classical_Prop.classic` and `ClassicalEpsilon.constructive_indefinite_description`
 |`+proofs/coq/posix_errors.v+` |Infinite-domain universal quantification
 
 |Coq |(closed) `+mkdir_two_dirs_reversible+`
@@ -387,7 +448,7 @@ theorem in this repo establishes that bytes are absent from a device.
 
 The three Coq admits (#56 / #57 / #58) closed in the 2026-06-02 PM
 session bring the Coq layer to *zero `+Admitted+` markers* — only the
-single justified `+Axiom is_empty_dir_dec+` remains.
+single justified classical theorem `+is_empty_dir_dec+` remains (not an `Axiom`; corrected 2026-11-09).
 `+obliterate_not_injective+` — the formal grounding for the
 "`mathematically irreversible secure deletion`" marketing claim — is now
 soundly proven (under the strengthened `+block_overwritten+`-aware

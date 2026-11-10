@@ -66,9 +66,14 @@ def parentExists (p : Path) (fs : Filesystem) : Prop :=
 def hasWritePermission (p : Path) (fs : Filesystem) : Prop :=
   ∃ node, fs p = some node ∧ node.permissions.writable = true
 
+-- `p` is a directory with no strict descendants: every path that has `p` as a
+-- proper prefix is absent. Before 2026-11-09 the prefix test ran the other way
+-- (`child.isPrefixOf p`), quantifying over ancestors. The parent always exists,
+-- so `RmdirPrecondition` was uninhabited and every theorem assuming it was
+-- vacuous. Regression witness: `rmdir_pre_inhabited` in PreconditionWitnesses.
 def isEmptyDir (p : Path) (fs : Filesystem) : Prop :=
   isDirectory p fs ∧
-  ∀ child : Path, child.isPrefixOf p → child ≠ p → ¬pathExists child fs
+  ∀ child : Path, p.isPrefixOf child → child ≠ p → ¬pathExists child fs
 
 -- Basic Lemmas
 
@@ -129,6 +134,8 @@ def mkdir (p : Path) (fs : Filesystem) : Filesystem :=
 structure RmdirPrecondition (p : Path) (fs : Filesystem) : Prop where
   isDir : isDirectory p fs
   isEmpty : isEmptyDir p fs
+  parentExists : parentExists p fs
+  parentIsDir : isDirectory (parentPath p) fs
   parentWritable : hasWritePermission (parentPath p) fs
   notRoot : p ≠ rootPath
 

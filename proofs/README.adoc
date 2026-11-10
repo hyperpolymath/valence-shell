@@ -1,5 +1,11 @@
 == Valence Shell Formal Proofs
 
+NOTE: *2026-11-09.* Agda (`agda/`) is the theory source of truth, checked under
+`--safe --without-K --cubical-compatible`; Rocq (`coq/`) and Lean (`lean4/`) are
+recheck legs. The Isabelle and Mizar trees were archived, unchecked, to
+`../archive/proofs/` (with a successor map). Statements below about "5 proof
+assistants" predate that. Current state: `../docs/audits/2026-11-09-proof-ground-truth.adoc`.
+
 This directory contains formal proofs of filesystem operations across *5
 different proof assistants*, establishing the MAA (Mutually Assured
 Accountability) framework with polyglot verification.
@@ -135,27 +141,13 @@ lake build
 [source,bash]
 ----
 cd proofs/agda
-agda FilesystemModel.agda
-# Produces: FilesystemModel.agdai
+agda --safe --without-K --cubical-compatible All.agda
+# Checks every module (interface files go under _build/, not committed)
 ----
 
-==== Isabelle/HOL
+==== Isabelle/HOL and Mizar
 
-[source,bash]
-----
-cd proofs/isabelle
-isabelle build -D .
-# Or: isabelle jedit FilesystemModel.thy
-----
-
-==== Mizar
-
-[source,bash]
-----
-cd proofs/mizar
-mizf filesystem_model.miz
-# Produces verification output
-----
+Archived on 2026-11-09; see `../archive/proofs/README.adoc`.
 
 === What This Enables
 

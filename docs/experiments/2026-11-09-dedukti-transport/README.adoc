@@ -1,0 +1,137 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Experiment: can the Agda proofs be transported to Rocq and Lean through Dedukti?
+:toc: preamble
+
+*Date:* 2026-11-09. *Asked by:* the owner, with route-plan ruling OD-32.
+*Why:* `hyperpolymath/standards` PROOF-POLICY §2 says each Agda theorem is rechecked
+in Rocq and Lean "transport first": carry the Agda proof term across through
+Dedukti/Lambdapi, and only fall back to re-proving by hand. This experiment asks
+whether that route works today for a tree like `proofs/agda/`, and what mathesis
+and echidna would need to make it work.
+
+== Result in one paragraph
+
+Transport to Rocq or Lean does not work today, for three independent reasons. Two
+of them are measured, and the third is measured on a minimal stand-in. (1) The
+only Agda-to-Dedukti translator, Agda2Dedukti, is built on a 2021 Agda fork that has
+no `--cubical-compatible` option, so it cannot read any module written to the
+estate's canonical invocation, and it predates the agda-stdlib 2.x that such modules
+import. (2) Lambdapi, the hub, exports to Rocq only by *dropping rewrite rules*,
+and rewrite rules are how a Dedukti encoding of Agda represents every
+pattern-matching definition. A proof that relies on a definition computing is then
+rejected by Rocq. (3) Lambdapi 4.0.0 has no Lean export at all. Dedukti itself,
+however, checked the same encoding without trouble. So Dedukti is usable *today*
+as an independent checking kernel, but not as a bridge to Rocq or Lean.
+
+== Toolchain
+
+[cols="2,3",options="header"]
+|===
+|Tool |Version and source
+|Lambdapi |4.0.0, opam (`opam install lambdapi`), OCaml 4.14.2 switch
+|Dedukti (`dk`) |opam (`opam install dedukti`), same switch
+|Rocq/Coq |8.18.0, Ubuntu package
+|Agda2Dedukti |`Deducteam/Agda2Dedukti` master `c7c7d67` (2022-01-24); *not built*, see below
+|===
+
+All were installed for this experiment outside Guix: a PROOF-POLICY §6 deviation,
+recorded here and in `PROOF-NEEDS.adoc`.
+
+== Finding 1: Agda2Dedukti cannot read our modules
+
+Measured from the source, not by running the tool:
+
+* `stack.yaml` pins the Agda fork `Deducteam/agda` at `b026db1`, branch `to_dk`,
+  whose `Agda.cabal` says version `2.6.3`: a development snapshot from before the
+  2.6.3 release, on the Stackage LTS 18.21 resolver (GHC 8.10).
+* That fork's option parser (Haskell module `Agda.Interaction.Options.Base`) has
+  `--safe` and `--without-K` but *no* `--cubical-compatible`. Agda added that flag
+  in the 2.6.3 release (`CHANGELOG.md` at `v2.6.3`). Every module in `proofs/agda/`
+  starts with `{-# OPTIONS --safe --without-K --cubical-compatible #-}`, so the
+  translator's Agda rejects them before translation.
+* Our tree imports agda-stdlib v2.2, which states "tested using Agda 2.7.0 and
+  2.7.0.1". The translator's own README lists "correct errors when translating the
+  standard library" as open work.
+
+Building the translator was not attempted. The session's safety policy refused to
+compile an unvetted external repository, and the measured facts above already
+decide the question for this tree.
+
+== Finding 2: Lambdapi's Rocq export drops rewrite rules
+
+`Nat.lp` (in this directory) is a minimal stand-in for the Agda encoding:
+naturals, addition defined by two rewrite rules (as Agda2Dedukti encodes
+pattern-matching definitions), an equality type, and the theorem
+`one_plus_zero : add (succ zero) zero = succ zero`, proved by `refl`. The proof
+only type-checks if `add` computes.
+
+[source,shell]
+----
+lambdapi check Nat.lp                                  # accepted
+lambdapi export --verbose 0 -o dk Nat.lp > Nat.dk && dk check Nat.dk
+# [SUCCESS] Nat.dk was successfully checked.
+lambdapi export --verbose 0 -o raw_coq Nat.lp > Nat.v
+# [Nat.lp:13:0-14:39] Command not translated.   <- the rewrite rules (on stderr)
+coqc Nat.v
+# Error: The term "refl (succ zero)" has type "El (Eq (succ zero) (succ zero))"
+# while it is expected to have type "El (Eq (add (succ zero) zero) (succ zero))".
+----
+
+The exported Rocq file declares `add` as an `Axiom` with no equations, so the
+definitional step the proof relies on is gone. (Lambdapi's documentation says the
+same: `raw_coq` and `stt_coq` accept only `require`, `open`, `symbol` and `rule`,
+and ignore rules. `stt_coq` additionally assumes a simple-type-theory encoding, which
+Agda's dependent type theory is not.) A side observation: `raw_coq` does not rename
+identifiers that are reserved in Rocq; a symbol named `Set` makes `coqc` fail to
+parse, so the stand-in uses `Univ`.
+
+Nearly every proof in `proofs/agda/` depends on reduction in exactly this way
+(`fsUpdate` unfolding, `refl` on computed values), so this blocks transport of the
+tree even once Finding 1 is fixed.
+
+== Finding 3: no Lean export
+
+Lambdapi 4.0.0's `export -o` accepts `lp`, `raw_dk`, `dk`, `raw_coq` and `stt_coq`
+(from `lambdapi export --help`). There is no Lean target. A Lean exporter appears
+only in an open Lambdapi pull request.
+
+== What this means
+
+* *For this repository.* The recheck legs (OD-30) are "re-proved", not
+  "transported", for now, and the ledger must say so (§2). Dedukti can still be
+  added as an extra kernel check later: it is independent of Agda's kernel, but it
+  is not a Rocq or Lean leg and does not count toward `PWG-2i`.
+* *For PROOF-POLICY and mathesis.* "Transport first" is currently unreachable for
+  any repository that follows the policy's own §2.1 invocation. The policy, or the
+  mathesis architecture note, should say so explicitly, so that repositories do not
+  wait on a route that cannot run. Mathesis census rows could carry a
+  `transport: blocked (agda2dedukti pre-cubical-compatible)` note until it changes.
+* *For echidna.* Its exchange layer speaks Dedukti, so it can already use `dk` as an
+  independent checker. To carry Agda proofs on to Rocq or Lean, the exchange needs
+  one of three things, in order of effort. None of the three was tried in this
+  experiment; they are design options for mathesis and echidna to evaluate.
+  . *Rules as equations.* Export each rewrite rule `l ↪ r` as an axiom
+    `∀ x̄, l = r` and turn each conversion step in the proof term into an explicit
+    rewrite (`eq_rect`) on it. Rocq and Lean then check the proof, but the rule
+    axioms join the trust base, so the leg is at best `PROVEN-WITH-AXIOMS` and is
+    recorded as "transported, with rule axioms". This is the route mathesis could
+    adopt soonest.
+  . *Rules as definitions.* Recognise rule sets that are the clauses of a
+    terminating function and emit them as a `Fixpoint` / `def` with pattern
+    matching, so conversion still holds and no axiom is added. This is the
+    elegant result, but it needs a termination and coverage argument per definition
+    (Agda already has one; it would have to be carried along).
+  . *A modern Agda front end.* Port Agda2Dedukti, or write a successor, against
+    Agda 2.7 and agda-stdlib 2.x with `--cubical-compatible` support. Without it,
+    neither of the above has an input.
+
+== Reproduce
+
+From this directory, with Lambdapi and Dedukti on `PATH` and Rocq installed, run the
+four commands in Finding 2. Keep `--verbose 0`: without it Lambdapi 4.0.0 prints
+progress lines ("Start checking …", with colour codes) on standard output, into the
+exported file, and `dk check` then rejects it. With it, the exported files are clean and
+the "Command not translated" warning goes to standard error. Check that `Nat.dk` is not
+empty before trusting a `dk check` success: an empty file also checks. The
+`lambdapi.pkg` file makes this directory a Lambdapi package.

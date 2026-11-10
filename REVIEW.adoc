@@ -1,5 +1,10 @@
 == Valence Shell - One-Day Sprint Review
 
+NOTE: *Historical record (2025-11-22), not current status.* Its claims that the
+theorems are "proven" in five systems were never CI-checked for Isabelle or Mizar;
+both trees were archived unchecked on 2026-11-09. Current state:
+`docs/audits/2026-11-09-proof-ground-truth.adoc`.
+
 *Date*: 2025-11-22 *Type*: Autonomous polyglot verification development
 
 '''''

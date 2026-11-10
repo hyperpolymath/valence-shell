@@ -21,13 +21,16 @@ below.
 
 ==== Formal Verification Status
 
-Valence Shell uses *polyglot verification* across 6 proof systems:
+Valence Shell uses *polyglot verification*: Agda is the theory source, Lean 4 and
+Rocq/Coq are recheck legs, and Z3 is a supplementary check. Isabelle/HOL and Mizar
+were archived unchecked on 2026-11-09 (`archive/proofs/`). Per-obligation status is
+in `EXPLAINME.adoc#proof-ledger`; the list below is the scope of the in-model proofs,
+not a claim that every system proves every item:
 
 ✅ *Formally Proven* (Mathematical Guarantees): - Directory operations
 (mkdir/rmdir) reversibility - File operations (create/delete)
 reversibility - File content operations (read/write) reversibility -
-Operation independence - Composition correctness - ~250+ theorems across
-Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3 (4 gaps remain)
+Operation independence - Composition correctness
 
 ⚠️ *Not Verified* (Manual Review Required): - OCaml FFI layer
 (filesystem_ffi.ml) - Elixir reference implementation - POSIX syscall
@@ -38,7 +41,7 @@ interface - Extraction correctness (Coq → OCaml)
 ....
 ┌─────────────────────────────────────┐
 │ Formal Proofs (HIGH TRUST)          │
-│ - Coq/Lean/Agda/Isabelle/Mizar      │
+│ - Agda (source); Lean, Coq rechecks │
 │ - Mathematical guarantees            │
 └─────────────┬───────────────────────┘
               │ Extraction (GAP)
@@ -112,8 +115,8 @@ of undo capability
 ✅ *MAA Framework Foundation* - Audit trail for modifications -
 Reversible operations with proof - FileModificationRecord tracking
 
-✅ *Type Safety* - Coq/Lean 4/Agda: Dependent types - Isabelle/HOL:
-Higher-order logic - OCaml: Strong static typing - Elixir: Pattern
+✅ *Type Safety* - Coq/Lean 4/Agda: Dependent types (Isabelle/HOL proofs
+archived unchecked 2026-11-09) - OCaml: Strong static typing - Elixir: Pattern
 matching, guards
 
 ==== Implemented, best-effort (not a compliance claim)
@@ -182,8 +185,9 @@ NIST/IETF standards - Disclose any custom primitives
 
 ==== Current Dependencies (Minimal)
 
-*Proof Systems* (development only): - Coq 8.18+ - Lean 4.3+ - Agda
-2.6.4+ - Isabelle/HOL 2024 - Mizar (optional) - Z3 4.12+
+*Proof Systems* (development only): - Agda 2.7.0.1 with agda-stdlib v2.2 -
+Lean 4 (pinned in `proofs/lean4/lean-toolchain`) - Coq 8.18+ - Z3 4.12+.
+Isabelle/HOL and Mizar are no longer needed (archived unchecked 2026-11-09)
 
 *Runtime* (OCaml implementation): - OCaml 5.0+ (compiler + stdlib only)
 - Zero external runtime dependencies ✅
@@ -233,7 +237,7 @@ acknowledged here (with permission).
 * ✅ *RSR Framework*: Bronze level (this security policy = part of
 compliance)
 * ✅ *Offline-First*: No network dependencies
-* ✅ *Type Safety*: All 6 proof systems provide strong typing
+* ✅ *Type Safety*: the checked proof systems (Agda, Lean 4, Coq) are typed
 * ✅ *Memory Safety*: safe Rust in `impl/rust-cli/`, with `unsafe` confined to
 audited POSIX FFI sites (see `audits/assail-classifications.a2ml`)
 

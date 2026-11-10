@@ -24,7 +24,7 @@ irreplaceable data.
   (https://rustup.rs[install via rustup]).
 * **just** — task runner (https://github.com/casey/just[install guide]).
 
-The six proof systems (Coq, Lean 4, Agda, Isabelle, Mizar, Z3) are **optional** —
+The proof toolchains (Agda, Lean 4, Coq, Z3; Isabelle and Mizar are archived) are **optional** —
 they are only needed to re-check the formal proofs, not to build or run the shell.
 
 == Launch it (fastest path)

@@ -24,9 +24,7 @@ perimeters:
 *Who*: Project maintainers with formal methods expertise
 
 *Files*: - `+proofs/coq/*.v+` - Coq proofs - `+proofs/lean4/*.lean+` -
-Lean 4 proofs - `+proofs/agda/*.agda+` - Agda proofs -
-`+proofs/isabelle/*.thy+` - Isabelle proofs - `+proofs/mizar/*.miz+` -
-Mizar proofs - `+impl/ocaml/filesystem_ffi.ml+` - FFI layer
+Lean 4 proofs - `+proofs/agda/*.agda+` - Agda proofs (theory source) - `+impl/ocaml/filesystem_ffi.ml+` - FFI layer
 
 *Requirements*: - Formal verification expertise - Proof assistant
 proficiency - Security review process - Maintainer approval required
@@ -86,7 +84,7 @@ Matters`"
 Bash
 
 *Full Development* (to modify proofs): - Coq 8.18+ - Lean 4.3+ - Agda
-2.6.4+ - Isabelle 2024 - Z3 4.12+ - Just (command runner) - Nix
+2.7.0.1 with agda-stdlib v2.2 - Z3 4.8+ - Just (command runner) - Nix
 (recommended for reproducible builds)
 
 ==== Setup Instructions
@@ -276,7 +274,6 @@ just verify-proofs
 just build-coq
 just build-lean4
 just build-agda
-just build-isabelle
 ----
 
 ==== Implementation Testing

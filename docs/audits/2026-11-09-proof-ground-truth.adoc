@@ -1,0 +1,312 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Proof ground truth and PROOF-POLICY conformance, 2026-11-09
+:toc: macro
+
+This record re-runs every prover leg in `proofs/` on `main` at `2d798b8`. It then
+reads the results, and the merged route plan
+(`docs/plans/VSH-ROUTE-PLAN-2026-11-04.adoc`), against the estate proof policy
+(`hyperpolymath/standards` `3-practice/PROOF-POLICY.adoc`, rulings 2026-10-26,
+2026-11-04 and 2026-11-07). Status words are the policy's closed vocabulary
+(§5). Grades are Proof Witness Grades (§8) and always carry the `PWG-` prefix.
+
+toc::[]
+
+== 1. Summary
+
+* *One real soundness defect was found and is fixed in this change.* In Lean,
+  `RmdirPrecondition` was uninhabited: `isEmptyDir` quantified over ancestors
+  (`child.isPrefixOf p`) instead of descendants, and the parent always exists.
+  Every Lean theorem with that hypothesis was vacuous. That covers
+  `rmdir_removes_path`, `rmdir_mkdir_reversible`, `rmdirPreservesEquiv`, and,
+  through `reversible (.mkdirOp p)`, which needs `RmdirPrecondition` after the
+  mkdir, every composition theorem on a sequence containing mkdir or rmdir. The
+  Rocq/Coq and Isabelle definitions have the correct direction. Section 3.1 has
+  the evidence.
+* *No theory theorem in this repository reaches `PWG-3`.* The Agda tree does
+  not check under the §2.1 invocation (`--safe --without-K
+  --cubical-compatible`), because of the `funext` postulate. By §8, every theory
+  theorem here is `ungraded`. The census: 0 of 9 Agda modules check under §2.1,
+  so 0 theorems are at `PWG-3` or better.
+* The existing Lean and Coq proofs are *target-only evidence* under §3, because
+  no Agda proof is yet `PROVEN`, so the statements cannot be compared. Their
+  correspondence state is `AGDA-PENDING` (§2.2).
+* The Z3 leg is `ASSUMED` at best (§5: a direct SMT run with no certificate),
+  and two of its five files prove nothing.
+* Idris2 (the engineering/ABI leg, §1) builds under `--total`:
+  `PROVEN-WITH-AXIOMS`, with the 2 registered primitive-equality axioms.
+* The Rust suite is green: 827 passed, 0 failed, 15 ignored, across 23 test
+  binaries. No Creusot, Pearlite or Verus contract exists yet (§1.2), so the Rust
+  implementation leg is `OPEN`.
+* The merged route plan disagrees with the policy in six places (section 5).
+  Those need owner rulings before the implementation session starts.
+
+== 2. Toolchains used
+
+None of these came from the Guix manifest or a container. They were installed
+for this audit, so each is a §6 *deviation*. These records cover this audit
+session only. CI lanes that install provers outside Guix still need their own
+records (section 5, gap G-6).
+
+[cols="2,2,4,2",options="header"]
+|===
+|Leg |Tool and version |Source and digest |State
+
+|Lean |Lean 4.34.1 (commit `5045d00`) |release archive
+`lean.tar.zst`, sha256 `47bf4bbd78f70c2e9670598ab7124d92b6efb7330ff33e5fbb4030f6fd72e4e4`
+|`open`
+|Rocq/Coq |Coq 8.18.0 |Ubuntu apt package |`open`
+|Agda |Agda 2.7.0.1, standard library 2.2 (rev `6cd04e46`) |release
+archive `agda.tar.xz`, sha256
+`975b515a14877ab6bce5bfc641e16c4a3ee52ca5d7f846577dee80aa2145db8a`; stdlib from
+git |`open`
+|Z3 |Z3 4.8.12 |Ubuntu apt package |`open`
+|Idris2 |Idris2 0.8.0 |built from source, rev `15a3e4e7` |`open`
+|Mizar |— |the archive was downloaded (sha256
+`2ca6aa03a8a19aa1d96e4d80c15e32b59bd789c9aff7b0ca9168834c468e8637`) but the
+session's permission policy refused running its installer. *Not run.* |`open`
+|Isabelle |— |the distribution server returned HTTP 503. *Not run.* |`open`
+|===
+
+== 3. Results per leg
+
+[cols="2,3,3,2",options="header"]
+|===
+|Leg |What ran |Result |Status (§5) and correspondence (§2.2)
+
+|Agda, theory source (§1) |all 9 modules, plain `agda`, and again under
+`agda --safe --without-K --cubical-compatible` |plain: 9/9 check. §2.1: 9/9
+fail with `Cannot postulate funext with safe flag`
+(`FilesystemModel.agda:178-179`). `IsEmptyDir` has only an `isDir` field: the
+emptiness half of the precondition is missing, so the Agda rmdir precondition is
+weaker than the Coq and Lean ones |`OPEN` under §2.1. Every theory theorem is
+`ungraded`
+
+|Lean, recheck leg |`lake build` per library, 12 libraries plus
+`model_oracle` |8 libraries and the oracle build. `FileContentOperations`
+(line 292, application type mismatch), `RMOOperations` (172, simp failed),
+`CopyMoveOperations` (19, unknown namespace `Valence.Filesystem`) and
+`PermissionOperations` (28, instance synthesis failed) do not build. No `sorry`
+and no `axiom`. `RmdirPrecondition` uninhabited (3.1, fixed here) |kernel-checked
+where it builds; *target-only*, `AGDA-PENDING`
+
+|Rocq/Coq, recheck leg |all 11 `_CoqProject` files; `Print Assumptions` on all
+133 theorems |all build. 98 are *closed under the global context*. 35 use
+standard-library axioms only: `functional_extensionality_dep` (30),
+`Classical_Prop.classic` (6), `ClassicalEpsilon.constructive_indefinite_description`
+(6). No custom `Axiom`. The 6 classical theorems are `is_empty_dir_dec`, which
+is a `Theorem` proved by excluded middle and is not an axiom as `CLAUDE.md` and
+`PROOF-NEEDS.adoc` said, and five `safe_rmdir_*` / `safe_mkdir_rmdir_reversible`
+lemmas that use it. `rmdir_precondition` is inhabited: a witness on `mkdir ["a"]
+empty_fs` is closed under the global context |`PROVEN` / `PROVEN-WITH-AXIOMS` as a
+target; *target-only*, `AGDA-PENDING`
+
+|Z3 / SMT, §4 exception |each of the 5 files, one process each |`filesystem_operations.smt2`
+asserts the reversibility "theorem" as an axiom (line 65) and then shows its
+negation `unsat`, which is circular. `symlink_operations.smt2` has one `sat`
+check and negates no goal. The other three return `unsat` from asserted,
+unverified definitional axioms over uninterpreted functions |`ASSUMED` (no
+certificate). No §4 exception note exists beside the files
+
+|Idris2, engineering/ABI (§1) |`idris2 --build valence-shell.ipkg` |5/5 modules
+under `--total`. The `believe_me` gate passes: 2 occurrences, 2 registered
+axioms (`axStringEqRefl`, `axBits8EqRefl`) |`PROVEN-WITH-AXIOMS`
+
+|Isabelle |not run (server 503) |— |supplementary evidence only under §3;
+unchecked
+
+|Mizar |not run (permission refused) |— |unchecked; needs a §4 exception
+record or archival
+
+|Rust implementation (§1.2) |`cargo test` in `impl/rust-cli` |827 passed, 0
+failed, 15 ignored, 23 binaries |`TESTED`. Creusot/Pearlite and Verus: no
+contracts, `OPEN`
+|===
+
+=== 3.1 The Lean `RmdirPrecondition` defect
+
+Before this change:
+
+[source,lean]
+----
+def isEmptyDir (p : Path) (fs : Filesystem) : Prop :=
+  isDirectory p fs ∧
+  ∀ child : Path, child.isPrefixOf p → child ≠ p → ¬pathExists child fs
+----
+
+`parentPath p` is a proper prefix of `p` and, by the `parentWritable` field, it
+exists. The following theorem was checked against the unfixed file under Lean
+4.34.1 (axioms: `propext`, `Classical.choice`, `Quot.sound`):
+
+[source,lean]
+----
+theorem rmdir_precondition_uninhabited (p : Path) (fs : Filesystem) :
+    ¬ RmdirPrecondition p fs
+----
+
+The fix flips the prefix test to `p.isPrefixOf child`. The Coq
+(`path_prefix p child`) and Isabelle (`prefix p child`) models already had this
+direction. After the fix:
+
+* All 8 Lean libraries that built before still build, and so does
+  `model_oracle`. No proof depended on the vacuity. Two of the affected theorems
+  (`rmdir_removes_path`, `rmdir_mkdir_reversible`) never used the hypothesis;
+  they were true but could not be applied to any state.
+* The uninhabitedness proof no longer typechecks.
+* The new library `PreconditionWitnesses` exhibits an inhabitant of every
+  precondition (mkdir, rmdir, createFile, deleteFile, symlink) and of
+  `reversible (.mkdirOp ["a"]) emptyFS`. Its axioms are `propext` and
+  `Quot.sound` at most. A future edit that empties a precondition now fails the
+  build.
+
+=== 3.2 Related findings, not fixed here
+
+* *CI built almost none of the Lean tree.* `rust-cli.yml` ran a bare
+  `lake build`, which builds only the default target (`FilesystemModel`), and
+  `lean-verification.yml` builds only `Extraction` and `model_oracle`. This
+  change makes `rust-cli.yml` build the 8 working libraries plus
+  `PreconditionWitnesses` by name.
+* *The extracted model does not check emptiness.* `Extraction.isEmptyDirBool`
+  is "simplified: just check if it's a directory", and no theorem links it to
+  `isEmptyDir`. The Lean oracle that the Rust differential tests drive therefore
+  allows rmdir of a non-empty directory. This is a spec/executable gap at the
+  oracle seam.
+* *Agda `IsEmptyDir` is a stub* (see the table). Removing `funext` (route plan
+  P5) should also complete this record.
+* *No model requires the parent of an existing path to be a directory.* Coq has a
+  partial invariant, `well_formed` (`filesystem_composition.v:437`: every existing
+  non-root path has an existing parent), used by several composition theorems. It
+  does not say the parent is a directory, and Lean and Agda have no invariant at
+  all, so a state where `["a"]` is a file and `["a","b"]` is a directory is admitted
+  (raised in review on #223). This is an invariant of the whole model, not a precondition of one
+  operation, so it belongs in the Agda FinFS spec (route plan OD-30), with each
+  operation proved to preserve it, and is then carried to the recheck legs. Adding
+  it to the Lean rmdir alone would make the three models disagree.
+* *Three Idris2 holes sit outside the proof ledger.* The mathesis hole scanner
+  (`scripts/census/proof-holes.sh`) finds `?fieldsAlignedProof`,
+  `?exampleFieldsAligned` and `?offsetInBoundsProof` in
+  `alkahest-shell-transmuter/src/abi/Layout.idr` (lines 140, 161, 178).
+  `PROOF-NEEDS.adoc` and `CLAUDE.md` count only `proofs/idris2/`, so they report
+  zero Idris2 holes. `offsetInBounds` is also unprovable as stated: it quantifies
+  over every `Field`, not only the fields of the layout.
+* *The census and the ledger classify `believe_me` differently.* mathesis counts
+  the 2 registered primitive-equality axioms as `hole`; this repo registers them
+  as axioms. Its row today reads axioms 1 (Agda `funext`), holes 5 (those 3 plus
+  the 2 `believe_me`), policy 9 (Agda files without `--safe`). A local scan of this
+  branch gives the same counts, so this change leaves the row as it is.
+* *Mizar proofs look unfinished.* For example
+  `copy_move_operations.miz:200-201` discharges a reversibility equation with
+  `by A1`, the bare precondition. This cannot be confirmed without running the
+  checker.
+
+== 4. Reflection in mathesis
+
+`hyperpolymath/mathesis` builds its catalogue with `scripts/census/*`, and the
+catalogue says it must never be edited by hand. Its census finds this repo's
+proof-status file by the pattern `PROOF-STATUS*|PROOF-NEEDS*|proof-debt*`; here
+that file is `PROOF-NEEDS.adoc`. The current catalogue row reads `axioms 1, holes
+5, status_doc PROOF-NEEDS.adoc`. This change updates `PROOF-NEEDS.adoc` with the
+2026-11-09 reproduction block. The row refreshes the next time mathesis reruns
+its census. That rerun happens in another repository and is not done by this
+change.
+
+== 5. Route plan against PROOF-POLICY
+
+The plan merged in #222 predates the 2026-11-07 Rust ruling. In places it also
+departs from the 2026-10-26 theory mapping. The owner ruled on every gap below on
+2026-11-09 (route plan OD-30 to OD-34): G-1 Agda canonical; G-2 Creusot/Pearlite and
+Verus, with Aeneas as an optional side lane; G-3 the canonical invocation, now met;
+G-4 G6 by Proof Witness Grade; G-5 Isabelle and Mizar archived, Z3 kept with §4
+notes; G-6 deviation records.
+
+[cols="1,4,4",options="header"]
+|===
+|Gap |Plan says |Policy says
+
+|G-1 |OD-0/OD-1: Lean is the canonical FinFS spec; Agda is the second witness
+|§1/§3: Agda is the source of truth for theory; Rocq and Lean are recheck legs,
+Dedukti transport first
+
+|G-2 |OD-2/P6/P9: Aeneas spike to prove the Rust core refines the Lean spec;
+`#print axioms` allow-list includes Aeneas library axioms |§1.2: Rust is
+verified with Creusot/Pearlite and Verus by default. §4.1: Aeneas only where
+Rust implements an Agda theorem; its Lean backend needs Mathlib (ruled out), so
+the Rust-to-model row is `ASSUMED`
+
+|G-3 |P5 and the session-1 provisioner: Agda 2.6.4.3 with `--no-libraries`;
+`--safe --without-K` only |§2.1: `--safe --without-K --cubical-compatible`, with
+version and stdlib pinned per commit
+
+|G-4 |G6: "≥2 independent CI-gated provers plus the oracle", using the #221
+lower-case ledger words |§8: grades derived from receipts; a leg counts only when
+kernel-checked *and* `RECONCILED`; §5 upper-case vocabulary
+
+|G-5 |Isabelle and Mizar "unchecked until archived"; Z3 counted as a prover |§3:
+Isabelle is supplementary only. §4: Z3 and Mizar need recorded exception notes,
+and SMT without a certificate is `ASSUMED`
+
+|G-6 |Session-1 provisioner installs from elan, opam, apt and release archives
+|§6: Guix manifest or container, otherwise a `deviation` record in the
+proof-status file and the installing workflow
+|===
+
+The plan also writes "Coq" where the estate now writes "Rocq". That is wording
+only.
+
+== 6. What this change does
+
+* `proofs/lean4/FilesystemModel.lean`: the `isEmptyDir` fix.
+* `proofs/lean4/PreconditionWitnesses.lean` (new) and its `lean_lib` entry.
+* `.github/workflows/rust-cli.yml`: build the 8 working Lean libraries and the
+  witnesses by name.
+* `PROOF-NEEDS.adoc`: the 2026-11-09 reproduction block; the `is_empty_dir_dec`
+  row corrected from axiom to classical theorem.
+* `CLAUDE.md`: the same correction.
+* This record.
+
+The owner rulings of 2026-11-09 are recorded in the route plan (OD-30 to OD-34), and
+the follow-up commits on this PR carry them out (section 7).
+
+== 7. Follow-up after the owner rulings (same day, same PR)
+
+[cols="2,5",options="header"]
+|===
+|Ruling |What was done, with the check that shows it
+
+|OD-30, OD-32: Agda canonical, `funext` removed
+|All 10 Agda modules check under `agda --safe --without-K --cubical-compatible
+All.agda` (Agda 2.7.0.1, agda-stdlib v2.2): no postulates, no escape pragmas.
+Filesystem equality is pointwise (`_≗_`). `IsEmptyDir` now has its emptiness field.
+Positive and negative precondition witnesses exist in Agda and Lean; weakening the
+Lean `isEmptyDir` to `True` breaks the build. New CI lane: `.github/workflows/agda.yml`.
+
+|OD-33: Isabelle and Mizar archived; Z3 fixed
+|`archive/proofs/` holds both trees with a successor map for all 139 theorems. The
+two broken Z3 files now define their operations as array `store`s, check
+non-vacuity (`sat`) and negate each goal (`unsat`); dropping a precondition gives
+`sat`. `scripts/verify-z3.sh` passes all five files.
+
+|OD-32: Dedukti transport experiment
+|`docs/experiments/2026-11-09-dedukti-transport/`. Transport to Rocq or Lean does not
+work today: Agda2Dedukti has no `--cubical-compatible` and predates agda-stdlib 2.x;
+Lambdapi's Rocq export drops rewrite rules, so a computed proof is rejected by
+`coqc`; Lambdapi 4.0.0 has no Lean export. Dedukti itself checks the same encoding.
+The recheck legs are therefore "re-proved", not "transported", for now.
+|===
+
+The mathesis hole scanner (`scripts/census/proof-holes.sh`) on this branch now
+reports 0 axioms, 5 holes and 0 policy violations, down from 1, 5 and 9. The 5 holes
+are the 3 `alkahest-shell-transmuter` Idris2 holes and the 2 registered `believe_me`
+axioms. The census still counts the archived `.thy` files as Isabelle, because it
+does not exclude `archive/`; that is a change for mathesis, not this repository.
+
+Documents that still describe six proof systems. This PR corrects the current-status
+files (`README.adoc`, `FAQ.adoc`, `QUICKSTART-DEV.adoc`, `QUICKSTART-USER.adoc`,
+`SECURITY.adoc`, `TOPOLOGY.adoc`, `RSR_COMPLIANCE.adoc`, `ROADMAP.adoc`, `CLAUDE.md`)
+and the CLI and FFI output. About sixty older mentions remain, in dated reports and
+session records under `docs/` (for example `PHASE2_REPORT`, `PHASE3_INITIAL_REPORT`,
+`SEAM_SEALING_REPORT`, `VERIFICATION_STRATEGY_ANALYSIS`) and in `docs/wiki/`,
+`REVERSIBILITY.adoc` and `PROVEN-INTEGRATION.adoc`. Dated records stay as written.
+The wiki pages, `REVERSIBILITY.adoc` and `PROVEN-INTEGRATION.adoc` need a separate
+sweep, because correcting them means checking which system proves each listed
+theorem, not only changing the system count.

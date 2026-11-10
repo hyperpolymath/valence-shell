@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: MPL-2.0
+# Agda is the theory source of truth (standards PROOF-POLICY §1). This lane
+# checks every module through proofs/agda/All.agda under the canonical
+# invocation (§2.1): --safe --without-K --cubical-compatible.
+#
+# PROOF-POLICY §6 deviation (state: open). The toolchain is not installed from
+# the Guix manifest or a container, because this repository has neither for
+# Agda yet. Leg: Agda theory source. Tool: Agda 2.7.0.1 upstream release
+# archive, sha256 975b515a14877ab6bce5bfc641e16c4a3ee52ca5d7f846577dee80aa2145db8a;
+# agda-stdlib tag v2.2 at commit 6cd04e46e5f8c740a5ec584a108bbb3380fa92d7.
+# The run asserts both and fails on a mismatch. Also recorded in PROOF-NEEDS.adoc.
+name: Agda proofs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'proofs/agda/**'
+      - '.github/workflows/agda.yml'
+      - 'scripts/check-agda.sh'
+  pull_request:
+    paths:
+      - 'proofs/agda/**'
+      - '.github/workflows/agda.yml'
+      - 'scripts/check-agda.sh'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Agda (--safe --without-K --cubical-compatible)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AGDA_VERSION: 2.7.0.1
+      AGDA_SHA256: 975b515a14877ab6bce5bfc641e16c4a3ee52ca5d7f846577dee80aa2145db8a
+      STDLIB_TAG: v2.2
+      STDLIB_COMMIT: 6cd04e46e5f8c740a5ec584a108bbb3380fa92d7
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v4
+
+      - name: Install Agda (pinned release, digest-checked)
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -sSfL -o agda.tar.xz \
+            "https://github.com/agda/agda/releases/download/v${AGDA_VERSION}/Agda-v${AGDA_VERSION}-linux.tar.xz"
+          echo "${AGDA_SHA256}  agda.tar.xz" | sha256sum -c -
+          mkdir -p "$HOME/agda"
+          tar -xJf agda.tar.xz -C "$HOME/agda"
+          echo "$HOME/agda/Agda-v${AGDA_VERSION}/bin" >> "$GITHUB_PATH"
+          echo "Agda_datadir=$HOME/agda/Agda-v${AGDA_VERSION}/data" >> "$GITHUB_ENV"
+
+      - name: Install agda-stdlib (pinned commit)
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "${STDLIB_TAG}" https://github.com/agda/agda-stdlib.git "$HOME/agda-stdlib"
+          got="$(git -C "$HOME/agda-stdlib" rev-parse HEAD)"
+          if [ "$got" != "${STDLIB_COMMIT}" ]; then
+            echo "::error::agda-stdlib ${STDLIB_TAG} is ${got}, expected ${STDLIB_COMMIT}"; exit 1
+          fi
+          mkdir -p "$HOME/.agda"
+          echo "$HOME/agda-stdlib/standard-library.agda-lib" > "$HOME/.agda/libraries"
+
+      - name: Assert Agda version
+        run: |
+          set -euo pipefail
+          ver="$(agda --version | head -n1)"
+          echo "$ver"
+          case "$ver" in
+            *"version ${AGDA_VERSION}"*) : ;;
+            *) echo "::error::expected Agda ${AGDA_VERSION}, got: $ver"; exit 1 ;;
+          esac
+
+      # Postulates and escape pragmas need no separate grep: `--safe` rejects
+      # `postulate`, TERMINATING, NO_POSITIVITY_CHECK and the rest. The script
+      # checks All.agda under the estate invocation, then fails if any module
+      # is missing from the import graph Agda reports (--dependency-graph), so
+      # a commented-out import cannot pass.
+      - name: Check All.agda and module coverage
+        run: bash scripts/check-agda.sh

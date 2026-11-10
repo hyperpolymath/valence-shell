@@ -11,8 +11,9 @@ toc::[]
 
 A formally verified Unix-style shell whose model-layer filesystem operations
 (`mkdir`, `rmdir`, `cp`, `mv`, `ln -s`, `chmod`, `chown`, file content read/write)
-are proven reversible across six independent proof systems (Coq, Lean 4, Agda,
-Isabelle/HOL, Mizar, Z3), with a working interactive Rust CLI that mirrors those
+are proven reversible in machine-checked models (Agda as the theory source,
+rechecked in Lean 4 and Rocq/Coq, with supplementary Z3 checks), with a working
+interactive Rust CLI that mirrors those
 proven operations and provides undo/redo, named checkpoints, and proof-annotated
 dry-runs.
 
@@ -22,7 +23,7 @@ Because every traditional shell silently relies on the user trusting the
 filesystem-mutation primitives the shell exposes. `mkdir` and `rmdir` are
 *assumed* to be inverses; `cp` is *assumed* to be a non-destructive copy; `rm -rf`
 is *assumed* to do what its name suggests. valence-shell makes those assumptions
-mathematical theorems with machine-checkable proofs in six different logical
+mathematical theorems with machine-checkable proofs in several logical
 foundations, so an error in one foundation's modelling does not propagate.
 
 This matters most for two classes of work:
@@ -37,19 +38,23 @@ This matters most for two classes of work:
   legal compliance; the implemented `obliterate` is best-effort local overwrite +
   unlink + an audit residue.
 
-== Why six proof systems and not one?
+== Why several proof systems and not one?
 
-Cross-validation. The six systems sit on different logical foundations:
+Cross-validation. The checked systems sit on different logical foundations:
 
-* Lean 4 — dependent type theory (primary spec)
-* Coq — Calculus of Inductive Constructions (extraction path to OCaml)
-* Agda — intensional type theory
-* Isabelle/HOL — higher-order logic
-* Mizar — Tarski-Grothendieck set theory
-* Z3 SMT — first-order logic with theories
+* Agda — intensional type theory (theory source of truth, owner ruling 2026-11-09)
+* Lean 4 — dependent type theory (recheck leg and executable model oracle)
+* Rocq/Coq — Calculus of Inductive Constructions (recheck leg; extraction path to OCaml)
+* Z3 SMT — first-order logic with theories (supplementary; `ASSUMED` under PROOF-POLICY §5)
 
-If all six prove the same theorem, it is *extremely* unlikely that all six
-modelled the problem incorrectly in the same way. This is the same pattern
+Isabelle/HOL and Mizar proofs were archived unchecked on 2026-11-09 (`archive/proofs/`) and
+are not counted as evidence.
+
+When independently checked legs prove the same statement, it is unlikely that
+all of them modelled the problem incorrectly in the same way. The Lean and Rocq
+statements have not yet been compared against the Agda source one by one
+(`docs/audits/2026-11-09-proof-ground-truth.adoc`), so that agreement is a goal,
+not yet a measured fact. This is the same pattern
 seL4 and CompCert use, and it is the central technical commitment of the
 project — see `INTENT.contractile` and `.machine_readable/bot_directives/methodology.a2ml`
 for the architectural-invariant statement.
@@ -67,9 +72,8 @@ just verify-proofs
 # Or per-system
 just build-coq      # produces .vo certificates
 just build-lean4    # compiles to executable
-just build-agda     # type-checks, generates interface files
-just build-isabelle # builds heap image
-just build-mizar    # set-theoretic foundation
+just build-agda     # type-checks All.agda under --safe --without-K --cubical-compatible
+# Isabelle and Mizar are archived (archive/proofs/README.adoc has the successor map)
 just build-z3       # SMT SAT/UNSAT queries
 ----
 
@@ -87,7 +91,7 @@ deep-audit inventory in `docs/audits/2026-06-01-deep-audit.adoc`.
 
 What is solid:
 
-* The 6-system proofs of the model-layer operations. ~478 theorem candidates;
+* The machine-checked proofs of the model-layer operations (Agda (theory source), Lean 4 and Rocq/Coq (rechecks), Z3 (supplementary); Isabelle/HOL and Mizar archived unchecked). ~478 theorem candidates in the 2026-06-01 census;
   0 real gaps (Coq `obliterate_overwrites_all_blocks` CLOSED, re-verified
   2026-07-16 via `Print Assumptions` under Coq 8.18.0) + 2 documented axioms
   (1 justified decidability + 1 structural funext).
@@ -117,17 +121,19 @@ on a system you care about.
 Historical drift. The figure varied as proof work landed and as different
 counting methodologies were used (definitions vs. lemmas vs. all proof
 obligations including the Idris2 ABI). The 2026-06-01 deep audit (issue #42)
-locked the count at **478 theorem candidates** across all 6 proof systems
-plus the Idris2 ABI layer, distributed as:
+locked the count at **478 theorem candidates** across the six proof systems
+then in use plus the Idris2 ABI layer, distributed as below. This is the
+2026-06-01 census; Isabelle/HOL and Mizar proofs were archived unchecked on 2026-11-09 (`archive/proofs/`), and the current per-obligation
+status is in `EXPLAINME.adoc#proof-ledger`.
 
 [cols="1,1,3",options="header"]
 |===
 |System |Count |Notes
-|Lean 4 |101 |Primary source of truth
+|Lean 4 |101 |Recheck leg (Agda is the theory source since 2026-11-09)
 |Coq |131 |Includes `extraction.v` — 0 admits (re-verified 2026-07-16, Coq 8.18.0)
-|Isabelle/HOL |76 |Cross-validation
-|Agda |85 |3 postulates remaining (including funext)
-|Mizar |63 |Set-theoretic foundation
+|Isabelle/HOL |76 |Archived unchecked 2026-11-09
+|Agda |85 |3 postulates at the census; 0 since 2026-11-09 (funext removed)
+|Mizar |63 |Archived unchecked 2026-11-09
 |Z3 SMT |125 asserts |Automated decision procedures
 |Idris2 (ABI + filesystem) |~22 |0 holes, 0 partials, 2 primitive-eq axioms (closed #151/#152)
 |===

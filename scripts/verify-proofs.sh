@@ -129,14 +129,14 @@ echo ""
 # Lean 4 Verification
 if check_command lean; then
     log_info "Lean 4 detected"
-    run_test "Lean 4: FilesystemModel.lean" \
-        "cd proofs/lean4 && lean FilesystemModel.lean"
-    run_test "Lean 4: FileOperations.lean" \
-        "cd proofs/lean4 && lean FileOperations.lean"
+    # Same named libraries as CI (.github/workflows/rust-cli.yml); a bare
+    # `lean File.lean` cannot resolve imports outside `lake env`, and a bare
+    # `lake build` builds only the default target.
+    run_test "Lean 4: lake build (CI library set)" \
+        "cd proofs/lean4 && lake build FilesystemModel FileOperations FilesystemComposition FilesystemEquivalence SymlinkOperations Extraction CrashConsistency PathTraversal PreconditionWitnesses"
 else
     log_skip "Lean 4 not installed"
-    ((TOTAL_TESTS += 2))
-    ((SKIPPED_TESTS += 2))
+    ((TOTAL_TESTS += 1))
 fi
 
 echo ""
@@ -144,43 +144,17 @@ echo ""
 # Agda Verification
 if check_command agda; then
     log_info "Agda detected"
-    run_test "Agda: FilesystemModel.agda" \
-        "cd proofs/agda && agda FilesystemModel.agda"
-    run_test "Agda: FileOperations.agda" \
-        "cd proofs/agda && agda FileOperations.agda"
+    run_test "Agda: All.agda (--safe --without-K --cubical-compatible) + module coverage" \
+        "bash scripts/check-agda.sh"
 else
     log_skip "Agda not installed"
-    ((TOTAL_TESTS += 2))
-    ((SKIPPED_TESTS += 2))
+    ((TOTAL_TESTS += 1))
 fi
 
 echo ""
 
-# Isabelle Verification
-if check_command isabelle; then
-    log_info "Isabelle/HOL detected"
-    run_test "Isabelle: FilesystemModel.thy" \
-        "cd proofs/isabelle && isabelle build -D ."
-else
-    log_skip "Isabelle not installed"
-    TOTAL_TESTS=$((TOTAL_TESTS + 1))
-    SKIPPED_TESTS=$((SKIPPED_TESTS + 1))
-fi
-
-echo ""
-
-# Mizar Verification
-if check_command mizf; then
-    log_info "Mizar detected"
-    run_test "Mizar: filesystem_model.miz" \
-        "cd proofs/mizar && mizf filesystem_model.miz"
-    run_test "Mizar: file_operations.miz" \
-        "cd proofs/mizar && mizf file_operations.miz"
-else
-    log_skip "Mizar not installed (complex setup required)"
-    ((TOTAL_TESTS += 2))
-    ((SKIPPED_TESTS += 2))
-fi
+# Isabelle and Mizar were archived to archive/proofs/ on 2026-11-09 and are
+# not verified here (see archive/proofs/README.adoc).
 
 echo ""
 

@@ -790,16 +790,17 @@ defmodule VSH.Daemon do
     proofs = VSH.State.get_proofs()
 
     {:ok, %{
-      totalTheorems: 280,
-      proofSystems: 6,
-      proofSystemsList: ["Coq", "Lean 4", "Agda", "Isabelle/HOL", "Mizar", "Z3 SMT"],
+      proofLedger: "EXPLAINME.adoc#proof-ledger",
+      proofSystems: 4,
+      proofSystemsList: ["Agda", "Lean 4", "Coq", "Z3 SMT"],
+      archivedProofSystems: ["Isabelle/HOL", "Mizar"],
       operationCategories: %{
         rmr: ["mkdir", "rmdir", "touch", "rm", "read", "write", "copy", "move"],
         rmo: ["obliterate", "obliterate_tree"]
       },
       coreTheorems: proofs,
       verificationStatus: %{
-        proofs: "Formally verified in 6 systems",
+        proofs: "Model-level proofs: Agda source, Lean 4 and Coq rechecks, Z3 supplementary",
         ffi: "Precondition checks - manual review required",
         daemon: "Reference implementation - matches spec",
         gap: "No mechanical proof of correspondence between daemon and Coq spec"

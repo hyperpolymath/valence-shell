@@ -1695,8 +1695,8 @@ pub fn show_graph(state: &ShellState) -> Result<()> {
 
 /// Display formal verification status and proof system coverage.
 ///
-/// Shows all proof references with their locations in Coq, Lean 4, Agda,
-/// Isabelle, and other verification systems. Provides verification statistics.
+/// Shows all proof references with their locations in Coq, Lean 4 and Agda, and
+/// the archived (unchecked) Isabelle location. Provides verification statistics.
 ///
 /// # Examples
 /// ```no_run
@@ -2128,7 +2128,12 @@ pub fn hardware_erase(state: &mut ShellState, device: &str, method: Option<&str>
 // ============================================================================
 
 /// Explain: proof-annotated dry run showing preconditions, state transition,
-/// inverse operation, and proof references across all 6 verification systems.
+/// inverse operation, and proof references (Agda source, Lean 4 and Coq rechecks;
+/// Isabelle archived, unchecked).
+///
+/// Reads the current filesystem to report selected preconditions without
+/// executing the command. Failed preconditions are displayed and still return
+/// success; commands without dedicated checks receive a generic message.
 pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Result<()> {
     use crate::executable::ExecutableCommand;
     use crate::proof_refs::ProofReference;
@@ -2310,7 +2315,9 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
                     .as_ref()
                     .map_or("(none)", |p| p.description)
                     .bright_white(),
-                "[QED in 6 systems]".bright_green().bold()
+                "[see proof references below; Isabelle archived, unchecked]"
+                    .bright_green()
+                    .bold()
             );
         } else {
             println!(
@@ -2325,11 +2332,14 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
 
     // Full proof references
     if let Some(ref proof) = proof_ref {
-        println!("  {}", "Verification (6 systems):".bright_yellow().bold());
+        println!("  {}", "Proof references:".bright_yellow().bold());
         println!("    Coq:      {}", proof.coq_location);
         println!("    Lean 4:   {}", proof.lean_location);
         println!("    Agda:     {}", proof.agda_location);
-        println!("    Isabelle: {}", proof.isabelle_location);
+        println!(
+            "    Isabelle: {} (archived, unchecked)",
+            proof.isabelle_location
+        );
         println!();
     }
 
@@ -2351,7 +2361,16 @@ pub fn checkpoint(state: &mut ShellState, name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Restore: undo back to a named checkpoint, printing proof certificates.
+/// Restore: undo back to a named checkpoint, printing proof references.
+///
+/// Uses the difference between the current history length and the saved history
+/// index as the undo count. Returns success without undoing anything when the
+/// saved index is at or beyond the current history length.
+///
+/// # Errors
+/// Returns an error if `name` is unknown or an undo operation fails, including
+/// filesystem errors and invalid undo data. Earlier successful undos remain
+/// applied if a later one fails.
 pub fn restore(state: &mut ShellState, name: &str) -> Result<()> {
     let (target_idx, _timestamp) = state
         .checkpoints
@@ -2401,7 +2420,7 @@ pub fn restore(state: &mut ShellState, name: &str) -> Result<()> {
 
     println!();
     println!(
-        "{} Restored to '{}' — {} operations reversed, all proven in 6 systems",
+        "{} Restored to '{}' — {} operations reversed (in-model reversibility proofs; see EXPLAINME.adoc#proof-ledger)",
         "✓".bright_green(),
         name.bright_cyan().bold(),
         ops_to_undo

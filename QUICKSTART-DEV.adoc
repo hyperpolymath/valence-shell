@@ -9,7 +9,7 @@
 * **Rust** — CLI implementation (`impl/rust-cli/`), Cargo crate `vsh`
 * **Idris2** — ABI definitions with formal proofs (`src/abi/`, `proofs/idris2/`)
 * **Zig** — C-compatible FFI layer (`ffi/zig/`, exports `valence_shell_*`)
-* **Coq / Lean4 / Agda / Isabelle / Mizar** — 6-system polyglot proofs (`proofs/`)
+* **Agda / Lean 4 / Coq / Z3** — polyglot proofs (`proofs/`): Agda is the theory source, Lean 4 and Coq recheck it, Z3 is supplementary; Isabelle and Mizar are archived unchecked (`archive/proofs/`)
 * **Elixir** — NIF daemon + MCP server (`impl/elixir/`)
 * **OCaml** — Lean-extraction FFI wrapper (`impl/ocaml/`)
 

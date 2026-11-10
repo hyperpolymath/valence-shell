@@ -41,7 +41,7 @@ pub fn main() !void {
 
     // === Theorem 1: mkdir_rmdir_reversible ===
     print("{s}═══ Theorem 1: mkdir_rmdir_reversible ═══{s}\n", .{ YELLOW, RESET });
-    print("Proven in: Coq, Lean 4, Agda, Isabelle, Mizar\n\n", .{});
+    print("Proof references: Agda (source), Lean 4, Coq; see EXPLAINME.adoc#proof-ledger\n\n", .{});
 
     print("  Initial state: test_dir does not exist\n", .{});
     try std.testing.expect(!fs.pathExists("test_dir"));
@@ -70,7 +70,7 @@ pub fn main() !void {
 
     // === Theorem 2: create_delete_file_reversible ===
     print("{s}═══ Theorem 2: create_delete_file_reversible ═══{s}\n", .{ YELLOW, RESET });
-    print("Proven in: Coq, Lean 4, Agda, Isabelle, Mizar\n\n", .{});
+    print("Proof references: Agda (source), Lean 4, Coq; see EXPLAINME.adoc#proof-ledger\n\n", .{});
 
     print("  Initial state: test_file does not exist\n", .{});
     try std.testing.expect(!fs.pathExists("test_file"));
@@ -148,9 +148,8 @@ pub fn main() !void {
     print("  1. Coq (Calculus of Inductive Constructions)\n", .{});
     print("  2. Lean 4 (Dependent Type Theory)\n", .{});
     print("  3. Agda (Intensional Type Theory)\n", .{});
-    print("  4. Isabelle/HOL (Higher-Order Logic)\n", .{});
-    print("  5. Mizar (Tarski-Grothendieck Set Theory)\n", .{});
-    print("  6. Z3 SMT (Automated Verification)\n\n", .{});
+    print("  4. Z3 SMT (supplementary automated checks)\n", .{});
+    print("  (Isabelle/HOL and Mizar are archived, unchecked)\n\n", .{});
 
     print("Trust Chain:\n", .{});
     print("  • Coq proofs → {s}verified by kernel{s}\n", .{ GREEN, RESET });

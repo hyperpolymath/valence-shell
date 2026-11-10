@@ -4,7 +4,7 @@
 
 Z3 (SMT-LIB v2 scripts) provides automated verification for the
 filesystem operation invariants. Unlike the interactive proof systems
-(Lean 4 / Coq / Agda / Isabelle) and the structural foundation (Mizar),
+(Agda, the theory source, and the Lean 4 / Rocq recheck legs),
 Z3 discharges decidable fragments via SAT-modulo-theories solving.
 
 == Files
@@ -66,6 +66,7 @@ sweep.
 == See also
 
 * `../README.md` — overall proof-stack design
-* `../lean4/README.adoc` — primary source of truth (interactive)
+* `../agda/README.adoc` — theory source of truth (owner ruling 2026-11-09)
+* `../lean4/README.adoc` — Lean recheck leg and executable model oracle
 * `../coq/README.adoc` — interactive CIC foundation
 * `../../docs/PROOF_HOLES_AUDIT.adoc` — proof-debt status

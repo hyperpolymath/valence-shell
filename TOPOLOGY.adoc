@@ -65,9 +65,9 @@ SHELL FEATURES (v0.9.0)
   Shell Script Execution           ░░░░░░░░░░   0%    Not started
 
 FORMAL VERIFICATION
-  Polyglot Proofs (6 systems)      █████████░  90%    ~250+ theorems, 4 gaps remain
-  Reversibility Proofs             ██████████ 100%    All 8 ops proven in all 6 systems
-  Permission Proofs (chmod/chown)  ██████████ 100%    NEW — 42 theorems across 6 systems
+  Polyglot Proofs (Agda/Lean/Coq/Z3) see EXPLAINME.adoc#proof-ledger (Isabelle/Mizar archived)
+  Reversibility Proofs             in-model; per-system status in the proof ledger
+  Permission Proofs (chmod/chown)  Lean PermissionOperations does not build (2026-11-09 audit)
   MAA Framework (RMR)              ██████████ 100%    Reversible ops with audit trails
   MAA Framework (RMO)              ████░░░░░░  40%    Proofs + wired `obliterate` (best-effort + audit residue); no HW erase/HMAC
   Extraction Gap (Lean → Rust)     ██████░░░░  open   argued + tested-only; never proven (EXPLAINME#proof-ledger)
@@ -102,7 +102,7 @@ Agda/Isabelle/Mizar ► (no build sys) ──► (manual verification)
 Rust CLI ───────────► Cargo.toml ──────► cargo test (602) ──► CI (rust-cli.yml)
                           │
                           ▼
-                     proof_refs.rs ────► Maps ops to theorems across 6 systems
+                     proof_refs.rs ────► Maps ops to theorems (Agda, Lean 4, Coq; Isabelle archived)
                           │
                           ▼
                      correspondence ───► argued + tested-only (never proven)

@@ -14,6 +14,11 @@ echo "Generating Verification Coverage Report..."
 cat > "$REPORT_FILE" << 'EOF'
 # Verification Coverage Report
 
+> **Historical template (milestone M14), not current status.** The current proof
+> ledger is `EXPLAINME.adoc#proof-ledger` and
+> `docs/audits/2026-11-09-proof-ground-truth.adoc`. Isabelle and Mizar were archived
+> unchecked on 2026-11-09 (`archive/proofs/`) and are not listed below.
+
 **Generated**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
 **Version**: 0.14.0
 **Phase**: M14 Complete - Conditionals & Logical Operators
@@ -38,7 +43,7 @@ along with property-based test coverage for each proven theorem.
 ## Core Filesystem Operations
 
 ### mkdir Operation
-- ✅ **Proven**: `mkdir_rmdir_reversible` (Lean 4, Coq, Agda, Isabelle, Mizar)
+- ✅ **Proven**: `mkdir_rmdir_reversible` (Lean 4, Coq, Agda)
 - 🔗 **Implemented**: `impl/rust-cli/src/commands.rs:mkdir()`
 - 🧪 **Tested**: `prop_mkdir_rmdir_reversible` (1000+ iterations)
 - **Status**: ✅ COMPLETE
@@ -60,19 +65,19 @@ pub fn mkdir(state: &mut ShellState, path: &str, quiet: bool) -> Result<()> {
 ```
 
 ### rmdir Operation
-- ✅ **Proven**: `mkdir_rmdir_reversible` (Lean 4, Coq, Agda, Isabelle, Mizar)
+- ✅ **Proven**: `mkdir_rmdir_reversible` (Lean 4, Coq, Agda)
 - 🔗 **Implemented**: `impl/rust-cli/src/commands.rs:rmdir()`
 - 🧪 **Tested**: `prop_mkdir_rmdir_reversible` (1000+ iterations)
 - **Status**: ✅ COMPLETE
 
 ### touch (create_file) Operation
-- ✅ **Proven**: `create_delete_file_reversible` (Lean 4, Coq, Agda, Isabelle)
+- ✅ **Proven**: `create_delete_file_reversible` (Lean 4, Coq, Agda)
 - 🔗 **Implemented**: `impl/rust-cli/src/commands.rs:touch()`
 - 🧪 **Tested**: `prop_create_delete_file_reversible` (1000+ iterations)
 - **Status**: ✅ COMPLETE
 
 ### rm (delete_file) Operation
-- ✅ **Proven**: `create_delete_file_reversible` (Lean 4, Coq, Agda, Isabelle)
+- ✅ **Proven**: `create_delete_file_reversible` (Lean 4, Coq, Agda)
 - 🔗 **Implemented**: `impl/rust-cli/src/commands.rs:rm()`
 - 🧪 **Tested**: `prop_create_delete_file_reversible` (1000+ iterations)
 - **Status**: ✅ COMPLETE
@@ -82,13 +87,13 @@ pub fn mkdir(state: &mut ShellState, path: &str, quiet: bool) -> Result<()> {
 ## Composition & Equivalence
 
 ### Operation Sequences
-- ✅ **Proven**: `operation_sequence_reversible` (Lean 4, Coq, Agda, Isabelle)
+- ✅ **Proven**: `operation_sequence_reversible` (Lean 4, Coq, Agda)
 - 🔗 **Implemented**: `impl/rust-cli/src/state.rs` (undo/redo stack)
 - 🧪 **Tested**: `prop_sequence_reversible`, `prop_composition_correctness`
 - **Status**: ✅ COMPLETE
 
 ### Filesystem Equivalence
-- ✅ **Proven**: `fs_equiv_refl/sym/trans` (Lean 4, Coq, Agda, Isabelle)
+- ✅ **Proven**: `fs_equiv_refl/sym/trans` (Lean 4, Coq, Agda)
 - 🔗 **Implemented**: `impl/rust-cli/src/state.rs` (equivalence via snapshots)
 - 🧪 **Tested**: `prop_equivalence_reflexive`
 - **Status**: ✅ COMPLETE

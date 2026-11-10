@@ -1,164 +1,178 @@
-; Valence Shell - Z3 SMT Encoding
-; Filesystem operations with reversibility properties
+; SPDX-License-Identifier: MPL-2.0
+; Valence Shell - Z3 SMT encoding of the core filesystem operations
 ;
-; This encoding allows automated verification of theorems using Z3 SMT solver
+; PROOF-POLICY §4 exception note. Obligation: the mkdir/rmdir and
+; createFile/deleteFile reversibility, postcondition, independence and
+; composition properties, on a finite-map model. Tool: Z3 (SMT, theory of
+; arrays + datatypes). Why: the goals are array identities an SMT solver checks
+; automatically; the theory source of truth is the Agda tree (proofs/agda), and this
+; file is a supplementary automated check. The queries are *not* quantifier-free:
+; the strictness assertion on `child-of` and the `forall` in `rmdir-pre` add
+; quantifiers, so termination is not guaranteed by a decision procedure. Z3 4.8.12
+; returns every expected result in well under a second, and scripts/verify-z3.sh
+; fails any `unknown` or timeout (30 s), so a non-terminating query cannot pass. Status under
+; §5: ASSUMED, because a direct SMT run without a proof certificate is not a
+; kernel-checked witness.
+;
+; Encoding (rewritten 2026-11-09). The previous version declared the operations
+; as uninterpreted functions and *asserted* each theorem as an axiom before
+; "checking" it, which was circular. Here every operation is *defined*: a
+; filesystem is an array from paths to entries, and each operation is a
+; `store`. Each theorem query asserts the hypotheses and the *negation* of the
+; goal; `unsat` means no counterexample exists in the theory of arrays. Nothing
+; about the operations is assumed.
+;
+; Abstraction: entries carry the node type only (no permissions, no content).
+; The Agda model carries permissions; reversibility of rmdir/deleteFile there
+; needs the original node to have default permissions, which this encoding
+; makes trivially true by omitting them.
+;
+; Expected result sequence (scripts/verify-z3.sh):
+;   sat x 4, unsat x 11
+; The four `sat` results are non-vacuity checks: the mkdir, rmdir, createFile
+; and deleteFile preconditions are satisfiable, so the theorems below are not
+; vacuous.
 
 (set-logic ALL)
-(set-option :produce-models true)
-
-; ===== Sorts =====
 
 (declare-sort Path 0)
-(declare-sort Filesystem 0)
-(declare-sort FSNode 0)
+(declare-datatype NodeType ((File) (Directory)))
+(declare-datatype Entry ((Absent) (Present (kind NodeType))))
+(define-sort FS () (Array Path Entry))
 
-; ===== Filesystem Operations =====
+; Parent of a path; uninterpreted, so every result holds for any parent function.
+(declare-fun parent (Path) Path)
+; `(child-of c p)`: c is a strict descendant of p; uninterpreted, but strict.
+(declare-fun child-of (Path Path) Bool)
+(assert (forall ((p Path)) (not (child-of p p))))
+; A path is a strict descendant of its parent (the root, whose parent is
+; itself, is excluded, which keeps this consistent with strictness).
+(assert (forall ((c Path)) (=> (not (= (parent c) c)) (child-of c (parent c)))))
 
-(declare-fun mkdir (Path Filesystem) Filesystem)
-(declare-fun rmdir (Path Filesystem) Filesystem)
-(declare-fun create-file (Path Filesystem) Filesystem)
-(declare-fun delete-file (Path Filesystem) Filesystem)
+(define-fun exists-at ((p Path) (fs FS)) Bool (not (= (select fs p) Absent)))
+(define-fun is-dir ((p Path) (fs FS)) Bool (= (select fs p) (Present Directory)))
+(define-fun is-file ((p Path) (fs FS)) Bool (= (select fs p) (Present File)))
 
-; ===== Preconditions =====
+(define-fun mkdir ((p Path) (fs FS)) FS (store fs p (Present Directory)))
+(define-fun rmdir ((p Path) (fs FS)) FS (store fs p Absent))
+(define-fun create-file ((p Path) (fs FS)) FS (store fs p (Present File)))
+(define-fun delete-file ((p Path) (fs FS)) FS (store fs p Absent))
 
-(declare-fun path-exists (Path Filesystem) Bool)
-(declare-fun parent-path (Path) Path)
-(declare-fun parent-exists (Path Filesystem) Bool)
-(declare-fun is-directory (Path Filesystem) Bool)
-(declare-fun is-file (Path Filesystem) Bool)
-(declare-fun is-empty-dir (Path Filesystem) Bool)
-(declare-fun has-write-permission (Path Filesystem) Bool)
+(define-fun mkdir-pre ((p Path) (fs FS)) Bool
+  (and (not (exists-at p fs)) (is-dir (parent p) fs)))
+(define-fun rmdir-pre ((p Path) (fs FS)) Bool
+  (and (is-dir p fs)
+       (forall ((c Path)) (=> (child-of c p) (not (exists-at c fs))))))
+(define-fun create-file-pre ((p Path) (fs FS)) Bool
+  (and (not (exists-at p fs)) (is-dir (parent p) fs)))
+(define-fun delete-file-pre ((p Path) (fs FS)) Bool (is-file p fs))
 
-(declare-fun mkdir-precondition (Path Filesystem) Bool)
-(declare-fun rmdir-precondition (Path Filesystem) Bool)
-(declare-fun create-file-precondition (Path Filesystem) Bool)
-(declare-fun delete-file-precondition (Path Filesystem) Bool)
+(declare-const p Path)
+(declare-const p1 Path)
+(declare-const p2 Path)
+(declare-const p3 Path)
+(declare-const fs FS)
 
-; Define preconditions
-(assert (forall ((p Path) (fs Filesystem))
-  (= (mkdir-precondition p fs)
-     (and (not (path-exists p fs))
-          (parent-exists p fs)
-          (is-directory (parent-path p) fs)
-          (has-write-permission (parent-path p) fs)))))
+; ===== Non-vacuity (expected: sat x 4) =====
 
-(assert (forall ((p Path) (fs Filesystem))
-  (= (rmdir-precondition p fs)
-     (and (is-directory p fs)
-          (is-empty-dir p fs)
-          (has-write-permission (parent-path p) fs)))))
-
-(assert (forall ((p Path) (fs Filesystem))
-  (= (create-file-precondition p fs)
-     (and (not (path-exists p fs))
-          (parent-exists p fs)
-          (has-write-permission (parent-path p) fs)))))
-
-(assert (forall ((p Path) (fs Filesystem))
-  (= (delete-file-precondition p fs)
-     (and (is-file p fs)
-          (has-write-permission (parent-path p) fs)))))
-
-; ===== Main Reversibility Theorems =====
-
-; Theorem: mkdir/rmdir reversibility
-(assert (forall ((p Path) (fs Filesystem))
-  (=> (mkdir-precondition p fs)
-      (= (rmdir p (mkdir p fs)) fs))))
-
-; Theorem: create-file/delete-file reversibility
-(assert (forall ((p Path) (fs Filesystem))
-  (=> (create-file-precondition p fs)
-      (= (delete-file p (create-file p fs)) fs))))
-
-; ===== Postcondition Properties =====
-
-; mkdir creates directory
-(assert (forall ((p Path) (fs Filesystem))
-  (=> (mkdir-precondition p fs)
-      (is-directory p (mkdir p fs)))))
-
-; rmdir removes path
-(assert (forall ((p Path) (fs Filesystem))
-  (=> (rmdir-precondition p fs)
-      (not (path-exists p (rmdir p fs))))))
-
-; create-file creates file
-(assert (forall ((p Path) (fs Filesystem))
-  (=> (create-file-precondition p fs)
-      (is-file p (create-file p fs)))))
-
-; delete-file removes path
-(assert (forall ((p Path) (fs Filesystem))
-  (=> (delete-file-precondition p fs)
-      (not (path-exists p (delete-file p fs))))))
-
-; ===== Independence Properties =====
-
-; Operations on different paths don't interfere
-(declare-fun path-eq (Path Path) Bool)
-
-(assert (forall ((p1 Path) (p2 Path) (fs Filesystem))
-  (=> (and (not (path-eq p1 p2))
-           (mkdir-precondition p1 fs))
-      (= (path-exists p2 fs)
-         (path-exists p2 (mkdir p1 fs))))))
-
-(assert (forall ((p1 Path) (p2 Path) (fs Filesystem))
-  (=> (and (not (path-eq p1 p2))
-           (rmdir-precondition p1 fs))
-      (= (path-exists p2 fs)
-         (path-exists p2 (rmdir p1 fs))))))
-
-; ===== Composition Properties =====
-
-; Two-operation reversibility
-(assert (forall ((p1 Path) (p2 Path) (fs Filesystem))
-  (=> (and (mkdir-precondition p1 fs)
-           (mkdir-precondition p2 (mkdir p1 fs)))
-      (= (rmdir p2 (rmdir p1 (mkdir p2 (mkdir p1 fs)))) fs))))
-
-; Three-operation reversibility
-(assert (forall ((p1 Path) (p2 Path) (p3 Path) (fs Filesystem))
-  (=> (and (mkdir-precondition p1 fs)
-           (mkdir-precondition p2 (mkdir p1 fs))
-           (mkdir-precondition p3 (mkdir p2 (mkdir p1 fs))))
-      (= (rmdir p3 (rmdir p2 (rmdir p1
-           (mkdir p3 (mkdir p2 (mkdir p1 fs)))))) fs))))
-
-; ===== CNO (Certified Null Operation) Properties =====
-
-; Reversible operation followed by its reverse is identity
-(assert (forall ((p Path) (fs Filesystem))
-  (=> (mkdir-precondition p fs)
-      (= (rmdir p (mkdir p fs)) fs))))
-
-(assert (forall ((p Path) (fs Filesystem))
-  (=> (create-file-precondition p fs)
-      (= (delete-file p (create-file p fs)) fs))))
-
-; ===== Queries and Checks =====
-
-; Check satisfiability - should be SAT if theorems are consistent
-(check-sat)
-
-; Get a model (example filesystem state)
-; (get-model)
-
-; Check specific instances
 (push)
-(declare-const test-path Path)
-(declare-const test-fs Filesystem)
-(assert (mkdir-precondition test-path test-fs))
-(assert (not (= (rmdir test-path (mkdir test-path test-fs)) test-fs)))
-(check-sat) ; Should be UNSAT - proves the theorem
+(assert (mkdir-pre p fs))
+(check-sat)
 (pop)
 
-; Summary:
-; This SMT encoding formalizes filesystem operations in first-order logic
-; Z3 can automatically verify:
-; ✓ Reversibility theorems
-; ✓ Postcondition properties
-; ✓ Independence of operations
-; ✓ Composition correctness
-; ✓ CNO identity properties
+(push)
+(assert (rmdir-pre p fs))
+(check-sat)
+(pop)
+
+(push)
+(assert (create-file-pre p fs))
+(check-sat)
+(pop)
+
+(push)
+(assert (delete-file-pre p fs))
+(check-sat)
+(pop)
+
+; Negative control: a directory with an existing strict descendant does not
+; satisfy rmdir-pre (expected: unsat).
+(push)
+(assert (child-of p1 p))
+(assert (exists-at p1 fs))
+(assert (rmdir-pre p fs))
+(check-sat)
+(pop)
+
+; Negative control through `parent`: an existing path whose parent is p
+; keeps p from satisfying rmdir-pre (expected: unsat).
+(push)
+(assert (= (parent p1) p))
+(assert (not (= p1 p)))
+(assert (exists-at p1 fs))
+(assert (rmdir-pre p fs))
+(check-sat)
+(pop)
+
+; ===== Reversibility (expected: unsat x 4) =====
+
+(push)
+(assert (mkdir-pre p fs))
+(assert (not (= (rmdir p (mkdir p fs)) fs)))
+(check-sat)
+(pop)
+
+(push)
+(assert (rmdir-pre p fs))
+(assert (not (= (mkdir p (rmdir p fs)) fs)))
+(check-sat)
+(pop)
+
+(push)
+(assert (create-file-pre p fs))
+(assert (not (= (delete-file p (create-file p fs)) fs)))
+(check-sat)
+(pop)
+
+(push)
+(assert (delete-file-pre p fs))
+(assert (not (= (create-file p (delete-file p fs)) fs)))
+(check-sat)
+(pop)
+
+; ===== Postconditions (expected: unsat x 2) =====
+
+(push)
+(assert (not (is-dir p (mkdir p fs))))
+(check-sat)
+(pop)
+
+(push)
+(assert (exists-at p (rmdir p fs)))
+(check-sat)
+(pop)
+
+; ===== Independence (expected: unsat) =====
+
+(push)
+(assert (not (= p1 p2)))
+(assert (not (= (select (mkdir p1 fs) p2) (select fs p2))))
+(check-sat)
+(pop)
+
+; ===== Composition, undone in reverse order (expected: unsat x 2) =====
+
+(push)
+(assert (mkdir-pre p1 fs))
+(assert (mkdir-pre p2 (mkdir p1 fs)))
+(assert (not (= (rmdir p1 (rmdir p2 (mkdir p2 (mkdir p1 fs)))) fs)))
+(check-sat)
+(pop)
+
+(push)
+(assert (mkdir-pre p1 fs))
+(assert (mkdir-pre p2 (mkdir p1 fs)))
+(assert (mkdir-pre p3 (mkdir p2 (mkdir p1 fs))))
+(assert (not (= (rmdir p1 (rmdir p2 (rmdir p3 (mkdir p3 (mkdir p2 (mkdir p1 fs)))))) fs)))
+(check-sat)
+(pop)

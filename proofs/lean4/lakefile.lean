@@ -4,7 +4,7 @@
 -- Last verified working: Lean 4 v4.34.1 (2026-10-02)
 --   Builds clean: FilesystemModel, FileOperations, FilesystemComposition,
 --   FilesystemEquivalence, SymlinkOperations, Extraction, CrashConsistency,
---   PathTraversal, model_oracle.
+--   PathTraversal, PreconditionWitnesses, model_oracle.
 --   Do NOT build (already broken on v4.12.0, not port regressions):
 --   FileContentOperations, RMOOperations, CopyMoveOperations,
 --   PermissionOperations.
@@ -56,6 +56,10 @@ lean_lib CrashConsistency where
   srcDir := "."
 
 lean_lib PathTraversal where
+  srcDir := "."
+
+-- Non-vacuity witnesses: one inhabitant per operation precondition.
+lean_lib PreconditionWitnesses where
   srcDir := "."
 
 -- Executable model oracle: drives the proven model for differential testing

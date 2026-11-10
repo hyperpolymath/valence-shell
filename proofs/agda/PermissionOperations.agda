@@ -1,3 +1,4 @@
+{-# OPTIONS --safe --without-K --cubical-compatible #-}
 {- SPDX-License-Identifier: MPL-2.0 -}
 {- Valence Shell - Permission Operations (Agda)
 
@@ -15,7 +16,7 @@ open import Data.Nat using (ℕ)
 open import Data.Bool using (Bool; true; false)
 open import Relation.Nullary using (¬_; Dec; yes; no)
 open import Data.Empty using (⊥-elim)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; cong; subst)
+open import Relation.Binary.PropositionalEquality using (_≡_; _≗_; refl; sym; trans; cong; subst)
 
 -- ============================================================================
 -- Extended Types for Permission/Ownership
@@ -107,8 +108,8 @@ chmod-other p p' m fs p≢p' with p pathExt-≟ p'
 -- chmod is reversible — restoring old mode restores fs
 chmod-reversible : ∀ p fs oldMode newMode →
   (hold : ∃ λ node → (fs p ≡ just node) × (FSNodeExt.mode node ≡ oldMode)) →
-  chmod p oldMode (chmod p newMode fs) ≡ fs
-chmod-reversible p fs oldMode newMode (node , hnode , hmode) = funext helper
+  chmod p oldMode (chmod p newMode fs) ≗ fs
+chmod-reversible p fs oldMode newMode (node , hnode , hmode) = helper
   where
     node-modes : Mode → FSNodeExt
     node-modes m = mkFSNodeExt (FSNodeExt.nodeType node) m (FSNodeExt.owner node)
@@ -130,8 +131,8 @@ chmod-reversible p fs oldMode newMode (node , hnode , hmode) = funext helper
 -- chmod to same mode is identity
 chmod-same-mode : ∀ p fs m →
   (hold : ∃ λ node → (fs p ≡ just node) × (FSNodeExt.mode node ≡ m)) →
-  chmod p m fs ≡ fs
-chmod-same-mode p fs m (node , hnode , hmode) = funext helper
+  chmod p m fs ≗ fs
+chmod-same-mode p fs m (node , hnode , hmode) = helper
   where
     node-modes : Mode → FSNodeExt
     node-modes md = mkFSNodeExt (FSNodeExt.nodeType node) md (FSNodeExt.owner node)
@@ -184,8 +185,8 @@ chown-other p p' o fs p≢p' with p pathExt-≟ p'
 -- chown is reversible — restoring old owner restores fs
 chown-reversible : ∀ p fs oldOwner newOwner →
   (hold : ∃ λ node → (fs p ≡ just node) × (FSNodeExt.owner node ≡ oldOwner)) →
-  chown p oldOwner (chown p newOwner fs) ≡ fs
-chown-reversible p fs oldOwner newOwner (node , hnode , howner) = funext helper
+  chown p oldOwner (chown p newOwner fs) ≗ fs
+chown-reversible p fs oldOwner newOwner (node , hnode , howner) = helper
   where
     node-owners : Ownership → FSNodeExt
     node-owners o = mkFSNodeExt (FSNodeExt.nodeType node) (FSNodeExt.mode node) o
@@ -207,8 +208,8 @@ chown-reversible p fs oldOwner newOwner (node , hnode , howner) = funext helper
 -- chown to same owner is identity
 chown-same-owner : ∀ p fs o →
   (hold : ∃ λ node → (fs p ≡ just node) × (FSNodeExt.owner node ≡ o)) →
-  chown p o fs ≡ fs
-chown-same-owner p fs o (node , hnode , howner) = funext helper
+  chown p o fs ≗ fs
+chown-same-owner p fs o (node , hnode , howner) = helper
   where
     node-owners : Ownership → FSNodeExt
     node-owners ow = mkFSNodeExt (FSNodeExt.nodeType node) (FSNodeExt.mode node) ow

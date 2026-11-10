@@ -15,7 +15,7 @@ image:https://img.shields.io/badge/License-MPL--2.0-blue[License: MPL-2.0,link="
 
 image:https://img.shields.io/badge/RSR-PLATINUM-blueviolet[RSR Compliance]
 image:https://img.shields.io/badge/Proofs-478%20candidates-brightgreen[Formal Proofs]
-image:https://img.shields.io/badge/Systems-6%20proof%20assistants-orange[Proof Systems]
+image:https://img.shields.io/badge/Checked-Agda%20%7C%20Lean%204%20%7C%20Coq%20%7C%20Z3-orange[Proof Systems]
 
 **Research shell exploring formally specified reversible operations and the MAA (Mutually Assured Accountability) Framework.**
 
@@ -44,8 +44,8 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 
 == Formal Verification
 * [x] Formally Proven Reversibility: `rmdir(mkdir(p, fs)) = fs`
-* [x] Polyglot Verification: 6 proof systems (Coq, Lean 4, Agda, Isabelle, Mizar, Z3)
-* [x] ~478 Theorem Candidates: Proven across different logical foundations (0 real gaps; 1 justified axiom + 1 structural axiom remain — see `docs/PROOF_HOLES_AUDIT.adoc`)
+* [x] Polyglot Verification: Agda (theory source), rechecked in Lean 4 and Rocq/Coq, plus supplementary Z3 checks; Isabelle/HOL and Mizar archived unchecked (`archive/proofs/`)
+* [x] ~478 Theorem Candidates (2026-06-01 census, six systems then; Isabelle/Mizar since archived unchecked, so current checked evidence is narrower — see link:EXPLAINME.adoc#proof-ledger[the Proof Ledger]) (0 real gaps; 1 justified classical dependency remains, Coq `is_empty_dir_dec`; the Agda `funext` postulate was removed 2026-11-09 — see `docs/PROOF_HOLES_AUDIT.adoc`)
 * [x] Content Operations: File read/write with proven reversibility
 * [x] MAA Framework: Mutually Assured Accountability with audit trails
 
@@ -82,7 +82,7 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 
 |Verification
 |Testing only
-|*Formal proofs in 6 systems*
+|*Machine-checked proofs (Agda, Lean 4, Rocq/Coq; Z3 supplementary)*
 
 |Accountability
 |Logs (can be tampered)
@@ -112,7 +112,6 @@ Bash 4.0+
 Coq 8.18+
 Lean 4.3+
 Agda 2.6.4+
-Isabelle/HOL 2024
 Z3 4.12+
 Just (command runner)
 Nix (recommended)
@@ -201,8 +200,8 @@ just verify-proofs
 # Build specific proof system
 just build-coq      # Coq proofs
 just build-lean4    # Lean 4 proofs
-just build-agda     # Agda proofs
-just build-isabelle # Isabelle proofs
+just build-agda     # Agda proofs (theory source)
+# Isabelle and Mizar are archived: see archive/proofs/README.adoc
 
 # Show available commands
 just --list
@@ -210,7 +209,12 @@ just --list
 
 == What's Proven?
 
-=== Core Theorems (All 5 Manual Proof Systems)
+Statements are shown in Coq syntax. The theory source is the Agda tree
+(`proofs/agda/`); Lean 4 and Rocq/Coq are recheck legs. Which system proves which
+statement, and with what status, is in link:EXPLAINME.adoc#proof-ledger[the Proof
+Ledger]; Isabelle/HOL and Mizar are archived unchecked and not counted.
+
+=== Core Theorems
 
 [source,coq]
 ----
@@ -231,7 +235,7 @@ Theorem write_file_reversible :
     write_file p old_content (write_file p new_content fs) = fs.
 ----
 
-=== Composition (Proven in 5 Systems)
+=== Composition
 
 [source,coq]
 ----
@@ -242,7 +246,7 @@ Theorem operation_sequence_reversible :
                    (apply_sequence ops fs) = fs.
 ----
 
-=== Equivalence (Proven in 4 Systems)
+=== Equivalence
 
 [source,coq]
 ----
@@ -263,7 +267,10 @@ This connects to Absolute Zero's composition theory.
 
 === Proof Systems
 
-Valence Shell uses **polyglot verification** across 6 proof systems:
+Valence Shell uses **polyglot verification**. Agda is the theory source of
+truth; Lean 4 and Rocq/Coq are recheck legs; Z3 is a supplementary SMT check.
+Isabelle/HOL and Mizar proofs were archived unchecked on 2026-11-09 (`archive/proofs/`); their rows
+are historical and not counted as evidence. Line counts are approximate.
 
 [cols="2,2,3"]
 |===
@@ -281,11 +288,11 @@ Valence Shell uses **polyglot verification** across 6 proof systems:
 |Intensional Type Theory
 |~700
 
-|Isabelle/HOL
+|Isabelle/HOL (archived, unchecked)
 |Higher-Order Logic
 |~650
 
-|Mizar
+|Mizar (archived, unchecked)
 |Tarski-Grothendieck Set Theory
 |~400
 
@@ -294,7 +301,7 @@ Valence Shell uses **polyglot verification** across 6 proof systems:
 |~150
 |===
 
-**Why 6 systems?**
+**Why several systems?**
 
 * Different logical foundations increase confidence
 * Cross-validation catches errors
@@ -365,7 +372,7 @@ Valence Shell sits inside a three-layer architecture; the other two layers are u
 * If preconditions hold, `write(p, old, write(p, new, fs)) = fs`
 * Operations on `p1` don't affect `p2` (when `p1 ≠ p2`)
 * Composition: sequences of operations reverse correctly
-* ~478 theorem candidates proven across 6 verification systems (0 real gaps; 2 justified/structural axioms remain — see `docs/PROOF_HOLES_AUDIT.adoc`)
+* ~478 theorem candidates in the 2026-06-01 census, which counted six systems; Isabelle/HOL and Mizar were archived unchecked on 2026-11-09 and no longer count. Current per-obligation status: link:EXPLAINME.adoc#proof-ledger[the Proof Ledger]. 0 real gaps; 1 justified classical dependency (Coq `is_empty_dir_dec`) — see `docs/PROOF_HOLES_AUDIT.adoc`
 * 2026-07-16 re-verification: `proofs/coq/` compiles with **0 admits** under Coq 8.18.0; `Print Assumptions` on the load-bearing theorems reports *Closed under the global context* or dependence only on standard `functional_extensionality`. Idris2 0.8.0 keyword/parse fixes landed earlier (#112/#113/#115/#117), the build oracle is strict (#118), and the Idris2 layer is hole-free (#151/#152).
 
 === ❌ What Is NOT Guaranteed
@@ -517,7 +524,7 @@ Valence Shell achieves **PLATINUM-level** Rhodium Standard Repository (RSR) comp
 * ✅ .well-known/ directory (RFC 9116 compliant)
 * ✅ Build systems (Just + Nix + Container + CI/CD)
 * ✅ TPCF (Tri-Perimeter Contribution Framework)
-* ✅ Formal verification (6 proof systems, ~478 theorem candidates)
+* ✅ Formal verification (Agda source, Lean 4 and Rocq/Coq rechecks, Z3 supplementary; ~478 theorem candidates in the 2026-06-01 census, before Isabelle/Mizar were archived)
 * ✅ Zero runtime dependencies
 * ✅ Offline-first verification
 * ✅ Security guarantees (formal proofs + memory safety)
@@ -534,9 +541,9 @@ See link:RSR_COMPLIANCE.md[RSR_COMPLIANCE.md] for full report.
 
 == FAQ
 
-=== Why 6 proof systems?
+=== Why several proof systems?
 
-Different logical foundations increase confidence. If all 6 systems prove the same theorem, it's highly unlikely all have the same bug.
+Different logical foundations increase confidence: if independently checked systems prove the same statement, it is unlikely they all share the same bug. The checked systems are Agda (theory source), Lean 4 and Rocq/Coq (recheck legs), with Z3 as a supplementary check; Isabelle/HOL and Mizar are archived unchecked. Comparing the Lean and Rocq statements against Agda is open work (`docs/audits/2026-11-09-proof-ground-truth.adoc`).
 
 === Is this ready to put in production?
 
@@ -562,7 +569,6 @@ just verify-proofs
 # - Coq: generates .vo certificate files
 # - Lean 4: compiles to executable
 # - Agda: type-checks and generates interface files
-# - Isabelle: builds heap image
 # - Z3: checks SMT assertions
 ----
 
@@ -589,7 +595,7 @@ If you use Valence Shell in academic work:
   author = {{Valence Shell Contributors}},
   year = {2026},
   url = {https://github.com/Hyperpolymath/valence-shell},
-  note = {Polyglot verification across 6 proof systems},
+  note = {Polyglot verification: Agda source, Lean 4 and Rocq/Coq rechecks, Z3 supplementary},
   version = {0.9.0}
 }
 ----

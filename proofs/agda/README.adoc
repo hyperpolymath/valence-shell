@@ -2,10 +2,9 @@
 // Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 = proofs/agda/ — Agda Filesystem Proofs (Intensional Type Theory)
 
-Agda (intensional dependent type theory) cross-validates the
-filesystem reversibility theorems against the primary Lean 4 source
-of truth (`../lean4/`). Agda's intensional treatment of equality
-provides a different lens than Lean's HoTT-flavoured framework.
+Agda is the theory source of truth for the filesystem reversibility
+theorems (owner ruling 2026-11-09, per `standards` PROOF-POLICY §1). The Lean 4
+(`../lean4/`) and Rocq (`../coq/`) trees are recheck legs.
 
 == Files
 
@@ -22,6 +21,8 @@ provides a different lens than Lean's HoTT-flavoured framework.
 | `PermissionOperations.agda`   | chmod/chown bit-preservation.
 | `SymlinkOperations.agda`      | Symlink creation + traversal.
 | `RMOOperations.agda`          | Remove-Match-Obliterate (GDPR-relevant).
+| `PreconditionWitnesses.agda` | One inhabitant per operation precondition (non-vacuity).
+| `All.agda`                   | Imports every module; the file CI checks.
 |===
 
 Manifest:
@@ -31,33 +32,37 @@ Manifest:
 
 == Build
 
+`valence-shell.agda-lib` depends on `standard-library`, so Agda must know where
+agda-stdlib v2.2 lives. Register it once (CI does the same):
+
 ```bash
-cd proofs/agda
-agda --library-file=<stdlib>.agda-lib --library=valence-shell FilesystemModel.agda    # single module
-agda --library-file=<stdlib>.agda-lib --library=valence-shell CopyMoveOperations.agda # transitive
+git clone --depth 1 --branch v2.2 https://github.com/agda/agda-stdlib.git ~/agda-stdlib
+mkdir -p ~/.agda
+echo ~/agda-stdlib/standard-library.agda-lib >> ~/.agda/libraries
 ```
 
-All nine modules type-check this way under Agda 2.6.4.3 + stdlib 2.1.1 and under
-Agda 2.7.0.1 + stdlib 2.2.
+Then check every module:
 
-*Waiver (see `VERIFICATION.adoc`).* The estate invocation is
-`agda --safe --without-K --cubical-compatible`, and this tree does **not** meet
-it: `--safe` reports `Cannot postulate funext with safe flag` and `--without-K`
-reports `Cannot eliminate reflexive equation p = p of type List String because K
-has been disabled`. The commands above are therefore the *unflagged* invocation,
-used under a recorded waiver. Do not add `--safe` or `--without-K` to them until
-those two obstacles are discharged.
+```bash
+cd proofs/agda
+agda --safe --without-K --cubical-compatible All.agda
+```
+
+This is the estate invocation (PROOF-POLICY §2.1). It checks all ten modules
+under Agda 2.7.0.1 + agda-stdlib v2.2; CI runs the same command
+(`.github/workflows/agda.yml`). See `VERIFICATION.adoc` for the receipt.
 
 == Conventions
 
-* Status under PROOF-POLICY §5 is `proven-with-postulates` (one postulate:
-  `funext` in `FilesystemModel`) -- the waiver above is why it is not `proven`.
+* Status under PROOF-POLICY §5 is `PROVEN`: no postulates, no escape pragmas.
+* Filesystem equality is pointwise (`_≗_`), so no function extensionality is
+  needed.
 * PascalCase module names; one module per file.
 * No `.agdai` interface artefacts in tree (cached locally, not committed).
 
 == See also
 
 * `../README.md` — overall proof-stack design
-* `../lean4/README.adoc` — primary source of truth
+* `../lean4/README.adoc` — Lean recheck leg
 * `../../docs/PROOF_HOLES_AUDIT.adoc` — proof-debt status across all
   systems

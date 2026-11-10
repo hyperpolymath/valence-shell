@@ -325,7 +325,7 @@ fn print_banner() {
 ║    ╚═══╝  ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝ ║
 ║                                                              ║
 ║  Algorithmic reversibility - not thermodynamic (Landauer)    ║
-║  Backed by 478 theorem candidates across 6 proof systems     ║
+║  Proofs: Agda source, Lean 4 + Coq rechecks, Z3 checks       ║
 ╚══════════════════════════════════════════════════════════════╝
 "#
         .bright_blue()

@@ -158,7 +158,10 @@ impl HelpEntry {
         Ok(())
     }
 
-    /// Tier 3: Full man page (formatted)
+    /// Tier 3: Display a formatted man page through the smart pager.
+    ///
+    /// Returns terminal output or input errors from the pager. A failed system
+    /// pager falls back to the built-in pager.
     fn display_manpage(&self) -> Result<()> {
         let mut output = String::new();
 
@@ -208,7 +211,7 @@ impl HelpEntry {
             output.push_str(&format!("         Lean 4:   {}\n", proof_ref.lean_location));
             output.push_str(&format!("         Agda:     {}\n", proof_ref.agda_location));
             output.push_str(&format!(
-                "         Isabelle: {}\n\n",
+                "         Isabelle: {} (archived, unchecked)\n\n",
                 proof_ref.isabelle_location
             ));
         }

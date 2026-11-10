@@ -8,7 +8,7 @@
 //! # Trust Architecture
 //! ```
 //! ┌─────────────────────────────────┐
-//! │ Formal Proofs (HIGH TRUST)      │ ← Coq/Lean4/Agda/Isabelle/Mizar/Z3
+//! │ Formal Proofs (HIGH TRUST)      │ ← Agda source; Lean 4/Coq rechecks; Z3
 //! └─────────────┬───────────────────┘
 //!               │
 //! ┌─────────────▼───────────────────┐
@@ -38,6 +38,8 @@ pub const ProofRef = struct {
     coq: ?[]const u8 = null,
     lean4: ?[]const u8 = null,
     agda: ?[]const u8 = null,
+    // Isabelle and Mizar were archived unchecked on 2026-11-09; these
+    // references point into archive/proofs/ and are not checked by CI.
     isabelle: ?[]const u8 = null,
     mizar: ?[]const u8 = null,
     z3: ?[]const u8 = null,
@@ -50,9 +52,9 @@ pub const proofs = struct {
         .coq = "proofs/coq/filesystem_model.v:L45-L62",
         .lean4 = "proofs/lean4/FilesystemModel.lean:L38-L52",
         .agda = "proofs/agda/FilesystemModel.agda:L41-L58",
-        .isabelle = "proofs/isabelle/FilesystemModel.thy:L35-L50",
-        .mizar = "proofs/mizar/filesystem_model.miz:L38-L55",
-        .z3 = "proofs/z3/filesystem_operations.smt2:L28-L45",
+        .isabelle = "archive/proofs/isabelle/FilesystemModel.thy:L35-L50",
+        .mizar = "archive/proofs/mizar/filesystem_model.miz:L38-L55",
+        .z3 = "proofs/z3/filesystem_operations.smt2:L119-L123",
     };
 
     pub const create_delete = ProofRef{
@@ -60,9 +62,9 @@ pub const proofs = struct {
         .coq = "proofs/coq/file_operations.v:L32-L48",
         .lean4 = "proofs/lean4/FileOperations.lean:L28-L42",
         .agda = "proofs/agda/FileOperations.agda:L30-L45",
-        .isabelle = "proofs/isabelle/FileOperations.thy:L25-L40",
-        .mizar = "proofs/mizar/file_operations.miz:L28-L43",
-        .z3 = "proofs/z3/filesystem_operations.smt2:L55-L72",
+        .isabelle = "archive/proofs/isabelle/FileOperations.thy:L25-L40",
+        .mizar = "archive/proofs/mizar/file_operations.miz:L28-L43",
+        .z3 = "proofs/z3/filesystem_operations.smt2:L131-L135",
     };
 
     pub const obliterate_irreversible = ProofRef{
@@ -70,8 +72,8 @@ pub const proofs = struct {
         .coq = "proofs/coq/rmo_operations.v:L85-L115",
         .lean4 = "proofs/lean4/RMOOperations.lean:L78-L108",
         .agda = "proofs/agda/RMOOperations.agda:L82-L112",
-        .isabelle = "proofs/isabelle/RMO_Operations.thy:L75-L105",
-        .mizar = "proofs/mizar/rmo_operations.miz:L80-L110",
+        .isabelle = "archive/proofs/isabelle/RMO_Operations.thy:L75-L105",
+        .mizar = "archive/proofs/mizar/rmo_operations.miz:L80-L110",
         .z3 = "proofs/z3/rmo_operations.smt2:L95-L125",
     };
 };
@@ -318,6 +320,8 @@ fn handlePwd() !void {
     try std.io.getStdOut().writer().print("{s}\n", .{cwd});
 }
 
+/// Write command usage and proof system status to standard output.
+/// Propagates output errors.
 fn printUsage() !void {
     const usage =
         \\vsh - Valence Shell (Formally Verified)
@@ -345,8 +349,9 @@ fn printUsage() !void {
         \\  --help, -h        Show this help
         \\  --version, -v     Show version
         \\
-        \\All operations are backed by formal proofs in:
-        \\  Coq, Lean 4, Agda, Isabelle/HOL, Mizar, Z3
+        \\Model-level proofs: Agda (theory source), Lean 4 and Coq (rechecks),
+        \\Z3 (supplementary). Isabelle/HOL and Mizar are archived, unchecked.
+        \\Per-obligation status: EXPLAINME.adoc#proof-ledger
         \\
         \\See: https://github.com/hyperpolymath/valence-shell
         \\
@@ -354,12 +359,14 @@ fn printUsage() !void {
     try std.io.getStdOut().writeAll(usage);
 }
 
+/// Write the version, proof system summary, and licence to standard output.
+/// Propagates output errors.
 fn printVersion() !void {
     const version =
         \\vsh 0.1.0 (Valence Shell)
         \\
         \\Formally verified shell operations.
-        \\Proofs: ~256 theorems across 6 verification systems
+        \\Proofs: Agda source, Lean 4 and Coq rechecks; see the proof ledger
         \\License: MPL-2.0
         \\
     ;

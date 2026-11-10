@@ -4,8 +4,9 @@
 
 Coq (Calculus of Inductive Constructions) provides the CIC foundation
 for the valence-shell formal specs and serves as the OCaml extraction
-target. The primary source of truth is Lean 4 (`../lean4/`); Coq
-cross-validates and feeds extraction.
+target. Since the 2026-11-09 owner ruling the theory source of truth is Agda
+(`../agda/`); Coq is a recheck leg alongside Lean 4 (`../lean4/`), and feeds
+extraction.
 
 == Files
 
@@ -77,6 +78,7 @@ under `[coq-proof-status]`.
 == See also
 
 * `../README.md` — overall proof-stack design
-* `../lean4/README.adoc` — primary source of truth
+* `../agda/README.adoc` — theory source of truth
+* `../lean4/README.adoc` — the other recheck leg and the executable model oracle
 * `../../docs/PROOF_HOLES_AUDIT.adoc` — full proof-debt history
 * `../../impl/ocaml/` — extraction target

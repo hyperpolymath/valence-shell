@@ -1,3 +1,4 @@
+{-# OPTIONS --safe --without-K --cubical-compatible #-}
 {- Valence Shell - Filesystem Equivalence (Agda)
 
    Equivalence relations on filesystems and proofs that operations
@@ -14,7 +15,7 @@ open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Product using (_×_; _,_)
 open import Data.List using (List; []; _∷_)
 open import Relation.Nullary using (Dec; yes; no)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; cong)
+open import Relation.Binary.PropositionalEquality using (_≡_; _≗_; refl; sym; trans; cong)
 
 -- Filesystem Equivalence
 
@@ -123,14 +124,12 @@ equivSubstitution = applyOpPreservesEquiv
 reversibleCreatesEquiv : ∀ (op : Operation) (fs : Filesystem) →
   ReversibleDP op fs →
   applyOp (reverseOp op) (applyOp op fs) ≈ fs
-reversibleCreatesEquiv op fs rev p =
-  cong (λ x → x p) (singleOpReversible op fs rev)
+reversibleCreatesEquiv op fs rev = singleOpReversible op fs rev
 
 sequenceReversibleEquiv : ∀ (ops : List Operation) (fs : Filesystem) →
   AllReversibleDP ops fs →
   applySequence (reverseSequence ops) (applySequence ops fs) ≈ fs
-sequenceReversibleEquiv ops fs hrev p =
-  cong (λ x → x p) (operationSequenceReversible ops fs hrev)
+sequenceReversibleEquiv ops fs hrev = operationSequenceReversible ops fs hrev
 
 -- CNO Connection via Equivalence
 
