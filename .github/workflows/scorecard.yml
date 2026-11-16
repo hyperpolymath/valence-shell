@@ -1,8 +1,12 @@
+# This workflow is managed by gh actions-lock.
 # SPDX-License-Identifier: MPL-2.0
+# This workflow is managed by gh actions-lock.
+# This workflow is managed by gh actions-lock.
 name: Scorecards supply-chain security
 
 on:
   branch_protection_rule:
+  workflow_dispatch:
   schedule:
     - cron: '23 4 * * 1'
 
@@ -12,13 +16,19 @@ permissions:
 
 jobs:
   analysis:
-    # Explicit least-privilege permissions for the OSSF Scorecard reusable
-    # workflow (the documented set), instead of relying on a broad
-    # workflow-level `read-all`:
+    # Manual refreshes measure the merged default branch. Keep the OIDC-bearing
+    # publication job off manually selected feature branches.
+    if: github.event_name != 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    # Caller-granted permissions per the scorecard-reusable contract
+    # (its header documents: the caller MUST grant security-events:write
+    # + id-token:write; contents:read lets it read the repo). Closes the
+    # Hypatia `scorecard_wrapper_missing_job_permissions` finding.
+    # actions: read is repeated here: this job-level block replaces the
+    # workflow-level one, and the callee's job requests actions: read.
+    # The callee declares no secrets, so no `secrets:` line.
     permissions:
-      contents: read          # read the repository
-      actions: read           # inspect workflow runs (Token-Permissions, etc.)
-      security-events: write  # upload results to the code-scanning dashboard
-      id-token: write         # OIDC, to publish results / badge
-    uses: hyperpolymath/standards/.github/workflows/scorecard-reusable.yml@092dedada188f56c5915f74a5fd40aac093742c3
-    secrets: inherit
+      actions: read
+      contents: read
+      security-events: write
+      id-token: write
+    uses: metadatastician/standards/.github/workflows/scorecard-reusable.yml@ba640e9a57f22608710ffecdca282074eac55a0b

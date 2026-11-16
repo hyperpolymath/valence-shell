@@ -157,20 +157,22 @@ pub fn execute_pipeline(
         let is_last = idx == stages.len() - 1;
 
         // Configure stdin
-        let stdin_cfg =
-            if is_first {
-                // First stage: inherit from shell
-                Stdio::inherit()
-            } else {
-                // Middle/last stages: read from previous stdout.
-                // Invariant: when idx > 0, the previous iteration spawned a
-                // non-last child with Stdio::piped() stdout (line below) and
-                // stored child.stdout into prev_stdout after spawning. So the
-                // The expect documents the loop invariant described above.
-                Stdio::from(prev_stdout.take().expect(
-                    "prev_stdout invariant: previous non-last stage stored its piped stdout",
-                ))
-            };
+        let stdin_cfg = if is_first {
+            // First stage: inherit from shell
+            Stdio::inherit()
+        } else {
+            // Middle/last stages: read from previous stdout.
+            // When idx > 0, the previous iteration spawned a non-last
+            // child with Stdio::piped() stdout and stored it in
+            // prev_stdout, so this is always Some. A broken invariant is
+            // reported as an error rather than a panic.
+            prev_stdout.take().map(Stdio::from).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "pipeline stage {}: previous stage left no piped stdout",
+                    idx
+                )
+            })?
+        };
 
         // Configure stdout. Pivot on redirect_setup directly: it is Some
         // iff redirects is non-empty (constructed above), so matching the
@@ -438,22 +440,7 @@ fn stdio_config_from_redirects(
 
                 // Write heredoc content to a pipe instead of a temp file (avoids
                 // predictable temp path + symlink attacks entirely).
-                use std::os::unix::io::FromRawFd;
-                let mut pipe_fds = [0i32; 2];
-                // SAFETY: pipe() is a POSIX syscall; pipe_fds is a valid 2-element array.
-                if unsafe { libc::pipe(pipe_fds.as_mut_ptr()) } != 0 {
-                    anyhow::bail!(
-                        "Failed to create pipe for here document: {}",
-                        std::io::Error::last_os_error()
-                    );
-                }
-                // SAFETY: pipe_fds[1] is a valid file descriptor from pipe().
-                let mut write_end = unsafe { File::from_raw_fd(pipe_fds[1]) };
-                std::io::Write::write_all(&mut write_end, processed.as_bytes())?;
-                drop(write_end); // Close write end so reader gets EOF
-                                 // SAFETY: pipe_fds[0] is a valid file descriptor from pipe().
-                let read_end = unsafe { File::from_raw_fd(pipe_fds[0]) };
-                stdin_cfg = Stdio::from(read_end);
+                stdin_cfg = stdin_from_bytes(processed.as_bytes(), "here document")?;
             }
 
             Redirection::HereString { content, expand } => {
@@ -466,27 +453,26 @@ fn stdio_config_from_redirects(
                 };
 
                 // Write here string content to a pipe (avoids predictable temp paths).
-                use std::os::unix::io::FromRawFd;
-                let mut pipe_fds = [0i32; 2];
-                // SAFETY: pipe() is a POSIX syscall; pipe_fds is a valid 2-element array.
-                if unsafe { libc::pipe(pipe_fds.as_mut_ptr()) } != 0 {
-                    anyhow::bail!(
-                        "Failed to create pipe for here string: {}",
-                        std::io::Error::last_os_error()
-                    );
-                }
-                // SAFETY: pipe_fds[1] is a valid file descriptor from pipe().
-                let mut write_end = unsafe { File::from_raw_fd(pipe_fds[1]) };
-                std::io::Write::write_all(&mut write_end, processed.as_bytes())?;
-                drop(write_end); // Close write end so reader gets EOF
-                                 // SAFETY: pipe_fds[0] is a valid file descriptor from pipe().
-                let read_end = unsafe { File::from_raw_fd(pipe_fds[0]) };
-                stdin_cfg = Stdio::from(read_end);
+                stdin_cfg = stdin_from_bytes(processed.as_bytes(), "here string")?;
             }
         }
     }
 
     Ok((stdin_cfg, stdout_cfg, stderr_cfg))
+}
+
+/// Feed `content` to a child's stdin through an anonymous pipe.
+///
+/// Uses `std::io::pipe` (stable since Rust 1.87), so no raw file
+/// descriptors or `unsafe` are involved. The whole content is written before
+/// the child starts, as before, so it must fit in the pipe buffer (64 KiB on
+/// Linux); larger here-documents would block here.
+fn stdin_from_bytes(content: &[u8], what: &str) -> Result<Stdio> {
+    let (reader, mut writer) = std::io::pipe()
+        .map_err(|e| anyhow::anyhow!("Failed to create pipe for {}: {}", what, e))?;
+    std::io::Write::write_all(&mut writer, content)?;
+    drop(writer); // Close the write end so the reader gets EOF
+    Ok(Stdio::from(reader))
 }
 
 /// Expand glob patterns in command arguments (Phase 6 M12)

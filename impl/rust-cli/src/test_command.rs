@@ -244,7 +244,7 @@ impl TestExpr {
 pub fn parse_test_expr(args: &[String], is_bracket: bool) -> Result<TestExpr> {
     // Handle "[" syntax - must end with "]"
     let args = if is_bracket {
-        if args.is_empty() || args.last().unwrap() != "]" {
+        if args.last().map(String::as_str) != Some("]") {
             bail!("test: missing ']'");
         }
         &args[..args.len() - 1] // Remove trailing "]"

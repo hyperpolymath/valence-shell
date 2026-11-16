@@ -1,0 +1,96 @@
+// SPDX-License-Identifier: MPL-2.0
+= Hypatia remediation and Secret Scanner repair
+:revdate: 2026-11-16
+:toc: macro
+
+Record of the 2026-11-16 pass over the Hypatia scan of
+`claude/laughing-hawking-pibzji` (`fe8ded7`, CI run 43970213345, artifact
+`hypatia-findings`) and of why the Secret Scanner never produced a result.
+
+toc::[]
+
+== Secret Scanner (gitleaks): why every run failed
+
+All 595 runs of `.github/workflows/secret-scanner.yml` ended in failure with no
+jobs (a startup failure, so no check run appeared). `governance.yml`,
+`mirror.yml` and `scorecard.yml` called reusable workflows the same way.
+
+* All four called `hyperpolymath/standards/.github/workflows/*-reusable.yml@092deda`.
+  The standards repository now lives at `metadatastician/standards`;
+  `git ls-remote` returns the same `HEAD` for both names.
+* `hyperpolymath/echo-types` calls the same reusables as
+  `metadatastician/standards/...@75bd599` (secret scanner, mirror) and
+  `@ba640e9` (governance, scorecard). Its Secret Scanner runs pass, for
+  example run 43967735914 on 2026-11-16.
+* Fix: the four wrappers are now the echo-types versions, with the
+  `metadatastician/standards` paths and pins. The same change removes
+  `secrets: inherit` (Hypatia WH008): the secret scanner needs only
+  `contents: read`, mirror passes its seven named keys, and scorecard
+  declares no secrets.
+
+The root cause (moved repository versus pinned `uses:` paths) is inferred from
+the echo-types comparison; the repository's Actions policy page was not
+readable from this session. The first CI run on this change confirms or
+refutes it.
+
+== Hypatia findings
+
+Of 98 findings, 48 are code-scanning meta-alerts (CSA001 "alert open",
+CSA003 "alert overdue", CSA002 "25 alerts open") that restate the other 50.
+They close when the underlying alert closes.
+
+[cols="2,1,4",options="header"]
+|===
+| Rule (count) | Disposition | Detail
+
+| `secret_detected` (critical) | allowed | `secure_erase.rs`: "Eins" is the temporary ATA password from the ata.wiki.kernel.org Secure Erase guide, now a documented `ATA_TEMP_PASSWORD` const. It is deliberately well known so a drive locked by an interrupted erase can be unlocked; it protects nothing.
+| `believe_me` (critical) | allowed after experiment | See <<idris>>.
+| `from_raw` | fixed | `external.rs`: the here-doc/here-string pipe uses `std::io::pipe()` (Rust 1.87; MSRV 1.88). No raw descriptors, no `unsafe`.
+| `as_ptr` (3) | fixed | `chown` uses `std::os::unix::fs::chown` (Rust 1.73) in the CLI, its two undo paths and `ffi/rust`; `mkfifo` uses `nix::unistd::mkfifo`.
+| `unsafe_block` | fixed | `getpwnam`/`getgrnam` dereferences replaced by `nix` `User::from_name`/`Group::from_name` (reentrant); the job-control syscalls each carry a `SAFETY:` comment.
+| `expect_in_hot_path` (4) | fixed | Pipeline, brace and parameter-expansion invariants are now `let ... else`, `ok_or_else` or a `match`. `arith.rs` was a method named `expect`, renamed `expect_token`.
+| `unwrap_without_check` (3) | fixed | `test_command.rs` compares `args.last()` as an `Option`; the fuzz targets return on a non-UTF-8 temp path.
+| `zig_ptr_cast`, `zig_align_cast` | fixed or allowed | `lib.zig`: ten handle casts collapse into `toHandle`/`fromHandle`, the only two casts across the C boundary, each annotated. `daemon_client.zig`: the `sockaddr_un` to `sockaddr` cast is the sockets ABI, annotated. `lean_wrapper.zig`: `leanStrToCStr` was unused and documented "caller must free" for a pointer Lean owns, so it was deleted.
+| `shell_download_then_run`, `download_then_run_shell` (setup.sh) | fixed | The `curl \| bash` fallback for `just` is replaced by `cargo install --locked just`, or a clear failure.
+| `eval_in_shell` (2) | fixed | `verify-proofs.sh` runs each check as an argument vector from a named directory.
+| `npx_in_workflow` (2) | fixed | `bunx --no-install --bun rescript build`, which never fetches an unpinned package.
+| `missing_timeout_minutes`, WH006 | fixed | `labels.yml`, `label-triage.yml` (echo-types versions).
+| RE001 (3) | fixed | `harden-runner`: `block` to `api.github.com` in `instant-sync.yml`, `block` to the SMTP endpoint in `push-email-notify.yml`, `audit` in `hypatia-scan.yml`.
+| RE005 | fixed | The ignored stress suite no longer runs under `continue-on-error` in `compilation_tests.yml`; see <<stress>>.
+| WH008 (3) | fixed | See the Secret Scanner section.
+| SD022 (2) | fixed | Both paths named another tree (`echidna/src/rust/`, the Agda tarball's `src/data/lib`); now qualified.
+| SD009 | left for the owner | `ffi/zig/src/main.zig` has no SPDX header. Licence edits are owner-only (estate doctrine 6).
+| SD004 (6), SD007 | left for the owner | Moving `.machine_readable/6a2/` into deed clauses needs the estate converter (kyX, standards D312/D313); writing the clauses by hand would guess at metadata.
+| `known_fake_action_sha` (3), `download_then_run_shell` (1) in `alkahest-shell-transmuter/` | left for upstream | Owner ruling: fix the canonical alkahest repository, then re-sync this copy. These workflows never run here.
+|===
+
+[[idris]]
+== Idris2 `believe_me`: experiment
+
+Goal: prove `(s : String) -> (s == s) = True` without an axiom.
+
+* Direct `Refl` fails under Idris2 0.8.0: "Can't solve constraint between:
+  True and intToBool (prim__eq_String s s)". The primitive does not reduce
+  on a variable.
+* Going through `decEq s s` fails with the same constraint. Idris2's own
+  `DecEq String` (`libs/base/Decidable/Equality.idr`, `primitiveEq`) is
+  itself `believe_me`, so routing through it would move the axiom into the
+  standard library, out of the scanner's sight, without removing it.
+* Removing it for real means changing path components from `String` to a type
+  with structural equality, which changes the ABI-facing model.
+
+Outcome: `axStringEqRefl` and `axBits8EqRefl` stay as the two registered
+axioms (`.machine_readable/IDRIS2_AXIOMS.a2ml`, gated by
+`.github/scripts/check-idris2-believe-me.sh`), with an inline Hypatia
+allow that names both. The package builds and the gate passes.
+
+[[stress]]
+== Stress suite state
+
+Run one test at a time on 2026-11-16, 120 s limit each: 5 fail
+(`stress_concurrent_multiple_instances`, `stress_deep_nesting_1000_levels`,
+`stress_deep_nesting_no_stack_overflow`, `stress_large_file_undo_streaming`,
+`stress_undo_redo_efficiency`), 2 exceed the limit
+(`stress_many_operations_10000`, `stress_resource_limits_max_history`), 3 pass;
+`stress_large_file_1gb` was not run. The CI step only ever reached the
+30-minute job timeout. Repairing the suite is separate work.

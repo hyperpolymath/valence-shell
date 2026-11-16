@@ -50,30 +50,17 @@ impl ProcessSubstitution {
         // Create FIFO using mkfifo(2) syscall
         #[cfg(unix)]
         {
-            use std::ffi::CString;
-            let path_str = fifo_path.to_str().ok_or_else(|| {
-                anyhow!("FIFO path contains invalid UTF-8: {}", fifo_path.display())
-            })?;
-            let path_cstr = CString::new(path_str)
-                .map_err(|_| anyhow!("FIFO path contains null bytes: {}", fifo_path.display()))?;
-            // SAFETY: path_cstr is a valid NUL-terminated C string; mkfifo is a POSIX syscall
-            // that creates a FIFO special file at the given path with the specified permissions.
-            let result = unsafe { libc::mkfifo(path_cstr.as_ptr(), 0o600) };
-            if result != 0 {
-                let err = std::io::Error::last_os_error();
+            use nix::sys::stat::Mode;
+            // `nix::unistd::mkfifo` takes the path directly, so no C string
+            // or raw pointer is built here.
+            let mode = Mode::S_IRUSR | Mode::S_IWUSR; // 0o600
+            if let Err(err) = nix::unistd::mkfifo(&fifo_path, mode) {
                 // If FIFO already exists, try to remove and recreate
-                if err.kind() == std::io::ErrorKind::AlreadyExists {
+                if err == nix::errno::Errno::EEXIST {
                     std::fs::remove_file(&fifo_path)?;
-                    // SAFETY: same as above — path_cstr unchanged, mkfifo is safe with valid CString
-                    let result = unsafe { libc::mkfifo(path_cstr.as_ptr(), 0o600) };
-                    if result != 0 {
-                        let err = std::io::Error::last_os_error();
-                        return Err(anyhow!(
-                            "Failed to create FIFO {}: {}",
-                            fifo_path.display(),
-                            err
-                        ));
-                    }
+                    nix::unistd::mkfifo(&fifo_path, mode).map_err(|err| {
+                        anyhow!("Failed to create FIFO {}: {}", fifo_path.display(), err)
+                    })?;
                 } else {
                     return Err(anyhow!(
                         "Failed to create FIFO {}: {}",

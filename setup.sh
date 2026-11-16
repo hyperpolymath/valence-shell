@@ -128,6 +128,27 @@ detect_platform() {
     esac
 }
 
+# ── Install just from crates.io ──
+# Used where no package manager carries just. Cargo checks every crate against
+# the registry's checksums, so nothing is downloaded and executed unverified
+# (the former fallback piped https://just.systems/install.sh into bash).
+install_just_with_cargo() {
+    if command -v cargo >/dev/null 2>&1; then
+        info "Building just with cargo (crates.io, checksum-verified)..."
+        cargo install --locked just || return 1
+        # cargo installs into ~/.cargo/bin, which may not be on PATH yet.
+        case ":$PATH:" in
+            *":$HOME/.cargo/bin:"*) ;;
+            *) export PATH="$HOME/.cargo/bin:$PATH"
+               info "Added ~/.cargo/bin to PATH for this run; add it to your shell profile." ;;
+        esac
+    else
+        fail "No package manager here provides just, and cargo is not installed."
+        fail "Install just from your distribution or https://just.systems/, then re-run."
+        return 1
+    fi
+}
+
 # ── Install just ──
 install_just() {
     if command -v just >/dev/null 2>&1; then
@@ -140,8 +161,8 @@ install_just() {
     case "$PKG_MGR" in
         dnf)        sudo dnf install -y just ;;
         apt)        sudo apt-get install -y just 2>/dev/null || {
-                        # just not in older apt repos — use installer
-                        curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+                        # just is not in older apt repos — build it from crates.io
+                        install_just_with_cargo
                     } ;;
         pacman)     sudo pacman -S --noconfirm just ;;
         apk)        sudo apk add just ;;
@@ -152,8 +173,7 @@ install_just() {
         guix)       guix install just ;;
         nix)        nix-env -iA nixpkgs.just ;;
         *)
-            info "Using just installer script..."
-            curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+            install_just_with_cargo
             ;;
     esac
 

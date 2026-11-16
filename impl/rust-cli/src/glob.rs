@@ -195,13 +195,14 @@ fn expand_braces_limited(pattern: &str, remaining: usize) -> Vec<String> {
             brace_depth -= 1;
             if brace_depth == 0 {
                 // Found matching close brace.
-                // Invariant: brace_start is Some whenever brace_depth >= 1.
-                // The only site that increments brace_depth (the `ch == '{'`
-                // arm above) sets brace_start = Some(i) when brace_depth was
-                // zero, and only the matched '}' decrements it back. So this
-                // The expect documents the non-empty split invariant.
-                let start =
-                    brace_start.expect("brace_start invariant: Some whenever brace_depth >= 1");
+                // brace_start is Some whenever brace_depth >= 1: the only site
+                // that increments brace_depth (the `ch == '{'` arm above) sets
+                // brace_start = Some(i) when brace_depth was zero, and only the
+                // matched '}' decrements it back. If that ever broke, the
+                // pattern is returned unexpanded instead of panicking.
+                let Some(start) = brace_start else {
+                    return vec![pattern.to_string()];
+                };
                 let prefix = &pattern[..start];
                 let suffix = &pattern[i + 1..];
                 let content = &pattern[start + 1..i];

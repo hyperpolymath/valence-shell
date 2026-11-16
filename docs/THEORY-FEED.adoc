@@ -144,7 +144,7 @@ Priority reflects two things: how directly the item unblocks a named valence-she
 ** This is an owner decision because it moves a dependency edge between repos. Record the ruling in nextgen-typing#118.
 . *NW-2: ECHIDNA tri-state verdict plus project context* (echidna, valence-shell#162). Two independent defects combine to report 15 known-good proofs "invalid":
 ** *valence-shell side:* `scripts/validate-with-echidna.sh:77` invokes `echidna verify <file> --prover <p> --timeout 120 --format <f>` with no `--library` or project root. echidna's verify already accepts `library: Vec<PathBuf>`. Pass `_CoqProject`, `lakefile.lean` and the `.agda-lib` roots.
-** *echidna side:* `src/rust/main.rs` ~L590–631 collapses the result to a bool and prints "✗ Proof is invalid" then `exit(1)`, so an environment failure is indistinguishable from a refutation. Return `Valid | Invalid | EnvironmentError`, with distinct exit codes.
+** *echidna side:* `echidna/src/rust/main.rs` ~L590–631 collapses the result to a bool and prints "✗ Proof is invalid" then `exit(1)`, so an environment failure is indistinguishable from a refutation. Return `Valid | Invalid | EnvironmentError`, with distinct exit codes.
 ** Estate benefit: every ECHIDNA consumer stops reading a missing import path as a disproof.
 . *NW-3: First real echo-types import* (echo-types, valence-shell#51). The smallest first step already named in #51: import `EchoObservationalEquivalence` into `proofs/agda/FilesystemEquivalence.agda` and restate `fsEquiv` as `_≡m_`. Then map the remaining pairs:
 ** `obliterate_not_injective` → `EchoLossTaxonomy.const-fibre-↔-domain`

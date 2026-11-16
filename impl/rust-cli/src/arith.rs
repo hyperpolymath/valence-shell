@@ -334,7 +334,7 @@ impl Parser {
         }
     }
 
-    fn expect(&mut self, expected: Token) -> Result<()> {
+    fn expect_token(&mut self, expected: Token) -> Result<()> {
         let token = self.advance().clone();
         if token == expected {
             Ok(())
@@ -559,7 +559,7 @@ impl Parser {
 
             Token::LeftParen => {
                 let expr = self.parse_or()?;
-                self.expect(Token::RightParen)?;
+                self.expect_token(Token::RightParen)?;
                 Ok(expr)
             }
 

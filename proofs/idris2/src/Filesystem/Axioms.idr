@@ -41,6 +41,7 @@ import Data.String
 ||| `axStringEqRefl`.
 export
 axStringEqRefl : (s : String) -> (s == s) = True
+-- hypatia: allow code_safety/believe_me -- registered axiom axStringEqRefl (.machine_readable/IDRIS2_AXIOMS.a2ml), gated by .github/scripts/check-idris2-believe-me.sh; no proof exists without one (prim__eq is opaque), see docs/audits/2026-11-16-hypatia-remediation.adoc
 axStringEqRefl _ = believe_me (Refl {x = True})
 
 ||| AXIOM: primitive `Bits8` equality is reflexive on opaque values.
@@ -54,6 +55,7 @@ axStringEqRefl _ = believe_me (Refl {x = True})
 ||| `axBits8EqRefl`.
 export
 axBits8EqRefl : (b : Bits8) -> (b == b) = True
+-- hypatia: allow code_safety/believe_me -- registered axiom axBits8EqRefl (.machine_readable/IDRIS2_AXIOMS.a2ml), gated by .github/scripts/check-idris2-believe-me.sh; no proof exists without one (prim__eq is opaque), see docs/audits/2026-11-16-hypatia-remediation.adoc
 axBits8EqRefl _ = believe_me (Refl {x = True})
 
 --------------------------------------------------------------------------------

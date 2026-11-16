@@ -717,14 +717,8 @@ pub fn chown(state: &mut ShellState, owner_str: &str, path: &str, verbose: bool)
     let (new_uid, new_gid) = parse_chown_spec(owner_str, old_uid, old_gid)?;
 
     // Apply ownership via libc
-    let c_path = std::ffi::CString::new(file_path.to_str().context("Invalid path")?)
-        .context("Path contains null bytes")?;
-    // SAFETY: c_path is a valid NUL-terminated CString; chown is a POSIX syscall.
-    let ret = unsafe { libc::chown(c_path.as_ptr(), new_uid, new_gid) };
-    if ret != 0 {
-        let err = std::io::Error::last_os_error();
-        anyhow::bail!("chown failed: {}", err);
-    }
+    std::os::unix::fs::chown(&file_path, Some(new_uid), Some(new_gid))
+        .map_err(|e| anyhow::anyhow!("chown failed: {}", e))?;
 
     // Record operation with old uid:gid for undo
     let undo_str = format!("{}:{}", old_uid, old_gid);
@@ -758,77 +752,52 @@ pub fn chown(state: &mut ShellState, owner_str: &str, path: &str, verbose: bool)
 
 /// Parse chown owner spec: `user`, `user:group`, `:group`, `user:`.
 /// Returns (uid, gid) where unchanged values keep the original.
+///
+/// Each part is a numeric id or a name, resolved with `nix`'s
+/// `User::from_name` / `Group::from_name` (the reentrant `getpwnam_r` /
+/// `getgrnam_r`), so no raw `passwd`/`group` pointer is dereferenced here.
+/// `u32::MAX` is rejected because `chown(2)` reads `(uid_t)-1` as "leave
+/// unchanged", not as an id.
 #[cfg(unix)]
 fn parse_chown_spec(spec: &str, current_uid: u32, current_gid: u32) -> Result<(u32, u32)> {
-    if spec.contains(':') {
-        let parts: Vec<&str> = spec.splitn(2, ':').collect();
-        let uid = if parts[0].is_empty() {
-            current_uid
-        } else {
-            parts[0].parse::<u32>().unwrap_or_else(|_| {
-                // Try looking up user by name
-                match std::ffi::CString::new(parts[0]) {
-                    Ok(c_name) => {
-                        // SAFETY: c_name is a valid NUL-terminated string; getpwnam
-                        // returns a pointer to a static passwd struct or null.
-                        let pw = unsafe { libc::getpwnam(c_name.as_ptr()) };
-                        if pw.is_null() {
-                            u32::MAX
-                        } else {
-                            unsafe { (*pw).pw_uid }
-                        }
-                    }
-                    Err(_) => u32::MAX, // Name contains null bytes — invalid
-                }
-            })
-        };
-        let gid = if parts[1].is_empty() {
-            current_gid
-        } else {
-            parts[1].parse::<u32>().unwrap_or_else(|_| {
-                match std::ffi::CString::new(parts[1]) {
-                    Ok(c_name) => {
-                        // SAFETY: c_name is a valid NUL-terminated string; getgrnam
-                        // returns a pointer to a static group struct or null.
-                        let gr = unsafe { libc::getgrnam(c_name.as_ptr()) };
-                        if gr.is_null() {
-                            u32::MAX
-                        } else {
-                            unsafe { (*gr).gr_gid }
-                        }
-                    }
-                    Err(_) => u32::MAX, // Name contains null bytes — invalid
-                }
-            })
-        };
-        if uid == u32::MAX {
-            anyhow::bail!("chown: invalid user: '{}'", parts[0]);
-        }
-        if gid == u32::MAX {
-            anyhow::bail!("chown: invalid group: '{}'", parts[1]);
-        }
-        Ok((uid, gid))
-    } else {
-        // Just user — keep group
-        let uid = spec.parse::<u32>().unwrap_or_else(|_| {
-            match std::ffi::CString::new(spec) {
-                Ok(c_name) => {
-                    // SAFETY: c_name is a valid NUL-terminated string; getpwnam is POSIX-safe.
-                    let pw = unsafe { libc::getpwnam(c_name.as_ptr()) };
-                    if pw.is_null() {
-                        u32::MAX
-                    } else {
-                        unsafe { (*pw).pw_uid }
-                    }
-                }
-                Err(_) => u32::MAX,
-            }
-        });
-        if uid == u32::MAX {
-            anyhow::bail!("chown: invalid user: '{}'", spec);
-        }
-        Ok((uid, current_gid))
+    fn resolve_uid(part: &str) -> Option<u32> {
+        part.parse::<u32>().ok().or_else(|| {
+            nix::unistd::User::from_name(part)
+                .ok()
+                .flatten()
+                .map(|u| u.uid.as_raw())
+        })
     }
+    fn resolve_gid(part: &str) -> Option<u32> {
+        part.parse::<u32>().ok().or_else(|| {
+            nix::unistd::Group::from_name(part)
+                .ok()
+                .flatten()
+                .map(|g| g.gid.as_raw())
+        })
+    }
+
+    let (user, group) = match spec.split_once(':') {
+        Some((user, group)) => (user, Some(group)),
+        None => (spec, None),
+    };
+
+    let uid = if user.is_empty() {
+        current_uid
+    } else {
+        match resolve_uid(user) {
+            Some(uid) if uid != u32::MAX => uid,
+            _ => anyhow::bail!("chown: invalid user: '{}'", user),
+        }
+    };
+    let gid = match group {
+        None | Some("") => current_gid,
+        Some(group) => match resolve_gid(group) {
+            Some(gid) if gid != u32::MAX => gid,
+            _ => anyhow::bail!("chown: invalid group: '{}'", group),
+        },
+    };
+    Ok((uid, gid))
 }
 
 /// Undo the last N operations.
@@ -997,17 +966,8 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                     let parts: Vec<&str> = uid_gid_str.splitn(2, ':').collect();
                     let uid: u32 = parts[0].parse().context("Invalid uid")?;
                     let gid: u32 = parts[1].parse().context("Invalid gid")?;
-                    let c_path = std::ffi::CString::new(path.to_str().context("Invalid path")?)
-                        .context("Path contains null bytes")?;
-                    // SAFETY: `c_path` is a valid, NUL-terminated `CString` that
-                    // outlives the call, so `as_ptr()` is live; `uid`/`gid` are
-                    // plain integers. `chown` only borrows the pointer and
-                    // returns a status code we check below.
-                    let ret = unsafe { libc::chown(c_path.as_ptr(), uid, gid) };
-                    if ret != 0 {
-                        let err = std::io::Error::last_os_error();
-                        anyhow::bail!("Undo chown failed: {}", err);
-                    }
+                    std::os::unix::fs::chown(&path, Some(uid), Some(gid))
+                        .map_err(|e| anyhow::anyhow!("Undo chown failed: {}", e))?;
                 }
             }
             OperationType::FileTruncated | OperationType::CopyFile => {
@@ -1524,22 +1484,9 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                             {
                                 let uid: u32 = parts[0].parse().context("Invalid uid")?;
                                 let gid: u32 = parts[1].parse().context("Invalid gid")?;
-                                let c_path = std::ffi::CString::new(path.to_str().unwrap_or(""))
-                                    .context("Path contains null bytes")?;
-                                // SAFETY: `c_path` is a valid, NUL-terminated
-                                // `CString` that outlives the call, so `as_ptr()`
-                                // is live; `uid`/`gid` are plain integers. `chown`
-                                // only borrows the pointer and returns a status
-                                // code we check below.
-                                let ret = unsafe { libc::chown(c_path.as_ptr(), uid, gid) };
-                                if ret != 0 {
-                                    Err(anyhow::anyhow!(
-                                        "Failed to restore ownership: {}",
-                                        std::io::Error::last_os_error()
-                                    ))
-                                } else {
-                                    Ok(())
-                                }
+                                std::os::unix::fs::chown(&path, Some(uid), Some(gid)).map_err(|e| {
+                                    anyhow::anyhow!("Failed to restore ownership: {}", e)
+                                })
                             }
                             #[cfg(not(unix))]
                             Ok(())
@@ -1777,15 +1724,16 @@ pub fn fg(state: &mut ShellState, job_spec: Option<&str>) -> Result<()> {
     {
         use crate::job::JobState;
 
-        // SAFETY: tcsetpgrp/kill/waitpid/getpgrp are POSIX syscalls; pgid is a valid
-        // process group ID obtained from job control. Negative pgid in kill/waitpid
-        // targets the entire process group.
+        // SAFETY: tcsetpgrp takes plain integers (a file descriptor and a
+        // process group ID obtained from job control); no memory is shared.
         unsafe {
             libc::tcsetpgrp(libc::STDIN_FILENO, pgid);
         }
 
         // If job is stopped, send SIGCONT to resume
         if job_state == JobState::Stopped {
+            // SAFETY: kill takes plain integers; the negative pgid targets the
+            // job's whole process group. No memory is shared.
             unsafe {
                 libc::kill(-pgid, libc::SIGCONT);
             }
@@ -1796,12 +1744,16 @@ pub fn fg(state: &mut ShellState, job_spec: Option<&str>) -> Result<()> {
 
         // Wait for job to complete or stop
         let mut status: i32 = 0;
+        // SAFETY: `status` is a live, exclusively borrowed i32 for the whole
+        // call; waitpid writes the child's status into it and nothing else.
         unsafe {
             libc::waitpid(-pgid, &mut status, libc::WUNTRACED);
         }
 
         // Return terminal control to shell
+        // SAFETY: getpgrp takes no arguments and cannot fail (POSIX).
         let shell_pgid = unsafe { libc::getpgrp() };
+        // SAFETY: tcsetpgrp takes plain integers; no memory is shared.
         unsafe {
             libc::tcsetpgrp(libc::STDIN_FILENO, shell_pgid);
         }

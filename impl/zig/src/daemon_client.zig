@@ -35,6 +35,7 @@ pub fn isDaemonRunning() bool {
     addr.path[path_bytes.len] = 0;
 
     // Try to connect
+    // hypatia: allow code_safety/zig_ptr_cast -- sockaddr_un passed as the generic sockaddr, the BSD sockets ABI
     posix.connect(socket_fd, @ptrCast(&addr), @sizeOf(posix.sockaddr.un)) catch {
         return false;
     };
@@ -84,6 +85,7 @@ pub fn sendSimpleRequest(
     @memcpy(addr.path[0..path_bytes.len], path_bytes);
     addr.path[path_bytes.len] = 0;
 
+    // hypatia: allow code_safety/zig_ptr_cast -- sockaddr_un passed as the generic sockaddr, the BSD sockets ABI
     posix.connect(socket_fd, @ptrCast(&addr), @sizeOf(posix.sockaddr.un)) catch {
         return false;
     };
