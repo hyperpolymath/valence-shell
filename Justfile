@@ -155,7 +155,10 @@ build-elixir:
 # Build ReScript MCP server
 build-mcp:
     @echo "Building ReScript MCP server..."
-    cd impl/mcp && npx rescript build
+    # bunx --no-install never fetches an unpinned package: it uses a locally
+    # installed rescript or fails. impl/mcp has no package manifest yet; it is
+    # due to be ported to AffineScript (see .hypatia-ignore).
+    cd impl/mcp && bunx --no-install --bun rescript build
     @echo "✓ MCP server compiled"
 
 # Run MCP server (STDIO mode for Claude Desktop)

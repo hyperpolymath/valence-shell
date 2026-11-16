@@ -45,11 +45,12 @@ permissions:
 
 jobs:
   triage:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10   # Hypatia workflow_audit/missing_timeout_minutes (alert #68)
     steps:
       - name: Classify and label
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           NUM: ${{ github.event.issue.number || inputs.issue }}
         run: |
           set -uo pipefail

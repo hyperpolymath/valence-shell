@@ -93,8 +93,9 @@ What is solid:
 
 * The machine-checked proofs of the model-layer operations (Agda (theory source), Lean 4 and Rocq/Coq (rechecks), Z3 (supplementary); Isabelle/HOL and Mizar archived unchecked). ~478 theorem candidates in the 2026-06-01 census;
   0 real gaps (Coq `obliterate_overwrites_all_blocks` CLOSED, re-verified
-  2026-07-16 via `Print Assumptions` under Coq 8.18.0) + 2 documented axioms
-  (1 justified decidability + 1 structural funext).
+  2026-07-16 via `Print Assumptions` under Coq 8.18.0); 1 justified classical
+  dependency remains (Coq `is_empty_dir_dec`, a theorem proved with classical
+  logic, not a custom axiom). The Agda `funext` postulate was removed 2026-11-09.
 * The Rust CLI. 736 tests passing, 0 failures, 7 fuzz targets, working shell
   surface (pipelines, redirections, here-docs, job control, variables, control
   structures, glob, quoting).

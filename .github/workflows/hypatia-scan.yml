@@ -47,6 +47,16 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      # Hypatia RE001: the scan job holds GITHUB_TOKEN and the fleet PAT next
+      # to fetched code (the Hypatia and gitbot-fleet clones, the mix build).
+      # Audit mode records every outbound connection without blocking; the
+      # job's endpoints (hex.pm, GitHub, the Elixir builds) are too many to
+      # enumerate safely as a block list here.
+      - name: Monitor outbound requests (audit)
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
         with:

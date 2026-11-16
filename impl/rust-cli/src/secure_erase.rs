@@ -115,13 +115,23 @@ pub fn check_ata_secure_erase_support(device: &str) -> Result<bool> {
     Ok(info.contains("supported: enhanced erase") || info.contains("SECURITY ERASE UNIT"))
 }
 
+/// Temporary ATA user password set before the erase command.
+///
+/// "Eins" is the conventional value in the ATA Secure Erase guide on
+/// ata.wiki.kernel.org. It is deliberately well known: if an erase is
+/// interrupted after the password is set, the drive stays locked, and the
+/// owner can recover it with `hdparm --user-master u --security-disable Eins`.
+/// A completed erase clears it. It protects nothing, so it is not a secret.
+// hypatia: allow security_errors/secret_detected -- documented hdparm temporary password, not a credential
+const ATA_TEMP_PASSWORD: &str = "Eins"; // ggignore (public hdparm convention, see above)
+
 /// Perform ATA Secure Erase
 pub fn ata_secure_erase(device: &str, enhanced: bool) -> Result<()> {
     // CRITICAL: This is a destructive operation
     // Requires security password to be set first
 
     // Step 1: Set user password (temporary)
-    let password = "Eins"; // Standard temporary password
+    let password = ATA_TEMP_PASSWORD;
 
     println!("⚠️  Setting security password...");
     let status = Command::new("hdparm")

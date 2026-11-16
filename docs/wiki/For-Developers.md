@@ -47,28 +47,32 @@ just build-lean4      # or one at a time: coq / agda / isabelle / mizar / z3
 
 Run the ignored slow/stress tests explicitly with `cargo test -- --ignored`.
 
-## The six proof systems (and why six)
+## The proof systems and their roles
 
-Each system sits on a different logical foundation, so a modelling error in one
-is unlikely to be replicated in all. If all six prove the same theorem, confidence
-is very high — the seL4/CompCert pattern.
+Agda is the theory source of truth (owner ruling 2026-11-09, under standards
+`3-practice/PROOF-POLICY.adoc`). Lean 4 and Coq are recheck legs: their proofs
+build, but their statements have not yet been compared one by one with the
+Agda source, so they are target-only evidence until that comparison is done.
+Isabelle/HOL and Mizar were archived unchecked on 2026-11-09
+(`archive/proofs/`) and are not current evidence.
 
 | System | Foundation | Role |
 |--------|-----------|------|
-| Lean 4 | Dependent type theory | Primary source of truth |
-| Coq | Calculus of Inductive Constructions | Extraction path to OCaml |
-| Agda | Intensional type theory | Cross-validation |
-| Isabelle/HOL | Higher-order logic | Cross-validation |
-| Mizar | Tarski–Grothendieck set theory | Set-theoretic foundation |
-| Z3 SMT | First-order logic + theories | Automated decision procedures |
+| Agda | Intensional type theory | Theory source of truth (`--safe --without-K --cubical-compatible`) |
+| Lean 4 | Dependent type theory | Recheck leg; executable model oracle |
+| Coq | Calculus of Inductive Constructions | Recheck leg; extraction path to OCaml |
+| Z3 SMT | First-order logic + theories | Solver checks (PROOF-POLICY §5 `ASSUMED`) |
+| Isabelle/HOL | Higher-order logic | Archived, unchecked |
+| Mizar | Tarski–Grothendieck set theory | Archived, unchecked |
 
 **Read the honest status first:** the project maintains a single source of truth
 for open proof holes —
 [`docs/PROOF_HOLES_AUDIT.adoc`](https://github.com/hyperpolymath/valence-shell/blob/main/docs/PROOF_HOLES_AUDIT.adoc).
 As of this writing: **0 real gaps** (the former Coq `obliterate_overwrites_all_blocks`
 gap is CLOSED — re-verified 2026-07-16 via `Print Assumptions` as *Closed under
-the global context* under Coq 8.18.0), plus 2 documented axioms: 1 justified
-decidability axiom (`is_empty_dir_dec`) and 1 structural `funext` axiom (Agda).
+the global context* under Coq 8.18.0), plus 1 justified classical dependency
+(Coq `is_empty_dir_dec`, a theorem proved with classical logic, not a custom
+axiom). The Agda `funext` postulate was removed 2026-11-09.
 The Idris2 ABI layer is **hole-free** (closed under `--total`) with 2 registered
 primitive-equality axioms gated by CI.
 

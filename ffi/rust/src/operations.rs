@@ -259,26 +259,14 @@ pub fn chmod(path: &Path, mode: u32) -> FfiResult<()> {
 /// Change file ownership (Unix)
 #[cfg(unix)]
 pub fn chown(path: &Path, uid: Option<u32>, gid: Option<u32>) -> FfiResult<()> {
-    use std::os::unix::ffi::OsStrExt;
-
     if !path.exists() {
         return Err(FfiError::Posix(PosixError::Enoent));
     }
 
-    let path_cstr = std::ffi::CString::new(path.as_os_str().as_bytes())
-        .map_err(|_| FfiError::InvalidPath("Path contains null byte".to_string()))?;
-
-    let uid = uid.map(|u| u as libc::uid_t).unwrap_or(u32::MAX as libc::uid_t);
-    let gid = gid.map(|g| g as libc::gid_t).unwrap_or(u32::MAX as libc::gid_t);
-
-    // SAFETY: `path_cstr` is a valid, NUL-terminated `CString` that outlives
-    // this call, so `as_ptr()` is a live pointer for the call's duration;
-    // `uid`/`gid` are plain integers. `chown` only borrows the pointer and
-    // returns a status code we check below.
-    let result = unsafe { libc::chown(path_cstr.as_ptr(), uid, gid) };
-
-    if result != 0 {
-        let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+    // `std::os::unix::fs::chown` (stable since Rust 1.73) passes `None` as
+    // `(uid_t)-1`, "leave unchanged", exactly as the raw call did.
+    if let Err(e) = std::os::unix::fs::chown(path, uid, gid) {
+        let errno = e.raw_os_error().unwrap_or(0);
         return Err(FfiError::Posix(PosixError::from_errno(errno)));
     }
 

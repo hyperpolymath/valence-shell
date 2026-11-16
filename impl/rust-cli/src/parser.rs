@@ -2268,16 +2268,11 @@ fn apply_expansion(expansion: &ParameterExpansion, state: &crate::state::ShellSt
 
         ExpansionOp::Default { value, check_null } => {
             // ${VAR:-default} or ${VAR-default}
-            if is_unset || (*check_null && is_null) {
-                // Recursively expand the default value
-                expand_variables(value, state)
-            } else {
-                // var_value is Some by construction here: the surrounding
-                // `if is_unset || ...` branch is the unset/null path; this
-                // else branch only fires when var_value is Some.
-                var_value
-                    .expect("var_value is Some when !is_unset (checked above)")
-                    .to_string()
+            match var_value {
+                // Set, and not null when `:-` asks for a null check.
+                Some(v) if !(*check_null && is_null) => v.to_string(),
+                // Unset, or null under `:-`: recursively expand the default.
+                _ => expand_variables(value, state),
             }
         }
 

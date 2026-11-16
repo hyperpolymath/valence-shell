@@ -410,11 +410,9 @@ fn execute_segments(state: &mut ShellState, input: &str) -> Result<bool> {
             }
         }
     }
-    // Fire any pending signal traps (e.g. trap 'handler' INT).
-    if executable::run_pending_traps(state) {
-        return Ok(true);
-    }
-    Ok(false)
+    // Fire any pending signal traps (e.g. trap 'handler' INT); a trap that
+    // runs `exit` ends the shell.
+    Ok(executable::run_pending_traps(state))
 }
 
 fn execute_line(state: &mut ShellState, input: &str) -> Result<bool> {

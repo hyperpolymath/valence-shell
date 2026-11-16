@@ -461,18 +461,35 @@ pub const ValenceFS = opaque {};
 /// C-compatible error code
 pub const ValenceError = c_int;
 
+/// Wrap a `Filesystem` allocated by this module as an opaque C handle.
+fn toHandle(fs_ptr: *Filesystem) *ValenceFS {
+    // hypatia: allow code_safety/zig_ptr_cast -- erasing to the opaque C handle type
+    return @ptrCast(fs_ptr);
+}
+
+/// Recover the `Filesystem` behind a handle from `valence_fs_create*`.
+///
+/// Every `ValenceFS` handle this module hands out is a `*Filesystem` from
+/// `toHandle`, so it has `Filesystem`'s alignment; these are the only two
+/// casts across the C boundary. A pointer not obtained from
+/// `valence_fs_create*` is a caller error the C ABI cannot detect.
+fn fromHandle(h: *ValenceFS) *Filesystem {
+    // hypatia: allow code_safety/zig_ptr_cast -- handle came from toHandle (see doc comment)
+    return @ptrCast(@alignCast(h)); // hypatia: allow code_safety/zig_align_cast -- handle came from toHandle, so it has Filesystem's alignment
+}
+
 /// Create filesystem handle (C ABI)
 export fn valence_fs_create(root: [*:0]const u8) ?*ValenceFS {
     const allocator = std.heap.c_allocator;
     const fs_ptr = allocator.create(Filesystem) catch return null;
     fs_ptr.* = Filesystem.init(allocator, std.mem.span(root), null);
-    return @ptrCast(fs_ptr);
+    return toHandle(fs_ptr);
 }
 
 /// Destroy filesystem handle (C ABI)
 export fn valence_fs_destroy(handle: ?*ValenceFS) void {
     if (handle) |h| {
-        const fs_ptr: *Filesystem = @ptrCast(@alignCast(h));
+        const fs_ptr = fromHandle(h);
         std.heap.c_allocator.destroy(fs_ptr);
     }
 }
@@ -480,7 +497,7 @@ export fn valence_fs_destroy(handle: ?*ValenceFS) void {
 /// Create directory (C ABI)
 export fn valence_mkdir(handle: ?*ValenceFS, path: [*:0]const u8) ValenceError {
     if (handle) |h| {
-        const fs_ptr: *Filesystem = @ptrCast(@alignCast(h));
+        const fs_ptr = fromHandle(h);
         const result = fs_ptr.mkdir(std.mem.span(path));
         return switch (result) {
             .ok => 0,
@@ -493,7 +510,7 @@ export fn valence_mkdir(handle: ?*ValenceFS, path: [*:0]const u8) ValenceError {
 /// Remove directory (C ABI)
 export fn valence_rmdir(handle: ?*ValenceFS, path: [*:0]const u8) ValenceError {
     if (handle) |h| {
-        const fs_ptr: *Filesystem = @ptrCast(@alignCast(h));
+        const fs_ptr = fromHandle(h);
         const result = fs_ptr.rmdir(std.mem.span(path));
         return switch (result) {
             .ok => 0,
@@ -506,7 +523,7 @@ export fn valence_rmdir(handle: ?*ValenceFS, path: [*:0]const u8) ValenceError {
 /// Create file (C ABI)
 export fn valence_create_file(handle: ?*ValenceFS, path: [*:0]const u8) ValenceError {
     if (handle) |h| {
-        const fs_ptr: *Filesystem = @ptrCast(@alignCast(h));
+        const fs_ptr = fromHandle(h);
         const result = fs_ptr.createFile(std.mem.span(path));
         return switch (result) {
             .ok => 0,
@@ -519,7 +536,7 @@ export fn valence_create_file(handle: ?*ValenceFS, path: [*:0]const u8) ValenceE
 /// Delete file (C ABI)
 export fn valence_delete_file(handle: ?*ValenceFS, path: [*:0]const u8) ValenceError {
     if (handle) |h| {
-        const fs_ptr: *Filesystem = @ptrCast(@alignCast(h));
+        const fs_ptr = fromHandle(h);
         const result = fs_ptr.deleteFile(std.mem.span(path));
         return switch (result) {
             .ok => 0,
@@ -532,7 +549,7 @@ export fn valence_delete_file(handle: ?*ValenceFS, path: [*:0]const u8) ValenceE
 /// Check path exists (C ABI)
 export fn valence_path_exists(handle: ?*ValenceFS, path: [*:0]const u8) bool {
     if (handle) |h| {
-        const fs_ptr: *const Filesystem = @ptrCast(@alignCast(h));
+        const fs_ptr: *const Filesystem = fromHandle(h);
         return fs_ptr.pathExists(std.mem.span(path));
     }
     return false;
@@ -541,7 +558,7 @@ export fn valence_path_exists(handle: ?*ValenceFS, path: [*:0]const u8) bool {
 /// Check if path is directory (C ABI)
 export fn valence_is_directory(handle: ?*ValenceFS, path: [*:0]const u8) bool {
     if (handle) |h| {
-        const fs_ptr: *const Filesystem = @ptrCast(@alignCast(h));
+        const fs_ptr: *const Filesystem = fromHandle(h);
         return fs_ptr.isDirectory(std.mem.span(path));
     }
     return false;
@@ -550,7 +567,7 @@ export fn valence_is_directory(handle: ?*ValenceFS, path: [*:0]const u8) bool {
 /// Check if path is file (C ABI)
 export fn valence_is_file(handle: ?*ValenceFS, path: [*:0]const u8) bool {
     if (handle) |h| {
-        const fs_ptr: *const Filesystem = @ptrCast(@alignCast(h));
+        const fs_ptr: *const Filesystem = fromHandle(h);
         return fs_ptr.isFile(std.mem.span(path));
     }
     return false;
@@ -579,7 +596,7 @@ export fn valence_fs_create_with_audit(root: [*:0]const u8, audit_path_cstr: [*:
         return null;
     };
     fs_ptr.* = fs;
-    return @ptrCast(fs_ptr);
+    return toHandle(fs_ptr);
 }
 
 /// Get error string (C ABI)

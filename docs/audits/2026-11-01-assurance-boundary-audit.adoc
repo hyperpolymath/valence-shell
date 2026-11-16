@@ -368,7 +368,7 @@ provers said, and what that does and does not license.
 |===
 | Tool | Available | Version used | How it was obtained
 
-| Agda | yes | 2.7.0.1 and 2.6.4.3 | PyPI wheel; the wheel ships no `data/lib`, so `src/data/lib` was copied from the matching Agda source tarball
+| Agda | yes | 2.7.0.1 and 2.6.4.3 | PyPI wheel; the wheel ships no `data/lib`, so `agda-2.7.0.1/src/data/lib` was copied from the matching Agda source tarball
 | agda-stdlib | yes | 2.2 and 2.1.1 | codeload tarball from `agda/agda-stdlib`
 | Z3 | yes | z3-solver 5.3.3 | PyPI wheel
 | Rust / Cargo / rustup | no | — | `static.rust-lang.org` is not reachable; a `rustup` wheel from PyPI installs the toolchain *manager*, which then fails to download any toolchain (`tls handshake eof`)

@@ -59,11 +59,6 @@ fn cStrToLeanStr(c_str: [*:0]const u8) *lean_object {
     return lean_mk_string(c_str);
 }
 
-// Helper: Convert Lean String to C string (caller must free)
-fn leanStrToCStr(lean_str: *lean_object) [*:0]u8 {
-    const data = lean_string_cstr(lean_str);
-    return @ptrCast(@constCast(data));
-}
 
 // Helper: Convert Lean CResult to VshResult
 fn leanResultToC(lean_result: *lean_object) VshResult {
