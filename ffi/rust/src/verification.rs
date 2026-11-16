@@ -19,8 +19,8 @@
 //!
 //! | Theorem | Coq | Lean4 | Agda | Z3 |
 //! |---------|-----|-------|------|----|
-//! | mkdir_rmdir_reversible | ✓ | ✓ | ✓ | ✓ |
-//! | create_delete_reversible | ✓ | ✓ | ✓ | ✓ |
+//! | mkdir_rmdir_reversible | ✓ | ✓ | ✓ | Q |
+//! | create_delete_reversible | ✓ | ✓ | ✓ | Q |
 //! | write_file_reversible | ✓ | ✗ | ✓ | — |
 //! | copy_preserves_source | ✓ | ✗ | ✓ | A |
 //! | move_reversible | ✓ | ✗ | ✓ | A |
@@ -29,8 +29,10 @@
 //! ✓: the proof builds in that system (the Lean and Coq statements are not yet
 //! compared one by one with the Agda source). ✗: the Lean library
 //! (`FileContentOperations`, `CopyMoveOperations`, `RMOOperations`) does not
-//! build on the pinned toolchain, so CI does not check it. A: the Z3 query runs
-//! over asserted axioms (PROOF-POLICY §5 `ASSUMED`). —: no Z3 encoding.
+//! build on the pinned toolchain, so CI does not check it. Q: the Z3 query passes
+//! over a definitional encoding; a solver result is not a proof certificate
+//! (PROOF-POLICY §5 `ASSUMED`). A: the Z3 query runs over asserted axioms
+//! (also `ASSUMED`). —: no Z3 encoding.
 //! Per-obligation status: `EXPLAINME.adoc#proof-ledger`.
 
 use crate::{FfiConfig, FfiContext, FfiResult};

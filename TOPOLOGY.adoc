@@ -21,15 +21,15 @@ Copyright (c) Jonathan D.A. Jewell j.d.a.jewell@open.ac.uk
                                    │                   │
                                    ▼                   ▼
                         ┌───────────────────────┐  ┌────────────────────────────────┐
-                        │ FORMAL PROOFS (6 SYS) │  │ IMPLEMENTATION LAYER           │
-                        │ - Lean 4 (primary)    │  │ - Zig FFI (builds, unlinked)   │
-                        │ - Coq (CIC)           │  │ - Rust FFI (preconditions)     │
-                        │ - Agda (ITT)          │  │ - libc direct (chown/getpw*)   │
-                        │ - Isabelle/HOL        │  │ - Audit Logging (MAA)          │
-                        │ - Mizar (set theory)  │  └──────────┬─────────────────────┘
-                        │ - Z3 (SMT)            │             │
-                        │ ~250+ theorems        │             │
-                        │ 4 gaps, 4 axioms      │             │
+                        │ FORMAL PROOFS         │  │ IMPLEMENTATION LAYER           │
+                        │ - Agda (source)       │  │ - Zig FFI (builds, unlinked)   │
+                        │ - Lean 4 (recheck)    │  │ - Rust FFI (preconditions)     │
+                        │ - Coq (recheck)       │  │ - libc direct (chown/getpw*)   │
+                        │ - Z3 (SMT, ASSUMED)   │  │ - Audit Logging (MAA)          │
+                        │ Isabelle, Mizar:      │  └──────────┬─────────────────────┘
+                        │   archived, unchecked │             │
+                        │ see proof ledger      │             │
+                        │ 0 Agda postulates     │             │
                         └──────────┬────────────┘             │
                                    │                          │
                                    └────────────┬─────────────┘

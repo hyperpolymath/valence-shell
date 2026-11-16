@@ -67,8 +67,9 @@ for open proof holes —
 [`docs/PROOF_HOLES_AUDIT.adoc`](https://github.com/hyperpolymath/valence-shell/blob/main/docs/PROOF_HOLES_AUDIT.adoc).
 As of this writing: **0 real gaps** (the former Coq `obliterate_overwrites_all_blocks`
 gap is CLOSED — re-verified 2026-07-16 via `Print Assumptions` as *Closed under
-the global context* under Coq 8.18.0), plus 2 documented axioms: 1 justified
-decidability axiom (`is_empty_dir_dec`) and 1 structural `funext` axiom (Agda).
+the global context* under Coq 8.18.0), plus 1 justified classical dependency
+(Coq `is_empty_dir_dec`, a theorem proved with classical logic, not a custom
+axiom). The Agda `funext` postulate was removed 2026-11-09.
 The Idris2 ABI layer is **hole-free** (closed under `--total`) with 2 registered
 primitive-equality axioms gated by CI.
 
