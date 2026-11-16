@@ -123,7 +123,7 @@ pub fn check_ata_secure_erase_support(device: &str) -> Result<bool> {
 /// owner can recover it with `hdparm --user-master u --security-disable Eins`.
 /// A completed erase clears it. It protects nothing, so it is not a secret.
 // hypatia: allow security_errors/secret_detected -- documented hdparm temporary password, not a credential
-const ATA_TEMP_PASSWORD: &str = "Eins";
+const ATA_TEMP_PASSWORD: &str = "Eins"; // ggignore (public hdparm convention, see above)
 
 /// Perform ATA Secure Erase
 pub fn ata_secure_erase(device: &str, enhanced: bool) -> Result<()> {
