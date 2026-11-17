@@ -603,7 +603,8 @@ fn apply_symlink(state: &ShellState, target: &str, link: &str) -> Result<Operati
 /// PermissionOperations.lean: chmod_reversible
 pub fn chmod(state: &mut ShellState, mode_str: &str, path: &str, verbose: bool) -> Result<()> {
     let (op, old_mode, new_mode) = apply_chmod(state, path, |old_mode| {
-        parse_chmod_mode(mode_str, old_mode).context(format!("chmod: invalid mode: '{}'", mode_str))
+        parse_chmod_mode(mode_str, old_mode)
+            .with_context(|| format!("chmod: invalid mode: '{}'", mode_str))
     })?;
     let op_id = op.id;
     state.record_operation(op);
