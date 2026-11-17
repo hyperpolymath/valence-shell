@@ -278,8 +278,39 @@ pub struct ShellState {
     /// Completed transactions
     pub transactions: Vec<Transaction>,
 
-    /// State file path for persistence
+    /// State file path for persistence (the snapshot)
     state_file: PathBuf,
+
+    /// Append-only journal of the history mutations made since the last
+    /// snapshot.
+    ///
+    /// Rewriting the whole snapshot on every operation made each operation
+    /// cost O(history length), so a session of n operations cost O(n²) in
+    /// serialisation and disk writes. Hot-path mutations (record, mark-undone,
+    /// trim) are appended here in O(1); the snapshot is rewritten only when
+    /// the journal outgrows it (amortised O(1) per operation) or at the rare
+    /// transaction boundaries.
+    journal_file: PathBuf,
+
+    /// Sequence number of the last journal entry written or replayed.
+    /// Each snapshot records it, so replay skips entries already folded in.
+    journal_seq: u64,
+
+    /// Journal entries written or replayed since the last snapshot.
+    journal_entries: usize,
+
+    /// Indices of a contiguous block of `history` known to be all undone.
+    ///
+    /// Repeated single-step undo used to rescan every already-undone
+    /// operation at the end of the history (twice: to pick the next target
+    /// and to mark it), so undoing n operations one at a time cost O(n²).
+    /// Undo skips this block instead. It is a hint: it is checked before
+    /// use and an empty range means "no hint".
+    undone_run: std::ops::Range<usize>,
+
+    /// A journal append failed (possibly leaving a torn line), so the next
+    /// persist must write a full snapshot rather than append.
+    snapshot_pending: bool,
 
     /// Last exit code from external command (for $? support)
     pub last_exit_code: i32,
@@ -337,6 +368,7 @@ impl ShellState {
         let root_path =
             fs::canonicalize(&root_path).context("Failed to canonicalize sandbox root")?;
         let state_file = root_path.join(".vsh_state.json");
+        let journal_file = root_path.join(".vsh_state.journal");
 
         let mut state = Self {
             root: root_path,
@@ -345,6 +377,11 @@ impl ShellState {
             active_transaction: None,
             transactions: Vec::new(),
             state_file,
+            journal_file,
+            journal_seq: 0,
+            journal_entries: 0,
+            undone_run: 0..0,
+            snapshot_pending: false,
             last_exit_code: 0,
             previous_dir: None,
             variables: HashMap::new(),
@@ -377,13 +414,13 @@ impl ShellState {
         self.history.push(op);
 
         // Enforce history size limit
-        self.enforce_history_limit();
+        let trimmed = self.enforce_history_limit();
 
         // Clear redo stack when new operation is performed
         self.redo_stack.clear();
 
         // Persist state - warn on failure but don't abort
-        if let Err(e) = self.save() {
+        if let Err(e) = self.persist_recorded(trimmed) {
             eprintln!("{} Failed to save state: {}", "Warning:".bright_yellow(), e);
             eprintln!("Operation succeeded but may not persist across restarts");
         }
@@ -400,10 +437,10 @@ impl ShellState {
         }
 
         self.history.push(op);
-        self.enforce_history_limit();
+        let trimmed = self.enforce_history_limit();
 
         // Persist state - warn on failure but don't abort
-        if let Err(e) = self.save() {
+        if let Err(e) = self.persist_recorded(trimmed) {
             eprintln!("{} Failed to save state: {}", "Warning:".bright_yellow(), e);
             eprintln!("Redo succeeded but may not persist across restarts");
         }
@@ -413,7 +450,8 @@ impl ShellState {
     ///
     /// When history exceeds max_history_size, removes the oldest operations.
     /// If history_archive_path is set, saves removed operations to archive.
-    fn enforce_history_limit(&mut self) {
+    /// Returns the number of operations removed.
+    fn enforce_history_limit(&mut self) -> usize {
         if let Some(limit) = self.max_history_size {
             if self.history.len() > limit {
                 let excess = self.history.len() - limit;
@@ -432,11 +470,14 @@ impl ShellState {
 
                 // Remove oldest operations
                 self.history.drain(0..excess);
+                self.shift_undone_run(excess);
 
                 // Note: This means undo can only go back `limit` operations
                 // Users should be aware via configuration
+                return excess;
             }
         }
+        0
     }
 
     /// Archive operations to disk for later reference
@@ -466,26 +507,103 @@ impl ShellState {
 
     /// Get the last N undoable operations
     pub fn last_n_undoable(&self, n: usize) -> Vec<&Operation> {
-        self.history
-            .iter()
-            .rev()
-            .filter(|op| !op.undone)
+        self.undoable_indices_rev()
             .take(n)
+            .map(|i| &self.history[i])
             .collect()
+    }
+
+    /// Indices of operations not yet undone, newest first, skipping the
+    /// known-undone block instead of rescanning it.
+    fn undoable_indices_rev(&self) -> impl Iterator<Item = usize> + '_ {
+        let run = self.checked_undone_run();
+        let mut next = self.history.len();
+        std::iter::from_fn(move || {
+            while next > 0 {
+                next -= 1;
+                if next + 1 == run.end {
+                    next = run.start;
+                    continue;
+                }
+                if !self.history[next].undone {
+                    return Some(next);
+                }
+            }
+            None
+        })
+    }
+
+    /// The undone-block hint, or an empty range if it does not hold.
+    fn checked_undone_run(&self) -> std::ops::Range<usize> {
+        let run = self.undone_run.clone();
+        let holds = !run.is_empty()
+            && run.end <= self.history.len()
+            && self.history[run.start].undone
+            && self.history[run.end - 1].undone;
+        if holds {
+            run
+        } else {
+            0..0
+        }
+    }
+
+    /// Record that `history[index]` is now undone in the block hint.
+    fn extend_undone_run(&mut self, index: usize) {
+        let run = self.checked_undone_run();
+        self.undone_run = if run.is_empty() {
+            index..index + 1
+        } else if index + 1 == run.start {
+            index..run.end
+        } else if index == run.end {
+            run.start..index + 1
+        } else if run.contains(&index) {
+            run
+        } else {
+            index..index + 1
+        };
+    }
+
+    /// Keep the block hint aligned after the oldest `removed` operations
+    /// were dropped from the front of the history.
+    fn shift_undone_run(&mut self, removed: usize) {
+        let start = self.undone_run.start.saturating_sub(removed);
+        let end = self.undone_run.end.saturating_sub(removed);
+        self.undone_run = start..end;
     }
 
     /// Mark an operation as undone
     pub fn mark_undone(&mut self, op_id: Uuid, undone_by: Uuid) {
-        if let Some(op) = self.history.iter_mut().find(|o| o.id == op_id) {
-            op.undone = true;
-            op.undone_by = Some(undone_by);
+        // Undo targets the newest operations that are not yet undone, so look
+        // there first; fall back to a full scan for any other id.
+        let index = self
+            .undoable_indices_rev()
+            .find(|&i| self.history[i].id == op_id)
+            .or_else(|| self.history.iter().rposition(|o| o.id == op_id));
 
-            // Push to redo stack
-            self.redo_stack.push_front(op.clone());
-        }
+        let found = match index {
+            Some(i) => {
+                let op = &mut self.history[i];
+                op.undone = true;
+                op.undone_by = Some(undone_by);
+
+                // Push to redo stack
+                self.redo_stack.push_front(op.clone());
+                self.extend_undone_run(i);
+                true
+            }
+            None => false,
+        };
 
         // Persist state - warn on failure
-        if let Err(e) = self.save() {
+        let persisted = if found {
+            self.persist_entries(&[JournalEntryRef::Undone {
+                id: op_id,
+                undone_by,
+            }])
+        } else {
+            Ok(())
+        };
+        if let Err(e) = persisted {
             eprintln!(
                 "{} Failed to save undo state: {}",
                 "Warning:".bright_yellow(),
@@ -546,6 +664,21 @@ impl ShellState {
         Ok(())
     }
 
+    /// Drop the active transaction without committing it (after a rollback)
+    /// and persist that, so a restart does not resurrect it.
+    pub fn abort_transaction(&mut self) {
+        self.active_transaction = None;
+
+        // Persist state - warn on failure
+        if let Err(e) = self.save() {
+            eprintln!(
+                "{} Failed to save transaction rollback: {}",
+                "Warning:".bright_yellow(),
+                e
+            );
+        }
+    }
+
     /// Get operations in current transaction
     pub fn current_transaction_ops(&self) -> Vec<&Operation> {
         match &self.active_transaction {
@@ -584,36 +717,167 @@ impl ShellState {
         self.redo_stack.pop_front()
     }
 
-    /// Save state to file
-    fn save(&self) -> Result<()> {
-        let state = SerializableState {
-            history: self.history.clone(),
-            transactions: self.transactions.clone(),
-            active_transaction: self.active_transaction.clone(),
-            previous_dir: self.previous_dir.clone(),
+    /// Persist the operation just pushed by `record_operation` or
+    /// `record_redo_operation`, plus the history trim it caused.
+    fn persist_recorded(&mut self, trimmed: usize) -> Result<()> {
+        if self.journal_due_for_snapshot() {
+            return self.save();
+        }
+        // With `max_history_size == Some(0)` the operation is trimmed at once
+        // and there is nothing to journal; fall back to a snapshot.
+        let Some(op) = self.history.last() else {
+            return self.save();
+        };
+        let mut entries = vec![JournalEntryRef::Record(op)];
+        if trimmed > 0 {
+            entries.push(JournalEntryRef::Trim(trimmed));
+        }
+        let appended = append_journal(&self.journal_file, self.journal_seq, &entries);
+        let count = entries.len();
+        self.after_append(appended, count)
+    }
+
+    /// Persist journal entries that do not borrow from `self`.
+    fn persist_entries(&mut self, entries: &[JournalEntryRef<'_>]) -> Result<()> {
+        if self.journal_due_for_snapshot() {
+            return self.save();
+        }
+        let appended = append_journal(&self.journal_file, self.journal_seq, entries);
+        self.after_append(appended, entries.len())
+    }
+
+    /// Account for a journal append of `count` entries. A failed append may
+    /// have left a torn line, which ends replay, so the next persist writes a
+    /// full snapshot (and empties the journal) instead of appending after it.
+    fn after_append(&mut self, appended: Result<()>, count: usize) -> Result<()> {
+        if appended.is_err() {
+            self.snapshot_pending = true;
+        } else {
+            self.journal_seq += count as u64;
+            self.journal_entries += count;
+        }
+        appended
+    }
+
+    /// The journal is folded into a fresh snapshot once it holds at least
+    /// half as many entries as the history has operations (and at least
+    /// `JOURNAL_MIN_ENTRIES`). A snapshot costs O(history length), which is
+    /// then at most twice the number of entries it absorbs, so persistence
+    /// stays amortised O(1) per operation.
+    fn journal_due_for_snapshot(&self) -> bool {
+        self.snapshot_pending
+            || (self.journal_entries >= JOURNAL_MIN_ENTRIES
+                && 2 * self.journal_entries >= self.history.len())
+    }
+
+    /// Write a full snapshot and empty the journal.
+    ///
+    /// The snapshot is written to a temporary file and renamed over the old
+    /// one, so a crash leaves either the old or the new snapshot. It records
+    /// the journal sequence number it includes, so a crash between the rename
+    /// and the journal truncation cannot replay entries twice.
+    fn save(&mut self) -> Result<()> {
+        use std::io::Write;
+
+        let state = SerializableStateRef {
+            history: &self.history,
+            transactions: &self.transactions,
+            active_transaction: self.active_transaction.as_ref(),
+            previous_dir: self.previous_dir.as_ref(),
+            journal_seq: self.journal_seq,
         };
 
-        let json = serde_json::to_string_pretty(&state)?;
-        fs::write(&self.state_file, json)?;
+        let file_name = format!(".vsh_state.json.{}.tmp", Uuid::new_v4().simple());
+        let tmp = self.state_file.with_file_name(file_name);
+        let written = (|| -> Result<()> {
+            let mut out = std::io::BufWriter::new(fs::File::create(&tmp)?);
+            serde_json::to_writer(&mut out, &state)?;
+            out.flush()?;
+            fs::rename(&tmp, &self.state_file)?;
+            Ok(())
+        })();
+        if written.is_err() {
+            let _ = fs::remove_file(&tmp);
+        }
+        written?;
+
+        // Everything journalled so far is now in the snapshot.
+        if self.journal_file.exists() {
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&self.journal_file)?
+                .set_len(0)?;
+        }
+        self.journal_entries = 0;
+        self.snapshot_pending = false;
 
         Ok(())
     }
 
-    /// Load state from file
+    /// Load state from the snapshot, then replay the journal on top of it.
     fn load(&mut self) -> Result<()> {
-        if !self.state_file.exists() {
-            return Ok(());
+        if self.state_file.exists() {
+            let json = crate::fs_pure::read_to_string(&self.state_file)?;
+            let state: SerializableState = serde_json::from_str(&json)?;
+
+            self.history = state.history;
+            self.transactions = state.transactions;
+            self.active_transaction = state.active_transaction;
+            self.previous_dir = state.previous_dir;
+            self.journal_seq = state.journal_seq;
         }
 
-        let json = crate::fs_pure::read_to_string(&self.state_file)?;
-        let state: SerializableState = serde_json::from_str(&json)?;
+        if self.journal_file.exists() {
+            let journal = crate::fs_pure::read_to_string(&self.journal_file)?;
+            for line in journal.lines() {
+                // A torn line (crash mid-append) ends the replay, and so does
+                // a sequence gap: replay keeps the longest consistent prefix.
+                let Ok(JournalLine { seq, entry }) = serde_json::from_str::<JournalLine>(line)
+                else {
+                    break;
+                };
+                if seq <= self.journal_seq {
+                    continue; // already folded into the snapshot
+                }
+                if seq != self.journal_seq + 1 {
+                    break;
+                }
+                self.replay(entry);
+                self.journal_seq = seq;
+                self.journal_entries += 1;
+            }
+        }
 
-        self.history = state.history;
-        self.transactions = state.transactions;
-        self.active_transaction = state.active_transaction;
-        self.previous_dir = state.previous_dir;
+        // The history was replaced wholesale; drop the undone-block hint.
+        self.undone_run = 0..0;
 
         Ok(())
+    }
+
+    /// Apply one journal entry to the in-memory history. Mirrors what the
+    /// live mutation did, minus side effects (archiving, redo stack, I/O);
+    /// the redo stack is not persisted, as before.
+    fn replay(&mut self, entry: JournalEntry) {
+        match entry {
+            JournalEntry::Record(op) => {
+                if let Some(txn) = self.active_transaction.as_mut() {
+                    if op.transaction_id == Some(txn.id) {
+                        txn.operations.push(op.id);
+                    }
+                }
+                self.history.push(op);
+            }
+            JournalEntry::Undone { id, undone_by } => {
+                if let Some(op) = self.history.iter_mut().rev().find(|o| o.id == id) {
+                    op.undone = true;
+                    op.undone_by = Some(undone_by);
+                }
+            }
+            JournalEntry::Trim(n) => {
+                let n = n.min(self.history.len());
+                self.history.drain(0..n);
+            }
+        }
     }
 
     // =========================================================================
@@ -909,13 +1173,81 @@ impl ShellState {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 struct SerializableState {
     history: Vec<Operation>,
     transactions: Vec<Transaction>,
     active_transaction: Option<Transaction>,
     #[serde(default)]
     previous_dir: Option<PathBuf>,
+    /// Last journal sequence number folded into this snapshot (0 for
+    /// snapshots written before the journal existed).
+    #[serde(default)]
+    journal_seq: u64,
+}
+
+/// Borrowing twin of [`SerializableState`], so a snapshot does not clone the
+/// whole history first.
+#[derive(Serialize)]
+struct SerializableStateRef<'a> {
+    history: &'a [Operation],
+    transactions: &'a [Transaction],
+    active_transaction: Option<&'a Transaction>,
+    previous_dir: Option<&'a PathBuf>,
+    journal_seq: u64,
+}
+
+/// Minimum journal length before it is folded into a snapshot.
+const JOURNAL_MIN_ENTRIES: usize = 1024;
+
+/// One history mutation in the journal (`.vsh_state.journal`, JSON lines).
+#[derive(Deserialize)]
+enum JournalEntry {
+    /// An operation appended to the history.
+    Record(Operation),
+    /// An operation marked undone.
+    Undone { id: Uuid, undone_by: Uuid },
+    /// The oldest `n` operations dropped by the history size limit.
+    Trim(usize),
+}
+
+/// Borrowing twin of [`JournalEntry`]; serialises to the same shape.
+#[derive(Serialize)]
+enum JournalEntryRef<'a> {
+    Record(&'a Operation),
+    Undone { id: Uuid, undone_by: Uuid },
+    Trim(usize),
+}
+
+#[derive(Deserialize)]
+struct JournalLine {
+    seq: u64,
+    entry: JournalEntry,
+}
+
+#[derive(Serialize)]
+struct JournalLineRef<'a, 'b> {
+    seq: u64,
+    entry: &'b JournalEntryRef<'a>,
+}
+
+/// Append `entries` to the journal as JSON lines numbered from
+/// `last_seq + 1`. Lines are streamed to the file rather than built in memory
+/// first, since a `Record` can carry a large `undo_data` payload; small
+/// entries still reach the file in a single write.
+fn append_journal(path: &Path, last_seq: u64, entries: &[JournalEntryRef<'_>]) -> Result<()> {
+    use std::io::Write;
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    let mut out = std::io::BufWriter::with_capacity(64 * 1024, file);
+    for (seq, entry) in (last_seq + 1..).zip(entries) {
+        serde_json::to_writer(&mut out, &JournalLineRef { seq, entry })?;
+        out.write_all(b"\n")?;
+    }
+    out.flush()?;
+    Ok(())
 }
 
 /// Resolve `path` against the sandbox `root`, clamping any `..` traversal so
@@ -1322,5 +1654,199 @@ mod tests {
     #[test]
     fn test_chown_display() {
         assert_eq!(format!("{}", OperationType::Chown), "chown");
+    }
+
+    // ========================================================================
+    // Persistence: snapshot + journal
+    // ========================================================================
+
+    fn persisted_root() -> tempfile::TempDir {
+        tempfile::TempDir::new().unwrap()
+    }
+
+    fn reopen(root: &tempfile::TempDir) -> ShellState {
+        ShellState::new(root.path().to_str().unwrap()).unwrap()
+    }
+
+    fn record(state: &mut ShellState, path: &str) -> Uuid {
+        let op = Operation::new(OperationType::CreateFile, path.to_string(), None);
+        let id = op.id;
+        state.record_operation(op);
+        id
+    }
+
+    fn summary(state: &ShellState) -> Vec<(Uuid, bool, Option<Uuid>)> {
+        state
+            .history
+            .iter()
+            .map(|op| (op.id, op.undone, op.undone_by))
+            .collect()
+    }
+
+    #[test]
+    fn test_journal_replay_restores_history_and_undo_marks() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        record(&mut state, "a");
+        let b = record(&mut state, "b");
+        record(&mut state, "c");
+        state.mark_undone(b, Uuid::new_v4());
+
+        // Hot-path operations only append to the journal.
+        assert!(state.journal_file.exists());
+        assert!(!state.state_file.exists());
+
+        let reloaded = reopen(&root);
+        assert_eq!(summary(&reloaded), summary(&state));
+    }
+
+    #[test]
+    fn test_journal_folds_into_snapshot_and_reloads() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        for i in 0..(JOURNAL_MIN_ENTRIES + 10) {
+            record(&mut state, &format!("f{i}"));
+        }
+        assert!(state.state_file.exists(), "journal should have compacted");
+        assert!(state.journal_entries < JOURNAL_MIN_ENTRIES);
+
+        let reloaded = reopen(&root);
+        assert_eq!(summary(&reloaded), summary(&state));
+    }
+
+    #[test]
+    fn test_journal_replays_history_trim() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        state.max_history_size = Some(3);
+        for i in 0..5 {
+            record(&mut state, &format!("f{i}"));
+        }
+        assert_eq!(state.history.len(), 3);
+
+        // The reopened state has the default (larger) limit, so the trim must
+        // come from the journal, not from re-applying a limit.
+        let reloaded = reopen(&root);
+        assert_eq!(summary(&reloaded), summary(&state));
+    }
+
+    #[test]
+    fn test_journal_torn_tail_is_ignored() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        record(&mut state, "a");
+        record(&mut state, "b");
+        {
+            use std::io::Write;
+            let mut journal = fs::OpenOptions::new()
+                .append(true)
+                .open(&state.journal_file)
+                .unwrap();
+            journal.write_all(b"{\"seq\":3,\"entry\":{\"Rec").unwrap();
+        }
+
+        let reloaded = reopen(&root);
+        assert_eq!(summary(&reloaded), summary(&state));
+    }
+
+    #[test]
+    fn test_snapshot_skips_already_folded_journal_entries() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        record(&mut state, "a");
+        record(&mut state, "b");
+        let stale_journal = fs::read(&state.journal_file).unwrap();
+
+        // Simulate a crash after the snapshot rename but before the journal
+        // was truncated: the journal still holds entries the snapshot has.
+        state.save().unwrap();
+        fs::write(&state.journal_file, stale_journal).unwrap();
+
+        let reloaded = reopen(&root);
+        assert_eq!(summary(&reloaded), summary(&state));
+    }
+
+    #[test]
+    fn test_rolled_back_transaction_does_not_survive_reload() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        state.begin_transaction("t").unwrap();
+        record(&mut state, "a");
+        state.abort_transaction();
+
+        let reloaded = reopen(&root);
+        assert!(reloaded.active_transaction.is_none());
+        assert_eq!(summary(&reloaded), summary(&state));
+    }
+
+    /// `last_n_undoable` must agree with a plain newest-first scan for
+    /// non-undone operations, whatever the undone-block hint holds.
+    fn assert_undoable_matches_scan(state: &ShellState) {
+        let naive: Vec<Uuid> = state
+            .history
+            .iter()
+            .rev()
+            .filter(|op| !op.undone)
+            .map(|op| op.id)
+            .collect();
+        let fast: Vec<Uuid> = state
+            .last_n_undoable(usize::MAX)
+            .iter()
+            .map(|op| op.id)
+            .collect();
+        assert_eq!(fast, naive);
+    }
+
+    fn undo_one(state: &mut ShellState) {
+        let id = state.last_n_undoable(1)[0].id;
+        state.mark_undone(id, Uuid::new_v4());
+    }
+
+    #[test]
+    fn test_undone_block_hint_agrees_with_full_scan() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        state.max_history_size = Some(12);
+        for i in 0..10 {
+            record(&mut state, &format!("a{i}"));
+        }
+        for _ in 0..3 {
+            undo_one(&mut state);
+            assert_undoable_matches_scan(&state);
+        }
+        // New operations after an undone block, then undo across it.
+        for i in 0..4 {
+            record(&mut state, &format!("b{i}"));
+            assert_undoable_matches_scan(&state);
+        }
+        for _ in 0..6 {
+            undo_one(&mut state);
+            assert_undoable_matches_scan(&state);
+        }
+        // Out-of-order mark of an older operation.
+        let oldest_live = state.last_n_undoable(usize::MAX).last().unwrap().id;
+        state.mark_undone(oldest_live, Uuid::new_v4());
+        assert_undoable_matches_scan(&state);
+        // Trims from the front shift the block.
+        for i in 0..8 {
+            record(&mut state, &format!("c{i}"));
+            assert_undoable_matches_scan(&state);
+        }
+        while !state.last_n_undoable(1).is_empty() {
+            undo_one(&mut state);
+            assert_undoable_matches_scan(&state);
+        }
+    }
+
+    #[test]
+    fn test_transaction_membership_survives_journal_replay() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        state.begin_transaction("t").unwrap();
+        let a = record(&mut state, "a");
+
+        let reloaded = reopen(&root);
+        let txn = reloaded.active_transaction.as_ref().unwrap();
+        assert_eq!(txn.operations, vec![a]);
     }
 }
