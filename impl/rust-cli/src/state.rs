@@ -743,13 +743,11 @@ impl ShellState {
         let Some(op) = self.history.last() else {
             return self.save();
         };
-        let mut entries = vec![JournalEntryRef::Record(op)];
-        if trimmed > 0 {
-            entries.push(JournalEntryRef::Trim(trimmed));
-        }
+        // The record and its trim are one line, so a crash cannot persist the
+        // new operation without the history-limit trim it caused.
+        let entries = [JournalEntryRef::Record { op, trim: trimmed }];
         let appended = append_journal(&self.journal_file, self.journal_seq, &entries);
-        let count = entries.len();
-        self.after_append(appended, count)
+        self.after_append(appended, entries.len())
     }
 
     /// Persist journal entries that do not borrow from `self`.
@@ -805,7 +803,7 @@ impl ShellState {
         let file_name = format!(".vsh_state.json.{}.tmp", Uuid::new_v4().simple());
         let tmp = self.state_file.with_file_name(file_name);
         let written = (|| -> Result<()> {
-            let mut out = std::io::BufWriter::new(fs::File::create(&tmp)?);
+            let mut out = std::io::BufWriter::new(create_private(&tmp)?);
             serde_json::to_writer(&mut out, &state)?;
             out.flush()?;
             fs::rename(&tmp, &self.state_file)?;
@@ -848,7 +846,11 @@ impl ShellState {
             // rather than make the whole file unreadable.
             let journal = crate::fs_pure::read_to_end(&self.journal_file)?;
             let body = journal.strip_suffix(b"\n").unwrap_or(&journal);
-            let mut replayed_all = true;
+            // A last line with no newline may parse, but the next append
+            // would be glued onto it (`}{`), losing both lines on the
+            // following reload. Treat it like a torn tail: keep what parses,
+            // then snapshot before appending again.
+            let mut replayed_all = journal.is_empty() || journal.ends_with(b"\n");
             for line in body.split(|&b| b == b'\n').filter(|_| !body.is_empty()) {
                 // A torn line (crash mid-append) ends the replay, and so does
                 // a sequence gap: replay keeps the longest consistent prefix.
@@ -887,23 +889,21 @@ impl ShellState {
     /// the redo stack is not persisted, as before.
     fn replay(&mut self, entry: JournalEntry) {
         match entry {
-            JournalEntry::Record(op) => {
+            JournalEntry::Record { op, trim } => {
                 if let Some(txn) = self.active_transaction.as_mut() {
                     if op.transaction_id == Some(txn.id) {
                         txn.operations.push(op.id);
                     }
                 }
                 self.history.push(op);
+                let trim = trim.min(self.history.len());
+                self.history.drain(0..trim);
             }
             JournalEntry::Undone { id, undone_by } => {
                 if let Some(op) = self.history.iter_mut().rev().find(|o| o.id == id) {
                     op.undone = true;
                     op.undone_by = Some(undone_by);
                 }
-            }
-            JournalEntry::Trim(n) => {
-                let n = n.min(self.history.len());
-                self.history.drain(0..n);
             }
             JournalEntry::PreviousDir(dir) => {
                 self.previous_dir = dir;
@@ -1234,12 +1234,15 @@ const JOURNAL_MIN_ENTRIES: usize = 1024;
 /// One history mutation in the journal (`.vsh_state.journal`, JSON lines).
 #[derive(Deserialize)]
 enum JournalEntry {
-    /// An operation appended to the history.
-    Record(Operation),
+    /// An operation appended to the history, then the oldest `trim`
+    /// operations dropped by the history size limit (0 when under it).
+    Record {
+        op: Operation,
+        #[serde(default)]
+        trim: usize,
+    },
     /// An operation marked undone.
     Undone { id: Uuid, undone_by: Uuid },
-    /// The oldest `n` operations dropped by the history size limit.
-    Trim(usize),
     /// The directory `cd -` returns to, as set by `cd`.
     PreviousDir(Option<PathBuf>),
 }
@@ -1247,10 +1250,23 @@ enum JournalEntry {
 /// Borrowing twin of [`JournalEntry`]; serialises to the same shape.
 #[derive(Serialize)]
 enum JournalEntryRef<'a> {
-    Record(&'a Operation),
+    Record { op: &'a Operation, trim: usize },
     Undone { id: Uuid, undone_by: Uuid },
-    Trim(usize),
     PreviousDir(Option<PathBuf>),
+}
+
+/// Create (or truncate) a persistence file readable only by its owner.
+/// History can hold the contents of deleted files in `undo_data`, so the
+/// journal and snapshot must not inherit a permissive umask.
+fn create_private(path: &Path) -> std::io::Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)
 }
 
 #[derive(Deserialize)]
@@ -1271,10 +1287,14 @@ struct JournalLineRef<'a, 'b> {
 /// entries still reach the file in a single write.
 fn append_journal(path: &Path, last_seq: u64, entries: &[JournalEntryRef<'_>]) -> Result<()> {
     use std::io::Write;
-    let file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)?;
+    let mut options = fs::OpenOptions::new();
+    options.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600); // see create_private
+    }
+    let file = options.open(path)?;
     let mut out = std::io::BufWriter::with_capacity(64 * 1024, file);
     for (seq, entry) in (last_seq + 1..).zip(entries) {
         serde_json::to_writer(&mut out, &JournalLineRef { seq, entry })?;
@@ -1806,6 +1826,53 @@ mod tests {
         let reloaded = reopen(&root);
         assert_eq!(reloaded.history.len(), 3);
         assert_eq!(summary(&reloaded), summary(&restarted));
+    }
+
+    #[test]
+    fn test_journal_without_final_newline_is_repaired() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        record(&mut state, "a");
+        // Crash after the last record but before its newline.
+        let journal = fs::read(&state.journal_file).unwrap();
+        fs::write(&state.journal_file, journal.strip_suffix(b"\n").unwrap()).unwrap();
+
+        let mut restarted = reopen(&root);
+        assert_eq!(restarted.history.len(), 1, "the complete record is kept");
+        record(&mut restarted, "b");
+
+        let reloaded = reopen(&root);
+        assert_eq!(reloaded.history.len(), 2);
+        assert_eq!(summary(&reloaded), summary(&restarted));
+    }
+
+    #[test]
+    fn test_record_and_trim_share_one_journal_line() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        state.max_history_size = Some(3);
+        for i in 0..5 {
+            record(&mut state, &format!("f{i}"));
+        }
+        let journal = fs::read_to_string(&state.journal_file).unwrap();
+        // One line per operation: no trim can be split from its record.
+        assert_eq!(journal.lines().count(), 5);
+        assert!(journal.lines().last().unwrap().contains("\"trim\":1"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_persistence_files_are_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        record(&mut state, "a");
+        state.save().unwrap();
+        record(&mut state, "b");
+        for file in [&state.journal_file, &state.state_file] {
+            let mode = fs::metadata(file).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "{}", file.display());
+        }
     }
 
     #[test]
