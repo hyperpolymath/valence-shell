@@ -120,7 +120,7 @@ reproduce. Absence of a tool is an open obligation, not a passing leg
 | `proofs/agda/` (via `All.agda`)
 | No postulates, no holes, the estate invocation. Filesystem equality is pointwise (`_≗_`). Grade `PWG-3` is derived from the CI receipt on the merge head, not asserted here. See `docs/audits/2026-11-09-proof-ground-truth.adoc`
 
-| Journal model: after a crash, loading yields the synced events followed by a prefix of the unsynced ones; a cut-short record is rejected, and is classified as torn, never as damaged; rollback leaves no live operation
+| Journal model: after a crash, loading yields the synced events followed by a prefix of the unsynced ones; a cut-short record is rejected, and is classified as torn, never as damaged; rollback leaves no operation of the rolled-back transaction live
 | proven (2026-11-17)
 | `bash scripts/check-agda.sh`, Agda 2.7.0.1 + stdlib v2.2; ten mutations rejected locally (`proofs/agda/VERIFICATION.adoc`)
 | `proofs/agda/JournalModel.agda` `crash-recovery`, `write-atomic`, `crash-tail`; `JournalFraming.agda` `step-torn`, `decode-sound`, `classify-torn`; `JournalReplay.agda` `run-ids`, `rollback-no-live`

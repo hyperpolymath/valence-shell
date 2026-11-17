@@ -23,7 +23,7 @@ theorems (owner ruling 2026-11-09, per `standards` PROOF-POLICY §1). The Lean 4
 | `RMOOperations.agda`          | Remove-Match-Obliterate (GDPR-relevant).
 | `PreconditionWitnesses.agda` | One inhabitant per operation precondition (non-vacuity).
 | `JournalFraming.agda`        | Journal record framing and decoder: a record cut short is rejected, and whatever is accepted is byte for byte a run of well-formed records. The rejected bytes are classified as clean, torn or damaged; a record cut short is torn, never damaged. A changed record is caught only as far as its header check and its checksum can tell.
-| `JournalReplay.agda`         | Journal events and replay: history is append-only; rollback leaves no live operation.
+| `JournalReplay.agda`         | Journal events and replay: history is append-only; rollback leaves no operation of the rolled-back transaction live.
 | `JournalModel.agda`          | File and crash model; recovery after a crash is the synced events plus a prefix of the unsynced ones.
 | `JournalWitnesses.agda`      | One instance of the journal model's parameters, and worked cases closed by `refl`.
 | `All.agda`                   | Imports every module; the file CI checks.

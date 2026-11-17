@@ -1194,7 +1194,7 @@ cannot save and returns an error, with the transaction left open; the next
 write that succeeds saves the whole state. The saved state is then at most
 one operation behind the disk. Every other command still only warns when its
 record cannot be saved; what they should do is an open decision (section
-14.5). `cargo test`: 896 passed, 0 failed, 15 ignored.
+14.5). `cargo test`: 896 passed, 0 failed, 15 ignored (898 after the redo fix that followed).
 
 Not proved: the model's `rollback-no-live` speaks of the operations that are
 in the history. That an open transaction's operations all stay there is a
@@ -1265,7 +1265,7 @@ loss. Today that is damage, and the shell refuses to start (OD-40).
 |===
 |Option |E / D |Notes
 
-|Read a tail that is nothing but zero bytes as an interrupted write, and widen the model's crash to "a prefix, then any number of zero bytes" with `crash-tail` proved for it |8 / 8 |Such a tail holds no record, so setting it aside loses nothing, and it runs to the end of the file, so it cannot hide a good record. It does hide one thing: a record that was overwritten with zeros is no longer reported as damage. The etcd log reader works this way: a zero length ends the log, and a record that fails its check and has a zeroed sector counts as a torn write (https://github.com/etcd-io/etcd/blob/main/server/storage/wal/decoder.go[`decoder.go`], read 2026-11-17)
+|Take the zero bytes off the end of the rejected bytes, then classify what is left: empty or a record cut short is an interrupted write. Widen the model's crash to "a prefix, then any number of zero bytes" and prove `crash-tail` for it |8 / 8 |Covers a record cut short and then padded with zeros, which a rule for an all-zero tail alone would report as damage (found in review). The zeros hold no record, so setting them aside loses nothing, and they run to the end of the file, so they cannot hide a good record. Two costs: a record overwritten with zeros is no longer reported as damage, and a damaged last record whose bytes end in a zero byte is read as cut short. The model needs one more assumption, that no record starts with a zero header. The etcd log reader works in a similar way: a zero length ends the log, and a record that fails its check and has a zeroed sector counts as a torn write (https://github.com/etcd-io/etcd/blob/main/server/storage/wal/decoder.go[`decoder.go`], read 2026-11-17)
 |Keep it as damage, and build the recovery command (C5) before the first engine release |7 / 9 |Nothing is ever guessed. Until C5 exists, a user must repair the file by hand
 |Treat every unreadable tail as the end of the journal |4 / 5 |Always starts. Gives up the difference between a crash and damage, which OD-40 ruled against. SQLite's log is read this way: a frame is valid only if its running checksum matches, so the first bad frame ends the log (https://www.sqlite.org/fileformat2.html#walformat[file format], section 4.1, read 2026-11-17)
 |===

@@ -1047,144 +1047,170 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
         };
 
-        let path = state.resolve_path(&op.path);
-
-        // The record this redo writes must be able to undo it. A removal or a
-        // truncation needs the contents as they are now, read before the file
-        // is touched. A copy, a link and an unlink need what the first record
-        // carried (the source path or the link target).
-        let undo_data: Option<Vec<u8>> = match op.op_type {
-            // Read as `rm` and a truncating redirection do: without changing
-            // the file's access time where the system allows it.
-            OperationType::DeleteFile | OperationType::FileTruncated => Some(
-                crate::fs_pure::read_to_end(&path)
-                    .context("Redo: could not read the file to keep its contents")?,
-            ),
-            OperationType::CopyFile | OperationType::Symlink | OperationType::Unlink => {
-                op.undo_data.clone()
+        if let Err(e) = redo_one(state, &op, verbose) {
+            // Nothing was redone. Keep the entry, so that the redo can be
+            // tried again once the cause is fixed. An entry of a kind that
+            // can never be redone is dropped, or it would block the ones
+            // behind it for the rest of the session.
+            if can_be_redone(op.op_type) {
+                state.redo_stack.push_front(op);
             }
-            _ => None,
-        };
-
-        // Re-execute the original operation
-        match op.op_type {
-            OperationType::Mkdir => {
-                fs::create_dir(&path).context("Redo mkdir failed")?;
-            }
-            OperationType::Rmdir => {
-                fs::remove_dir(&path).context("Redo rmdir failed")?;
-            }
-            OperationType::CreateFile => {
-                fs::write(&path, "").context("Redo touch failed")?;
-            }
-            OperationType::DeleteFile => {
-                fs::remove_file(&path).context("Redo rm failed")?;
-            }
-            OperationType::WriteFile => {
-                // Would need new content
-                anyhow::bail!("WriteFile redo not yet implemented");
-            }
-            OperationType::FileTruncated => {
-                // Redo truncate: truncate file (original undo_data was the old content)
-                fs::write(&path, "").context("Redo truncate failed")?;
-            }
-            OperationType::FileAppended => {
-                // Cannot redo append without knowing what was appended
-                anyhow::bail!(
-                    "FileAppended redo not yet implemented (would need appended content)"
-                );
-            }
-            OperationType::CopyFile => {
-                // Redo copy: copy again from src (stored in undo_data) to dst (path)
-                let src = op
-                    .undo_data
-                    .as_ref()
-                    .map(|d| String::from_utf8_lossy(d).to_string())
-                    .context("Missing source path for redo cp")?;
-                let src_path = state.resolve_path(&src);
-                fs::copy(&src_path, &path).context("Redo cp failed")?;
-            }
-            OperationType::Move => {
-                // Redo move: move src -> dst again
-                let parts: Vec<&str> = op.path.splitn(2, '\0').collect();
-                if parts.len() != 2 {
-                    anyhow::bail!("Invalid move operation record for redo");
-                }
-                let src_path = state.resolve_path(parts[0]);
-                let dst_path = state.resolve_path(parts[1]);
-                fs::rename(&src_path, &dst_path).context("Redo mv failed")?;
-            }
-            OperationType::Symlink => {
-                // Redo symlink: create symlink again
-                let target = op
-                    .undo_data
-                    .as_ref()
-                    .map(|d| String::from_utf8_lossy(d).to_string())
-                    .context("Missing symlink target for redo")?;
-                #[cfg(unix)]
-                std::os::unix::fs::symlink(&target, &path).context("Redo ln -s failed")?;
-                #[cfg(not(unix))]
-                anyhow::bail!("Symbolic links not supported on this platform");
-            }
-            OperationType::Unlink => {
-                // Redo unlink: remove the symlink again
-                fs::remove_file(&path).context("Redo unlink failed")?;
-            }
-            OperationType::SetVariable => {
-                // Redo set: re-apply the variable value
-                // The undo_data stores the PREVIOUS value, not the new one.
-                // For redo, we need the value that was set, but we don't have it.
-                // Redo of SetVariable is a no-op — variable state has moved on.
-                // This is correct: variable redo is best-effort; filesystem redo is exact.
-                println!(
-                    "{}",
-                    "Variable set cannot be exactly redone (state-dependent)".bright_yellow()
-                );
-            }
-            OperationType::UnsetVariable => {
-                // Redo unset: unset the variable again
-                state.variables.remove(&op.path);
-                state.exported_vars.remove(&op.path);
-            }
-            OperationType::Chmod => {
-                // Redo chmod: cannot exactly redo without storing new mode
-                println!(
-                    "{}",
-                    "chmod cannot be exactly redone (state-dependent)".bright_yellow()
-                );
-            }
-            OperationType::Chown => {
-                // Redo chown: cannot exactly redo without storing new uid:gid
-                println!(
-                    "{}",
-                    "chown cannot be exactly redone (state-dependent)".bright_yellow()
-                );
-            }
-            OperationType::HardwareErase | OperationType::Obliterate => {
-                // Cannot redo - irreversible operations
-                anyhow::bail!(
-                    "{:?} cannot be redone - operation is irreversible",
-                    op.op_type
-                );
-            }
+            return Err(e);
         }
+    }
 
-        let mut new_op = Operation::new(op.op_type, op.path.clone(), None);
-        new_op.undo_data = undo_data;
-        let new_id = new_op.id;
-        state.record_redo_operation(new_op);
+    Ok(())
+}
 
-        println!(
-            "{} {} {}",
-            format!("[op:{}]", &new_id.to_string()[..8]).bright_black(),
-            "redo".bright_cyan(),
-            op.path
-        );
+/// Whether `redo` has a way to do this kind of operation again.
+fn can_be_redone(op_type: OperationType) -> bool {
+    !matches!(
+        op_type,
+        OperationType::WriteFile
+            | OperationType::FileAppended
+            | OperationType::HardwareErase
+            | OperationType::Obliterate
+    )
+}
 
-        if verbose {
-            let proof = op.op_type.proof_reference();
-            println!("    {} {}", "Proof:".bright_black(), proof.format_short());
+/// Do one undone operation again and record it. On an error nothing has
+/// been recorded.
+fn redo_one(state: &mut ShellState, op: &Operation, verbose: bool) -> Result<()> {
+    let path = state.resolve_path(&op.path);
+
+    // The record this redo writes must be able to undo it. A removal or a
+    // truncation needs the contents as they are now, read before the file
+    // is touched. A copy, a link and an unlink need what the first record
+    // carried (the source path or the link target).
+    let undo_data: Option<Vec<u8>> = match op.op_type {
+        // Read as `rm` and a truncating redirection do: without changing
+        // the file's access time where the system allows it.
+        OperationType::DeleteFile | OperationType::FileTruncated => Some(
+            crate::fs_pure::read_to_end(&path)
+                .context("Redo: could not read the file to keep its contents")?,
+        ),
+        OperationType::CopyFile | OperationType::Symlink | OperationType::Unlink => {
+            op.undo_data.clone()
         }
+        _ => None,
+    };
+
+    // Re-execute the original operation
+    match op.op_type {
+        OperationType::Mkdir => {
+            fs::create_dir(&path).context("Redo mkdir failed")?;
+        }
+        OperationType::Rmdir => {
+            fs::remove_dir(&path).context("Redo rmdir failed")?;
+        }
+        OperationType::CreateFile => {
+            fs::write(&path, "").context("Redo touch failed")?;
+        }
+        OperationType::DeleteFile => {
+            fs::remove_file(&path).context("Redo rm failed")?;
+        }
+        OperationType::WriteFile => {
+            // Would need new content
+            anyhow::bail!("WriteFile redo not yet implemented");
+        }
+        OperationType::FileTruncated => {
+            // Redo truncate: truncate file (original undo_data was the old content)
+            fs::write(&path, "").context("Redo truncate failed")?;
+        }
+        OperationType::FileAppended => {
+            // Cannot redo append without knowing what was appended
+            anyhow::bail!("FileAppended redo not yet implemented (would need appended content)");
+        }
+        OperationType::CopyFile => {
+            // Redo copy: copy again from src (stored in undo_data) to dst (path)
+            let src = op
+                .undo_data
+                .as_ref()
+                .map(|d| String::from_utf8_lossy(d).to_string())
+                .context("Missing source path for redo cp")?;
+            let src_path = state.resolve_path(&src);
+            fs::copy(&src_path, &path).context("Redo cp failed")?;
+        }
+        OperationType::Move => {
+            // Redo move: move src -> dst again
+            let parts: Vec<&str> = op.path.splitn(2, '\0').collect();
+            if parts.len() != 2 {
+                anyhow::bail!("Invalid move operation record for redo");
+            }
+            let src_path = state.resolve_path(parts[0]);
+            let dst_path = state.resolve_path(parts[1]);
+            fs::rename(&src_path, &dst_path).context("Redo mv failed")?;
+        }
+        OperationType::Symlink => {
+            // Redo symlink: create symlink again
+            let target = op
+                .undo_data
+                .as_ref()
+                .map(|d| String::from_utf8_lossy(d).to_string())
+                .context("Missing symlink target for redo")?;
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(&target, &path).context("Redo ln -s failed")?;
+            #[cfg(not(unix))]
+            anyhow::bail!("Symbolic links not supported on this platform");
+        }
+        OperationType::Unlink => {
+            // Redo unlink: remove the symlink again
+            fs::remove_file(&path).context("Redo unlink failed")?;
+        }
+        OperationType::SetVariable => {
+            // Redo set: re-apply the variable value
+            // The undo_data stores the PREVIOUS value, not the new one.
+            // For redo, we need the value that was set, but we don't have it.
+            // Redo of SetVariable is a no-op — variable state has moved on.
+            // This is correct: variable redo is best-effort; filesystem redo is exact.
+            println!(
+                "{}",
+                "Variable set cannot be exactly redone (state-dependent)".bright_yellow()
+            );
+        }
+        OperationType::UnsetVariable => {
+            // Redo unset: unset the variable again
+            state.variables.remove(&op.path);
+            state.exported_vars.remove(&op.path);
+        }
+        OperationType::Chmod => {
+            // Redo chmod: cannot exactly redo without storing new mode
+            println!(
+                "{}",
+                "chmod cannot be exactly redone (state-dependent)".bright_yellow()
+            );
+        }
+        OperationType::Chown => {
+            // Redo chown: cannot exactly redo without storing new uid:gid
+            println!(
+                "{}",
+                "chown cannot be exactly redone (state-dependent)".bright_yellow()
+            );
+        }
+        OperationType::HardwareErase | OperationType::Obliterate => {
+            // Cannot redo - irreversible operations
+            anyhow::bail!(
+                "{:?} cannot be redone - operation is irreversible",
+                op.op_type
+            );
+        }
+    }
+
+    let mut new_op = Operation::new(op.op_type, op.path.clone(), None);
+    new_op.undo_data = undo_data;
+    let new_id = new_op.id;
+    state.record_redo_operation(new_op);
+
+    println!(
+        "{} {} {}",
+        format!("[op:{}]", &new_id.to_string()[..8]).bright_black(),
+        "redo".bright_cyan(),
+        op.path
+    );
+
+    if verbose {
+        let proof = op.op_type.proof_reference();
+        println!("    {} {}", "Proof:".bright_black(), proof.format_short());
     }
 
     Ok(())

@@ -296,6 +296,59 @@ fn rollback_is_refused_when_an_operation_of_the_transaction_is_missing() {
     assert!(state.active_transaction.is_none());
 }
 
+/// A redo that fails has redone nothing, so its entry stays on the redo
+/// stack and the redo can be tried again once the cause is fixed. Before,
+/// the entry was dropped and the operation could not be redone in that
+/// session.
+#[test]
+fn a_redo_that_fails_keeps_its_entry_to_try_again() {
+    let root = TempDir::new().unwrap();
+    let mut state = open(&root);
+    let file = root.path().join("notes");
+    fs::write(&file, "contents\n").unwrap();
+    commands::rm(&mut state, "notes", false).unwrap();
+    commands::undo(&mut state, 1, false).unwrap();
+    let entry = state.get_redo_stack().front().unwrap().id;
+
+    // The redo has to read the file first. Put a directory in its place, so
+    // that the read fails whoever runs the test.
+    fs::remove_file(&file).unwrap();
+    fs::create_dir(&file).unwrap();
+    let failed = commands::redo(&mut state, 1, false).unwrap_err();
+    assert!(failed.to_string().contains("could not read"), "{failed}");
+    assert_eq!(state.get_redo_stack().len(), 1);
+    assert_eq!(state.get_redo_stack().front().unwrap().id, entry);
+    let records = state.history.len();
+
+    // With the file back, the same redo goes through.
+    fs::remove_dir(&file).unwrap();
+    fs::write(&file, "contents\n").unwrap();
+    commands::redo(&mut state, 1, false).unwrap();
+    assert!(!file.exists());
+    assert!(state.get_redo_stack().is_empty());
+    assert_eq!(state.history.len(), records + 1);
+}
+
+/// An entry of a kind that can never be redone is dropped when it fails, so
+/// that it does not block the entries behind it.
+#[test]
+fn an_entry_that_can_never_be_redone_does_not_block_the_redo_stack() {
+    let root = TempDir::new().unwrap();
+    let mut state = open(&root);
+    commands::touch(&mut state, "a", false).unwrap();
+    let mut appended = Operation::new(OperationType::FileAppended, "a".to_string(), None);
+    appended.undo_data = Some(0u64.to_le_bytes().to_vec());
+    state.record_operation(appended);
+    commands::undo(&mut state, 2, false).unwrap();
+    assert_eq!(state.get_redo_stack().len(), 2);
+
+    // The entries come back oldest first: `touch a`, then the append.
+    commands::redo(&mut state, 1, false).unwrap();
+    assert!(root.path().join("a").exists());
+    assert!(commands::redo(&mut state, 1, false).is_err());
+    assert!(state.get_redo_stack().is_empty());
+}
+
 /// A state whose saved form goes to simulated storage, which can be made to
 /// refuse writes.
 fn open_on(root: &TempDir, storage: &SimStorage) -> ShellState {

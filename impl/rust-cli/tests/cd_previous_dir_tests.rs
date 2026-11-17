@@ -22,7 +22,24 @@ use std::process::{Command, Output, Stdio};
 const NOBODY: u32 = 65534;
 
 fn vsh(root: &Path, script: &str) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_vsh"));
+    let built = Path::new(env!("CARGO_BIN_EXE_vsh"));
+    let as_root = nix::unistd::geteuid().is_root();
+
+    // As root the shell is started as another user, who may not be able to
+    // reach the build directory (a checkout under a private home directory,
+    // for one). Give that user a copy it can run. The directory is removed
+    // when this function returns, after the shell has finished.
+    let staged = as_root.then(|| {
+        let dir = tempfile::tempdir().expect("directory for a copy of the shell");
+        fs::set_permissions(dir.path(), Permissions::from_mode(0o755)).expect("open it");
+        let copy = dir.path().join("vsh");
+        fs::copy(built, &copy).expect("copy the built shell");
+        fs::set_permissions(&copy, Permissions::from_mode(0o755)).expect("make it runnable");
+        (dir, copy)
+    });
+    let program = staged.as_ref().map_or(built, |(_, copy)| copy.as_path());
+
+    let mut command = Command::new(program);
     command
         .arg("-r")
         .arg(root)
@@ -32,7 +49,7 @@ fn vsh(root: &Path, script: &str) -> Output {
         .env("HOME", root)
         .env_remove("RUST_BACKTRACE")
         .stdin(Stdio::null());
-    if nix::unistd::geteuid().is_root() {
+    if as_root {
         command.uid(NOBODY).gid(NOBODY);
     }
     command.output().expect("start the built shell")

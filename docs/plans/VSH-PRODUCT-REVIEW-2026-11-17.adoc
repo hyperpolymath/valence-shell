@@ -1223,6 +1223,10 @@ run_one() {
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$st" "$cat" "$(printf "%s" "$snip" | tr "\n\t" "~ ")" "$br" "$(printf '%s' "$bo" | head -c 50 | tr '\n\t' '~ ')" "$vr" "$(printf '%s' "$vo" | head -c 50 | tr '\n\t' '~ ')" "$verr" >> "$OUT"
 }
 mkdir -p "$S/work"
+# Absolute paths: each run changes directory, and a relative path would then
+# point somewhere else.
+S=$(cd "$S" && pwd)
+V=$(cd "$(dirname "$V")" && pwd)/$(basename "$V")
 # Error output is kept outside the directories under test.
 E="$S/work/stderr.txt"
 while IFS= read -r line; do
