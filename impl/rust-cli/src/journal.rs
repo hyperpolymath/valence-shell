@@ -153,6 +153,15 @@ impl<S: Storage + ?Sized> Storage for Box<S> {
 /// opened through a symlink, and must be a regular file owned by the
 /// current user; group and other permission bits on an existing file are
 /// removed before it is used.
+///
+/// # Single owner
+///
+/// One `FileStorage` must own its path. Nothing here stops a second one,
+/// in this process or another, from using the same path, and if it does,
+/// writes are lost: after one of them replaces the file, the other keeps
+/// appending to the file that was replaced. Keeping a second owner out
+/// (an exclusive lock held for the life of the shell) is the caller's job
+/// and is not done yet; see route plan section 14.3, step C3.
 #[derive(Debug)]
 pub struct FileStorage {
     path: PathBuf,
@@ -178,9 +187,12 @@ impl FileStorage {
         #[cfg(unix)]
         {
             use std::os::unix::fs::OpenOptionsExt;
+            // O_NONBLOCK: a FIFO in place of the file must fail or open at
+            // once, not block before it can be checked. It has no effect on
+            // reads and writes of a regular file.
             options
                 .mode(0o600)
-                .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+                .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK);
         }
         options
     }
@@ -234,12 +246,13 @@ impl FileStorage {
     /// The open append handle, creating the file on first use.
     fn handle(&mut self) -> io::Result<&mut fs::File> {
         if self.file.is_none() {
-            let existed = self.path.symlink_metadata().is_ok();
             let file = Self::options().append(true).create(true).open(&self.path)?;
             self.vet(&file)?;
-            if !existed {
-                self.sync_dir()?;
-            }
+            // The open may have created the file, now or on an earlier
+            // attempt whose directory sync failed. Sync the directory every
+            // time a handle is established, so no append is acknowledged
+            // while the file's directory entry might not be durable.
+            self.sync_dir()?;
             self.file = Some(file);
         }
         // The branch above filled `self.file`.
@@ -344,6 +357,8 @@ struct SimState {
     aside: Vec<Vec<u8>>,
     /// Fail the next calls of these kinds (to test error handling).
     fail_append: bool,
+    /// Fail appends after writing this many bytes of them.
+    fail_append_after: Option<usize>,
     fail_sync: bool,
     fail_replace: bool,
 }
@@ -425,6 +440,12 @@ impl SimStorage {
         self.lock().fail_append = fail;
     }
 
+    /// Make appends fail after writing their first `bytes` bytes, as a real
+    /// write can; `None` turns it off.
+    pub fn fail_append_after(&self, bytes: Option<usize>) {
+        self.lock().fail_append_after = bytes;
+    }
+
     /// Make syncs fail until turned off.
     pub fn fail_sync(&self, fail: bool) {
         self.lock().fail_sync = fail;
@@ -464,6 +485,13 @@ impl Storage for SimStorage {
         let mut state = self.lock();
         if state.fail_append {
             return Err(injected("append"));
+        }
+        if let Some(limit) = state.fail_append_after {
+            state.exists = true;
+            let written = limit.min(bytes.len());
+            state.pending.extend_from_slice(&bytes[..written]);
+            state.record();
+            return Err(injected("partial append"));
         }
         state.exists = true;
         state.pending.extend_from_slice(bytes);
@@ -613,6 +641,17 @@ mod tests {
         assert_eq!(storage.trace().len(), 4);
     }
 
+    #[test]
+    fn sim_storage_can_fail_an_append_part_way() {
+        let mut storage = SimStorage::new();
+        storage.fail_append_after(Some(2));
+        assert!(storage.append(b"abcd").is_err());
+        assert_eq!(storage.point().pending, b"ab");
+        storage.fail_append_after(None);
+        storage.append(b"cd").unwrap();
+        assert_eq!(storage.point().pending, b"abcd");
+    }
+
     #[cfg(unix)]
     mod file {
         use super::super::*;
@@ -684,6 +723,26 @@ mod tests {
             storage.replace(b"fresh").unwrap();
             assert_eq!(fs::read(&target).unwrap(), b"keep me");
             assert_eq!(storage.read().unwrap().unwrap(), b"fresh");
+        }
+
+        /// A FIFO with no peer blocks a plain `open`. The storage must
+        /// refuse it without waiting.
+        #[test]
+        fn a_fifo_in_place_of_the_file_is_refused_without_blocking() {
+            let (dir, storage) = storage();
+            nix::unistd::mkfifo(storage.path(), nix::sys::stat::Mode::S_IRWXU).unwrap();
+
+            let (done, finished) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let mut storage = storage;
+                let outcome = (storage.read().is_err(), storage.append(b"x").is_err());
+                let _ = done.send(outcome);
+                drop(dir);
+            });
+            let outcome = finished
+                .recv_timeout(std::time::Duration::from_secs(10))
+                .expect("storage calls on a FIFO must not block");
+            assert_eq!(outcome, (true, true));
         }
 
         #[test]

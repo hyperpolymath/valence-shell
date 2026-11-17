@@ -2225,6 +2225,28 @@ mod tests {
     }
 
     #[test]
+    fn test_append_torn_by_a_failure_is_repaired_by_the_next_persist() {
+        let root = persisted_root();
+        let (mut state, storage) = sim_state(&root);
+        record(&mut state, "a");
+
+        // The write stops part of the way through the record.
+        storage.fail_append_after(Some(7));
+        record(&mut state, "b");
+        assert!(state.rewrite_pending);
+        assert_eq!(storage.point().pending.len(), 7);
+        storage.fail_append_after(None);
+
+        record(&mut state, "c");
+        assert!(!state.rewrite_pending);
+        let point = storage.point();
+        assert!(point.pending.is_empty());
+        let reloaded = sim_reopen(&root, point.durable).unwrap();
+        assert_eq!(reloaded.history.len(), 3);
+        assert_eq!(summary(&reloaded), summary(&state));
+    }
+
+    #[test]
     fn test_failed_sync_is_repaired_by_the_next_persist() {
         let root = persisted_root();
         let (mut state, storage) = sim_state(&root);
