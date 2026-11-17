@@ -369,3 +369,95 @@ undoRedoComposition state (S n) (US s' uEq rEq inner) =
         (trans (sym (bindAssoc (applyN n Composition.undo s')
                                (applyN n Composition.redo) Composition.redo))
                (rewrite undoRedoComposition s' n inner in rEq))
+
+--------------------------------------------------------------------------------
+-- Redo then undo
+--------------------------------------------------------------------------------
+
+||| Redo followed by undo is the identity, from any state with something to
+||| redo, provided the redone operation genuinely inverts at the current
+||| filesystem.
+|||
+||| This is the direction `undoRedoIdentity` does not cover: it starts from an
+||| arbitrary redo stack, not from a state reached by `execute`. The premise
+||| is the same per-step reversibility fact `TraceReversible` records. It is
+||| a real premise: an operation re-applied by `redo` must carry everything
+||| its inverse needs. (An implementation that redoes an operation but drops
+||| the data its inverse needs satisfies `undoRedoIdentity` on the filesystem
+||| component and still breaks this law.)
+export
+redoUndoIdentity :
+  (fs : Filesystem) ->
+  (undos, redos : List Operation) ->
+  (op : Operation) ->
+  applyOp (Composition.inverse op) (applyOp op fs) = fs ->
+  (Composition.redo (MkUndoState fs undos (op :: redos)) >>= Composition.undo)
+    = Just (MkUndoState fs undos (op :: redos))
+redoUndoIdentity fs undos redos op prf =
+  cong (\x => Just (MkUndoState x undos (op :: redos))) prf
+
+||| Undo, redo, undo is the same as undo.
+|||
+||| After `execute op`, undoing, redoing and undoing again lands on the state
+||| the first undo reached: filesystem, undo stack and redo stack alike. A
+||| corollary of `undoRedoIdentity`, which equates whole `UndoState`s and so
+||| already fixes the undo stack that the second undo reads.
+export
+undoRedoUndoIdentity :
+  (state : UndoState) ->
+  (op : Operation) ->
+  Applicable op (current state) ->
+  ((Composition.undo (execute op state) >>= Composition.redo) >>= Composition.undo)
+    = Composition.undo (execute op state)
+undoRedoUndoIdentity state op prf =
+  cong (>>= Composition.undo) (undoRedoIdentity state op prf)
+
+||| A state is `n`-fold redoable when each of the next `n` redos is exactly
+||| cancelled by an undo. The mirror image of `Undoable`.
+public export
+data Redoable : Nat -> UndoState -> Type where
+  ||| Zero redos: trivially redoable.
+  RZ : Redoable Z st
+  ||| One redo to `s'` that an `undo` cancels, then `n` more from `s'`.
+  RS : {0 st : UndoState} -> {0 n : Nat} ->
+       (s' : UndoState) ->
+       redo st = Just s' ->
+       undo s' = Just st ->
+       Redoable n s' ->
+       Redoable (S n) st
+
+||| `Redoable` is inhabited whenever the operation on top of the redo stack
+||| inverts at the current filesystem: one step of the witness, built from
+||| the same premise as `redoUndoIdentity`.
+export
+redoableStep :
+  (fs : Filesystem) ->
+  (undos, redos : List Operation) ->
+  (op : Operation) ->
+  applyOp (Composition.inverse op) (applyOp op fs) = fs ->
+  Redoable n (MkUndoState (applyOp op fs) (op :: undos) redos) ->
+  Redoable (S n) (MkUndoState fs undos (op :: redos))
+redoableStep fs undos redos op prf rest =
+  RS (MkUndoState (applyOp op fs) (op :: undos) redos)
+     Refl
+     (cong (\x => Just (MkUndoState x undos (op :: redos))) prf)
+     rest
+
+||| Multiple redos can all be undone: `n` redos followed by `n` undos is the
+||| identity, for any `n`-fold-redoable state. The mirror image of
+||| `undoRedoComposition`, by the same induction with the roles of `undo`
+||| and `redo` exchanged.
+export
+redoUndoComposition :
+  (state : UndoState) ->
+  (n : Nat) ->
+  Redoable n state ->
+  (applyN n Composition.redo state >>= applyN n Composition.undo) = Just state
+redoUndoComposition state Z RZ = Refl
+redoUndoComposition state (S n) (RS s' rEq uEq inner) =
+  rewrite rEq in
+  trans (bindCong (applyN n Composition.redo s')
+                  (\z => applyNSnoc n Composition.undo z))
+        (trans (sym (bindAssoc (applyN n Composition.redo s')
+                               (applyN n Composition.undo) Composition.undo))
+               (rewrite redoUndoComposition s' n inner in uEq))

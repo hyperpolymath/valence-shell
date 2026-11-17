@@ -87,6 +87,14 @@ via `+equivAddSwap+` — `+=+` was a non-theorem
 |`+undoRedoComposition+` |induction over an `+Undoable+` witness +
 `+Maybe+`-monad laws (`+applyNSnoc+`, `+bindAssoc+`, `+bindCong+`)
 
+|`+redoUndoIdentity+` |`+cong+` over the per-step reversibility premise
+(redo then undo, from any redo stack)
+
+|`+undoRedoUndoIdentity+` |corollary of `+undoRedoIdentity+`
+
+|`+redoUndoComposition+` |induction over a `+Redoable+` witness (mirror of
+`+undoRedoComposition+`); `+redoableStep+` builds the witness
+
 |`+overwriteIrreversible+` |redesigned to non-injectivity
 (`+updateEntryDeterminedByFilter+`); prior
 `+recovery randomData = Nothing+` was refuted by `+recovery = Just+`
