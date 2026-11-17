@@ -1049,6 +1049,20 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
 
         let path = state.resolve_path(&op.path);
 
+        // The record this redo writes must be able to undo it. A removal or a
+        // truncation needs the contents as they are now, read before the file
+        // is touched. A copy, a link and an unlink need what the first record
+        // carried (the source path or the link target).
+        let undo_data: Option<Vec<u8>> = match op.op_type {
+            OperationType::DeleteFile | OperationType::FileTruncated => Some(
+                fs::read(&path).context("Redo: could not read the file to keep its contents")?,
+            ),
+            OperationType::CopyFile | OperationType::Symlink | OperationType::Unlink => {
+                op.undo_data.clone()
+            }
+            _ => None,
+        };
+
         // Re-execute the original operation
         match op.op_type {
             OperationType::Mkdir => {
@@ -1152,7 +1166,8 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
         }
 
-        let new_op = Operation::new(op.op_type, op.path.clone(), None);
+        let mut new_op = Operation::new(op.op_type, op.path.clone(), None);
+        new_op.undo_data = undo_data;
         let new_id = new_op.id;
         state.record_redo_operation(new_op);
 

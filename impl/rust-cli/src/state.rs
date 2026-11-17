@@ -11,6 +11,7 @@ use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
@@ -935,9 +936,7 @@ impl ShellState {
         self.rewrite_journal()
             .context("Failed to convert the saved shell state to a journal")?;
 
-        let mut migrated = legacy.as_os_str().to_owned();
-        migrated.push(".migrated");
-        if let Err(e) = fs::rename(legacy, &migrated) {
+        if let Err(e) = Self::set_legacy_aside(legacy) {
             eprintln!(
                 "{} could not rename {} after converting it: {}",
                 "Warning:".bright_yellow(),
@@ -946,6 +945,37 @@ impl ShellState {
             );
         }
         Ok(())
+    }
+
+    /// Give the converted old state file a name that is not in use:
+    /// `<name>.migrated`, or `<name>.migrated.1`, `.2` and so on when an
+    /// earlier backup is already there. A backup is never replaced.
+    ///
+    /// The new name is made as a second link to the file and the old name is
+    /// then removed. Making a link fails when the name exists, which a rename
+    /// does not, so nothing can be overwritten between a check and the move.
+    fn set_legacy_aside(legacy: &Path) -> io::Result<PathBuf> {
+        const ATTEMPTS: u32 = 1000;
+        for attempt in 0..ATTEMPTS {
+            let mut name = legacy.as_os_str().to_owned();
+            name.push(".migrated");
+            if attempt > 0 {
+                name.push(format!(".{attempt}"));
+            }
+            let candidate = PathBuf::from(name);
+            match fs::hard_link(legacy, &candidate) {
+                Ok(()) => {
+                    fs::remove_file(legacy)?;
+                    return Ok(candidate);
+                }
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(e),
+            }
+        }
+        Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            format!("{ATTEMPTS} earlier backups are in the way"),
+        ))
     }
 
     /// Apply one journal event to the in-memory state (model: `apply`).
@@ -2271,6 +2301,29 @@ mod tests {
             reloaded.active_transaction.as_ref().unwrap().operations,
             txn.operations
         );
+    }
+
+    #[test]
+    fn test_an_earlier_backup_of_the_legacy_state_is_not_replaced() {
+        let root = persisted_root();
+        let legacy = root.path().join(LEGACY_STATE_FILE_NAME);
+        fs::write(&legacy, LEGACY_STATE).unwrap();
+        let earlier = root.path().join(".vsh_state.json.migrated");
+        fs::write(&earlier, "an earlier backup").unwrap();
+        let earlier_still = root.path().join(".vsh_state.json.migrated.1");
+        fs::write(&earlier_still, "one before that").unwrap();
+
+        let state = reopen(&root);
+        assert_eq!(state.history.len(), 3);
+
+        assert!(!legacy.exists());
+        assert_eq!(fs::read_to_string(&earlier).unwrap(), "an earlier backup");
+        assert_eq!(
+            fs::read_to_string(&earlier_still).unwrap(),
+            "one before that"
+        );
+        let fresh = root.path().join(".vsh_state.json.migrated.2");
+        assert_eq!(fs::read_to_string(fresh).unwrap(), LEGACY_STATE);
     }
 
     #[test]

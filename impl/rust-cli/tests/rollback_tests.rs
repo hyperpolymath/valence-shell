@@ -277,3 +277,43 @@ fn rollback_of_an_empty_transaction_closes_it() {
     assert!(state.active_transaction.is_none());
     commands::begin_transaction(&mut state, "next").unwrap();
 }
+
+#[test]
+fn a_redone_removal_can_be_undone_with_its_contents() {
+    let root = TempDir::new().unwrap();
+    let mut state = open(&root);
+    let file = root.path().join("notes");
+    fs::write(&file, "kept across redo\n").unwrap();
+
+    commands::rm(&mut state, "notes", false).unwrap();
+    commands::undo(&mut state, 1, false).unwrap();
+    assert_eq!(fs::read_to_string(&file).unwrap(), "kept across redo\n");
+
+    commands::redo(&mut state, 1, false).unwrap();
+    assert!(!file.exists());
+
+    // The redo wrote a new record. Undoing it must bring the contents back,
+    // not an empty file.
+    commands::undo(&mut state, 1, false).unwrap();
+    assert_eq!(fs::read_to_string(&file).unwrap(), "kept across redo\n");
+}
+
+#[test]
+fn a_removal_redone_inside_a_transaction_can_be_rolled_back() {
+    let root = TempDir::new().unwrap();
+    let mut state = open(&root);
+    let file = root.path().join("notes");
+    fs::write(&file, "kept across rollback\n").unwrap();
+
+    commands::rm(&mut state, "notes", false).unwrap();
+    commands::undo(&mut state, 1, false).unwrap();
+
+    commands::begin_transaction(&mut state, "t").unwrap();
+    commands::redo(&mut state, 1, false).unwrap();
+    assert!(!file.exists());
+
+    commands::rollback_transaction(&mut state).unwrap();
+
+    assert!(state.active_transaction.is_none());
+    assert_eq!(fs::read_to_string(&file).unwrap(), "kept across rollback\n");
+}
