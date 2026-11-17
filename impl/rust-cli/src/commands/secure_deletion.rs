@@ -423,6 +423,8 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
     if let Err(e) = append_rmo_residue(state, &op, "obliterated") {
         eprintln!("warning: RMO audit outcome not written: {e:#}");
     }
+    // Earlier operations on this file may hold its content as undo data.
+    state.scrub_obliterated(&state.rooted(path), op_id);
     state.record_operation(op);
 
     // Output
@@ -481,6 +483,9 @@ pub fn obliterate_dir(
     let full_path = state.resolve_path(path);
     let contained = state.contained(path)?;
 
+    if contained == Path::new(".") {
+        bail!("Refusing to obliterate the session root itself");
+    }
     match state.root_dir().symlink_metadata(&contained) {
         Ok(meta) if meta.is_dir() => {}
         Ok(meta) if meta.is_symlink() => bail!(
@@ -565,6 +570,8 @@ pub fn obliterate_dir(
     if let Err(e) = append_rmo_residue(state, &op, "obliterated-dir") {
         eprintln!("warning: RMO audit outcome not written: {e:#}");
     }
+    // Earlier operations on anything in this directory may hold content.
+    state.scrub_obliterated(&state.rooted(path), op_id);
     state.record_operation(op);
 
     println!(

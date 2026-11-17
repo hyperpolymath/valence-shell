@@ -1,0 +1,124 @@
+// SPDX-License-Identifier: MPL-2.0
+//! `rm` and its undo: the file comes back as it was, links are treated as
+//! links, and nothing outside the session root is touched.
+
+#![cfg(unix)]
+
+mod fixtures;
+
+use fixtures::tempfile::TempDir;
+use std::fs;
+use std::os::unix::fs::{symlink, PermissionsExt};
+use std::path::PathBuf;
+use std::time::{Duration, UNIX_EPOCH};
+use vsh::commands;
+use vsh::state::{OperationType, ShellState};
+
+struct Sandbox {
+    _temp: TempDir,
+    root: PathBuf,
+    outside: PathBuf,
+}
+
+fn sandbox() -> (Sandbox, ShellState) {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("root");
+    let outside = temp.path().join("outside");
+    fs::create_dir(&root).unwrap();
+    fs::create_dir(&outside).unwrap();
+    let state = ShellState::new(root.to_str().unwrap()).unwrap();
+    (
+        Sandbox {
+            _temp: temp,
+            root,
+            outside,
+        },
+        state,
+    )
+}
+
+#[test]
+fn undo_of_rm_restores_content_mode_and_modification_time() {
+    let (sandbox, mut state) = sandbox();
+    let path = sandbox.root.join("secret");
+    fs::write(&path, "TOPSECRET").unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).unwrap();
+    let long_ago = UNIX_EPOCH + Duration::new(1_500_000_000, 123_000_000);
+    fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_modified(long_ago)
+        .unwrap();
+
+    commands::rm(&mut state, "secret", false).unwrap();
+    assert!(!path.exists());
+    commands::undo(&mut state, 1, false).unwrap();
+
+    let meta = fs::metadata(&path).unwrap();
+    assert_eq!(fs::read(&path).unwrap(), b"TOPSECRET");
+    assert_eq!(meta.permissions().mode() & 0o7777, 0o640);
+    assert_eq!(meta.modified().unwrap(), long_ago);
+}
+
+#[test]
+fn undo_of_rm_survives_a_restart() {
+    let (sandbox, mut state) = sandbox();
+    let path = sandbox.root.join("s");
+    fs::write(&path, "X").unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    commands::rm(&mut state, "s", false).unwrap();
+    drop(state);
+
+    let mut state = ShellState::new(sandbox.root.to_str().unwrap()).unwrap();
+    commands::undo(&mut state, 1, false).unwrap();
+    assert_eq!(
+        fs::metadata(&path).unwrap().permissions().mode() & 0o7777,
+        0o600
+    );
+}
+
+#[test]
+fn rm_of_a_symlink_removes_the_link_and_undo_puts_it_back() {
+    let (sandbox, mut state) = sandbox();
+    let victim = sandbox.outside.join("victim");
+    fs::write(&victim, "PRECIOUS").unwrap();
+    symlink(&victim, sandbox.root.join("link")).unwrap();
+
+    commands::rm(&mut state, "link", false).unwrap();
+    assert!(fs::symlink_metadata(sandbox.root.join("link")).is_err());
+    assert_eq!(fs::read(&victim).unwrap(), b"PRECIOUS");
+    // The link's target is recorded, not the target's content.
+    let op = state.history.last().unwrap();
+    assert_eq!(op.op_type, OperationType::Unlink);
+    assert_eq!(
+        op.undo_data.as_deref(),
+        Some(victim.to_str().unwrap().as_bytes())
+    );
+
+    commands::undo(&mut state, 1, false).unwrap();
+    assert_eq!(fs::read_link(sandbox.root.join("link")).unwrap(), victim);
+    assert_eq!(fs::read(&victim).unwrap(), b"PRECIOUS");
+}
+
+#[test]
+fn rm_can_remove_a_dangling_symlink() {
+    let (sandbox, mut state) = sandbox();
+    symlink("nowhere", sandbox.root.join("dangling")).unwrap();
+    commands::rm(&mut state, "dangling", false).unwrap();
+    assert!(fs::symlink_metadata(sandbox.root.join("dangling")).is_err());
+}
+
+#[test]
+fn rm_does_not_reach_through_a_symlinked_directory() {
+    let (sandbox, mut state) = sandbox();
+    fs::write(sandbox.outside.join("victim"), "PRECIOUS").unwrap();
+    symlink(&sandbox.outside, sandbox.root.join("lp")).unwrap();
+
+    assert!(commands::rm(&mut state, "lp/victim", false).is_err());
+    assert_eq!(
+        fs::read(sandbox.outside.join("victim")).unwrap(),
+        b"PRECIOUS"
+    );
+    assert!(state.history.is_empty());
+}

@@ -202,3 +202,88 @@ fn secure_delete_refuses_links_too() {
     secure_delete(&sandbox.root.join("plain")).unwrap();
     assert!(!sandbox.root.join("plain").exists());
 }
+
+/// After obliteration the history holds none of the file's earlier content,
+/// and no earlier operation on it can be undone or redone.
+#[test]
+fn obliterate_scrubs_the_history_of_the_path() {
+    use vsh::parser::parse_command;
+    use vsh::ExecutableCommand;
+
+    let (sandbox, mut state) = sandbox();
+    let run = |state: &mut ShellState, command: &str| {
+        parse_command(command).unwrap().execute(state).unwrap();
+    };
+    fs::write(sandbox.root.join("other"), "OTHER").unwrap();
+    fs::write(sandbox.root.join("f"), "SECRETA").unwrap();
+    // `rm` then `undo` puts the content into the history twice over: as the
+    // undo data of the removal, and in the redo stack.
+    run(&mut state, "rm f");
+    run(&mut state, "undo");
+    run(&mut state, "rm other");
+
+    obliterate_path(&mut state, "f", false, true).unwrap();
+
+    for op in &state.history {
+        let holds = op
+            .undo_data
+            .as_deref()
+            .is_some_and(|data| data.windows(7).any(|w| w == b"SECRETA"));
+        assert!(
+            !holds,
+            "{:?} on {} still holds the content",
+            op.op_type, op.path
+        );
+        // Every earlier operation on `f` is closed off. The obliteration
+        // itself stays as the record of what happened.
+        if op.path == "f" && op.op_type != vsh::state::OperationType::Obliterate {
+            assert!(op.undone, "{:?} on f can still be undone", op.op_type);
+        }
+    }
+    assert!(state.redo_stack.iter().all(|op| op.path != "f"));
+    let saved = fs::read_to_string(sandbox.root.join(".vsh_state.json")).unwrap();
+    let compact: String = saved.chars().filter(|c| !c.is_whitespace()).collect();
+    assert!(
+        !compact.contains("83,69,67,82,69,84,65"),
+        "SECRETA is still saved"
+    );
+
+    // Operations on other paths are untouched: undo restores `other`. The
+    // newest operation is the obliteration, which undo passes over, so two
+    // steps are asked for.
+    vsh::commands::undo(&mut state, 2, false).unwrap();
+    assert_eq!(fs::read(sandbox.root.join("other")).unwrap(), b"OTHER");
+    assert!(!sandbox.root.join("f").exists());
+}
+
+/// Obliterating a directory scrubs the history of everything in it.
+#[test]
+fn obliterating_a_directory_scrubs_what_was_in_it() {
+    let (sandbox, mut state) = sandbox();
+    fs::create_dir(sandbox.root.join("d")).unwrap();
+    fs::write(sandbox.root.join("d/inner"), "SECRETB").unwrap();
+    fs::write(sandbox.root.join("dx"), "NOTINDIR").unwrap();
+    vsh::commands::rm(&mut state, "d/inner", false).unwrap();
+    vsh::commands::rm(&mut state, "dx", false).unwrap();
+
+    obliterate_path(&mut state, "d", false, true).unwrap();
+
+    let inner = state
+        .history
+        .iter()
+        .find(|op| op.path == "d/inner")
+        .unwrap();
+    assert!(inner.undo_data.is_none() && inner.undone);
+    // `dx` only shares a prefix with `d`; it is not inside it.
+    let sibling = state.history.iter().find(|op| op.path == "dx").unwrap();
+    assert_eq!(sibling.undo_data.as_deref(), Some(&b"NOTINDIR"[..]));
+    assert!(!sibling.undone);
+}
+
+#[test]
+fn the_session_root_itself_cannot_be_obliterated() {
+    let (sandbox, mut state) = sandbox();
+    fs::write(sandbox.root.join("f"), "DATA").unwrap();
+    assert!(obliterate_path(&mut state, ".", false, true).is_err());
+    assert_eq!(fs::read(sandbox.root.join("f")).unwrap(), b"DATA");
+}

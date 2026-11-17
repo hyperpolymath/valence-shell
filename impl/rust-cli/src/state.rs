@@ -157,6 +157,19 @@ impl std::fmt::Display for OperationType {
     }
 }
 
+/// What a file was, apart from its content: permission bits, owner and
+/// modification time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileMeta {
+    /// Permission and set-ID bits (the low 12 bits of the mode).
+    pub mode: u32,
+    pub uid: u32,
+    pub gid: u32,
+    /// Modification time: seconds and nanoseconds since the Unix epoch.
+    pub mtime: i64,
+    pub mtime_nsec: i64,
+}
+
 /// A single filesystem operation with complete undo/redo information.
 ///
 /// Each operation is assigned a unique UUID and records all data needed for reversal.
@@ -190,6 +203,13 @@ pub struct Operation {
     /// Data needed for undo (e.g., file contents before write)
     pub undo_data: Option<Vec<u8>>,
 
+    /// The removed file's permissions, owner and modification time, so
+    /// that undo restores the file as it was and not merely its content.
+    /// Absent on operations that removed nothing and on records written
+    /// before this field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub undo_meta: Option<FileMeta>,
+
     /// Whether this operation has been undone
     pub undone: bool,
 
@@ -206,6 +226,7 @@ impl Operation {
             timestamp: Utc::now(),
             transaction_id,
             undo_data: None,
+            undo_meta: None,
             undone: false,
             undone_by: None,
         }
@@ -213,6 +234,11 @@ impl Operation {
 
     pub fn with_undo_data(mut self, data: Vec<u8>) -> Self {
         self.undo_data = Some(data);
+        self
+    }
+
+    pub fn with_undo_meta(mut self, meta: FileMeta) -> Self {
+        self.undo_meta = Some(meta);
         self
     }
 }
@@ -631,6 +657,42 @@ impl ShellState {
     /// relative to the session root, whatever the working directory is now.
     pub fn resolve_op_path(&self, recorded: &str) -> PathBuf {
         resolve_under_root(&self.root, recorded)
+    }
+
+    /// Forget what the history holds about a path that has been
+    /// obliterated: `rooted` itself, or anything beneath it if it was a
+    /// directory.
+    ///
+    /// Earlier operations on the path keep their place in the history, but
+    /// lose their undo data (which may be the very content that was
+    /// obliterated) and are marked undone by the obliteration `by`, so that
+    /// no later `undo` or `redo` can bring any of it back. The caller
+    /// records the obliteration next, which saves the scrubbed history.
+    pub fn scrub_obliterated(&mut self, rooted: &str, by: Uuid) {
+        if rooted.is_empty() {
+            return;
+        }
+        let within = |recorded: &str| {
+            recorded == rooted
+                || recorded
+                    .strip_prefix(rooted)
+                    .is_some_and(|rest| rest.starts_with('/'))
+        };
+        let concerns = |op: &Operation| {
+            !matches!(
+                op.op_type,
+                OperationType::SetVariable | OperationType::UnsetVariable
+            ) && op.path.split('\0').any(within)
+        };
+        for op in self.history.iter_mut().filter(|op| concerns(op)) {
+            op.undo_data = None;
+            op.undo_meta = None;
+            if !op.undone {
+                op.undone = true;
+                op.undone_by = Some(by);
+            }
+        }
+        self.redo_stack.retain(|op| !concerns(op));
     }
 
     /// Rewrite the path of an operation about to be recorded so that it is

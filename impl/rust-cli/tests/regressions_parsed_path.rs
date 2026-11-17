@@ -37,7 +37,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 /// Holes that are open today. See the module documentation.
-const KNOWN_OPEN: &[&str] = &["b", "d", "h", "o"];
+const KNOWN_OPEN: &[&str] = &["b", "o"];
 
 /// Every hole this file tests.
 const ALL_HOLES: &[&str] = &[

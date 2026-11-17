@@ -256,6 +256,80 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     Ok(())
 }
 
+/// The permissions, owner and modification time in `meta`.
+#[cfg(unix)]
+fn file_meta(meta: &cap_std::fs::Metadata) -> Option<crate::state::FileMeta> {
+    use cap_std::fs::MetadataExt;
+    Some(crate::state::FileMeta {
+        mode: meta.mode() & 0o7777,
+        uid: meta.uid(),
+        gid: meta.gid(),
+        mtime: meta.mtime(),
+        mtime_nsec: meta.mtime_nsec(),
+    })
+}
+
+#[cfg(not(unix))]
+fn file_meta(_meta: &cap_std::fs::Metadata) -> Option<crate::state::FileMeta> {
+    None
+}
+
+/// Put a file back: its content, and what it was if `meta` is known.
+///
+/// `recorded` is a path from the history, relative to the session root. The
+/// file is written beneath the session root. A file that has to be created
+/// is created readable by its owner only, and gets its recorded permissions
+/// once the content is in place, so its content is never exposed under
+/// looser permissions than it had.
+fn restore_file(
+    state: &ShellState,
+    recorded: &str,
+    content: &[u8],
+    meta: Option<&crate::state::FileMeta>,
+) -> Result<()> {
+    use std::io::Write;
+
+    let contained = state.contained_abs(&state.resolve_op_path(recorded))?;
+    let mut options = cap_std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use cap_std::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = state.root_dir().open_with(&contained, &options)?.into_std();
+    file.write_all(content)?;
+
+    #[cfg(unix)]
+    if let Some(meta) = meta {
+        use std::os::unix::fs::PermissionsExt;
+        // The owner first: changing it clears set-ID bits. It needs
+        // privilege when the owner differs, so a failure is not an error.
+        let _ = std::os::unix::fs::fchown(&file, Some(meta.uid), Some(meta.gid));
+        file.set_permissions(fs::Permissions::from_mode(meta.mode & 0o7777))?;
+        if let Some(modified) = modification_time(meta) {
+            file.set_modified(modified)?;
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = meta;
+
+    Ok(())
+}
+
+/// The recorded modification time as a `SystemTime`, if it is representable.
+#[cfg(unix)]
+fn modification_time(meta: &crate::state::FileMeta) -> Option<std::time::SystemTime> {
+    let nanos = u32::try_from(meta.mtime_nsec).ok()?;
+    if meta.mtime >= 0 {
+        std::time::UNIX_EPOCH.checked_add(std::time::Duration::new(meta.mtime as u64, nanos))
+    } else {
+        std::time::UNIX_EPOCH
+            .checked_sub(std::time::Duration::from_secs(meta.mtime.unsigned_abs()))?
+            .checked_add(std::time::Duration::from_nanos(u64::from(nanos)))
+    }
+}
+
 /// Remove a file at the specified path.
 ///
 /// The file's content is preserved for undo. This operation is reversible via [`undo`]
@@ -283,26 +357,55 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
-    let full_path = state.resolve_path(path);
-
     // Runtime check of the Lean 4 precondition (see verification.rs)
     verification::verify_delete_file(state.root(), &state.rooted(path))?;
 
-    if !full_path.exists() {
-        anyhow::bail!("Path does not exist (ENOENT)");
-    }
-    if full_path.is_dir() {
+    // Look at the name itself, beneath the session root.
+    let contained = state.contained(path)?;
+    let named = match state.root_dir().symlink_metadata(&contained) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            anyhow::bail!("Path does not exist (ENOENT)")
+        }
+        Err(e) => return Err(e).context("rm failed"),
+    };
+    if named.is_dir() {
         anyhow::bail!("Path is a directory - use rmdir (EISDIR)");
     }
 
-    // Store content for undo (pure read of the soon-to-be-deleted file;
-    // routed through fs_pure to honour the noatime discipline).
-    let content = crate::fs_pure::read_to_end(&full_path).unwrap_or_default();
-
-    fs::remove_file(&full_path).context("rm failed")?;
-
-    let op =
-        Operation::new(OperationType::DeleteFile, path.to_string(), None).with_undo_data(content);
+    let op = if named.is_symlink() {
+        // Removing a link removes the link, not what it points to. Undo
+        // puts the link back.
+        let target = state
+            .root_dir()
+            .read_link_contents(&contained)
+            .context("rm failed: cannot read the link")?;
+        state
+            .root_dir()
+            .remove_file(&contained)
+            .context("rm failed")?;
+        Operation::new(OperationType::Unlink, path.to_string(), None)
+            .with_undo_data(target.to_string_lossy().into_owned().into_bytes())
+    } else {
+        // Save the content and what the file was, so that undo can restore
+        // it. A file that cannot be read cannot be restored, so it is not
+        // removed: saving it as empty would lose it on undo.
+        let content = state
+            .root_dir()
+            .read(&contained)
+            .context("rm refused: the file cannot be read, so it could not be restored by undo")?;
+        let meta = file_meta(&named);
+        state
+            .root_dir()
+            .remove_file(&contained)
+            .context("rm failed")?;
+        let op = Operation::new(OperationType::DeleteFile, path.to_string(), None)
+            .with_undo_data(content);
+        match meta {
+            Some(meta) => op.with_undo_meta(meta),
+            None => op,
+        }
+    };
     let op_id = op.id;
     state.record_operation(op);
 
@@ -877,12 +980,13 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 fs::remove_file(&path).context("Undo touch failed")?;
             }
             OperationType::CreateFile => {
-                let content = op.undo_data.as_ref().cloned().unwrap_or_default();
-                fs::write(&path, content).context("Undo rm failed")?;
+                let content = op.undo_data.as_deref().unwrap_or_default();
+                restore_file(state, &op.path, content, op.undo_meta.as_ref())
+                    .context("Undo rm failed")?;
             }
             OperationType::WriteFile => {
-                let content = op.undo_data.as_ref().cloned().unwrap_or_default();
-                fs::write(&path, content).context("Undo write failed")?;
+                let content = op.undo_data.as_deref().unwrap_or_default();
+                restore_file(state, &op.path, content, None).context("Undo write failed")?;
             }
             OperationType::FileAppended => {
                 // Undo append: truncate file to original size
@@ -1381,12 +1485,14 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                     fs::remove_file(&path).context("Failed to remove file")
                 }
                 OperationType::CreateFile => {
-                    let content = op.undo_data.as_ref().cloned().unwrap_or_default();
-                    fs::write(&path, content).context("Failed to restore file")
+                    let content = op.undo_data.as_deref().unwrap_or_default();
+                    restore_file(state, &op.path, content, op.undo_meta.as_ref())
+                        .context("Failed to restore file")
                 }
                 OperationType::WriteFile => {
-                    let content = op.undo_data.as_ref().cloned().unwrap_or_default();
-                    fs::write(&path, content).context("Failed to restore file content")
+                    let content = op.undo_data.as_deref().unwrap_or_default();
+                    restore_file(state, &op.path, content, None)
+                        .context("Failed to restore file content")
                 }
                 OperationType::FileAppended => {
                     // Rollback append: truncate file to original size
