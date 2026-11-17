@@ -82,6 +82,25 @@ fn help_can_be_redirected_to_a_file() {
     );
 }
 
+/// `help mkdir 2>err` printed nothing: any redirection made the shell
+/// capture standard output, and the captured text was written only to a
+/// target that takes standard output. The same held for every built-in
+/// that prints, so `echo` is checked here too.
+#[test]
+fn a_redirection_that_does_not_take_standard_output_leaves_it_alone() {
+    let (status, out, _) = vsh("help mkdir 2>err");
+    assert_eq!(status, 0);
+    assert!(out.contains("Create a directory"), "{out}");
+
+    let (status, out, _) = vsh("echo hello 2>err");
+    assert_eq!(status, 0);
+    assert_eq!(out, "hello\n");
+
+    let (status, out, _) = vsh("echo text > in; echo hello < in");
+    assert_eq!(status, 0);
+    assert_eq!(out, "hello\n");
+}
+
 #[test]
 fn help_for_an_unknown_command_says_so() {
     let (code, _, stderr) = vsh("help nosuchcommand");
