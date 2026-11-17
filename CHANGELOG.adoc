@@ -85,6 +85,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   redirections are now relative to the root.
 - `touch` creates its file with `create_new`, so it no longer writes through a
   dangling symbolic link.
+- `chmod` and `chown` on a symbolic link recorded the link's own mode and
+  owner while changing the file it points to. Undo of that `chmod` set the
+  file to mode 0777, and redo of either restored the wrong value. Both now
+  record the mode and owner of the file they change.
+- Redo of `touch`, or of a `>` redirection that created a file, brings the
+  file back with the mode it had when it was undone. It used to come back
+  with the default mode, so a file made private in between returned readable
+  by others. The owner is not restored.
 - Idris2 model: `redoUndoIdentity`, `undoRedoUndoIdentity`,
   `redoUndoComposition` added to `Filesystem.Composition`. Their status is
   the proof ledger's row for the undo/redo stack laws
@@ -92,8 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Known and *not* fixed here (tests exclude them, see
   `impl/rust-cli/tests/redo_roundtrip_tests.rs`): undo of `rm`/`rmdir` does
   not restore the mode; undo of `unset` does not restore the exported flag;
-  `rm`, `chmod` and redirections follow symbolic links and their undo does not
-  account for it.
+  `rm` and redirections follow symbolic links and their undo does not account
+  for it.
 
 === Planned
 - Glob expansion (*.txt, ?.rs, [a-z]*)

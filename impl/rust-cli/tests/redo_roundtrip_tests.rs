@@ -542,7 +542,7 @@ fn redo_refuses_a_file_whose_content_was_not_captured() {
     // What undo records when the read fails (see the unit test of
     // `capture_redo_data` for the capture side).
     let entry = state.redo_stack.front_mut().expect("redo entry");
-    assert!(matches!(entry.redo_data, Some(RedoData::Content(_))));
+    assert!(matches!(entry.redo_data, Some(RedoData::Created { .. })));
     entry.redo_data = Some(RedoData::NotCaptured("Permission denied".to_string()));
 
     let err = commands::redo(&mut state, 1, false).expect_err("redo must refuse");
@@ -597,6 +597,51 @@ fn assignment_redo_restores_not_exported() {
         !state.is_exported("X"),
         "redo restores the unexported state"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The mode of a file that undo deletes
+// ---------------------------------------------------------------------------
+
+/// Undo of `touch` deletes the file. If its mode was changed outside the
+/// history in the meantime, redo must bring the file back with that mode,
+/// not with the default one: a private file must not return readable by all.
+#[cfg(unix)]
+#[test]
+fn touch_redo_restores_the_mode_the_file_had_when_it_was_undone() {
+    let (temp, mut state) = setup();
+    let f = temp.path().join("f");
+
+    commands::touch(&mut state, "f", false).unwrap();
+    for mode in [0o600, 0o400, 0o4755, 0o666, 0o640] {
+        set_mode(&f, mode);
+        undo(&mut state);
+        assert!(!f.exists());
+        redo(&mut state);
+        assert_eq!(mode_of(&f), mode, "redo after undo at mode {mode:o}");
+    }
+}
+
+/// The same for a file a redirection created, with its content.
+#[cfg(unix)]
+#[test]
+fn redirect_redo_restores_content_and_mode() {
+    use vsh::executable::ExecutableCommand;
+    let (temp, mut state) = setup();
+    let f = temp.path().join("new");
+
+    vsh::parser::parse_command("/bin/echo hi > new")
+        .unwrap()
+        .execute(&mut state)
+        .unwrap();
+    assert_eq!(read(&f), b"hi\n");
+    set_mode(&f, 0o600);
+
+    undo(&mut state);
+    assert!(!f.exists());
+    redo(&mut state);
+    assert_eq!(read(&f), b"hi\n");
+    assert_eq!(mode_of(&f), 0o600);
 }
 
 // ---------------------------------------------------------------------------
@@ -821,6 +866,27 @@ mod laws {
                 needs_root: true,
                 ..s("chown", |r, _| put(r, "f", 0o644), "chown 1000:1000 f")
             },
+            // chmod and chown act on what a link points to, so the mode and
+            // owner they record must be the target's, not the link's own.
+            s(
+                "chmod through a symlink",
+                |r, _| {
+                    put(r, "f", 0o600);
+                    std::os::unix::fs::symlink("f", r.join("l")).expect("symlink");
+                },
+                "chmod 640 l",
+            ),
+            Scenario {
+                needs_root: true,
+                ..s(
+                    "chown through a symlink",
+                    |r, _| {
+                        put(r, "f", 0o644);
+                        std::os::unix::fs::symlink("f", r.join("l")).expect("symlink");
+                    },
+                    "chown 1000:1000 l",
+                )
+            },
             s("> creating a file", |_, _| {}, "/bin/echo hi > new"),
             s(
                 "> replacing a file",
@@ -990,8 +1056,8 @@ mod laws {
     // -- random sequences ---------------------------------------------------
 
     /// One command line over a four-name namespace. Symbolic links are left
-    /// out: `rm`, `chmod` and redirections follow them, and undo of those is
-    /// a known, separate defect that would mask what is tested here.
+    /// out: `rm` and redirections follow them, and undo of those is a known,
+    /// separate defect that would mask what is tested here.
     fn command_line() -> impl Strategy<Value = String> {
         let name = prop::sample::select(vec!["a", "b", "c", "d"]);
         let mode = prop::sample::select(vec!["600", "644", "640", "755", "700", "u+x"]);

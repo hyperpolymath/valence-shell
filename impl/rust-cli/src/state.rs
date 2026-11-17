@@ -169,9 +169,12 @@ impl std::fmt::Display for OperationType {
 /// nothing to the saved state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RedoData {
-    /// Whole content of the file undo deleted or replaced
-    /// (`CreateFile`, `FileTruncated`, `WriteFile`).
+    /// Whole content of the file undo replaced (`FileTruncated`, `WriteFile`).
     Content(Vec<u8>),
+    /// Whole content and mode of the file undo deleted (`CreateFile`). The
+    /// mode is kept because undo removes the file itself, so nothing else
+    /// remembers it. `None` where the platform has no mode bits.
+    Created { content: Vec<u8>, mode: Option<u32> },
     /// The bytes undo cut off the end of the file (`FileAppended`).
     Appended(Vec<u8>),
     /// The mode undo replaced (`Chmod`).

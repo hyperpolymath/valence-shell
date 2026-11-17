@@ -221,7 +221,7 @@ fn apply_rmdir(state: &ShellState, path: &str) -> Result<Operation> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
-    let op = apply_create_file(state, path, &[])?;
+    let op = apply_create_file(state, path, &[], None)?;
     let op_id = op.id;
     state.record_operation(op);
 
@@ -244,7 +244,12 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 /// Check, execute and describe the creation of a new file holding `content`,
 /// without recording it. `touch` creates it empty; redo of a file that a `>`
 /// redirection created puts back the bytes undo removed.
-fn apply_create_file(state: &ShellState, path: &str, content: &[u8]) -> Result<Operation> {
+fn apply_create_file(
+    state: &ShellState,
+    path: &str,
+    content: &[u8],
+    mode: Option<u32>,
+) -> Result<Operation> {
     let full_path = state.resolve_path(path);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
@@ -260,12 +265,27 @@ fn apply_create_file(state: &ShellState, path: &str, content: &[u8]) -> Result<O
     }
 
     // `create_new` so a file that appeared since the check is never truncated.
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&full_path)
-        .context("touch failed")?;
-    if let Err(e) = file.write_all(content) {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    // A mode to restore is also the creation mode, so the file is never
+    // wider than it, even before the exact mode is set below.
+    #[cfg(unix)]
+    if let Some(mode) = mode {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(mode & 0o777);
+    }
+    let mut file = options.open(&full_path).context("touch failed")?;
+    let written = file.write_all(content).and_then(|()| {
+        // After the write: the creation mode is cut down by the umask, and
+        // writing can clear the set-user-ID and set-group-ID bits.
+        #[cfg(unix)]
+        if let Some(mode) = mode {
+            use std::os::unix::fs::PermissionsExt;
+            file.set_permissions(fs::Permissions::from_mode(mode & 0o7777))?;
+        }
+        Ok(())
+    });
+    if let Err(e) = written {
         // A partial file must not outlive the failure: it was not there
         // before, and it would block a retry.
         drop(file);
@@ -698,8 +718,9 @@ fn apply_chmod(
     #[cfg(unix)]
     let old_mode = {
         use std::os::unix::fs::PermissionsExt;
-        let metadata =
-            fs::symlink_metadata(&file_path).context("chmod: failed to read metadata")?;
+        // Through a symbolic link, as `set_permissions` below goes: the mode
+        // to put back is the target's, not the link's own.
+        let metadata = fs::metadata(&file_path).context("chmod: failed to read metadata")?;
         metadata.permissions().mode()
     };
     #[cfg(not(unix))]
@@ -869,7 +890,9 @@ fn apply_chown(
 
     // Capture current ownership for undo
     use std::os::unix::fs::MetadataExt;
-    let metadata = fs::symlink_metadata(&file_path).context("chown: failed to read metadata")?;
+    // Through a symbolic link, as `chown` below goes: the owner to put back
+    // is the target's, not the link's own.
+    let metadata = fs::metadata(&file_path).context("chown: failed to read metadata")?;
     let old_uid = metadata.uid();
     let old_gid = metadata.gid();
 
@@ -1340,9 +1363,27 @@ fn capture_redo_data(state: &ShellState, op: &Operation) -> Option<RedoData> {
         }
     };
     match op.op_type {
-        OperationType::CreateFile | OperationType::FileTruncated | OperationType::WriteFile => {
-            // A file that cannot be read is recorded as such, never as empty:
-            // redo must refuse it, not recreate the file without its content.
+        // A file that cannot be read is recorded as such, never as empty:
+        // redo must refuse it, not recreate the file without its content.
+        OperationType::CreateFile => {
+            // Undo deletes this file, so its mode goes with its content.
+            let capture = || -> std::io::Result<RedoData> {
+                let file = crate::fs_pure::open_pure(&path)?;
+                #[cfg(unix)]
+                let mode = {
+                    use std::os::unix::fs::PermissionsExt;
+                    Some(file.metadata()?.permissions().mode() & 0o7777)
+                };
+                #[cfg(not(unix))]
+                let mode = None;
+                Ok(match read(file, 0)? {
+                    RedoData::Content(content) => RedoData::Created { content, mode },
+                    other => other,
+                })
+            };
+            Some(capture().unwrap_or_else(|e| RedoData::NotCaptured(e.to_string())))
+        }
+        OperationType::FileTruncated | OperationType::WriteFile => {
             let capture = || read(crate::fs_pure::open_pure(&path)?, 0);
             Some(capture().unwrap_or_else(|e| RedoData::NotCaptured(e.to_string())))
         }
@@ -1364,7 +1405,8 @@ fn capture_redo_data(state: &ShellState, op: &Operation) -> Option<RedoData> {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                let mode = fs::symlink_metadata(&path).ok()?.permissions().mode();
+                // Through a symbolic link, as `chmod` itself goes.
+                let mode = fs::metadata(&path).ok()?.permissions().mode();
                 Some(RedoData::Mode(mode))
             }
             #[cfg(not(unix))]
@@ -1374,7 +1416,8 @@ fn capture_redo_data(state: &ShellState, op: &Operation) -> Option<RedoData> {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::MetadataExt;
-                let metadata = fs::symlink_metadata(&path).ok()?;
+                // Through a symbolic link, as `chown` itself goes.
+                let metadata = fs::metadata(&path).ok()?;
                 Some(RedoData::Owner {
                     uid: metadata.uid(),
                     gid: metadata.gid(),
@@ -1450,10 +1493,10 @@ fn reapply(state: &mut ShellState, op: &Operation) -> Result<Operation> {
             // Empty for `touch`; the redirected output for a file `>` created.
             // Anything but captured content is refused: recreating the file
             // empty would silently lose what the redirection wrote.
-            let Some(RedoData::Content(content)) = &op.redo_data else {
+            let Some(RedoData::Created { content, mode }) = &op.redo_data else {
                 return Err(missing());
             };
-            apply_create_file(state, &op.path, content)
+            apply_create_file(state, &op.path, content, *mode)
         }
         OperationType::DeleteFile => apply_rm(state, &op.path),
         OperationType::WriteFile | OperationType::FileTruncated => {
