@@ -56,7 +56,7 @@ They close when the underlying alert closes.
 | `npx_in_workflow` (2) | fixed | `bunx --no-install --bun rescript build`, which never fetches an unpinned package.
 | `missing_timeout_minutes`, WH006 | fixed | `labels.yml`, `label-triage.yml` (echo-types versions).
 | RE001 (3) | fixed | `harden-runner`: `block` to `api.github.com` in `instant-sync.yml`, `block` to the SMTP endpoint in `push-email-notify.yml`, `audit` in `hypatia-scan.yml`.
-| RE005 | fixed | The ignored stress suite no longer runs under `continue-on-error` in `compilation_tests.yml`; after its repair it gates the Linux test jobs again. See <<stress>>.
+| RE005 | fixed | The ignored stress suite no longer runs under `continue-on-error` in `compilation_tests.yml`; see <<stress>>.
 | WH008 (3) | fixed | See the Secret Scanner section.
 | SD022 (2) | fixed | Both paths named another tree (`echidna/src/rust/`, the Agda tarball path `agda-2.7.0.1/src/data/lib`); now qualified.
 | SD009 | left for the owner | `ffi/zig/src/main.zig` has no SPDX header. Licence edits are owner-only (estate doctrine 6).
@@ -95,108 +95,8 @@ Run one test at a time on 2026-11-16, 120 s limit each: 5 fail
 `stress_large_file_1gb` was not run. The CI step only ever reached the
 30-minute job timeout. Repairing the suite is separate work.
 
-=== Repair (2026-11-17)
-
-All 11 tests now pass. The step is back in `compilation_tests.yml` as
-`cargo test --test stress_tests -- --ignored --test-threads=1`, Linux only,
-with `timeout-minutes: 5` and no `continue-on-error`. No test was deleted or
-skipped, and no assertion was loosened.
-
-Shell bugs fixed (`src/state.rs`, `src/commands.rs`):
-
-* *O(n²) persistence.* Every recorded or undone operation rewrote the whole
-  history to `.vsh_state.json` (cloned, then pretty-printed). 1,000 touches
-  took 5.9 s; 10,000 and 100,000 never finished. The hot path now appends
-  one line to `.vsh_state.journal`; the snapshot is rewritten only when the
-  journal reaches half the history length (at least 1,024 entries), which
-  keeps the cost amortised O(1). Snapshots are written to a temporary file
-  and renamed, and record the last journal sequence number they contain, so
-  a crash cannot tear the snapshot or replay an entry twice. A torn journal
-  line or a sequence gap ends replay and forces the next save to be a full
-  snapshot, so operations made after a crash are not stranded behind the
-  bad line (Codex review on #229). After the fix, 1,000 touches take
-  0.04 s. Seven new unit tests in `state.rs` cover replay, compaction, trim,
-  a torn tail, crash-after-rename and transactions; two more cover
-  operations after a torn tail and `cd -` surviving a restart (`cd` now
-  journals `previous_dir`).
-* *O(n²) single-step undo.* Each `undo 1` walked past every already-undone
-  operation to pick its target, then searched for that target again from the
-  oldest end of the history to mark it. A checked hint for the block of undone operations removes the rescan:
-  undoing 10,000 operations one at a time went from 1.8 s to 0.34 s. A unit
-  test compares it against a full scan through undo, record, trim and an
-  out-of-order mark.
-* *Rollback not persisted.* `rollback` cleared the active transaction
-  without saving. That had been masked by the next operation's full rewrite,
-  and the journal would have exposed it. It now goes through
-  `ShellState::abort_transaction`, which saves.
-
-Test expectations corrected (`tests/stress_tests.rs`):
-
-* `stress_concurrent_multiple_instances`, `stress_many_operations_10000`:
-  the listings counted the shell's own `.vsh_state*` files. They now exclude
-  only those files, and the concurrent test checks the exact set of 1,000
-  names.
-* `stress_deep_nesting_1000_levels`: `level_NNNN` names give an
-  11,000-byte path, past `PATH_MAX`, and the test then ran `mkdir` on paths
-  that already existed. It now builds the 1,000 levels through the shell
-  with one-character names (about 2,000 bytes, asserted against `PATH_MAX`)
-  and undoes them all.
-* `stress_deep_nesting_no_stack_overflow`: it only called
-  `fs::create_dir_all`, which fails with ENAMETOOLONG at 5,000 levels. It
-  now builds the tree with `mkdirat`/`openat`, checks that shell `mkdir` and
-  `touch` at that depth fail cleanly without recording anything, and removes
-  the tree.
-* `stress_large_file_undo_streaming`, `stress_large_file_1gb`: both called
-  `touch` on an existing file, but vsh's `touch` only creates files
-  (EEXIST). The 100 MB test now runs `rm` (the operation that saves file
-  content as undo data) plus `undo` and checks the restored bytes. The 1 GB
-  test times `chmod`, `mv` and their undos.
-* `stress_undo_redo_efficiency`: "redo" popped the redo stack without
-  redoing. It now calls `commands::redo` and checks the files return.
-* `stress_resource_limits_max_history`: it now asserts the history is capped
-  at `max_history_size` and that the persisted state stays under 32 MiB
-  (measured: 2.3 MB).
-
-Measured (debug build, 4 cores, each test run alone with the CI flags):
-whole suite 29-51 s across three runs.
-
-[cols="3,1",options="header"]
-|===
-| Test | Wall time
-| `stress_concurrent_multiple_instances` | 0.6 s
-| `stress_concurrent_no_corruption` | 0.2 s
-| `stress_deep_nesting_1000_levels` | 0.5 s
-| `stress_deep_nesting_no_stack_overflow` | 0.7 s
-| `stress_history_memory_efficiency` | 0.5 s
-| `stress_large_file_1gb` | 1.8 s
-| `stress_large_file_undo_streaming` | 12.6 s
-| `stress_many_operations_10000` | 2.3 s
-| `stress_many_small_files` | 1.2 s
-| `stress_resource_limits_max_history` | 10-32 s
-| `stress_undo_redo_efficiency` | 0.2 s
-|===
-
-Still open:
-
-* *Undo data is not streamed.* `rm` reads the whole file into
-  `undo_data`, and the journal stores those bytes as a JSON number array
-  (about 3 bytes per byte). Removing a 100 MB file takes about 11.5 s in a
-  debug build and writes about 300 MB of state. The test name promises
-  streaming; the test comment now says it is not implemented. The fix is
-  out-of-line undo storage (for example, renaming the file into a store
-  under the root), which changes the reversibility implementation, so it is
-  left for the owner.
-* *History trimming is O(limit) per operation.* At the cap, each new
-  operation drains the oldest entry from the front of a `Vec`, moving about
-  1.2 MB at the default 10,000 limit. That is about 7 s of the 100,000-op
-  test. A `VecDeque` would remove it but changes the public
-  `ShellState::history` type that tests and `CLAUDE.md` document as a `Vec`.
-* *macOS.* The suite is not run there: `PATH_MAX` is 1024, so the
-  1,000-level test cannot pass with absolute paths, and the rest was not
-  measured on macOS.
-* Neither the journal nor the snapshot is `fsync`ed (the old `fs::write`
-  was not either), and they still live in the session root. Both are now
-  created with mode 0600 on Unix, since history can hold deleted file
-  contents (Codex review on #229). Route plan items E1d and G2
-  (`docs/plans/VSH-ROUTE-PLAN-2026-11-04.adoc`) still cover fsync and moving
-  state out of the root; the journal is a new file they must include.
+Update 2026-11-17: a repair was drafted on #229 and then moved to its own
+pull request (owner ruling 2026-11-17). It replaced whole-file state saves
+with an append-only journal, and review found the journal's crash handling
+unsound in ways point fixes did not close. The suite and the CI step are
+therefore unchanged here; the repair returns with the journal redesign.

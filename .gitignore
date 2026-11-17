@@ -122,8 +122,6 @@ htmlcov/
 ai-cli-crash-capture/
 .cache/
 .vsh_state.json
-.vsh_state.journal
-.vsh_state.json.*.tmp
 
 # ============
 # Strategic

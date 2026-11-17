@@ -16,16 +16,18 @@ extraction.
 
 | `filesystem_model.v`
 | Core `Filesystem = Path -> option FSNode` model + structural lemmas.
-  Note: this finite-domain model is the source of the
-  `is_empty_dir_dec` axiom (justified per `[coq-proof-status]
+  Note: this finite-domain model is why `is_empty_dir_dec`
+  (`posix_errors.v`) is a theorem proved with classical logic
+  (`Classical.classic`), not a custom axiom; see `[coq-proof-status]
   axiom-detail` in the archived
-  `../../archive/a2ml-v1/6a2-STATE.a2ml.txt`).
+  `../../archive/a2ml-v1/6a2-STATE.a2ml.txt`.
 
 | `filesystem_composition.v`
-| Composition theorems. Carries one declared `admit.` at line ~199
-  (`single_op_reversible` OpRmdir branch — pre-existing model gap;
-  see `[coq-proof-status] admitted-detail` in the archived
-  `../../archive/a2ml-v1/6a2-STATE.a2ml.txt`).
+| Composition theorems. Contains no `admit.` or `Admitted.` markers:
+  the former `single_op_reversible` OpRmdir admit is closed with `Qed`
+  (see `[coq-proof-status] admitted-detail` in the archived
+  `../../archive/a2ml-v1/6a2-STATE.a2ml.txt`, re-verified 2026-07-16
+  under Coq 8.18.0).
 
 | `filesystem_equivalence.v`
 | State-equivalence relations.
@@ -68,10 +70,10 @@ make all                      # via auto-emitted Makefile
 
 == Proof-debt status
 
-* `admitted = 1` — `single_op_reversible` OpRmdir branch
-  (`filesystem_composition.v:199`).
-* `axioms-justified = 1` — `is_empty_dir_dec` (infinite-domain
-  decidability; migration path: switch to `FMaps.t FSNode`).
+* `admitted = 0` — no `admit.` or `Admitted.` marker in any `.v` file.
+* One justified classical dependency: `is_empty_dir_dec`, a theorem
+  proved with `Classical.classic` (infinite-domain decidability;
+  migration path: switch to `FMaps.t FSNode`). No custom `Axiom`.
 * All other proofs constructively closed.
 
 Authoritative status in `../../docs/PROOF_HOLES_AUDIT.adoc` and the

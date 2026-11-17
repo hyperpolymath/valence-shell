@@ -860,11 +860,11 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 fs::remove_file(&path).context("Undo touch failed")?;
             }
             OperationType::CreateFile => {
-                let content: &[u8] = op.undo_data.as_deref().unwrap_or_default();
+                let content = op.undo_data.as_ref().cloned().unwrap_or_default();
                 fs::write(&path, content).context("Undo rm failed")?;
             }
             OperationType::WriteFile => {
-                let content: &[u8] = op.undo_data.as_deref().unwrap_or_default();
+                let content = op.undo_data.as_ref().cloned().unwrap_or_default();
                 fs::write(&path, content).context("Undo write failed")?;
             }
             OperationType::FileAppended => {
@@ -1364,11 +1364,11 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                     fs::remove_file(&path).context("Failed to remove file")
                 }
                 OperationType::CreateFile => {
-                    let content: &[u8] = op.undo_data.as_deref().unwrap_or_default();
+                    let content = op.undo_data.as_ref().cloned().unwrap_or_default();
                     fs::write(&path, content).context("Failed to restore file")
                 }
                 OperationType::WriteFile => {
-                    let content: &[u8] = op.undo_data.as_deref().unwrap_or_default();
+                    let content = op.undo_data.as_ref().cloned().unwrap_or_default();
                     fs::write(&path, content).context("Failed to restore file content")
                 }
                 OperationType::FileAppended => {
@@ -1521,8 +1521,8 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
         }
     }
 
-    // Clear the transaction (and persist that it is gone)
-    state.abort_transaction();
+    // Clear the transaction
+    state.active_transaction = None;
 
     // Report results
     if failed_rollbacks.is_empty() {
