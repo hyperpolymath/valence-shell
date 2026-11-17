@@ -20,12 +20,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Check SPDX headers
+        # The identifier must be in the file's LEADING comment block, not on
+        # line 1 exactly: this is the predicate of the estate governance check
+        # (metadatastician/standards governance-reusable.yml, tested by
+        # scripts/tests/spdx-header-block-test.sh). `gh actions-lock` inserts
+        # a "managed by" comment at line 1, so a line-1 test fails headers
+        # that are present.
         run: |
           errors=0
           for f in .github/workflows/*.yml .github/workflows/*.yaml; do
             [ -f "$f" ] || continue
-            if ! head -1 "$f" | grep -q "SPDX-License-Identifier"; then
-              echo "ERROR: $f missing SPDX header"
+            if ! awk '/^---[[:space:]]*$/ { next } /^#/ { print; next } { exit }' "$f" \
+                 | grep -q "^# SPDX-License-Identifier:"; then
+              echo "ERROR: $f has no SPDX-License-Identifier in its leading comment block"
               errors=$((errors + 1))
             fi
           done
