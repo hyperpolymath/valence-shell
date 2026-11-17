@@ -126,6 +126,14 @@ fn help_does_not_promise_things_that_are_not_there() {
             "`{script}`: there is no -v option"
         );
     }
+
+    // `help rmdir` sent the reader to `rm -r`, which the built-in refuses.
+    let (_, stdout, _) = vsh("help rmdir");
+    assert!(stdout.contains("no -r"), "{stdout}");
+    assert!(
+        !stdout.contains("use 'rm -r'"),
+        "`help rmdir` recommends a form that is refused"
+    );
 }
 
 /// Help that is captured or piped is written as it is, not handed to a

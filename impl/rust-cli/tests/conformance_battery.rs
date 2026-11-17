@@ -42,6 +42,20 @@ use std::time::{Duration, Instant};
 const BATTERY: &str = include_str!("conformance/battery.jsonl");
 const KNOWN_FAILING: &str = include_str!("conformance/known_failing.txt");
 
+/// How many cases the list of known failures holds. It may only go down.
+///
+/// The list is a file. A test that only read the file could be satisfied
+/// by adding a case that has started to fail. With the number here, in
+/// the test, a case added to the file fails the test until this number is
+/// raised too, and raising it is a change to the gate itself, not to a
+/// list. When a case is fixed and leaves the file, lower the number to
+/// match: the test fails until it is lowered, so it cannot drift back up.
+///
+/// What this does not catch: one case taken off the list and another put
+/// on in the same change. Only a comparison with the base branch catches
+/// that.
+const KNOWN_FAILING_COUNT: usize = 61;
+
 /// Longest a single case may run. A case that does not finish counts as failed.
 const TIME_LIMIT: Duration = Duration::from_secs(5);
 
@@ -427,6 +441,22 @@ fn a_case_that_does_not_finish_is_reported_within_the_limit() {
 fn receipt_lines_and_colour_codes_are_removed_before_comparing() {
     let raw = "\u{1b}[32mgreen\u{1b}[0m\n[op:1f163398] mkdir d\nkept\n[txn:558b5380] begin t\n";
     assert_eq!(normalise(raw), "green\nkept\n");
+}
+
+/// See [`KNOWN_FAILING_COUNT`].
+#[test]
+fn the_known_failing_list_has_not_grown() {
+    let listed = known_failing().len();
+    assert!(
+        listed <= KNOWN_FAILING_COUNT,
+        "known_failing.txt holds {listed} cases and the gate allows {KNOWN_FAILING_COUNT}. \
+         A case that has started to fail is a regression: fix it, do not list it."
+    );
+    assert_eq!(
+        listed, KNOWN_FAILING_COUNT,
+        "known_failing.txt has shrunk to {listed} cases. Lower KNOWN_FAILING_COUNT to \
+         {listed}, so that the list cannot grow back."
+    );
 }
 
 #[test]

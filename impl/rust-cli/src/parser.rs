@@ -283,6 +283,20 @@ pub enum Command {
         topic: Option<String>,
         redirects: Vec<Redirection>,
     },
+
+    /// A built-in that was given arguments it does not take: an option it
+    /// does not handle, too many operands, or none where one is needed.
+    /// Running it prints `message` and fails with status 1; nothing else
+    /// is done.
+    ///
+    /// This is a command and not a parse error because the line is well
+    /// formed, and what follows depends on the failure: in
+    /// `mkdir -p x || echo fallback` the second command must run. As a
+    /// parse error it stopped the whole list, condition or loop from being
+    /// read at all.
+    Refused {
+        message: String,
+    },
     Ls {
         path: Option<String>,
         redirects: Vec<Redirection>,
@@ -1865,9 +1879,32 @@ pub fn parse_command(input: &str) -> Result<Command> {
     let cmd = &command_tokens[0];
     let args: Vec<String> = command_tokens[1..].to_vec();
 
-    // Parse base command with redirections
-    parse_base_command(cmd, args, redirects, background)
+    // Parse base command with redirections. A built-in that does not take
+    // what it was given is a command that fails when it is run (see
+    // `Command::Refused`).
+    match parse_base_command(cmd, args, redirects, background) {
+        Err(error) => match error.downcast::<Refusal>() {
+            Ok(Refusal(message)) => Ok(Command::Refused { message }),
+            Err(other) => Err(other),
+        },
+        parsed => parsed,
+    }
 }
+
+/// What a built-in says when it does not take the arguments it was given.
+/// It is raised while the command is read, and becomes
+/// [`Command::Refused`] there. Any other error from reading a command is
+/// still a parse error.
+#[derive(Debug)]
+struct Refusal(String);
+
+impl std::fmt::Display for Refusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Refusal {}
 
 /// Check if a string is a valid variable name
 /// Valid: starts with letter or underscore, then letters/digits/underscores
@@ -3289,9 +3326,10 @@ fn builtin_operands(
             options_ended = true;
         } else if !options_ended && reads_as_option(arg) {
             if !known_options.contains(&arg.as_str()) {
-                return Err(anyhow!(
+                return Err(Refusal(format!(
                     "{name}: option '{arg}' is not supported by the built-in {name}; nothing was done"
-                ));
+                ))
+                .into());
             }
             options.push(arg.clone());
         } else {
@@ -3299,7 +3337,7 @@ fn builtin_operands(
         }
     }
     if operands.len() < min {
-        return Err(anyhow!("{missing}"));
+        return Err(Refusal(missing.to_string()).into());
     }
     if operands.len() > max {
         let takes = match max {
@@ -3307,10 +3345,11 @@ fn builtin_operands(
             1 => "one operand".to_string(),
             n => format!("{n} operands"),
         };
-        return Err(anyhow!(
+        return Err(Refusal(format!(
             "{name}: the built-in {name} takes {takes}, but {} were given; nothing was done",
             operands.len()
-        ));
+        ))
+        .into());
     }
     Ok((options, operands))
 }
@@ -3428,9 +3467,10 @@ fn parse_base_command(
             if !options_ended {
                 if let Some(first) = args.first() {
                     if is_chmod_option(first) {
-                        return Err(anyhow!(
+                        return Err(Refusal(format!(
                             "chmod: option '{first}' is not supported by the built-in chmod; nothing was done"
-                        ));
+                        ))
+                        .into());
                     }
                 }
             }

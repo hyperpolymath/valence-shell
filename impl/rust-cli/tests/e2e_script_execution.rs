@@ -14,7 +14,7 @@ mod e2e_script_execution {
     use std::fs;
     use tempfile::TempDir;
     use vsh::commands::mkdir;
-    use vsh::parser::parse_command;
+    use vsh::parser::{parse_command, Command};
     use vsh::state::ShellState;
 
     // ================================================================
@@ -302,8 +302,10 @@ mkdir test_dir
         // The built-in mkdir has no `-p`. It used to take `-p` for the name of
         // the directory; it now refuses the option (see
         // `builtin_strictness_tests.rs`).
+        // The refusal is a command that fails when it is run, so that
+        // `mkdir -p build || ...` can go on to its second command.
         let result = parse_command("mkdir -p build");
-        assert!(result.is_err());
+        assert!(matches!(result, Ok(Command::Refused { .. })), "{result:?}");
 
         // Without the option it parses and runs.
         assert!(parse_command("mkdir build").is_ok());

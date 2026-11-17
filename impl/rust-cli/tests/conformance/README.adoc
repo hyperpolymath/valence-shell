@@ -41,6 +41,13 @@ A report of every case is written to `target/tmp/conformance-report.txt`.
   until it is.
 * Do not add a case to the list to make a failing build pass. Fix the shell.
   If an expectation is wrong, correct the case and say why in the commit.
+* The number of cases on the list is also written in the test
+  (`KNOWN_FAILING_COUNT`). A case added to the file fails the test until that
+  number is raised, and a case removed fails it until the number is lowered.
+  So the list cannot grow by an edit to the list alone. One thing is not
+  caught: a case taken off and another put on in the same change. A check
+  against the base branch would catch that; it needs a workflow, and the Rust
+  workflows do not start at present.
 
 == What is compared
 
@@ -79,7 +86,8 @@ operand. A case must be able to fail: check that its set-up runs.
 . Append a line to `battery.jsonl` with a new id of the form `group-NN`.
 . Take `out` and `rc` from a reference shell run in an empty directory.
 . Run the test. If the case fails, the shell has a gap: add the id to
-  `known_failing.txt` in the same change and say so.
+  `known_failing.txt` and raise `KNOWN_FAILING_COUNT` in the same change, and
+  say so.
 
 == Limits
 

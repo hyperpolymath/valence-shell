@@ -333,6 +333,13 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::Success)
             }
 
+            // A built-in that does not take what it was given: say so,
+            // do nothing, and fail like any other command that fails.
+            Command::Refused { message } => {
+                eprintln!("vsh: {message}");
+                Ok(REFUSED)
+            }
+
             // Exit commands
             Command::Exit { code, too_many } => {
                 // A status that is not a number comes first: status 2, and
@@ -1353,6 +1360,7 @@ impl ExecutableCommand for Command {
             Command::Graph => "graph".to_string(),
             Command::Proofs => "proofs".to_string(),
             Command::Help { .. } => "help".to_string(),
+            Command::Refused { .. } => "(refused)".to_string(),
             Command::Ls { path, .. } => {
                 if let Some(p) = path {
                     format!("ls {}", p)

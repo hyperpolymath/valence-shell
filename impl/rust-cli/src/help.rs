@@ -78,7 +78,7 @@ impl HelpEntry {
         println!("Usage: {}", self.usage.bright_cyan());
         println!(
             "Run {} for details",
-            format!("help -v {}", self.name).bright_yellow()
+            format!("help {}", self.name).bright_yellow()
         );
         Ok(())
     }
@@ -353,7 +353,8 @@ static HELP_DATABASE: &[HelpEntry] = &[
         summary: "Remove an empty directory",
         usage: "rmdir <path>",
         description: "Removes an empty directory at the specified path.\n\
-                      Directory must be empty (use 'rm -r' for non-empty directories).\n\
+                      Directory must be empty. The built-in rm has no -r, so there is no\n\
+                      recursive removal: remove what is in the directory first.\n\
                       This operation is reversible via 'undo'.",
         examples: &[
             Example {

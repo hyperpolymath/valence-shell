@@ -374,3 +374,54 @@ fn the_forms_the_built_ins_do_handle_still_work() {
         & 0o777;
     assert_eq!(mode, 0o600);
 }
+
+/// A built-in that refuses its arguments fails its own command, and what
+/// follows goes on from that failure. The refusal used to be a parse
+/// error, which stopped the whole list, condition or loop from being read:
+/// `mkdir -p x || echo fallback` printed nothing at all.
+#[test]
+fn a_refused_built_in_fails_only_its_own_command() {
+    for (script, expected) in [
+        ("mkdir -p x || echo fallback", "fallback\n"),
+        ("mkdir -p x && echo and; echo status=$?", "status=1\n"),
+        ("if mkdir -p x; then echo yes; else echo no; fi", "no\n"),
+        (
+            "for i in 1 2; do mkdir -p x; echo after; done",
+            "after\nafter\n",
+        ),
+        ("mkdir a b || echo fallback", "fallback\n"),
+        ("mkdir || echo fallback", "fallback\n"),
+        ("chmod -R 600 f || echo fallback", "fallback\n"),
+        ("rm -r x; echo status=$?", "status=1\n"),
+    ] {
+        let dir = tempfile::tempdir().expect("temporary directory");
+
+        let run = vsh(dir.path(), script);
+
+        assert_eq!(run.stdout, expected, "`{script}`: {}", run.stderr);
+        assert!(
+            tree(dir.path()).is_empty(),
+            "`{script}` changed the directory: {:?}",
+            tree(dir.path())
+        );
+    }
+
+    // On its own, the refusal is the status of the line.
+    let dir = tempfile::tempdir().expect("temporary directory");
+    let run = vsh(dir.path(), "mkdir -p x");
+    assert_eq!(run.code, 1, "{}", run.stderr);
+    assert!(run.stderr.contains("not supported"), "{}", run.stderr);
+}
+
+/// A line that is not well formed is still a parse error, not a refusal.
+#[test]
+fn a_malformed_line_is_still_a_parse_error() {
+    use vsh::parser::{parse_command, Command as Parsed};
+
+    assert!(parse_command("if [ true then echo yes fi").is_err());
+    assert!(parse_command("echo \"unclosed").is_err());
+    assert!(matches!(
+        parse_command("mkdir -p x"),
+        Ok(Parsed::Refused { .. })
+    ));
+}
