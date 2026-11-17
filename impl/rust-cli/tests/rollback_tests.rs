@@ -185,21 +185,102 @@ fn rollback_stops_at_the_first_failed_reversal() {
     assert!(state.active_transaction.is_some());
 }
 
-/// The history size limit can drop a transaction's oldest operations. What
-/// is left cannot stand for the whole transaction, so rollback is refused.
+/// The history size limit does not drop the operations of an open
+/// transaction: rollback has to reverse every one of them. Before, a
+/// transaction longer than the limit could not be rolled back at all.
 #[test]
-fn rollback_is_refused_when_the_history_limit_dropped_part_of_the_transaction() {
+fn an_open_transaction_keeps_its_operations_past_the_history_limit() {
     let root = TempDir::new().unwrap();
     let mut state = open(&root);
     state.max_history_size = Some(1);
+    commands::touch(&mut state, "before", false).unwrap();
     commands::begin_transaction(&mut state, "t").unwrap();
     commands::touch(&mut state, "a", false).unwrap();
     commands::touch(&mut state, "b", false).unwrap();
+    commands::touch(&mut state, "c", false).unwrap();
     assert_eq!(
         state.history.len(),
-        1,
-        "the limit dropped the first operation"
+        3,
+        "the operation before the transaction was dropped; its own were kept"
     );
+
+    commands::rollback_transaction(&mut state).unwrap();
+    for name in ["a", "b", "c"] {
+        assert!(!root.path().join(name).exists(), "{name} was reversed");
+    }
+    assert!(root.path().join("before").exists());
+    assert!(state.active_transaction.is_none());
+
+    // With the transaction closed, the next operation brings the history
+    // back under the limit, and a restart agrees with that.
+    commands::touch(&mut state, "after", false).unwrap();
+    assert_eq!(state.history.len(), 1);
+    let reloaded = open(&root);
+    assert_eq!(reloaded.history.len(), 1);
+    assert_eq!(reloaded.history[0].id, state.history[0].id);
+}
+
+/// The same after a restart: the kept operations are in the journal, and the
+/// reloaded transaction can still be rolled back.
+#[test]
+fn a_transaction_longer_than_the_limit_can_be_rolled_back_after_a_restart() {
+    let root = TempDir::new().unwrap();
+    {
+        let mut state = open(&root);
+        state.max_history_size = Some(2);
+        commands::begin_transaction(&mut state, "t").unwrap();
+        for name in ["a", "b", "c", "d"] {
+            commands::touch(&mut state, name, false).unwrap();
+        }
+        assert_eq!(state.history.len(), 4);
+    }
+
+    let mut state = open(&root);
+    state.max_history_size = Some(2);
+    assert_eq!(state.history.len(), 4);
+    assert_eq!(
+        state.active_transaction.as_ref().unwrap().operations.len(),
+        4
+    );
+    commands::rollback_transaction(&mut state).unwrap();
+    for name in ["a", "b", "c", "d"] {
+        assert!(!root.path().join(name).exists(), "{name} was reversed");
+    }
+    assert!(state.active_transaction.is_none());
+}
+
+/// An operation undone inside the transaction needs no reversal, so it never
+/// stands in the way of a rollback, whatever the history limit is.
+#[test]
+fn an_operation_undone_inside_a_transaction_does_not_block_its_rollback() {
+    let root = TempDir::new().unwrap();
+    let mut state = open(&root);
+    state.max_history_size = Some(2);
+    commands::begin_transaction(&mut state, "t").unwrap();
+    commands::touch(&mut state, "a", false).unwrap();
+    commands::undo(&mut state, 1, false).unwrap();
+    commands::touch(&mut state, "b", false).unwrap();
+    commands::touch(&mut state, "c", false).unwrap();
+
+    commands::rollback_transaction(&mut state).unwrap();
+    for name in ["a", "b", "c"] {
+        assert!(!root.path().join(name).exists(), "{name} is gone");
+    }
+    assert!(state.active_transaction.is_none());
+}
+
+/// A saved state from somewhere else may still lack an operation of its open
+/// transaction. What is left cannot stand for the whole transaction, so
+/// rollback is refused and nothing is changed.
+#[test]
+fn rollback_is_refused_when_an_operation_of_the_transaction_is_missing() {
+    let root = TempDir::new().unwrap();
+    let mut state = open(&root);
+    commands::begin_transaction(&mut state, "t").unwrap();
+    commands::touch(&mut state, "a", false).unwrap();
+    commands::touch(&mut state, "b", false).unwrap();
+    // This version never does this itself.
+    state.history.remove(0);
 
     let refused = commands::rollback_transaction(&mut state).unwrap_err();
     assert!(
@@ -212,6 +293,57 @@ fn rollback_is_refused_when_the_history_limit_dropped_part_of_the_transaction() 
 
     commands::commit_transaction(&mut state).unwrap();
     assert!(state.active_transaction.is_none());
+}
+
+/// Redo reads a file to keep its contents before it removes or truncates
+/// it. Like `rm` and a truncating redirection, it must not change the
+/// file's access time by doing so.
+#[cfg(target_os = "linux")]
+#[test]
+fn redoing_a_truncation_does_not_change_the_access_time() {
+    use std::time::{Duration, SystemTime};
+
+    /// An access time long ago, so that a plain read would update it under
+    /// the usual `relatime` mount option.
+    fn set_old_access_time(path: &std::path::Path) -> SystemTime {
+        let old = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000_000);
+        let file = fs::OpenOptions::new().write(true).open(path).unwrap();
+        file.set_times(fs::FileTimes::new().set_accessed(old))
+            .unwrap();
+        old
+    }
+
+    let root = TempDir::new().unwrap();
+
+    // Does this file system update access times on a plain read at all? If
+    // it is mounted `noatime` the fault cannot show here.
+    let control = root.path().join("control");
+    fs::write(&control, "x").unwrap();
+    let old = set_old_access_time(&control);
+    fs::read(&control).unwrap();
+    if fs::metadata(&control).unwrap().accessed().unwrap() == old {
+        eprintln!("this file system does not update access times; nothing to check");
+        return;
+    }
+
+    let mut state = open(&root);
+    let file = root.path().join("log");
+    fs::write(&file, "old contents\n").unwrap();
+
+    // A truncation as the redirection code records it, then undone.
+    let mut op = Operation::new(OperationType::FileTruncated, "log".to_string(), None);
+    op.undo_data = Some(b"old contents\n".to_vec());
+    fs::write(&file, "").unwrap();
+    state.record_operation(op);
+    commands::undo(&mut state, 1, false).unwrap();
+    assert_eq!(fs::read_to_string(&file).unwrap(), "old contents\n");
+
+    let old = set_old_access_time(&file);
+    commands::redo(&mut state, 1, false).unwrap();
+    // Taken before this test reads the file itself.
+    let accessed = fs::metadata(&file).unwrap().accessed().unwrap();
+    assert_eq!(accessed, old, "redo changed the file's access time");
+    assert_eq!(fs::read_to_string(&file).unwrap(), "");
 }
 
 /// Records that lack the data their reversal needs are found before

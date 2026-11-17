@@ -1054,8 +1054,11 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
         // is touched. A copy, a link and an unlink need what the first record
         // carried (the source path or the link target).
         let undo_data: Option<Vec<u8>> = match op.op_type {
+            // Read as `rm` and a truncating redirection do: without changing
+            // the file's access time where the system allows it.
             OperationType::DeleteFile | OperationType::FileTruncated => Some(
-                fs::read(&path).context("Redo: could not read the file to keep its contents")?,
+                crate::fs_pure::read_to_end(&path)
+                    .context("Redo: could not read the file to keep its contents")?,
             ),
             OperationType::CopyFile | OperationType::Symlink | OperationType::Unlink => {
                 op.undo_data.clone()
@@ -1409,10 +1412,13 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
         return Ok(());
     };
 
-    // Every operation of the transaction must still be in the history. The
-    // history size limit can drop the oldest ones; reversing only what is
-    // left and then closing the transaction would leave those in place
-    // behind a transaction recorded as rolled back.
+    // Every operation of the transaction must still be in the history.
+    // The history size limit does not drop the operations of an open
+    // transaction, so this holds for a state this version wrote. It is
+    // checked all the same, for a state that came from somewhere else:
+    // reversing only what is left and then closing the transaction would
+    // leave the missing ones in place behind a transaction recorded as
+    // rolled back.
     let dropped = state.active_transaction.as_ref().map_or(0, |txn| {
         txn.operations
             .iter()
@@ -1421,9 +1427,9 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
     });
     if dropped > 0 {
         eprintln!(
-            "{} {} of this transaction's operations are no longer in the history \
-             (the history size limit dropped them), so it cannot be rolled back. \
-             Nothing was changed. Commit to close the transaction.",
+            "{} {} of this transaction's operations are no longer in the history, \
+             so it cannot be rolled back. Nothing was changed. Commit to close \
+             the transaction.",
             "Rollback refused:".bright_red(),
             dropped
         );

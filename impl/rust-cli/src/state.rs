@@ -320,6 +320,9 @@ pub struct ShellState {
     /// Maximum history size (None = unlimited, Some(n) = limit to n operations)
     /// When limit is reached, oldest operations are removed
     /// Default: 10,000 operations
+    ///
+    /// The operations of an open transaction are never removed, so the
+    /// history can be longer than this while a transaction is open.
     pub max_history_size: Option<usize>,
 
     /// Directory for archiving old history entries
@@ -474,10 +477,20 @@ impl ShellState {
     /// When history exceeds max_history_size, removes the oldest operations.
     /// If history_archive_path is set, saves removed operations to archive.
     /// Returns the number of operations removed.
+    ///
+    /// An open transaction keeps all of its operations, however many there
+    /// are: rollback has to reverse every one of them, and it cannot reverse
+    /// one whose record is gone. The history can therefore be longer than
+    /// the limit while a transaction is open. The first operation recorded
+    /// after the transaction closes brings it back under the limit.
     fn enforce_history_limit(&mut self) -> usize {
         if let Some(limit) = self.max_history_size {
             if self.history.len() > limit {
-                let excess = self.history.len() - limit;
+                let over = self.history.len() - limit;
+                let excess = over.min(self.droppable_prefix());
+                if excess == 0 {
+                    return 0;
+                }
 
                 // Archive old operations if path is set
                 if let Some(ref archive_path) = self.history_archive_path {
@@ -526,6 +539,31 @@ impl ShellState {
         }
 
         Ok(())
+    }
+
+    /// How many operations at the front of the history may be dropped: all
+    /// of them, or those before the first operation of the open transaction.
+    fn droppable_prefix(&self) -> usize {
+        let Some(txn) = self.active_transaction.as_ref() else {
+            return self.history.len();
+        };
+        self.history
+            .iter()
+            .position(|op| op.transaction_id == Some(txn.id))
+            .unwrap_or(self.history.len())
+    }
+
+    /// Set the undone-block hint to the run of undone operations at the end
+    /// of the history. Used when the history was replaced or marked in bulk,
+    /// so that the next single-step undo does not rescan that run.
+    fn rebuild_undone_run(&mut self) {
+        let end = self.history.len();
+        let start = self
+            .history
+            .iter()
+            .rposition(|op| !op.undone)
+            .map_or(0, |last_live| last_live + 1);
+        self.undone_run = start..end;
     }
 
     /// Get the last N undoable operations
@@ -713,7 +751,7 @@ impl ShellState {
             return;
         };
         Self::mark_rolled_back(&mut self.history, &txn);
-        self.undone_run = 0..0;
+        self.rebuild_undone_run();
 
         // Persist state - warn on failure
         if let Err(e) = self.persist(Mutation::RolledBack) {
@@ -914,8 +952,10 @@ impl ShellState {
             }
         }
 
-        // The history was replaced wholesale; drop the undone-block hint.
-        self.undone_run = 0..0;
+        // The history was replaced wholesale. Point the undone-block hint at
+        // the run of undone operations at its end, so that single-step undo
+        // after a restart does not rescan that run every time.
+        self.rebuild_undone_run();
 
         Ok(())
     }
@@ -2532,6 +2572,43 @@ mod tests {
             undo_one(&mut state);
             assert_undoable_matches_scan(&state);
         }
+    }
+
+    /// After a restart the hint covers the run of undone operations at the
+    /// end of the history, so single-step undo does not rescan that run
+    /// every time. The same after a rollback, which marks in bulk.
+    #[test]
+    fn test_undone_block_hint_is_rebuilt_after_reload_and_rollback() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        for i in 0..6 {
+            record(&mut state, &format!("a{i}"));
+        }
+        for _ in 0..3 {
+            undo_one(&mut state);
+        }
+
+        let mut reloaded = reopen(&root);
+        assert_eq!(reloaded.checked_undone_run(), 3..6);
+        assert_undoable_matches_scan(&reloaded);
+        undo_one(&mut reloaded);
+        assert_eq!(reloaded.checked_undone_run(), 2..6);
+        assert_undoable_matches_scan(&reloaded);
+
+        // A history that ends in a live operation has no such run.
+        record(&mut reloaded, "b");
+        let mut again = reopen(&root);
+        assert_eq!(again.checked_undone_run(), 0..0);
+        assert_undoable_matches_scan(&again);
+
+        // A rollback marks its operations in one go; they are the newest.
+        again.begin_transaction("t").unwrap();
+        record(&mut again, "c0");
+        record(&mut again, "c1");
+        again.abort_transaction();
+        let len = again.history.len();
+        assert_eq!(again.checked_undone_run(), len - 2..len);
+        assert_undoable_matches_scan(&again);
     }
 
     #[test]

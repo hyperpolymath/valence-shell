@@ -1166,6 +1166,30 @@ Limits:
   are refused as damaged. The format was never merged or released, so there
   is no converter.
 
+[[c2-open-transaction]]
+*14.4c Review follow-up: an open transaction keeps its operations (Measured
+2026-11-17, local).* The history size limit (10,000 operations unless set)
+dropped the oldest operations whatever they belonged to. A transaction longer
+than the limit therefore lost its first operations, and its rollback was
+refused: the promise of `begin` ... `rollback` failed at the point where it
+was needed, which is most likely for a script or an agent that does many
+operations in one transaction. The limit now leaves the operations of the
+open transaction alone. The history can be longer than the limit while a
+transaction is open, and the first operation after it closes brings it back
+under. Rollback still refuses if an operation of the transaction is missing,
+which this version can no longer cause itself. The trim count is part of each
+record, so a restart replays the same history. `cargo test`: 894 passed, 0
+failed, 15 ignored.
+
+Two smaller faults from the same review were fixed with it: `redo` read a
+file in a way that could change its access time, and after a restart
+single-step `undo` rescanned the run of undone operations at the end of the
+history on every step.
+
+Not proved: the model's `rollback-no-live` speaks of the operations that are
+in the history. That an open transaction's operations all stay there is a
+rule of the writer, tested here and not stated in the model.
+
 Three behaviours changed with it, each following the model. The owner ruled on
 them the same day (OD-38 to OD-40):
 
