@@ -100,6 +100,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Redo of an assignment whose variable was no longer set when it was undone
   (a function's local, removed when the function returned) failed with "not
   captured". It now restores the variable as not set.
+- Undo of a `>>` redirection no longer grows a file that was cut shorter
+  outside the history in the meantime. It used to extend the file to its
+  earlier size with zero bytes.
+- Redo of `unset` succeeds when the variable is already not set, where it
+  failed and stayed on the redo stack.
 - Idris2 model: `redoUndoIdentity`, `undoRedoUndoIdentity`,
   `redoUndoComposition` added to `Filesystem.Composition`. Their status is
   the proof ledger's row for the undo/redo stack laws
@@ -108,7 +113,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `impl/rust-cli/tests/redo_roundtrip_tests.rs`): undo of `rm`/`rmdir` does
   not restore the mode; undo of `unset` does not restore the exported flag;
   `rm` and redirections follow symbolic links and their undo does not account
-  for it.
+  for it. Undo and redo identify a file by its path only: a file replaced
+  outside the history between an operation and its undo is overwritten or cut
+  by that undo.
 
 === Planned
 - Glob expansion (*.txt, ?.rs, [a-z]*)

@@ -622,6 +622,60 @@ fn assignment_redo_restores_a_variable_that_was_not_set() {
     }
 }
 
+/// Redo of `unset` when the variable is already not set (removed outside the
+/// history after the undo restored it) is the state redo is asked for. It
+/// succeeds and does not block the redo stack.
+#[test]
+fn unset_redo_succeeds_when_the_variable_is_already_not_set() {
+    use vsh::executable::ExecutableCommand;
+    use vsh::parser::parse_command;
+
+    let (_temp, mut state) = setup();
+    parse_command("X=1").unwrap().execute(&mut state).unwrap();
+    parse_command("unset X")
+        .unwrap()
+        .execute(&mut state)
+        .unwrap();
+    undo(&mut state);
+    assert_eq!(state.get_variable("X"), Some("1"));
+    // Outside the history: this call records nothing.
+    state.unset_variable("X");
+
+    redo(&mut state);
+    assert_eq!(state.get_variable("X"), None);
+    assert!(state.get_redo_stack().is_empty());
+    // Undo of that redo has nothing to restore: the variable was not set.
+    undo(&mut state);
+    assert_eq!(state.get_variable("X"), None);
+}
+
+/// Undo of an append cuts the file back to its earlier size. If the file is
+/// already shorter than that (cut outside the history), undo must not grow
+/// it with zero bytes, and redo must leave it as undo found it.
+#[test]
+fn append_undo_never_grows_a_file_that_was_cut_shorter() {
+    use vsh::executable::ExecutableCommand;
+    use vsh::parser::parse_command;
+
+    let (temp, mut state) = setup();
+    let f = temp.path().join("f");
+    fs::write(&f, b"0123456789").unwrap();
+    parse_command("/bin/echo hi >> f")
+        .unwrap()
+        .execute(&mut state)
+        .unwrap();
+    assert_eq!(read(&f), b"0123456789hi\n");
+    // Outside the history.
+    fs::write(&f, b"012").unwrap();
+
+    undo(&mut state);
+    assert_eq!(read(&f), b"012", "undo must not extend the file");
+    redo(&mut state);
+    assert_eq!(read(&f), b"012", "redo restores what undo found");
+    undo(&mut state);
+    assert_eq!(read(&f), b"012");
+}
+
 // ---------------------------------------------------------------------------
 // The mode of a file that undo deletes
 // ---------------------------------------------------------------------------

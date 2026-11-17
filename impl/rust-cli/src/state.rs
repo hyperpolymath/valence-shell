@@ -739,6 +739,17 @@ impl ShellState {
         )
     }
 
+    /// The record of an `unset` that found the variable already not set:
+    /// an `UnsetVariable` operation whose undo data says there is nothing to
+    /// restore. The `unset` command records nothing in that case; redo needs
+    /// a record, because it replaces the entry it took off the redo stack.
+    pub fn apply_variable_absent(&mut self, name: &str) -> Operation {
+        self.exported_vars.remove(name);
+        let undo_data = serde_json::to_vec(&None::<VariableValue>).unwrap_or_default();
+        Operation::new(OperationType::UnsetVariable, name.to_string(), None)
+            .with_undo_data(undo_data)
+    }
+
     /// Get a shell variable value (scalar only)
     /// Returns None if variable doesn't exist or is an array
     pub fn get_variable(&self, name: &str) -> Option<&str> {

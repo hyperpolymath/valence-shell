@@ -1043,8 +1043,7 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                     .write(true)
                     .open(&path)
                     .context("Failed to open file for truncation")?;
-                file.set_len(original_size)
-                    .context("Undo append (truncate) failed")?;
+                cut_back_to(&file, original_size).context("Undo append (truncate) failed")?;
             }
             OperationType::Move => {
                 // Undo move = move it back (dst -> src)
@@ -1308,6 +1307,16 @@ fn redo_capture_limit(state: &ShellState) -> Option<u64> {
     parse_redo_capture_limit(setting.as_deref())
 }
 
+/// Cut `file` back to `size` bytes to reverse an append. A file that is
+/// already that short or shorter is left alone: `set_len` would grow it with
+/// zero bytes that were never in it.
+fn cut_back_to(file: &fs::File, size: u64) -> std::io::Result<()> {
+    if file.metadata()?.len() > size {
+        file.set_len(size)?;
+    }
+    Ok(())
+}
+
 /// Read `reader` to its end, or return `None` once it has given more than
 /// `limit` bytes. At most `limit + 1` bytes are held, however long the stream
 /// turns out to be; with no limit, everything is read.
@@ -1539,9 +1548,12 @@ fn reapply(state: &mut ShellState, op: &Operation) -> Result<Operation> {
             }
             Ok(new_op)
         }
-        OperationType::UnsetVariable => state
+        // A variable that is already not set (removed outside the history
+        // since the undo) is the state this redo is for. The record then
+        // says there was nothing to restore, so undo of it changes nothing.
+        OperationType::UnsetVariable => Ok(state
             .apply_unset_variable(&op.path)
-            .with_context(|| format!("Cannot redo unset {}: it is not set", op.path)),
+            .unwrap_or_else(|| state.apply_variable_absent(&op.path))),
         OperationType::Chmod => {
             let Some(RedoData::Mode(mode)) = op.redo_data else {
                 return Err(missing());
@@ -1929,7 +1941,7 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                             OpenOptions::new()
                                 .write(true)
                                 .open(&path)
-                                .and_then(|file| file.set_len(original_size))
+                                .and_then(|file| cut_back_to(&file, original_size))
                                 .context("Failed to truncate file")
                         } else {
                             Err(anyhow::anyhow!("Invalid size data in undo_data"))
