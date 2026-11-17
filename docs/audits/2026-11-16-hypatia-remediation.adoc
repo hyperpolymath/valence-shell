@@ -58,7 +58,7 @@ They close when the underlying alert closes.
 | RE001 (3) | fixed | `harden-runner`: `block` to `api.github.com` in `instant-sync.yml`, `block` to the SMTP endpoint in `push-email-notify.yml`, `audit` in `hypatia-scan.yml`.
 | RE005 | fixed | The ignored stress suite no longer runs under `continue-on-error` in `compilation_tests.yml`; see <<stress>>.
 | WH008 (3) | fixed | See the Secret Scanner section.
-| SD022 (2) | fixed | Both paths named another tree (`echidna/src/rust/`, the Agda tarball's `src/data/lib`); now qualified.
+| SD022 (2) | fixed | Both paths named another tree (`echidna/src/rust/`, the Agda tarball path `agda-2.7.0.1/src/data/lib`); now qualified.
 | SD009 | left for the owner | `ffi/zig/src/main.zig` has no SPDX header. Licence edits are owner-only (estate doctrine 6).
 | SD004 (6), SD007 | left for the owner | Moving `.machine_readable/6a2/` into deed clauses needs the estate converter (kyX, standards D312/D313); writing the clauses by hand would guess at metadata.
 | `known_fake_action_sha` (3), `download_then_run_shell` (1) in `alkahest-shell-transmuter/` | left for upstream | Owner ruling: fix the canonical alkahest repository, then re-sync this copy. These workflows never run here.

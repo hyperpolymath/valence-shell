@@ -2281,17 +2281,11 @@ fn apply_expansion(expansion: &ParameterExpansion, state: &crate::state::ShellSt
             // Semantic assignment requires threading mutable state (and error
             // propagation) through the expansion API; tracked by #189. Until
             // that seam is redesigned this returns the default value only.
-            if is_unset || (*check_null && is_null) {
+            match var_value {
+                Some(v) if !(*check_null && is_null) => v.to_string(),
                 // Note: In bash, this would also assign to VAR.
                 // Requires signature change: &mut ShellState
-                expand_variables(value, state)
-            } else {
-                // var_value is Some by construction here: the surrounding
-                // `if is_unset || ...` branch is the unset/null path; this
-                // else branch only fires when var_value is Some.
-                var_value
-                    .expect("var_value is Some when !is_unset (checked above)")
-                    .to_string()
+                _ => expand_variables(value, state),
             }
         }
 
@@ -2309,18 +2303,14 @@ fn apply_expansion(expansion: &ParameterExpansion, state: &crate::state::ShellSt
             check_null,
         } => {
             // ${VAR:?message} or ${VAR?message}
-            if is_unset || (*check_null && is_null) {
-                let error_msg = message.as_deref().unwrap_or("parameter null or not set");
-                eprintln!("vsh: {}: {}", expansion.var_name, error_msg);
-                // Return empty string (bash exits non-interactively, but we continue)
-                String::new()
-            } else {
-                // var_value is Some by construction here: the surrounding
-                // `if is_unset || ...` branch is the unset/null path; this
-                // else branch only fires when var_value is Some.
-                var_value
-                    .expect("var_value is Some when !is_unset (checked above)")
-                    .to_string()
+            match var_value {
+                Some(v) if !(*check_null && is_null) => v.to_string(),
+                _ => {
+                    let error_msg = message.as_deref().unwrap_or("parameter null or not set");
+                    eprintln!("vsh: {}: {}", expansion.var_name, error_msg);
+                    // Return empty string (bash exits non-interactively, but we continue)
+                    String::new()
+                }
             }
         }
 
@@ -2925,9 +2915,9 @@ fn parse_if_command(input: &str) -> Result<Command> {
                 // earlier ("elif", "after_then") arm set pending_condition
                 // to Some. The match is exhaustive over (keyword, state)
                 // shapes, so this take() is provably Some by construction.
-                let elif_cond = pending_condition
-                    .take()
-                    .expect("pending_condition: Some by state-machine invariant in after_elif");
+                let elif_cond = pending_condition.take().ok_or_else(|| {
+                    anyhow::anyhow!("parse error: `then` after `elif` with no pending condition")
+                })?;
                 let body_str = content.trim().trim_end_matches(';').trim();
                 let elif_body = if !body_str.is_empty() {
                     parse_command_block(body_str)?
