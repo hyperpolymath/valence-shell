@@ -262,18 +262,15 @@ fn check(files: &Files, before: &Observed, after: &Observed) -> Option<&'static 
         return Some("atomic");
     }
 
+    // The oracle is built from the recovered state alone, so a regression
+    // that rewrites an existing entry while recording a new one is caught.
     let extra = record(&mut state, "after-crash");
-    let mut expected = observe(&state);
     drop(state);
-    let Ok(reopened) = open(dir.path()) else {
-        return Some("stable");
-    };
-    // The recovered state plus the one new operation, and nothing else.
-    expected
-        .history
-        .retain(|(id, _, _)| *id == extra || recovered.history.iter().any(|(r, _, _)| r == id));
-    if observe(&reopened) != expected || expected.history.len() != recovered.history.len() + 1 {
-        return Some("stable");
+    let mut expected = recovered;
+    expected.history.push((extra, false, None));
+    match open(dir.path()) {
+        Ok(reopened) if observe(&reopened) == expected => {}
+        _ => return Some("stable"),
     }
     None
 }
