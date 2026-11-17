@@ -867,13 +867,13 @@ impl ShellState {
             // way of converting an older state file.
             Some(bytes) if !bytes.is_empty() => {
                 let decoded = journal::decode(&bytes);
-                // A whole record that fails its checksum is damage, not an
-                // interrupted write. Stop before anything is changed: the
-                // records after it may be good, and only a person can decide
-                // what to keep.
+                // A record whose header fails its check, or a whole record
+                // that fails its checksum, is damage, not an interrupted
+                // write. Stop before anything is changed: the records after
+                // it may be good, and only a person can decide what to keep.
                 if decoded.tail == journal::Tail::Damaged {
                     anyhow::bail!(
-                        "Saved shell state is damaged: record {} fails its checksum \
+                        "Saved shell state is damaged: record {} fails its integrity check \
                          ({} of {} bytes are readable). Nothing was changed.",
                         decoded.records.len() + 1,
                         decoded.accepted,
@@ -1742,7 +1742,9 @@ mod tests {
 
     #[test]
     fn test_set_variable_tracked_records_operation() {
-        let mut state = ShellState::new("/tmp/vsh_tracked_var_1").unwrap();
+        // A fresh directory: these tests record an operation, which is saved.
+        let root = persisted_root();
+        let mut state = reopen(&root);
         state.set_variable_tracked("FOO", "bar");
 
         assert_eq!(state.get_variable("FOO"), Some("bar"));
@@ -1755,7 +1757,9 @@ mod tests {
 
     #[test]
     fn test_set_variable_tracked_captures_previous() {
-        let mut state = ShellState::new("/tmp/vsh_tracked_var_2").unwrap();
+        // A fresh directory: these tests record an operation, which is saved.
+        let root = persisted_root();
+        let mut state = reopen(&root);
         // Set initial value
         state.set_variable("FOO", "old_value");
         // Now track-set a new value
@@ -1774,7 +1778,9 @@ mod tests {
 
     #[test]
     fn test_set_variable_tracked_new_var_captures_none() {
-        let mut state = ShellState::new("/tmp/vsh_tracked_var_3").unwrap();
+        // A fresh directory: these tests record an operation, which is saved.
+        let root = persisted_root();
+        let mut state = reopen(&root);
         state.set_variable_tracked("NEW_VAR", "value");
 
         let last_op = state.history.last().unwrap();
@@ -1785,7 +1791,9 @@ mod tests {
 
     #[test]
     fn test_unset_variable_tracked_records_operation() {
-        let mut state = ShellState::new("/tmp/vsh_tracked_var_4").unwrap();
+        // A fresh directory: these tests record an operation, which is saved.
+        let root = persisted_root();
+        let mut state = reopen(&root);
         state.set_variable("FOO", "bar");
         state.unset_variable_tracked("FOO");
 
@@ -2148,7 +2156,10 @@ mod tests {
         let opened =
             ShellState::with_storage(root.path().to_str().unwrap(), Box::new(storage.clone()));
         let message = format!("{:#}", opened.err().expect("load must fail"));
-        assert!(message.contains("record 2 fails its checksum"), "{message}");
+        assert!(
+            message.contains("record 2 fails its integrity check"),
+            "{message}"
+        );
         assert_eq!(
             storage.point().durable,
             damaged,
@@ -2156,6 +2167,45 @@ mod tests {
         );
         assert!(storage.trace().is_empty());
         assert!(storage.set_aside_bytes().is_empty());
+    }
+
+    /// A length field changed so that the record seems to run past the end
+    /// of the file. Without a check on the length this looked like an
+    /// interrupted write: every record from there on was set aside and the
+    /// shell started with a shorter history, or an empty one.
+    #[test]
+    fn test_a_changed_length_is_damage_and_not_an_interrupted_write() {
+        let root = persisted_root();
+        let (mut state, storage) = sim_state(&root);
+        record(&mut state, "a");
+        record(&mut state, "b");
+        record(&mut state, "c");
+        let good = storage.point().durable;
+        let first_len =
+            journal::decode(&good).records[0].len() + journal::HEADER_LEN + journal::SUM_LEN;
+
+        // The first record and the second, each with one high bit of its
+        // length set, so the declared end is far past the end of the file.
+        for (start, record_number) in [(0, 1), (first_len, 2)] {
+            let mut damaged = good.clone();
+            damaged[start + journal::LENGTH_FIELD_LEN - 1] ^= 0x40;
+
+            let storage = SimStorage::with_contents(damaged.clone());
+            let opened =
+                ShellState::with_storage(root.path().to_str().unwrap(), Box::new(storage.clone()));
+            let message = format!("{:#}", opened.err().expect("load must fail"));
+            assert!(
+                message.contains(&format!("record {record_number} fails its integrity check")),
+                "{message}"
+            );
+            assert_eq!(
+                storage.point().durable,
+                damaged,
+                "storage must be untouched"
+            );
+            assert!(storage.trace().is_empty());
+            assert!(storage.set_aside_bytes().is_empty());
+        }
     }
 
     #[cfg(unix)]

@@ -120,15 +120,15 @@ reproduce. Absence of a tool is an open obligation, not a passing leg
 | `proofs/agda/` (via `All.agda`)
 | No postulates, no holes, the estate invocation. Filesystem equality is pointwise (`_≗_`). Grade `PWG-3` is derived from the CI receipt on the merge head, not asserted here. See `docs/audits/2026-11-09-proof-ground-truth.adoc`
 
-| Journal model: after a crash, loading yields the synced events followed by a prefix of the unsynced ones; a cut-short record is rejected; rollback leaves no live operation
+| Journal model: after a crash, loading yields the synced events followed by a prefix of the unsynced ones; a cut-short record is rejected, and is classified as torn, never as damaged; rollback leaves no live operation
 | proven (2026-11-17)
-| `bash scripts/check-agda.sh`, Agda 2.7.0.1 + stdlib v2.2; six mutations rejected locally (`proofs/agda/VERIFICATION.adoc`)
-| `proofs/agda/JournalModel.agda` `crash-recovery`, `write-atomic`; `JournalFraming.agda` `step-torn`, `decode-sound`; `JournalReplay.agda` `run-ids`, `rollback-no-live`
-| About the model only. The crash model (synced bytes survive; the unsynced part survives as a prefix) is an assumption about storage, and reordered or partly written blocks are outside it. No property of the checksum is proved or needed
+| `bash scripts/check-agda.sh`, Agda 2.7.0.1 + stdlib v2.2; ten mutations rejected locally (`proofs/agda/VERIFICATION.adoc`)
+| `proofs/agda/JournalModel.agda` `crash-recovery`, `write-atomic`, `crash-tail`; `JournalFraming.agda` `step-torn`, `decode-sound`, `classify-torn`; `JournalReplay.agda` `run-ids`, `rollback-no-live`
+| About the model only. The crash model (synced bytes survive; the unsynced part survives as a prefix) is an assumption about storage, and reordered or partly written blocks are outside it. No property of the checksum or of the header check is proved or needed. The converse is not proved and does not hold: damage that leaves a header passing its check and declaring more bytes than the file holds is classified as torn
 
 | The Rust journal follows the journal model
 | tested-only
-| `cargo test --test journal_crash_tests`: 3,079 crash images on simulated storage that implements the model's file, and 3,070 crash states on real files, none failing (2026-11-17, local); four deliberate bugs were each caught
+| `cargo test --test journal_crash_tests`: 3,139 crash images on simulated storage that implements the model's file, and 3,130 crash states on real files, none failing (2026-11-17, local, with the header check); four deliberate bugs were each caught. Unit tests flip every bit of every header and of a whole record and cut a journal at every byte
 | `impl/rust-cli/src/journal.rs`, `impl/rust-cli/src/state.rs`, `impl/rust-cli/tests/journal_crash_tests.rs`
 | Written to mirror the model, not derived from it or proved against it. One scripted session, not all sessions. The journal file still lives in the session root, so the shell's own commands can delete or alter it; the model does not cover that
 

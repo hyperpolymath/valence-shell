@@ -47,7 +47,8 @@ so the theorems are not vacuous.
 
 What they state, and for what:
 
-* `JournalFraming`: a record is length, payload, checksum. A record cut short
+* `JournalFraming`: a record is a header that carries the length, then the
+  payload, then a checksum. A record cut short
   at any point is rejected (`step-torn`); what the decoder accepts is byte
   for byte a run of well-formed records at the front of the input
   (`decode-sound`). Neither needs any property of the checksum.
@@ -77,6 +78,43 @@ checker. They were: a wrong left-over tail and a wrong recovered state in
 the worked cases; dropping the checksum test; dropping the canonical-header
 test; rollback that marks nothing; and `step-torn` without its "something
 was cut off" premise. The unedited tree passed as the control.
+
+=== Added the same day: what the rejected bytes are
+
+A review of the Rust journal found that a changed length field could pass
+for an interrupted write. The Rust format gained a check on the length (the
+header is now the length followed by four bytes of a hash of it), and the
+model gained the matching statements. `bash scripts/check-agda.sh` exits 0
+with them; the module count is unchanged at 14.
+
+* The model needed no new test in the decoder. It already accepts a header
+  `h` only if it is canonical, `hdr (unhdr h) ≡ h`. For a header that is the
+  bare length that holds for every input. For a header that carries a check
+  of the length it is the header check.
+* `JournalFraming.classify` names the bytes the decoder rejects: `clean`,
+  `torn` (the input ends inside a record) or `damaged` (a whole header that
+  is not canonical, or a whole record that was still rejected).
+* `classify-torn`: a record cut short, with at least one byte kept, is torn.
+* `decode-crash-tail`, and `crash-tail` in `JournalModel`: after a crash that
+  keeps a prefix of what was appended, the rejected bytes are never
+  classified as damaged. A reader that refuses a damaged journal is
+  therefore not stopped by a crash.
+* `JournalWitnesses` has a second framing instance, `C`, whose header is the
+  length and a check cell. There a changed length is damaged
+  (`changed-length-is-damage`); with the bare-length header the same change
+  is classified as torn (`changed-length-looks-torn`).
+
+Not proved, and not provable: that damage is always classified as damaged.
+Damage that leaves a canonical header declaring more bytes than the input
+holds is classified as torn (`changed-header-with-matching-check-looks-torn`).
+How unlikely that is depends on the strength of the header check, and the
+model assumes nothing about it.
+
+Mutation check (2026-11-17, local): four more edits were each rejected. They
+were: a body cut short classified as damaged; a header cut short classified
+as damaged; a header that is not canonical passed on to the body test; and
+the decoder without its canonical-header test. The unedited tree passed as
+the control.
 
 == What changed to get there
 

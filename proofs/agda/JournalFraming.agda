@@ -14,6 +14,7 @@
    * `step-sound`      whatever the decoder accepts is byte-for-byte a frame
                        at the front of the input (nothing is misread);
    * `step-torn`       a frame cut short at any point is rejected;
+   * `classify-torn`   and it is classified as torn, never as damaged;
    * `decode-sound`    the accepted records, re-encoded, followed by the
                        rejected tail, are exactly the input;
    * `decode-frames`   a sequence of frames followed by a rejected tail
@@ -22,6 +23,8 @@
                        prefix of the unsynced ones, the decoder returns the
                        synced records followed by a prefix of the unsynced
                        records;
+   * `decode-crash-tail`  after such a crash the bytes the decoder rejects
+                       are never classified as damaged;
    * `decode-normal`   re-encoding what was accepted gives a clean journal,
                        for any input at all.
 
@@ -36,11 +39,28 @@
    accepted as one; `step-sound` states exactly what acceptance means, and it
    holds for any checksum function.
 
+   The header may carry more than the length. The decoder accepts a header
+   `h` only if it is canonical, `hdr (unhdr h) ≡ h`. If `hdr n` is the length
+   followed by a check of the length, as in the Rust format, that test is the
+   header check. With a header that is the bare length it holds for every
+   input and says nothing.
+
+   `classify` names what the rejected tail is: `clean`, `torn` (the input
+   ends inside a record) or `damaged` (a whole header that is not canonical,
+   or a whole record that was still rejected). One direction is proved:
+   a crash never yields `damaged` (`classify-torn`, `decode-crash-tail`).
+   The other direction is not a theorem and cannot be one: damage that
+   leaves a canonical header declaring more bytes than the file holds is
+   classified `torn`. How unlikely that is depends on the strength of the
+   header check, about which nothing is assumed here.
+
    `Frameable p` says the header can carry the length of `p`. With a 4-byte
    length field this is `length p < 2^32`; the writer must refuse longer
    payloads.
 
    Added 2026-11-17 for route-plan Phase C (journal redesign), step C1.
+   `classify` and its theorems were added the same day, with the header
+   check in the Rust format.
 -}
 
 open import Data.Nat.Base using (ℕ; zero; suc; _+_; _≤_; z≤n; s≤s)
@@ -329,46 +349,174 @@ decode-normal : ∀ bs → decode (frames (proj₁ (decode bs))) ≡ (proj₁ (d
 decode-normal bs = decode-clean (proj₁ (decode bs)) (decode-frameable bs)
 
 ------------------------------------------------------------------------
+-- What the rejected tail is
+
+-- Why the decoder stopped. `clean`: nothing is left. `torn`: the input ends
+-- inside a record, and its header, if all of it is there, is canonical.
+-- `damaged`: a whole header that is not canonical, or a whole record. The
+-- last is damage when the decoder rejected that record, which is the only
+-- case `classify` is meant for: the bytes left over by `decode`.
+data Tail : Set where
+  clean torn damaged : Tail
+
+clean≢damaged : clean ≢ damaged
+clean≢damaged ()
+
+torn≢damaged : torn ≢ damaged
+torn≢damaged ()
+
+-- The part after the header: is all of it there?
+classifyBody : Maybe (List Byte × List Byte) → Tail
+classifyBody nothing  = torn
+classifyBody (just _) = damaged
+
+whenCanon : ∀ {P : Set} → Dec P → Tail → Tail
+whenCanon (yes _) t = t
+whenCanon (no _)  _ = damaged
+
+whenCanon-yes : ∀ {P : Set} (d : Dec P) → P → ∀ t → whenCanon d t ≡ t
+whenCanon-yes (yes _) _ t = refl
+whenCanon-yes (no ¬p) p t = ⊥-elim (¬p p)
+
+classifyHeader : Maybe (List Byte × List Byte) → Tail
+classifyHeader nothing        = torn
+classifyHeader (just (h , r)) =
+  whenCanon (hdr (unhdr h) ≟ᴸ h) (classifyBody (splitExact (unhdr h + c) r))
+
+classify : List Byte → Tail
+classify []       = clean
+classify (b ∷ bs) = classifyHeader (splitExact (suc w) (b ∷ bs))
+
+classify-∷ : ∀ t → t ≢ [] → classify t ≡ classifyHeader (splitExact (suc w) t)
+classify-∷ []      t≢ = ⊥-elim (t≢ refl)
+classify-∷ (_ ∷ _) _  = refl
+
+-- A list cannot give as many bytes as a longer list has.
+splitExact-short : ∀ xs y ys → splitExact (length (xs ++ y ∷ ys)) xs ≡ nothing
+splitExact-short []       y ys = refl
+splitExact-short (x ∷ xs) y ys rewrite splitExact-short xs y ys = refl
+
+-- A whole header written by `frame`, followed by a body cut short, is torn.
+torn-body : ∀ p v x u → Frameable p → p ++ sum p ≡ v ++ x ∷ u →
+            classifyHeader (splitExact (suc w) (hdr (length p) ++ v)) ≡ torn
+torn-body p v x u fr body =
+  trans (cong classifyHeader (splitExact-len H v (hdr-length (length p))))
+    (trans (whenCanon-yes (hdr (unhdr H) ≟ᴸ H) (cong hdr fr)
+              (classifyBody (splitExact (unhdr H + c) v)))
+      (cong classifyBody
+        (trans (cong (λ n → splitExact n v) len≡) (splitExact-short v x u))))
+  where
+  H = hdr (length p)
+
+  len≡ : unhdr H + c ≡ length (v ++ x ∷ u)
+  len≡ = trans (cong (_+ c) fr)
+           (trans (cong (length p +_) (sym (sum-length p)))
+             (trans (sym (length-++ p)) (cong length body)))
+
+-- An interrupted append is never reported as damage: a frame cut short,
+-- with at least one byte kept, is torn.
+classify-torn : ∀ p t u → Frameable p → t ≢ [] → u ≢ [] → t ++ u ≡ frame p →
+                classify t ≡ torn
+classify-torn p t []      fr t≢ u≢ eq = ⊥-elim (u≢ refl)
+classify-torn p t (x ∷ u) fr t≢ u≢ eq with ++-split (hdr (length p)) t eq
+-- The cut is at the end of the header.
+... | inj₁ ([] , H≡ , u≡) =
+  trans (classify-∷ t t≢)
+    (trans (cong (λ s → classifyHeader (splitExact (suc w) s))
+              (trans (sym (++-identityʳ t))
+                (trans (sym H≡) (sym (++-identityʳ (hdr (length p)))))))
+           (torn-body p [] x u fr (sym u≡)))
+-- The cut is inside the header.
+... | inj₁ (y ∷ v , H≡ , _) =
+  trans (classify-∷ t t≢)
+    (cong classifyHeader
+      (trans (cong (λ n → splitExact n t)
+                (trans (sym (hdr-length (length p))) (cong length H≡)))
+             (splitExact-short t y v)))
+-- The cut is after the header.
+... | inj₂ (v , t≡ , body) =
+  trans (classify-∷ t t≢)
+    (trans (cong (λ s → classifyHeader (splitExact (suc w) s)) t≡)
+           (torn-body p v x u fr body))
+
+-- The same without asking that a byte was kept: a frame cut short at any
+-- point is not classified as damage.
+classify-cut : ∀ p t u → Frameable p → u ≢ [] → t ++ u ≡ frame p →
+               classify t ≢ damaged
+classify-cut p []      u fr u≢ eq = clean≢damaged
+classify-cut p (b ∷ t) u fr u≢ eq =
+  subst (_≢ damaged) (sym (classify-torn p (b ∷ t) u fr (λ ()) u≢ eq)) torn≢damaged
+
+------------------------------------------------------------------------
 -- A prefix of a run of frames
 
 -- Any prefix of `frames qs` is some whole frames of `qs` followed by a tail
--- that the decoder rejects (an empty tail, or a frame cut short).
-frames-split : ∀ qs → All Frameable qs → ∀ t u → t ++ u ≡ frames qs →
+-- that the decoder rejects (an empty tail, or a frame cut short), and that
+-- tail is not classified as damage.
+frames-split⁺ : ∀ qs → All Frameable qs → ∀ t u → t ++ u ≡ frames qs →
   ∃ λ qs₁ → ∃ λ qs₂ → ∃ λ t′ →
     (qs₁ ++ qs₂ ≡ qs) × (t ≡ frames qs₁ ++ t′) × (step t′ ≡ nothing)
-frames-split [] [] t u eq =
-  [] , [] , [] , refl , ++-conicalˡ t u eq , step-[]
-frames-split (q ∷ qs) (fr ∷ frs) t u eq with ++-split (frame q) t eq
+    × (classify t′ ≢ damaged)
+frames-split⁺ [] [] t u eq =
+  [] , [] , [] , refl , ++-conicalˡ t u eq , step-[] , clean≢damaged
+frames-split⁺ (q ∷ qs) (fr ∷ frs) t u eq with ++-split (frame q) t eq
 ... | inj₁ ([] , fq≡ , _) =
   (q ∷ []) , qs , [] , refl
   , trans (sym (++-identityʳ t))
       (trans (sym fq≡)
         (sym (trans (++-identityʳ (frame q ++ [])) (++-identityʳ (frame q)))))
-  , step-[]
+  , step-[] , clean≢damaged
 ... | inj₁ (x ∷ v , fq≡ , _) =
   [] , (q ∷ qs) , t , refl , refl , step-torn q t (x ∷ v) fr (λ ()) (sym fq≡)
-... | inj₂ (v , t≡ , fqs≡) with frames-split qs frs v u (sym fqs≡)
-...   | qs₁ , qs₂ , t′ , split , v≡ , st =
+  , classify-cut q t (x ∷ v) fr (λ ()) (sym fq≡)
+... | inj₂ (v , t≡ , fqs≡) with frames-split⁺ qs frs v u (sym fqs≡)
+...   | qs₁ , qs₂ , t′ , split , v≡ , st , cl =
   (q ∷ qs₁) , qs₂ , t′ , cong (q ∷_) split
   , trans t≡ (trans (cong (frame q ++_) v≡) (sym (++-assoc (frame q) (frames qs₁) t′)))
-  , st
+  , st , cl
+
+frames-split : ∀ qs → All Frameable qs → ∀ t u → t ++ u ≡ frames qs →
+  ∃ λ qs₁ → ∃ λ qs₂ → ∃ λ t′ →
+    (qs₁ ++ qs₂ ≡ qs) × (t ≡ frames qs₁ ++ t′) × (step t′ ≡ nothing)
+frames-split qs frs t u eq with frames-split⁺ qs frs t u eq
+... | qs₁ , qs₂ , t′ , split , t≡ , st , _ = qs₁ , qs₂ , t′ , split , t≡ , st
 
 -- Crash recovery at the level of records. `es` are the synced records and
 -- `qs` the unsynced ones; the surviving file is the synced frames followed
 -- by any prefix `t` of the unsynced frames. The decoder returns `es`
--- followed by a prefix `qs₁` of `qs`.
-decode-crash : ∀ es qs → All Frameable es → All Frameable qs →
+-- followed by a prefix `qs₁` of `qs`, and the tail it rejects is not
+-- classified as damage.
+decode-crash⁺ : ∀ es qs → All Frameable es → All Frameable qs →
   ∀ t u → t ++ u ≡ frames qs →
   ∃ λ qs₁ → ∃ λ qs₂ → ∃ λ t′ →
     (qs₁ ++ qs₂ ≡ qs) × (decode (frames es ++ t) ≡ (es ++ qs₁ , t′))
-decode-crash es qs fes fqs t u eq with frames-split qs fqs t u eq
-... | qs₁ , qs₂ , t′ , split , t≡ , st =
+    × (classify t′ ≢ damaged)
+decode-crash⁺ es qs fes fqs t u eq with frames-split⁺ qs fqs t u eq
+... | qs₁ , qs₂ , t′ , split , t≡ , st , cl =
   qs₁ , qs₂ , t′ , split
   , trans (cong decode bytes≡)
       (decode-frames (es ++ qs₁) t′
         (All.++⁺ fes (All.++⁻ˡ qs₁ (subst (All Frameable) (sym split) fqs))) st)
+  , cl
   where
   bytes≡ : frames es ++ t ≡ frames (es ++ qs₁) ++ t′
   bytes≡ = trans (cong (frames es ++_) t≡)
              (trans (sym (++-assoc (frames es) (frames qs₁) t′))
                     (cong (_++ t′) (sym (frames-++ es qs₁))))
+
+decode-crash : ∀ es qs → All Frameable es → All Frameable qs →
+  ∀ t u → t ++ u ≡ frames qs →
+  ∃ λ qs₁ → ∃ λ qs₂ → ∃ λ t′ →
+    (qs₁ ++ qs₂ ≡ qs) × (decode (frames es ++ t) ≡ (es ++ qs₁ , t′))
+decode-crash es qs fes fqs t u eq with decode-crash⁺ es qs fes fqs t u eq
+... | qs₁ , qs₂ , t′ , split , dec≡ , _ = qs₁ , qs₂ , t′ , split , dec≡
+
+-- After a crash, what the decoder rejects is never classified as damage.
+-- A reader that refuses a damaged journal is therefore never stopped by a
+-- crash, as long as the crash keeps a prefix of what was appended.
+decode-crash-tail : ∀ es qs → All Frameable es → All Frameable qs →
+  ∀ t u → t ++ u ≡ frames qs →
+  classify (proj₂ (decode (frames es ++ t))) ≢ damaged
+decode-crash-tail es qs fes fqs t u eq with decode-crash⁺ es qs fes fqs t u eq
+... | qs₁ , qs₂ , t′ , split , dec≡ , cl =
+  subst (λ d → classify (proj₂ d) ≢ damaged) (sym dec≡) cl

@@ -19,6 +19,12 @@
    header is one cell holding the payload length, and the checksum is one
    cell holding the sum of the payload. It is not the Rust format.
 
+   A second framing instance (`C`) has a header of two cells: the length,
+   then a check of the length. It shows what the decoder's canonical-header
+   test does once the header carries a check, which is the shape of the Rust
+   format: a changed length is damage, even when the changed length runs
+   past the end of the input.
+
    Added 2026-11-17 for route-plan Phase C (journal redesign), step C1.
 -}
 
@@ -34,8 +40,10 @@ import Data.Maybe.Base as Maybe
 open import Data.Product.Base using (_×_; _,_; proj₁; proj₂; ∃)
 import Data.Product.Base as Prod
 open import Data.Sum.Base using (_⊎_; inj₂)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; cong; subst)
+open import Relation.Binary.PropositionalEquality
+  using (_≡_; _≢_; refl; sym; trans; cong; subst)
 
+import JournalFraming
 import JournalReplay
 import JournalModel
 
@@ -230,6 +238,95 @@ bad-sum : M.decode (1 ∷ 9 ∷ 9 ∷ 2 ∷ 5 ∷ 6 ∷ 12 ∷ 0 ∷ 0 ∷ [])
 bad-sum = refl
 
 ------------------------------------------------------------------------
+-- The rejected tail: worked cases
+
+-- The tails of the four cases above. A record cut short is torn; a whole
+-- record with a wrong checksum is damaged.
+torn-header-only-tail : M.classify (2 ∷ []) ≡ M.torn
+torn-header-only-tail = refl
+
+torn-before-sum-tail : M.classify (2 ∷ 5 ∷ 6 ∷ []) ≡ M.torn
+torn-before-sum-tail = refl
+
+bad-sum-tail : M.classify (2 ∷ 5 ∷ 6 ∷ 12 ∷ 0 ∷ 0 ∷ []) ≡ M.damaged
+bad-sum-tail = refl
+
+clean-tail : M.classify [] ≡ M.clean
+clean-tail = refl
+
+-- With a header that is the bare length, a changed length that runs past
+-- the end of the input cannot be told from a record cut short. The frame
+-- of 5 ∷ 6 ∷ [] with its length changed from 2 to 9:
+changed-length-looks-torn : M.classify (9 ∷ 5 ∷ 6 ∷ 11 ∷ []) ≡ M.torn
+changed-length-looks-torn = refl
+
+------------------------------------------------------------------------
+-- A header that carries a check of the length
+
+-- The header is the length followed by a check cell. The check here is the
+-- successor of the length; the Rust format uses part of a hash.
+hdrC : ℕ → List ℕ
+hdrC n = n ∷ suc n ∷ []
+
+module C = JournalFraming ℕ _≟_ 1 1 hdrC (λ _ → refl) unhdr chk (λ _ → refl)
+
+-- Every payload can be framed.
+fitsC : ∀ p → C.Frameable p
+fitsC p = refl
+
+-- A frame is length, check of the length, payload, sum.
+frameC-example : C.frame (5 ∷ 6 ∷ []) ≡ 2 ∷ 3 ∷ 5 ∷ 6 ∷ 11 ∷ []
+frameC-example = refl
+
+decodeC-example : C.decode (2 ∷ 3 ∷ 5 ∷ 6 ∷ 11 ∷ 0 ∷ 1 ∷ 0 ∷ [])
+                  ≡ ((5 ∷ 6 ∷ []) ∷ [] ∷ [] , [])
+decodeC-example = refl
+
+-- The same change as above, length 2 to 9 with the check cell untouched.
+-- The header is no longer canonical, so this is damage. Nothing is
+-- accepted, and the record after it is not dropped as if it were torn.
+changed-length-is-damage :
+  C.classify (9 ∷ 3 ∷ 5 ∷ 6 ∷ 11 ∷ 0 ∷ 1 ∷ 0 ∷ []) ≡ C.damaged
+changed-length-is-damage = refl
+
+changed-length-accepts-nothing :
+  C.decode (9 ∷ 3 ∷ 5 ∷ 6 ∷ 11 ∷ 0 ∷ 1 ∷ 0 ∷ [])
+  ≡ ([] , 9 ∷ 3 ∷ 5 ∷ 6 ∷ 11 ∷ 0 ∷ 1 ∷ 0 ∷ [])
+changed-length-accepts-nothing = refl
+
+-- A changed check cell is damage too.
+changed-check-is-damage : C.classify (2 ∷ 4 ∷ 5 ∷ 6 ∷ 11 ∷ []) ≡ C.damaged
+changed-check-is-damage = refl
+
+-- A record cut short is still torn, at every cut: inside the header, at
+-- its end, inside the payload, before the sum.
+cut-in-header : C.classify (2 ∷ []) ≡ C.torn
+cut-in-header = refl
+
+cut-after-header : C.classify (2 ∷ 3 ∷ []) ≡ C.torn
+cut-after-header = refl
+
+cut-in-payload : C.classify (2 ∷ 3 ∷ 5 ∷ []) ≡ C.torn
+cut-in-payload = refl
+
+cut-before-sum : C.classify (2 ∷ 3 ∷ 5 ∷ 6 ∷ []) ≡ C.torn
+cut-before-sum = refl
+
+-- The theorem applies: the hypotheses of `classify-torn` are inhabited.
+classify-torn-applies : C.classify (2 ∷ 3 ∷ 5 ∷ []) ≡ C.torn
+classify-torn-applies =
+  C.classify-torn (5 ∷ 6 ∷ []) (2 ∷ 3 ∷ 5 ∷ []) (6 ∷ 11 ∷ []) (fitsC (5 ∷ 6 ∷ []))
+    (λ ()) (λ ()) refl
+
+-- What is not caught: damage that leaves a canonical header declaring more
+-- than the input holds. Length and check cell changed together, 2 ∷ 3 to
+-- 9 ∷ 10. This is the blind spot of any header check, and how unlikely it
+-- is depends on the check's strength.
+changed-header-with-matching-check-looks-torn :
+  C.classify (9 ∷ 10 ∷ 5 ∷ 6 ∷ 11 ∷ []) ≡ C.torn
+changed-header-with-matching-check-looks-torn = refl
+
+------------------------------------------------------------------------
 -- Replay: worked cases
 
 -- Rollback marks the operations it reverses and closes the transaction, so
@@ -294,6 +391,15 @@ crash-recovery-applies :
     × (M.load (M.log synced ++ 1 ∷ 4 ∷ []) ≡ just (replay (synced ++ qs₁)))
 crash-recovery-applies =
   M.crash-recovery synced (rolledBack ∷ []) (fits synced) (fits (rolledBack ∷ [])) a-crash
+
+-- What the loader leaves over after that crash is not classified as damage.
+crash-tail-applies :
+  M.classify (M.discarded (M.log synced ++ 1 ∷ 4 ∷ [])) ≢ M.damaged
+crash-tail-applies =
+  M.crash-tail synced (rolledBack ∷ []) (fits synced) (fits (rolledBack ∷ [])) a-crash
+
+crash-tail-example : M.classify (M.discarded (M.log synced ++ 1 ∷ 4 ∷ [])) ≡ M.torn
+crash-tail-example = refl
 
 -- Compaction: the snapshot record alone loads to the same state.
 compaction-example : M.load (M.compacted synced) ≡ just (replay synced)

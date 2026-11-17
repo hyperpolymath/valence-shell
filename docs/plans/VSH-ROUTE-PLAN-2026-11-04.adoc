@@ -1130,6 +1130,42 @@ converted on first start and kept under a new name. A sync costs about 0.15 ms
 here (p95 0.43 ms), under the 2 ms threshold for syncing every record; the
 stress suite takes 82 s on disk and 39 s on tmpfs, so its CI step uses tmpfs.
 
+[[c2-header-check]]
+*14.4b Review follow-up: a check on the record's length (Measured 2026-11-17,
+local).* A review of C2 found that a changed length field could pass for an
+interrupted write. The record then seems to run past the end of the file; the
+loader set it and every later record aside, and the shell started with a
+shorter history, or an empty one. Each record's header is now the 4-byte
+length followed by a 4-byte check of it (the first four bytes of SHA-256 over
+a fixed tag and the length), so a record is length, check, payload, SHA-256
+of the payload. A whole header that fails its check is damage, and the shell
+refuses to load, as it does for a failed payload checksum.
+
+The model already had the test. Its decoder accepts a header `h` only if
+`hdr (unhdr h) ≡ h`, which says nothing for a bare length and is the header
+check once `hdr` carries one. The model gained `classify` (clean, torn or
+damaged) with `classify-torn`, `decode-crash-tail` and `crash-tail`: after a
+crash that keeps a prefix of what was appended, the rejected bytes are never
+classified as damaged, so a crash cannot set off the refusal. Four more
+mutations were rejected. The crash harness still finds no failing class:
+3,139 crash images on the simulated storage and 3,130 crash states on real
+files. `cargo test`: 889 passed, 0 failed, 15 ignored.
+
+Limits:
+
+* Damage that leaves a header passing its check, and declaring more bytes than
+  the file holds, is still read as an interrupted write. For a header changed
+  at random that is about one case in 2^32.
+* A tail of zero bytes is outside the crash model. Some storage can leave one
+  after a power loss. It is reported as damage once it holds a whole header
+  (8 bytes; before the check, 36), and the shell then refuses to start until
+  the file is repaired by hand, because the recovery command (C5) is not
+  built. Whether such a tail should be read as an interrupted write is an
+  open decision (section 14.5).
+* Journals written by earlier commits of this branch have the old header and
+  are refused as damaged. The format was never merged or released, so there
+  is no converter.
+
 Three behaviours changed with it, each following the model. The owner ruled on
 them the same day (OD-38 to OD-40):
 
@@ -1185,6 +1221,23 @@ recommendation is the first.
 
 *Deed migration:* nine owner inputs are listed in
 `archive/a2ml-v1/MIGRATION-LEDGER.adoc` on #229.
+
+*A journal that ends in zero bytes* (raised by the header check, section
+14.4b). The crash model says a crash keeps a prefix of what was appended. Some
+storage can instead leave zero bytes at the end of the file after a power
+loss. Today that is damage, and the shell refuses to start (OD-40).
+
+[cols="5,1,4",options="header"]
+|===
+|Option |E / D |Notes
+
+|Read a tail that is nothing but zero bytes as an interrupted write, and widen the model's crash to "a prefix, then any number of zero bytes" with `crash-tail` proved for it |8 / 8 |Such a tail holds no record, so setting it aside loses nothing, and it runs to the end of the file, so it cannot hide a good record. It does hide one thing: a record that was overwritten with zeros is no longer reported as damage. The etcd log reader works this way: a zero length ends the log, and a record that fails its check and has a zeroed sector counts as a torn write (https://github.com/etcd-io/etcd/blob/main/server/storage/wal/decoder.go[`decoder.go`], read 2026-11-17)
+|Keep it as damage, and build the recovery command (C5) before the first engine release |7 / 9 |Nothing is ever guessed. Until C5 exists, a user must repair the file by hand
+|Treat every unreadable tail as the end of the journal |4 / 5 |Always starts. Gives up the difference between a crash and damage, which OD-40 ruled against. SQLite's log is read this way: a frame is valid only if its running checksum matches, so the first bad frame ends the log (https://www.sqlite.org/fileformat2.html#walformat[file format], section 4.1, read 2026-11-17)
+|===
+
+The recommendation is the first, with C5 still built. It is not taken without
+a ruling, because it changes what OD-40 refuses.
 
 === 14.6 Stop rules added
 

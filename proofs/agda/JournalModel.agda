@@ -18,6 +18,9 @@
                         the replay of `es` followed by a prefix of `qs`;
    * `crash-state`      so the recovered state is one the shell actually
                         passed through after its last sync;
+   * `crash-tail`       and the bytes the loader does not accept are never
+                        classified as damage, so a loader that refuses a
+                        damaged journal is not stopped by a crash;
    * `synced-survives`  with nothing pending, the recovered state is exactly
                         the replay of `es`;
    * `write-atomic`     with one event pending, the recovered state is the
@@ -54,7 +57,7 @@ open import Data.List.Base using (List; []; _∷_; _++_; length; map)
 open import Data.Maybe.Base using (Maybe; just; nothing)
 open import Relation.Binary.Definitions using (DecidableEquality)
 open import Relation.Binary.PropositionalEquality
-  using (_≡_; refl; sym; trans; cong; cong₂; subst)
+  using (_≡_; _≢_; refl; sym; trans; cong; cong₂; subst)
 
 import JournalFraming
 import JournalReplay
@@ -195,6 +198,14 @@ crash-state : ∀ es qs → Fits es → Fits qs →
 crash-state es qs fes fqs cr with crash-recovery es qs fes fqs cr
 ... | qs₁ , qs₂ , split , ld =
   qs₁ , qs₂ , split , trans ld (cong just (replay-++ es qs₁))
+
+-- What the loader does not accept after a crash is empty or a record cut
+-- short. It is never classified as damage, so a loader that refuses a
+-- damaged journal still starts after any crash.
+crash-tail : ∀ es qs → Fits es → Fits qs →
+  ∀ {bs} → Crash (journal es qs) bs → classify (discarded bs) ≢ damaged
+crash-tail es qs fes fqs (crashed t u pend) =
+  decode-crash-tail (map enc es) (map enc qs) fes fqs t u (sym pend)
 
 -- With nothing pending, a crash loses nothing.
 synced-survives : ∀ es → Fits es →

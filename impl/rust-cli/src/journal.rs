@@ -14,11 +14,20 @@
 //! # Record format
 //!
 //! ```text
-//! | length: u32, little-endian | payload: `length` bytes | SHA-256 of payload: 32 bytes |
+//! | length: u32, little-endian | check of the length: 4 bytes | payload: `length` bytes | SHA-256 of payload: 32 bytes |
 //! ```
 //!
-//! * A record cut short at any point is rejected by its length alone
-//!   (model: `step-torn`).
+//! The first two fields are the header. The check is the first four bytes of
+//! SHA-256 over a fixed tag followed by the length field. It lets the length
+//! be tested before it is used to find the end of the record. In the model
+//! the header is the function `hdr`, and the decoder's test
+//! `hdr (unhdr h) ≡ h` is this check.
+//!
+//! * A record cut short at any point is rejected (model: `step-torn`), and is
+//!   reported as an interrupted append, never as damage (model:
+//!   `classify-torn`).
+//! * A whole header that fails its check is damage. An interrupted append
+//!   cannot leave one, because it leaves a prefix of what was written.
 //! * Whatever [`decode`] accepts is, byte for byte, a run of well-formed
 //!   records at the front of the input (model: `decode-sound`).
 //! * The checksum makes it unlikely that bytes never written as a record are
@@ -39,7 +48,11 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
 /// Width of the length field.
-pub const HEADER_LEN: usize = 4;
+pub const LENGTH_FIELD_LEN: usize = 4;
+/// Width of the check on the length field.
+pub const HEADER_CHECK_LEN: usize = 4;
+/// Width of the header: the length field, then its check.
+pub const HEADER_LEN: usize = LENGTH_FIELD_LEN + HEADER_CHECK_LEN;
 /// Width of the checksum.
 pub const SUM_LEN: usize = 32;
 /// Longest payload the length field can carry (model: `Frameable`).
@@ -50,15 +63,33 @@ pub const MAX_PAYLOAD: usize = u32::MAX as usize;
 #[error("journal record of {0} bytes exceeds the {MAX_PAYLOAD}-byte limit")]
 pub struct PayloadTooLong(pub usize);
 
+/// Hashed in front of the length field in every header check. It names this
+/// record format, so a journal written in another format is rejected at its
+/// first record and not misread.
+const HEADER_TAG: &[u8] = b"vsh-journal-header-v1";
+
 fn checksum(payload: &[u8]) -> [u8; SUM_LEN] {
     Sha256::digest(payload).into()
+}
+
+/// The check stored after a length field.
+fn header_check(length_field: &[u8; LENGTH_FIELD_LEN]) -> [u8; HEADER_CHECK_LEN] {
+    let digest = Sha256::new()
+        .chain_update(HEADER_TAG)
+        .chain_update(length_field)
+        .finalize();
+    let mut check = [0; HEADER_CHECK_LEN];
+    check.copy_from_slice(&digest[..HEADER_CHECK_LEN]);
+    check
 }
 
 /// Append the frame for `payload` to `out` (model: `frame`).
 pub fn write_frame(out: &mut Vec<u8>, payload: &[u8]) -> Result<(), PayloadTooLong> {
     let len = u32::try_from(payload.len()).map_err(|_| PayloadTooLong(payload.len()))?;
+    let length_field = len.to_le_bytes();
     out.reserve(HEADER_LEN + payload.len() + SUM_LEN);
-    out.extend_from_slice(&len.to_le_bytes());
+    out.extend_from_slice(&length_field);
+    out.extend_from_slice(&header_check(&length_field));
     out.extend_from_slice(payload);
     out.extend_from_slice(&checksum(payload));
     Ok(())
@@ -71,12 +102,38 @@ pub fn frame(payload: &[u8]) -> Result<Vec<u8>, PayloadTooLong> {
     Ok(out)
 }
 
+/// What stands where a record's header should be.
+enum Header {
+    /// Fewer bytes than a header has.
+    Incomplete,
+    /// A whole header whose check does not match its length field.
+    Bad,
+    /// A whole header that passes its check, with the payload length it
+    /// declares.
+    Good(usize),
+}
+
+/// Read a header from the front of `bytes`.
+fn read_header(bytes: &[u8]) -> Header {
+    let Some((length_field, rest)) = bytes.split_first_chunk::<LENGTH_FIELD_LEN>() else {
+        return Header::Incomplete;
+    };
+    let Some(check) = rest.first_chunk::<HEADER_CHECK_LEN>() else {
+        return Header::Incomplete;
+    };
+    if *check != header_check(length_field) {
+        return Header::Bad;
+    }
+    Header::Good(u32::from_le_bytes(*length_field) as usize)
+}
+
 /// Read one record from the front of `bytes` (model: `step`). Returns the
 /// payload and the number of bytes the record occupies, or `None` if `bytes`
 /// does not start with a well-formed record.
 fn step(bytes: &[u8]) -> Option<(&[u8], usize)> {
-    let header: [u8; HEADER_LEN] = bytes.get(..HEADER_LEN)?.try_into().ok()?;
-    let len = u32::from_le_bytes(header) as usize;
+    let Header::Good(len) = read_header(bytes) else {
+        return None;
+    };
     let payload_end = HEADER_LEN.checked_add(len)?;
     let frame_end = payload_end.checked_add(SUM_LEN)?;
     let payload = bytes.get(HEADER_LEN..payload_end)?;
@@ -84,17 +141,20 @@ fn step(bytes: &[u8]) -> Option<(&[u8], usize)> {
     (sum == checksum(payload)).then_some((payload, frame_end))
 }
 
-/// What follows the accepted records in a journal file.
+/// What follows the accepted records in a journal file (model: `Tail`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tail {
     /// Nothing. The journal is clean.
     Clean,
-    /// An incomplete record: the file ends before the record's length field,
-    /// payload or checksum does. This is what an interrupted append leaves,
-    /// and all it can leave if a crash keeps a prefix of what was written.
+    /// An incomplete record: the file ends before the record's header,
+    /// payload or checksum does, and the header, if all of it is there,
+    /// passes its check. This is what an interrupted append leaves, and all
+    /// it can leave if a crash keeps a prefix of what was written (model:
+    /// `classify-torn`).
     Torn,
-    /// A complete record whose checksum does not match its payload. An
-    /// interrupted append cannot produce this; the file has been damaged.
+    /// A whole header that fails its check, or a complete record whose
+    /// checksum does not match its payload. An interrupted append cannot
+    /// produce either; the file has been damaged.
     Damaged,
 }
 
@@ -108,25 +168,24 @@ pub struct Decoded<'a> {
     pub accepted: usize,
     /// What the bytes that were not accepted are.
     ///
-    /// The distinction has one blind spot. Damage to a length field that
-    /// makes the record appear to run past the end of the file looks the
-    /// same as an interrupted append, and is reported as [`Tail::Torn`].
+    /// The distinction has one blind spot. Damage to a header that still
+    /// passes the header check, and that makes the record appear to run past
+    /// the end of the file, looks the same as an interrupted append and is
+    /// reported as [`Tail::Torn`]. The check is four bytes, so a header
+    /// changed at random passes it about once in 2^32 times.
     pub tail: Tail,
 }
 
-/// Classify the bytes after the last accepted record.
+/// Classify the bytes after the last accepted record (model: `classify`).
 fn classify_tail(rest: &[u8]) -> Tail {
     if rest.is_empty() {
         return Tail::Clean;
     }
-    let Some(header) = rest.get(..HEADER_LEN) else {
-        return Tail::Torn;
+    let len = match read_header(rest) {
+        Header::Incomplete => return Tail::Torn,
+        Header::Bad => return Tail::Damaged,
+        Header::Good(len) => len,
     };
-    // The slice is exactly HEADER_LEN bytes, so the conversion cannot fail.
-    let len = header
-        .try_into()
-        .map(|bytes: [u8; HEADER_LEN]| u32::from_le_bytes(bytes) as usize)
-        .unwrap_or(usize::MAX);
     let complete = HEADER_LEN
         .checked_add(len)
         .and_then(|end| end.checked_add(SUM_LEN))
@@ -601,12 +660,34 @@ mod tests {
     }
 
     #[test]
-    fn frame_layout_is_length_payload_checksum() {
+    fn frame_layout_is_length_check_payload_checksum() {
         let bytes = frame(b"ab").unwrap();
+        let length_field = 2u32.to_le_bytes();
+        assert_eq!(HEADER_LEN, 8);
         assert_eq!(bytes.len(), HEADER_LEN + 2 + SUM_LEN);
-        assert_eq!(&bytes[..HEADER_LEN], &2u32.to_le_bytes());
+        assert_eq!(&bytes[..LENGTH_FIELD_LEN], &length_field);
+        assert_eq!(
+            &bytes[LENGTH_FIELD_LEN..HEADER_LEN],
+            &header_check(&length_field)
+        );
         assert_eq!(&bytes[HEADER_LEN..HEADER_LEN + 2], b"ab");
         assert_eq!(&bytes[HEADER_LEN + 2..], &checksum(b"ab"));
+    }
+
+    /// The header check is written down here so that a change to it, or to
+    /// the tag hashed with it, is a change to this test: the bytes on disk
+    /// are a format, and old journals must not be misread.
+    #[test]
+    fn header_check_is_the_start_of_sha256_over_the_tag_and_the_length() {
+        let length_field = 5u32.to_le_bytes();
+        let mut hashed = b"vsh-journal-header-v1".to_vec();
+        hashed.extend_from_slice(&length_field);
+        assert_eq!(header_check(&length_field), Sha256::digest(&hashed)[..4]);
+        // Different lengths give different checks, or the check says nothing.
+        assert_ne!(
+            header_check(&5u32.to_le_bytes()),
+            header_check(&6u32.to_le_bytes())
+        );
     }
 
     /// Model: `decode-clean`.
@@ -620,8 +701,9 @@ mod tests {
         assert_eq!(decoded.tail, Tail::Clean);
     }
 
-    /// A cut anywhere inside a record is an interrupted append; a changed
-    /// byte in a whole record's payload or checksum is damage.
+    /// A cut anywhere inside a record is an interrupted append (model:
+    /// `classify-torn`); a changed bit anywhere in a whole record, its header
+    /// included, is damage.
     #[test]
     fn a_cut_record_is_torn_and_a_changed_record_is_damaged() {
         let first = frame(b"first").unwrap();
@@ -642,14 +724,63 @@ mod tests {
             assert_eq!(decode(&bytes[..cut]).tail, expected, "cut at {cut}");
         }
 
-        // A flipped bit in the second record's payload or checksum, with the
-        // third record still after it.
-        for i in first.len() + HEADER_LEN..first.len() + HEADER_LEN + 6 + SUM_LEN {
+        // Every single flipped bit in the second record, with the third
+        // record still after it.
+        for i in first.len()..first.len() + HEADER_LEN + 6 + SUM_LEN {
+            for bit in 0..8 {
+                let mut damaged = bytes.clone();
+                damaged[i] ^= 1 << bit;
+                let decoded = decode(&damaged);
+                assert_eq!(decoded.records, [b"first"], "byte {i} bit {bit}");
+                assert_eq!(decoded.tail, Tail::Damaged, "byte {i} bit {bit}");
+            }
+        }
+    }
+
+    /// A length field changed so that the record seems to run past the end
+    /// of the file must not pass for an interrupted append. Before the
+    /// header had a check it did, and the records after it were dropped.
+    #[test]
+    fn a_length_changed_to_run_past_the_end_is_damage_not_a_torn_tail() {
+        let bytes = frames(&[b"first", b"second", b"third"]);
+        let second = frame(b"first").unwrap().len();
+        let third = second + frame(b"second").unwrap().len();
+        for (start, kept) in [(0, 0), (second, 1), (third, 2)] {
+            // Every bit of the length field, then every bit of its check.
+            for i in start..start + HEADER_LEN {
+                for bit in 0..8 {
+                    let mut damaged = bytes.clone();
+                    damaged[i] ^= 1 << bit;
+                    let decoded = decode(&damaged);
+                    assert_eq!(decoded.records.len(), kept, "byte {i} bit {bit}");
+                    assert_eq!(decoded.accepted, start, "byte {i} bit {bit}");
+                    assert_eq!(decoded.tail, Tail::Damaged, "byte {i} bit {bit}");
+                }
+            }
+            // The case from the review: the length made as large as it goes.
             let mut damaged = bytes.clone();
-            damaged[i] ^= 0x01;
-            let decoded = decode(&damaged);
-            assert_eq!(decoded.records, [b"first"], "byte {i}");
-            assert_eq!(decoded.tail, Tail::Damaged, "byte {i}");
+            damaged[start..start + LENGTH_FIELD_LEN].copy_from_slice(&u32::MAX.to_le_bytes());
+            assert_eq!(decode(&damaged).tail, Tail::Damaged, "record at {start}");
+        }
+    }
+
+    /// A tail of zero bytes is not a record cut short: its header fails the
+    /// check. Some file systems can leave zeros after a crash; the journal
+    /// reports that as damage and leaves the decision to a person.
+    #[test]
+    fn a_tail_of_zero_bytes_is_damage_once_it_holds_a_whole_header() {
+        let good = frames(&[b"first"]);
+        for zeros in 1..=HEADER_LEN + 40 {
+            let mut bytes = good.clone();
+            bytes.extend(std::iter::repeat_n(0u8, zeros));
+            let decoded = decode(&bytes);
+            assert_eq!(decoded.records, [b"first"], "{zeros} zero bytes");
+            let expected = if zeros < HEADER_LEN {
+                Tail::Torn
+            } else {
+                Tail::Damaged
+            };
+            assert_eq!(decoded.tail, expected, "{zeros} zero bytes");
         }
     }
 
@@ -710,11 +841,18 @@ mod tests {
         }
     }
 
+    /// A good header that declares the longest payload there is, with the
+    /// file ending soon after it. This is what the start of a very large
+    /// append looks like, so it is torn, and the arithmetic must not wrap.
     #[test]
-    fn a_length_field_past_the_end_is_rejected_without_overflow() {
-        let mut bytes = u32::MAX.to_le_bytes().to_vec();
+    fn a_good_header_for_the_longest_payload_is_torn_without_overflow() {
+        let length_field = u32::MAX.to_le_bytes();
+        let mut bytes = length_field.to_vec();
+        bytes.extend_from_slice(&header_check(&length_field));
         bytes.extend_from_slice(&[7; 40]);
-        assert_eq!(decode(&bytes).accepted, 0);
+        let decoded = decode(&bytes);
+        assert_eq!(decoded.accepted, 0);
+        assert_eq!(decoded.tail, Tail::Torn);
     }
 
     #[test]
