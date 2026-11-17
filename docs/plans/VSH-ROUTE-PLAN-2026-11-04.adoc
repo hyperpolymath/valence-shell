@@ -1201,3 +1201,17 @@ The stop rules of section 9 stand. Added:
 * The stress suite on CI, on macOS, or under a release build.
 * Anything about the Rust code following the journal model.
 * The E / D ratings.
+
+=== 14.10 Product review (2026-11-17)
+
+The owner asked for a review of the whole plan as a product before ruling on
+hole (b). It is in `VSH-PRODUCT-REVIEW-2026-11-17.adoc`.
+
+* It measures the shell against bash on everyday use, compares it with other
+  shells and with existing tools for undo, containment, audit and deletion,
+  rates each aspect, and sets out routes with their costs.
+* Its main finding for this plan: gates G1 to G11 say nothing about use as a
+  shell. It proposes a gate G0 (what is claimed equals what a battery shows)
+  and a staged model in which each step is a product.
+* It changes nothing here until the owner rules on its section 10. Hole (b)
+  stays open and is not implemented meanwhile.
