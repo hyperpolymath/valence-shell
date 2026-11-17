@@ -2262,7 +2262,7 @@ pub fn explain_command(cmd: &crate::parser::Command, state: &ShellState) -> Resu
             println!("  {}", "Inverse operation:".bright_yellow().bold());
             println!("    fs' ─── {} ───▶ fs", format!("{}", inv).bright_red(),);
             println!(
-                "    Proof: {}  {}",
+                "    Theorem (model): {}  {}",
                 proof_ref
                     .as_ref()
                     .map_or("(none)", |p| p.description)
@@ -2515,10 +2515,11 @@ pub fn diff_state(state: &ShellState, target_op: usize) -> Result<()> {
     );
 
     let composition_proof = crate::proof_refs::COMPOSITION_REVERSIBLE;
+    // The theorem is about the model. Whether this code follows the model is
+    // tested, not proved (EXPLAINME.adoc, proof ledger), so no tick is shown.
     println!(
-        "  All reversals proven: {} {}",
-        composition_proof.theorem.bright_cyan(),
-        "✓".bright_green()
+        "  Reversal theorem (about the model): {}",
+        composition_proof.theorem.bright_cyan()
     );
     Ok(())
 }
@@ -2564,11 +2565,7 @@ pub fn replay(state: &ShellState, start: usize, end: usize) -> Result<()> {
             format!("_{}", idx)
         };
         println!("    State: fs{} ──▶ fs_{}", from_state, idx + 1);
-        println!(
-            "    Proof: {} {}",
-            proof.theorem.bright_cyan(),
-            "✓".bright_green()
-        );
+        println!("    Theorem (model): {}", proof.theorem.bright_cyan());
         println!("    [{}] {}%", bar.bright_green(), (step * 100) / total);
         println!();
 
@@ -2577,16 +2574,18 @@ pub fn replay(state: &ShellState, start: usize, end: usize) -> Result<()> {
     }
 
     println!(
-        "Replay complete. {}: {} operations, all proven reversible.",
+        "Replay complete. {}: {} operations.",
         "Total".bright_white().bold(),
         total
+    );
+    println!(
+        "Each has a reversal theorem about the model; the link from the model to this code is tested, not proved."
     );
 
     let composition = crate::proof_refs::COMPOSITION_REVERSIBLE;
     println!(
-        "Composition theorem: {} {}",
-        composition.theorem.bright_cyan(),
-        "✓".bright_green()
+        "Composition theorem (model): {}",
+        composition.theorem.bright_cyan()
     );
 
     // Show full undo path

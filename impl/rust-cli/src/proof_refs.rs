@@ -322,14 +322,21 @@ pub fn print_verification_summary() {
 
     println!("{}", "Trust Model:".bright_yellow());
     println!(
-        "  {} Formal proofs verified by proof assistant kernels",
+        "  {} Theorems about the model are checked by proof assistants",
         "✓".bright_green()
     );
     println!(
-        "  {} Zig FFI layer checks preconditions",
+        "  {} The link from the model to this Rust code is tested, not proved",
+        "○".bright_yellow()
+    );
+    println!(
+        "  {} The Zig FFI layer is not connected to this shell",
+        "○".bright_yellow()
+    );
+    println!(
+        "  {} The shell keeps the operation history that undo uses",
         "✓".bright_green()
     );
-    println!("  {} Rust CLI maintains undo stack", "✓".bright_green());
     println!(
         "  {} POSIX semantics assumed correct (OS trust)",
         "○".bright_yellow()
@@ -337,9 +344,8 @@ pub fn print_verification_summary() {
     println!();
 
     println!("{}", "Verification Gap:".bright_red());
-    println!("  The FFI layer is NOT mechanically verified.");
-    println!("  It implements precondition checks derived from proofs.");
-    println!("  Full end-to-end verification requires:");
+    println!("  No proof connects the model to the code that runs.");
+    println!("  Closing that gap requires:");
     println!("  - Formal POSIX semantics model");
     println!("  - Refinement proof from abstract to concrete");
     println!("  - Verified compilation chain");

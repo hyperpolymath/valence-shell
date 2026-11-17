@@ -278,6 +278,11 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::Success)
             }
 
+            Command::Help { topic } => {
+                crate::help::display_help(topic.as_deref(), crate::help::HelpTier::Verbose)?;
+                Ok(ExecutionResult::Success)
+            }
+
             // Exit commands
             Command::Exit { code } => {
                 // `exit` alone keeps the status of the last command. Only the low
@@ -1268,6 +1273,7 @@ impl ExecutableCommand for Command {
             Command::Rollback => "rollback".to_string(),
             Command::Graph => "graph".to_string(),
             Command::Proofs => "proofs".to_string(),
+            Command::Help { .. } => "help".to_string(),
             Command::Ls { path, .. } => {
                 if let Some(p) = path {
                     format!("ls {}", p)

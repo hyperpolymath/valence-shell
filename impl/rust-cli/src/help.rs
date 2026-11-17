@@ -200,7 +200,9 @@ impl HelpEntry {
         if let Some(op_type) = self.proof_operation {
             output.push_str("FORMAL VERIFICATION\n");
             let proof_ref = proof_refs::ProofReference::for_operation(op_type);
-            output.push_str("       This operation is formally verified for correctness.\n\n");
+            output.push_str(
+                "       This operation has a reversal theorem about the model. Whether the\n       code follows the model is tested, not proved.\n\n",
+            );
             output.push_str(&format!("       Theorem: {}\n", proof_ref.theorem));
             output.push_str(&format!(
                 "       Description: {}\n\n",
@@ -279,31 +281,51 @@ fn display_command_list() -> Result<()> {
 
     // Group by category
     let categories = vec![
-        ("Navigation", vec!["cd", "pwd"]),
-        ("File Operations", vec!["mkdir", "rmdir", "touch", "rm"]),
-        ("History & Undo", vec!["undo", "redo", "history"]),
+        ("Navigation", vec!["cd", "pwd", "ls"]),
+        (
+            "File Operations",
+            vec![
+                "mkdir", "rmdir", "touch", "rm", "cp", "mv", "ln", "chmod", "chown",
+            ],
+        ),
+        (
+            "History & Undo",
+            vec![
+                "undo",
+                "redo",
+                "history",
+                "explain",
+                "checkpoint",
+                "restore",
+                "diff",
+                "replay",
+                "graph",
+            ],
+        ),
         ("Transactions", vec!["begin", "commit", "rollback"]),
-        ("Utilities", vec!["help", "exit"]),
+        ("Irreversible", vec!["obliterate"]),
+        ("Utilities", vec!["help", "proofs", "jobs", "exit"]),
     ];
 
     for (category, commands) in categories {
         println!("{}", category.bright_yellow());
         for cmd in commands {
-            if let Some(entry) = get_help(cmd) {
-                println!("  {} - {}", cmd.bright_green(), entry.summary);
+            // A command without a detailed entry is still listed, so the list
+            // does not suggest it is missing.
+            match get_help(cmd) {
+                Some(entry) => println!("  {} - {}", cmd.bright_green(), entry.summary),
+                None => println!("  {}", cmd.bright_green()),
             }
         }
         println!();
     }
 
-    println!("Run {} for command details", "help <command>".bright_cyan());
     println!(
-        "Run {} for detailed help with examples",
-        "help -v <command>".bright_cyan()
+        "Run {} for details, where a command has them.",
+        "help <command>".bright_cyan()
     );
     println!(
-        "Run {} for full manual page",
-        "man vsh-<command>".bright_cyan()
+        "The built-in file commands take one operand each (two for cp, mv and ln -s) and no options."
     );
 
     Ok(())
@@ -454,12 +476,10 @@ static HELP_DATABASE: &[HelpEntry] = &[
     HelpEntry {
         name: "help",
         summary: "Display help information",
-        usage: "help [command] [-v]",
-        description: "Shows help at three levels:\n\
+        usage: "help [command]",
+        description: "Shows help at two levels:\n\
                       - help           : List all commands\n\
-                      - help <cmd>     : Quick reference\n\
-                      - help -v <cmd>  : Detailed help with examples\n\
-                      - man vsh-<cmd>  : Full manual page",
+                      - help <cmd>     : Usage and examples, where the command has them",
         examples: &[
             Example {
                 description: "List all commands",
@@ -468,10 +488,6 @@ static HELP_DATABASE: &[HelpEntry] = &[
             Example {
                 description: "Quick help for mkdir",
                 command: "help mkdir",
-            },
-            Example {
-                description: "Detailed help with examples",
-                command: "help -v mkdir",
             },
         ],
         related: &[],

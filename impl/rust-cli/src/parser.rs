@@ -274,6 +274,10 @@ pub enum Command {
     // Display commands
     Graph,
     Proofs,
+    /// `help [command]`
+    Help {
+        topic: Option<String>,
+    },
     Ls {
         path: Option<String>,
         redirects: Vec<Redirection>,
@@ -3550,6 +3554,13 @@ fn parse_base_command(
         // Display commands
         "graph" => Ok(Command::Graph),
         "proofs" | "proof" => Ok(Command::Proofs),
+        "help" | "?" => {
+            let (_, operands) =
+                builtin_operands("help", &args, &[], 0, 1, "help: missing operand")?;
+            Ok(Command::Help {
+                topic: operands.first().cloned(),
+            })
+        }
         "ls" => {
             let (_, operands) = builtin_operands("ls", &args, &[], 0, 1, "ls: missing operand")?;
             Ok(Command::Ls {
