@@ -97,11 +97,36 @@ the open list.
   `openat2`, `cap-std` resolves paths itself, one component at a time; that
   path was not exercised here.
 
+== Follow-up the same day: obliterate
+
+`obliterate` (file and directory forms) and `secure_delete` now work through
+the handle, and close holes c, i, m and n:
+
+* A symbolic link is refused, wherever it points. The request named the link,
+  and the data belongs to its target.
+* A file with more than one hard link is refused, and so is a directory that
+  contains one. The check is made on the open file, which is opened without
+  following a link, so the name cannot be swapped in between.
+* A directory is walked first, without following links, and refused whole if
+  anything in it cannot be obliterated safely. Links inside it are removed as
+  links.
+* `obliterate` is refused inside a transaction (ruling OD-3a).
+* An audit entry is written before anything is destroyed, and its failure
+  stops the command. A second entry records the outcome.
+
+Output redirection also refuses a file with more than one hard link.
+
+One fault was found on the way: a directory handle from `open_dir` cannot be
+synced (`EBADF`), so the first version destroyed the file and then reported
+failure. The directory is now opened as a file for syncing. The existing
+tests did not catch this; the hole test for d did, because its set-up runs
+`obliterate`.
+
 == Decision and next steps
 
 Capability handles are adopted for containment (route plan step B2):
 
-. Port the remaining commands, `rm` and `obliterate` first.
+. Port the remaining commands, `rm` first (`obliterate` is done).
 . Give the shell a fixed session root and a separate working directory;
   record history paths relative to the session root.
 . Refuse content operations on files with more than one hard link, and

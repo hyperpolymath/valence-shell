@@ -1086,3 +1086,91 @@ fn prop_glob_deterministic() {
         prop_assert_eq!(expansion1, expansion2, "Glob expansion should be deterministic");
     });
 }
+
+// ============================================================
+// Arithmetic never panics
+// ============================================================
+
+const ARITH_BINARY_OPS: &[&str] = &[
+    "+", "-", "*", "/", "%", "**", "<<", ">>", "&", "|", "^", "<", "<=", ">", ">=", "==", "!=",
+    "&&", "||",
+];
+const ARITH_UNARY_OPS: &[&str] = &["", "-", "+", "!", "~"];
+
+/// Operands at and around the edges of i64, where `/`, `%` and negation used
+/// to panic.
+const ARITH_EDGES: &[i64] = &[
+    i64::MIN,
+    i64::MIN + 1,
+    -2,
+    -1,
+    0,
+    1,
+    2,
+    63,
+    64,
+    i64::MAX - 1,
+    i64::MAX,
+];
+
+/// Evaluate every shape of expression over `a` and `b`. Returning at all is
+/// the property: a panic fails the test.
+fn evaluate_all_shapes(state: &mut vsh::state::ShellState, a: i64, b: i64, op: &str, unary: &str) {
+    // Operands go in through variables: the smallest i64 cannot be written
+    // as a literal.
+    state.set_variable("a", a.to_string());
+    state.set_variable("b", b.to_string());
+    for expression in [
+        format!("a {op} b"),
+        format!("{unary}a {op} {unary}b"),
+        format!("{unary}(a {op} b)"),
+    ] {
+        if let Ok(parsed) = vsh::arith::parse_arithmetic(&expression) {
+            let _ = vsh::arith::eval_arith(&parsed, state);
+        }
+    }
+}
+
+/// Every operator on every pair of edge operands: a value or an error,
+/// never a panic. Exhaustive, so it does not depend on what a random run
+/// happens to draw.
+#[test]
+fn arithmetic_never_panics_at_the_edges() {
+    let temp = TempDir::new().unwrap();
+    let mut state = vsh::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
+    for &a in ARITH_EDGES {
+        for &b in ARITH_EDGES {
+            for op in ARITH_BINARY_OPS {
+                for unary in ARITH_UNARY_OPS {
+                    evaluate_all_shapes(&mut state, a, b, op, unary);
+                }
+            }
+        }
+    }
+
+    // The three cases that panicked, with the values bash gives.
+    state.set_variable("m", i64::MIN.to_string());
+    let eval = |expression: &str, state: &vsh::state::ShellState| {
+        vsh::arith::eval_arith(&vsh::arith::parse_arithmetic(expression).unwrap(), state).unwrap()
+    };
+    assert_eq!(eval("m / -1", &state), i64::MIN);
+    assert_eq!(eval("m % -1", &state), 0);
+    assert_eq!(eval("-m", &state), i64::MIN);
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(500))]
+
+    /// The same for operands drawn at random.
+    #[test]
+    fn prop_arithmetic_never_panics(
+        a in any::<i64>(),
+        b in any::<i64>(),
+        op in prop::sample::select(ARITH_BINARY_OPS.to_vec()),
+        unary in prop::sample::select(ARITH_UNARY_OPS.to_vec()),
+    ) {
+        let temp = TempDir::new().unwrap();
+        let mut state = vsh::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
+        evaluate_all_shapes(&mut state, a, b, op, unary);
+    }
+}

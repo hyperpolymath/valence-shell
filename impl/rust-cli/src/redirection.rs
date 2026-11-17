@@ -327,6 +327,17 @@ impl RedirectSetup {
         // is read for undo or opened for writing.
         let contained = state.contained_abs(&path)?;
         let exists = match state.root_dir().metadata(&contained) {
+            // A file with more than one hard link has other names, which
+            // may lie outside the session root. Writing to it would change
+            // what those names hold, so it is refused.
+            Ok(meta) if meta.is_file() && cap_fs_ext::MetadataExt::nlink(&meta) > 1 => {
+                anyhow::bail!(
+                    "Cannot redirect to {}: the file has {} hard links, and writing to it \
+                     would change the data under its other names too",
+                    path.display(),
+                    cap_fs_ext::MetadataExt::nlink(&meta)
+                )
+            }
             Ok(_) => true,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
             Err(e) => {

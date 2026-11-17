@@ -35,46 +35,159 @@
 //! operations use [`crate::secure_erase`] and validate the result independently.
 
 use anyhow::{bail, Context, Result};
+use cap_fs_ext::{FollowSymlinks, MetadataExt, OpenOptionsFollowExt};
+use cap_std::fs::Dir;
 use colored::Colorize;
-use std::fs::{self, OpenOptions};
 use std::io::{BufRead, Read, Seek, SeekFrom, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::state::{Operation, OperationType, ShellState};
 
 /// Dispatch `obliterate` to the file or directory variant by path type.
 /// This is the entry point wired into the shell parser/executor.
+///
+/// The type is read from the name itself, without following a symbolic
+/// link: a link to a directory is a link, and is refused like any other.
 pub fn obliterate_path(
     state: &mut ShellState,
     path: &str,
     verbose: bool,
     force: bool,
 ) -> Result<()> {
-    if state.resolve_path(path).is_dir() {
+    let contained = state.contained(path)?;
+    let is_dir = state
+        .root_dir()
+        .symlink_metadata(&contained)
+        .map(|meta| meta.is_dir())
+        .unwrap_or(false);
+    if is_dir {
         obliterate_dir(state, path, verbose, force)
     } else {
         obliterate(state, path, verbose, force)
     }
 }
 
-/// Append an RMO audit **residue**: a best-effort record that the command
-/// completed its local overwrite-and-unlink sequence. It is evidence of the
-/// command outcome, not proof of physical erasure or legal compliance. Written
-/// within the shell's sandbox root
-/// (`<root>/.vsh-audit.log`) so it is session-isolated and testable.
-/// Best-effort: obliteration still succeeds if the residue cannot be written,
-/// but a warning is emitted so the failure is never silent.
-fn append_rmo_residue(state: &ShellState, op: &Operation, outcome: &str) {
-    let log_path = state.root.join(".vsh-audit.log");
-    match crate::audit_log::AuditLog::new(log_path, None) {
-        Ok(log) => {
-            let entry = crate::audit_log::AuditEntry::from_operation(op, outcome, None);
-            if let Err(e) = log.append(&entry) {
-                eprintln!("warning: RMO audit residue not written: {e}");
-            }
-        }
-        Err(e) => eprintln!("warning: RMO audit log unavailable: {e}"),
+/// Obliteration cannot be undone, so it has no place in a transaction,
+/// whose promise is that it can be rolled back (owner ruling OD-3a).
+fn refuse_inside_transaction(state: &ShellState) -> Result<()> {
+    if state.active_transaction.is_some() {
+        bail!(
+            "obliterate cannot be undone, so it is refused inside a transaction. \
+             Commit or roll back the transaction first."
+        );
     }
+    Ok(())
+}
+
+/// Append an RMO audit entry for `op` to the audit log in the session root
+/// (`<session root>/.vsh-audit.log`). It is evidence of what the command
+/// did, not proof of physical erasure or legal compliance.
+///
+/// The `…-intent` entry is written *before* anything is destroyed, and its
+/// failure stops the command: nothing is obliterated that the log does not
+/// know about. The entry written afterwards records the outcome; if that
+/// one fails, the destruction has already happened, so the caller only
+/// warns.
+fn append_rmo_residue(state: &ShellState, op: &Operation, outcome: &str) -> Result<()> {
+    let log_path = state.session_root().join(".vsh-audit.log");
+    let log =
+        crate::audit_log::AuditLog::new(log_path, None).context("RMO audit log unavailable")?;
+    let entry = crate::audit_log::AuditEntry::from_operation(op, outcome, None);
+    log.append(&entry).context("RMO audit entry not written")
+}
+
+/// The regular file at `contained`, opened for overwriting, and its size.
+///
+/// Refuses anything that would destroy data reachable some other way:
+///
+/// * a symbolic link, because the data belongs to the link's target, which
+///   may lie outside the session root;
+/// * a file with more than one hard link, because its other names, which
+///   may lie outside the session root, would lose their contents.
+///
+/// The file is opened without following a link, and the checks are made on
+/// the open file, so the name cannot be swapped for a link in between.
+fn open_for_obliteration(dir: &Dir, contained: &Path) -> Result<(cap_std::fs::File, u64)> {
+    let named = match dir.symlink_metadata(contained) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            bail!("Path does not exist (ENOENT)")
+        }
+        Err(e) => return Err(e).context("Failed to stat target"),
+    };
+    if named.is_symlink() {
+        bail!(
+            "Path is a symbolic link. obliterate does not follow links: remove the link \
+             with rm, or obliterate its target by the target's own path."
+        );
+    }
+    if named.is_dir() {
+        bail!("Path is a directory (EISDIR)");
+    }
+    if !named.is_file() {
+        bail!("Path is not a regular file");
+    }
+
+    let mut options = cap_std::fs::OpenOptions::new();
+    options.write(true).follow(FollowSymlinks::No);
+    let file = dir
+        .open_with(contained, &options)
+        .context("Failed to open file for secure overwrite")?;
+    let opened = file.metadata().context("Failed to stat opened file")?;
+    if !opened.is_file() || opened.dev() != named.dev() || opened.ino() != named.ino() {
+        bail!("Path changed while it was being opened; nothing was overwritten");
+    }
+    if opened.nlink() > 1 {
+        bail!(
+            "File has {} hard links. Obliterating it would destroy the data under its \
+             other names too, so it is refused.",
+            opened.nlink()
+        );
+    }
+    Ok((file, opened.len()))
+}
+
+/// Overwrite the open `file` three times, then remove its name.
+///
+/// The name is removed only if it still refers to the file that was
+/// overwritten.
+fn overwrite_and_unlink(
+    dir: &Dir,
+    contained: &Path,
+    file: cap_std::fs::File,
+    file_size: u64,
+) -> Result<()> {
+    let identity = file.metadata().context("Failed to stat opened file")?;
+    let mut file = file.into_std();
+    overwrite_3pass(&mut file, file_size)?;
+    drop(file);
+
+    let named = dir
+        .symlink_metadata(contained)
+        .context("Failed to stat target after overwrite")?;
+    if named.dev() != identity.dev() || named.ino() != identity.ino() {
+        bail!("Path was replaced during the overwrite; the name was left in place");
+    }
+    dir.remove_file(contained)
+        .context("Failed to delete file after overwrite")?;
+    sync_directory(dir, contained.parent())
+}
+
+/// Make a removal durable in its directory.
+fn sync_directory(dir: &Dir, parent: Option<&Path>) -> Result<()> {
+    let parent = parent
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    // Opened as a file, read-only: a directory handle from `open_dir` may be
+    // path-only, which cannot be synced.
+    #[cfg(unix)]
+    dir.open(parent)
+        .with_context(|| format!("Failed to open directory {}", parent.display()))?
+        .sync_all()
+        .with_context(|| format!("Failed to sync directory {}", parent.display()))?;
+    #[cfg(not(unix))]
+    let _ = (dir, parent);
+    Ok(())
 }
 
 /// Simple yes/no confirmation prompt
@@ -172,36 +285,11 @@ fn overwrite_pass(file: &mut std::fs::File, file_size: u64, pattern: Pattern) ->
 /// next begins.
 ///
 /// See module-level docs for filesystem limitations (CoW / FTL remapping).
-fn secure_overwrite_3pass(file_path: &std::path::Path, file_size: u64) -> Result<()> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .open(file_path)
-        .context("Failed to open file for secure overwrite")?;
+fn overwrite_3pass(file: &mut std::fs::File, file_size: u64) -> Result<()> {
+    overwrite_pass(file, file_size, Pattern::Random)?;
+    overwrite_pass(file, file_size, Pattern::Fixed(0x00))?;
+    overwrite_pass(file, file_size, Pattern::Fixed(0xFF))?;
 
-    overwrite_pass(&mut file, file_size, Pattern::Random)?;
-    overwrite_pass(&mut file, file_size, Pattern::Fixed(0x00))?;
-    overwrite_pass(&mut file, file_size, Pattern::Fixed(0xFF))?;
-
-    Ok(())
-}
-
-/// Make an unlink durable in the containing directory where the platform
-/// exposes directory fsync. This closes the common crash window between a
-/// successful `unlink(2)` and persistence of that directory entry update.
-#[cfg(unix)]
-fn sync_parent_directory(path: &Path) -> Result<()> {
-    let parent = path
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    std::fs::File::open(parent)
-        .with_context(|| format!("Failed to open parent directory {}", parent.display()))?
-        .sync_all()
-        .with_context(|| format!("Failed to sync parent directory {}", parent.display()))
-}
-
-#[cfg(not(unix))]
-fn sync_parent_directory(_path: &Path) -> Result<()> {
     Ok(())
 }
 
@@ -233,18 +321,21 @@ fn sync_parent_directory(_path: &Path) -> Result<()> {
 /// remapping, and snapshot-bearing volumes defeat in-place overwrite. For
 /// hardware-level guarantees on SSDs use [`crate::secure_erase`].
 pub fn secure_delete(path: &Path) -> Result<()> {
-    if !path.exists() {
-        bail!("Path does not exist (ENOENT): {}", path.display());
-    }
-    let meta = fs::metadata(path).context("Failed to stat target")?;
-    if meta.is_dir() {
-        bail!("Path is a directory (EISDIR): {}", path.display());
-    }
-    let file_size = meta.len();
-    secure_overwrite_3pass(path, file_size)?;
-    fs::remove_file(path).context("Failed to unlink after overwrite")?;
-    sync_parent_directory(path)?;
-    Ok(())
+    // Open the containing directory, then treat the file as a name beneath
+    // it. This gives the same refusals as `obliterate`: no symbolic link,
+    // no file with more than one hard link.
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let name = path
+        .file_name()
+        .with_context(|| format!("Path has no file name: {}", path.display()))?;
+    let dir = Dir::open_ambient_dir(parent, cap_std::ambient_authority())
+        .with_context(|| format!("Failed to open directory {}", parent.display()))?;
+    let (file, file_size) = open_for_obliteration(&dir, Path::new(name))
+        .with_context(|| format!("Cannot securely delete {}", path.display()))?;
+    overwrite_and_unlink(&dir, Path::new(name), file, file_size)
 }
 
 /// Obliterate a file using best-effort overwrite and unlink
@@ -281,19 +372,12 @@ pub fn secure_delete(path: &Path) -> Result<()> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool) -> Result<()> {
+    refuse_inside_transaction(state)?;
     let full_path = state.resolve_path(path);
+    let contained = state.contained(path)?;
 
-    // Precondition checks
-    if !full_path.exists() {
-        bail!("Path does not exist (ENOENT)");
-    }
-    if full_path.is_dir() {
-        bail!("Path is a directory - secure directory deletion not yet implemented (EISDIR)");
-    }
-
-    // Get file size before deletion
-    let metadata = fs::metadata(&full_path)?;
-    let file_size = metadata.len();
+    // Precondition checks, on the file itself rather than on its name.
+    let (file, file_size) = open_for_obliteration(state.root_dir(), &contained)?;
 
     // CRITICAL: Require confirmation for irreversible operation
     if !force {
@@ -322,21 +406,23 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
         }
     }
 
-    // Step 1: Secure overwrite
+    // Step 1: Record the intent. Nothing is destroyed unless the audit log
+    // has been told first.
+    let op = Operation::new(OperationType::Obliterate, path.to_string(), None);
+    let op_id = op.id;
+    append_rmo_residue(state, &op, "obliterate-intent")
+        .context("Nothing was obliterated, because the audit entry could not be written")?;
+
+    // Step 2: Secure overwrite, then delete the name.
     if verbose {
         println!("🔥 3-pass overwrite (random / zeros / 0xFF) + unlink...");
     }
-    secure_overwrite_3pass(&full_path, file_size)?;
+    overwrite_and_unlink(state.root_dir(), &contained, file, file_size)?;
 
-    // Step 2: Delete file
-    fs::remove_file(&full_path).context("Failed to delete file after overwrite")?;
-    sync_parent_directory(&full_path)?;
-
-    // Step 3: Record as irreversible operation (NO undo_data stored)
-    let op = Operation::new(OperationType::Obliterate, path.to_string(), None);
-    let op_id = op.id;
-    // RMO residue: persist the append-only attestation BEFORE moving `op`.
-    append_rmo_residue(state, &op, "obliterated");
+    // Step 3: Record the outcome, and the irreversible operation (NO undo_data).
+    if let Err(e) = append_rmo_residue(state, &op, "obliterated") {
+        eprintln!("warning: RMO audit outcome not written: {e:#}");
+    }
     state.record_operation(op);
 
     // Output
@@ -391,27 +477,30 @@ pub fn obliterate_dir(
     verbose: bool,
     force: bool,
 ) -> Result<()> {
+    refuse_inside_transaction(state)?;
     let full_path = state.resolve_path(path);
+    let contained = state.contained(path)?;
 
-    if !full_path.exists() {
-        bail!("Path does not exist (ENOENT)");
-    }
-    if !full_path.is_dir() {
-        bail!("Path is not a directory (ENOTDIR)");
-    }
-
-    // Count files for confirmation message
-    let mut file_count = 0usize;
-    let mut total_size = 0u64;
-    for entry in walkdir::WalkDir::new(&full_path) {
-        let entry = entry?;
-        if entry.file_type().is_file() {
-            file_count += 1;
-            if let Ok(metadata) = entry.metadata() {
-                total_size += metadata.len();
-            }
+    match state.root_dir().symlink_metadata(&contained) {
+        Ok(meta) if meta.is_dir() => {}
+        Ok(meta) if meta.is_symlink() => bail!(
+            "Path is a symbolic link. obliterate does not follow links: remove the link \
+             with rm, or obliterate its target by the target's own path."
+        ),
+        Ok(_) => bail!("Path is not a directory (ENOTDIR)"),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            bail!("Path does not exist (ENOENT)")
         }
+        Err(e) => return Err(e).context("Failed to stat target"),
     }
+
+    // Walk the tree first, without following any link, and refuse the whole
+    // operation if anything in it cannot be obliterated safely. Nothing is
+    // destroyed until the whole tree has been checked.
+    let mut plan = DirPlan::default();
+    plan_dir(state.root_dir(), &contained, &mut plan)?;
+    let file_count = plan.files.len();
+    let total_size = plan.total_size;
 
     // CRITICAL: Require confirmation
     if !force {
@@ -442,35 +531,40 @@ pub fn obliterate_dir(
         }
     }
 
-    // Obliterate all files in directory tree
-    let mut obliterated = 0usize;
-    for entry in walkdir::WalkDir::new(&full_path).contents_first(true)
-    // Process files before directories
-    {
-        let entry = entry?;
-        let entry_path = entry.path();
+    // Record the intent before destroying anything.
+    let op = Operation::new(OperationType::Obliterate, path.to_string(), None);
+    let op_id = op.id;
+    append_rmo_residue(state, &op, "obliterate-dir-intent")
+        .context("Nothing was obliterated, because the audit entry could not be written")?;
 
-        if entry.file_type().is_file() {
-            secure_delete(entry_path)?;
-            obliterated += 1;
-            if verbose {
-                println!("  🔥 {}", entry_path.display());
-            }
-        } else if entry.file_type().is_dir() && entry_path != full_path {
-            fs::remove_dir(entry_path)?;
-            sync_parent_directory(entry_path)?;
+    // Obliterate the files, remove the links, then the directories, deepest
+    // first.
+    let mut obliterated = 0usize;
+    for file_path in &plan.files {
+        let (file, file_size) = open_for_obliteration(state.root_dir(), file_path)?;
+        overwrite_and_unlink(state.root_dir(), file_path, file, file_size)?;
+        obliterated += 1;
+        if verbose {
+            println!("  🔥 {}", file_path.display());
         }
+    }
+    for link in &plan.links {
+        // Removing a link removes only the link; its target is not touched.
+        state.root_dir().remove_file(link)?;
+    }
+    for dir_path in &plan.dirs {
+        state.root_dir().remove_dir(dir_path)?;
+        sync_directory(state.root_dir(), dir_path.parent())?;
     }
 
     // Remove root directory
-    fs::remove_dir(&full_path)?;
-    sync_parent_directory(&full_path)?;
+    state.root_dir().remove_dir(&contained)?;
+    sync_directory(state.root_dir(), contained.parent())?;
 
-    // Record operation
-    let op = Operation::new(OperationType::Obliterate, path.to_string(), None);
-    let op_id = op.id;
-    // RMO residue: persist the append-only attestation BEFORE moving `op`.
-    append_rmo_residue(state, &op, "obliterated-dir");
+    // Record the outcome and the operation.
+    if let Err(e) = append_rmo_residue(state, &op, "obliterated-dir") {
+        eprintln!("warning: RMO audit outcome not written: {e:#}");
+    }
     state.record_operation(op);
 
     println!(
@@ -491,10 +585,64 @@ pub fn obliterate_dir(
     Ok(())
 }
 
+/// What obliterating a directory will do, worked out before anything is
+/// destroyed. Paths are relative to the session root.
+#[derive(Default)]
+struct DirPlan {
+    /// Regular files to overwrite and remove.
+    files: Vec<PathBuf>,
+    /// Symbolic links to remove (the link only).
+    links: Vec<PathBuf>,
+    /// Sub-directories to remove, deepest first.
+    dirs: Vec<PathBuf>,
+    total_size: u64,
+}
+
+/// Walk the directory at `contained` without following links, filling
+/// `plan`. Fails, with nothing destroyed, on a file with more than one hard
+/// link or on anything that is not a regular file, a link or a directory.
+fn plan_dir(dir: &Dir, contained: &Path, plan: &mut DirPlan) -> Result<()> {
+    for entry in dir
+        .read_dir(contained)
+        .with_context(|| format!("Failed to read directory {}", contained.display()))?
+    {
+        let entry = entry?;
+        let child = contained.join(entry.file_name());
+        let meta = dir
+            .symlink_metadata(&child)
+            .with_context(|| format!("Failed to stat {}", child.display()))?;
+        if meta.is_symlink() {
+            plan.links.push(child);
+        } else if meta.is_dir() {
+            plan_dir(dir, &child, plan)?;
+            plan.dirs.push(child);
+        } else if meta.is_file() {
+            if meta.nlink() > 1 {
+                bail!(
+                    "{} has {} hard links. Obliterating it would destroy the data under \
+                     its other names too, so the whole directory is refused.",
+                    child.display(),
+                    meta.nlink()
+                );
+            }
+            plan.total_size += meta.len();
+            plan.files.push(child);
+        } else {
+            bail!(
+                "{} is not a regular file, a link or a directory; the whole directory \
+                 is refused.",
+                child.display()
+            );
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use std::fs;
     use tempfile::TempDir;
 
     #[test]
@@ -507,7 +655,9 @@ mod tests {
         fs::write(&file_path, original).unwrap();
 
         let file_size = fs::metadata(&file_path).unwrap().len();
-        secure_overwrite_3pass(&file_path, file_size).unwrap();
+        let mut file = fs::OpenOptions::new().write(true).open(&file_path).unwrap();
+        overwrite_3pass(&mut file, file_size).unwrap();
+        drop(file);
 
         // Verify content is overwritten (not original data)
         let after = fs::read(&file_path).unwrap();

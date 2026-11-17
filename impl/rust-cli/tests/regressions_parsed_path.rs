@@ -37,7 +37,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 /// Holes that are open today. See the module documentation.
-const KNOWN_OPEN: &[&str] = &["a", "b", "c", "d", "e", "f", "g", "h", "i", "m", "n", "o"];
+const KNOWN_OPEN: &[&str] = &["a", "b", "d", "f", "g", "h", "o"];
 
 /// Every hole this file tests.
 const ALL_HOLES: &[&str] = &[
@@ -249,7 +249,8 @@ fn hole_d_obliterate_scrubs_earlier_contents_from_the_state() {
     });
 }
 
-/// (e) Arithmetic at the edge of i64 reports an error; it does not panic.
+/// (e) Arithmetic at the edge of i64 does not panic. (It wraps, as bash
+/// does and as the shell's own addition and multiplication already did.)
 #[test]
 fn hole_e_arithmetic_overflow_does_not_panic() {
     hole("e", || {

@@ -572,6 +572,12 @@ impl ShellState {
         }
     }
 
+    /// The directory the session was started on. It does not move with
+    /// `cd`.
+    pub fn session_root(&self) -> &Path {
+        &self.session_root
+    }
+
     /// The handle on the session root. Use it, with a path from
     /// [`Self::contained`], for anything that creates, changes or removes a
     /// file.

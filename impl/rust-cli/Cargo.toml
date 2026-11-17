@@ -67,6 +67,7 @@ nix = { version = "0.31", default-features = false, features = ["fs", "user"] }
 # Capability-based filesystem access: every path is resolved beneath an open
 # directory handle, so it cannot name anything outside the session root.
 cap-std = "4.0"
+cap-fs-ext = "4.0"
 
 # Glob pattern matching
 glob = "0.3"
