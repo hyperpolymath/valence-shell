@@ -402,7 +402,7 @@ impl ExecutableCommand for Command {
                 }
 
                 // Store current directory as previous before changing
-                state.previous_dir = Some(state.root.clone());
+                state.set_previous_dir(state.root.clone());
 
                 // Change the shell's working directory
                 std::env::set_current_dir(&target)?;

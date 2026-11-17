@@ -664,6 +664,21 @@ impl ShellState {
         Ok(())
     }
 
+    /// Set the directory `cd -` returns to, and journal it so it survives a
+    /// restart without waiting for the next snapshot.
+    pub fn set_previous_dir(&mut self, dir: PathBuf) {
+        self.previous_dir = Some(dir);
+        let persisted =
+            self.persist_entries(&[JournalEntryRef::PreviousDir(self.previous_dir.clone())]);
+        if let Err(e) = persisted {
+            eprintln!(
+                "{} Failed to save previous directory: {}",
+                "Warning:".bright_yellow(),
+                e
+            );
+        }
+    }
+
     /// Drop the active transaction without committing it (after a rollback)
     /// and persist that, so a restart does not resurrect it.
     pub fn abort_transaction(&mut self) {
@@ -829,22 +844,31 @@ impl ShellState {
 
         if self.journal_file.exists() {
             let journal = crate::fs_pure::read_to_string(&self.journal_file)?;
+            let mut replayed_all = true;
             for line in journal.lines() {
                 // A torn line (crash mid-append) ends the replay, and so does
                 // a sequence gap: replay keeps the longest consistent prefix.
                 let Ok(JournalLine { seq, entry }) = serde_json::from_str::<JournalLine>(line)
                 else {
+                    replayed_all = false;
                     break;
                 };
                 if seq <= self.journal_seq {
                     continue; // already folded into the snapshot
                 }
                 if seq != self.journal_seq + 1 {
+                    replayed_all = false;
                     break;
                 }
                 self.replay(entry);
                 self.journal_seq = seq;
                 self.journal_entries += 1;
+            }
+            // Entries appended after a torn line or gap would be skipped by
+            // every later reload. Make the next persist write a full snapshot,
+            // which also truncates the journal, instead of appending.
+            if !replayed_all {
+                self.snapshot_pending = true;
             }
         }
 
@@ -876,6 +900,9 @@ impl ShellState {
             JournalEntry::Trim(n) => {
                 let n = n.min(self.history.len());
                 self.history.drain(0..n);
+            }
+            JournalEntry::PreviousDir(dir) => {
+                self.previous_dir = dir;
             }
         }
     }
@@ -1209,6 +1236,8 @@ enum JournalEntry {
     Undone { id: Uuid, undone_by: Uuid },
     /// The oldest `n` operations dropped by the history size limit.
     Trim(usize),
+    /// The directory `cd -` returns to, as set by `cd`.
+    PreviousDir(Option<PathBuf>),
 }
 
 /// Borrowing twin of [`JournalEntry`]; serialises to the same shape.
@@ -1217,6 +1246,7 @@ enum JournalEntryRef<'a> {
     Record(&'a Operation),
     Undone { id: Uuid, undone_by: Uuid },
     Trim(usize),
+    PreviousDir(Option<PathBuf>),
 }
 
 #[derive(Deserialize)]
@@ -1747,6 +1777,46 @@ mod tests {
 
         let reloaded = reopen(&root);
         assert_eq!(summary(&reloaded), summary(&state));
+    }
+
+    #[test]
+    fn test_operations_after_torn_tail_survive_reload() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        record(&mut state, "a");
+        {
+            use std::io::Write;
+            let mut journal = fs::OpenOptions::new()
+                .append(true)
+                .open(&state.journal_file)
+                .unwrap();
+            journal.write_all(b"{\"seq\":2,\"entry\":{\"Rec").unwrap();
+        }
+
+        // The restarted shell keeps working after the crash...
+        let mut restarted = reopen(&root);
+        record(&mut restarted, "b");
+        record(&mut restarted, "c");
+
+        // ...and those later operations must not hide behind the torn line.
+        let reloaded = reopen(&root);
+        assert_eq!(reloaded.history.len(), 3);
+        assert_eq!(summary(&reloaded), summary(&restarted));
+    }
+
+    #[test]
+    fn test_previous_dir_survives_reload_without_snapshot() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        record(&mut state, "a");
+        state.set_previous_dir(PathBuf::from("/tmp/elsewhere"));
+        assert!(!state.state_file.exists(), "no snapshot should be needed");
+
+        let reloaded = reopen(&root);
+        assert_eq!(
+            reloaded.previous_dir.as_deref(),
+            Some(Path::new("/tmp/elsewhere"))
+        );
     }
 
     #[test]
