@@ -79,7 +79,7 @@ pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_mkdir(state.root(), path)?;
+    verification::verify_mkdir(state.root(), &state.rooted(path))?;
 
     // Check preconditions (matching Coq)
     if full_path.exists() {
@@ -150,7 +150,7 @@ pub fn rmdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_rmdir(state.root(), path)?;
+    verification::verify_rmdir(state.root(), &state.rooted(path))?;
 
     // Check preconditions
     if !full_path.exists() {
@@ -214,7 +214,7 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_create_file(state.root(), path)?;
+    verification::verify_create_file(state.root(), &state.rooted(path))?;
 
     if full_path.exists() {
         anyhow::bail!("Path already exists (EEXIST)");
@@ -286,7 +286,7 @@ pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_delete_file(state.root(), path)?;
+    verification::verify_delete_file(state.root(), &state.rooted(path))?;
 
     if !full_path.exists() {
         anyhow::bail!("Path does not exist (ENOENT)");
@@ -354,7 +354,7 @@ pub fn cp(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
     let dst_path = state.resolve_path(dst);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_copy_file(state.root(), src, dst)?;
+    verification::verify_copy_file(state.root(), &state.rooted(src), &state.rooted(dst))?;
 
     // Check preconditions (matching Lean 4 copyFilePrecondition)
     if !src_path.exists() {
@@ -431,7 +431,7 @@ pub fn mv(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
     let dst_path = state.resolve_path(dst);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_move(state.root(), src, dst)?;
+    verification::verify_move(state.root(), &state.rooted(src), &state.rooted(dst))?;
 
     // Check preconditions (matching Lean 4 movePrecondition)
     if !src_path.exists() {
@@ -513,7 +513,7 @@ pub fn symlink(state: &mut ShellState, target: &str, link: &str, verbose: bool) 
     let link_path = state.resolve_path(link);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_symlink(state.root(), target, link)?;
+    verification::verify_symlink(state.root(), target, &state.rooted(link))?;
 
     // Check preconditions (matching Lean 4 SymlinkPrecondition)
     if link_path.exists() || link_path.symlink_metadata().is_ok() {
@@ -863,7 +863,7 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             continue;
         };
 
-        let path = state.resolve_path(&op.path);
+        let path = state.resolve_op_path(&op.path);
 
         // Execute inverse operation
         match inverse_type {
@@ -907,8 +907,8 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 if parts.len() != 2 {
                     anyhow::bail!("Invalid move operation record");
                 }
-                let src_path = state.resolve_path(parts[0]);
-                let dst_path = state.resolve_path(parts[1]);
+                let src_path = state.resolve_op_path(parts[0]);
+                let dst_path = state.resolve_op_path(parts[1]);
                 fs::rename(&dst_path, &src_path).context("Undo mv failed")?;
             }
             OperationType::Unlink => {
@@ -1064,7 +1064,7 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
         };
 
-        let path = state.resolve_path(&op.path);
+        let path = state.resolve_op_path(&op.path);
 
         // Re-execute the original operation
         match op.op_type {
@@ -1110,8 +1110,8 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 if parts.len() != 2 {
                     anyhow::bail!("Invalid move operation record for redo");
                 }
-                let src_path = state.resolve_path(parts[0]);
-                let dst_path = state.resolve_path(parts[1]);
+                let src_path = state.resolve_op_path(parts[0]);
+                let dst_path = state.resolve_op_path(parts[1]);
                 fs::rename(&src_path, &dst_path).context("Redo mv failed")?;
             }
             OperationType::Symlink => {
@@ -1372,7 +1372,7 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
     // Undo all operations in reverse order
     for op in ops.iter().rev() {
         if let Some(inverse_type) = op.op_type.inverse() {
-            let path = state.resolve_path(&op.path);
+            let path = state.resolve_op_path(&op.path);
 
             let result = match inverse_type {
                 OperationType::Rmdir => fs::remove_dir(&path).context("Failed to remove directory"),
@@ -1410,8 +1410,8 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                     // Rollback move: move it back (dst -> src)
                     let parts: Vec<&str> = op.path.splitn(2, '\0').collect();
                     if parts.len() == 2 {
-                        let src_path = state.resolve_path(parts[0]);
-                        let dst_path = state.resolve_path(parts[1]);
+                        let src_path = state.resolve_op_path(parts[0]);
+                        let dst_path = state.resolve_op_path(parts[1]);
                         fs::rename(&dst_path, &src_path).context("Failed to undo move")
                     } else {
                         Err(anyhow::anyhow!("Invalid move operation record"))

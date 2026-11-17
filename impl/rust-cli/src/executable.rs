@@ -295,7 +295,7 @@ impl ExecutableCommand for Command {
                     let target = if let Some(ref p) = expanded_path {
                         state.resolve_path(p)
                     } else {
-                        state.root.clone()
+                        state.cwd().to_path_buf()
                     };
 
                     if !target.is_dir() {
@@ -347,10 +347,10 @@ impl ExecutableCommand for Command {
 
             Command::Pwd { redirects } => {
                 if redirects.is_empty() {
-                    println!("{}", state.root.display());
+                    println!("{}", state.cwd().display());
                 } else {
                     redirection::capture_and_redirect(redirects, state, |s| {
-                        println!("{}", s.root.display());
+                        println!("{}", s.cwd().display());
                         Ok(())
                     })?;
                 }
@@ -379,18 +379,29 @@ impl ExecutableCommand for Command {
                             }
                         }
                     } else if p.starts_with('/') {
-                        // Absolute path (also handles expanded ~/... since
-                        // tilde expansion in expand_variables already turned
-                        // ~/path into /home/user/path)
-                        PathBuf::from(p)
+                        // A path that starts with `/`. If it names a real
+                        // directory inside the session root (as `pwd` prints,
+                        // or as `~/...` expands to), use it. Otherwise read it
+                        // as relative to the session root, as every other
+                        // command does.
+                        let literal = PathBuf::from(p);
+                        let inside = std::fs::canonicalize(&literal)
+                            .map(|real| real.starts_with(state.session_root()))
+                            .unwrap_or(false);
+                        if inside {
+                            literal
+                        } else {
+                            state.resolve_path(p)
+                        }
                     } else {
-                        // Relative to current directory
-                        state.root.join(p)
+                        // Relative to the working directory
+                        state.resolve_path(p)
                     }
                 } else {
-                    // cd with no args goes to home
-                    dirs::home_dir()
-                        .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?
+                    // `cd` with no argument goes to the session root: the
+                    // shell is confined to it, and the home directory is
+                    // normally outside.
+                    state.session_root().to_path_buf()
                 };
 
                 if !target.exists() {
@@ -401,14 +412,19 @@ impl ExecutableCommand for Command {
                     anyhow::bail!("cd: {}: Not a directory", target.display());
                 }
 
-                // Store current directory as previous before changing
-                state.previous_dir = Some(state.root.clone());
+                // Confine the working directory to the session root. This
+                // resolves symbolic links first, so a link that leads out of
+                // the root is refused too.
+                let previous = state.cwd().to_path_buf();
+                state.set_cwd(&target)?;
 
-                // Change the shell's working directory
-                std::env::set_current_dir(&target)?;
-
-                // Update state root to track current directory
-                state.root = std::fs::canonicalize(target)?;
+                // Change the process's working directory, for external
+                // commands. If that fails, the shell's own stays put.
+                if let Err(e) = std::env::set_current_dir(state.cwd()) {
+                    state.set_cwd(&previous)?;
+                    return Err(e.into());
+                }
+                state.previous_dir = Some(previous);
 
                 Ok(ExecutionResult::Success)
             }

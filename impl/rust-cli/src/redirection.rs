@@ -247,6 +247,16 @@ pub struct RedirectSetup {
     pub modifications: Vec<FileModification>,
 }
 
+/// `path`, an absolute path inside the session root, as the root-relative
+/// form the history stores. Recording the absolute path made undo resolve
+/// it under the root a second time and fail.
+fn rooted_path(state: &ShellState, path: &Path) -> String {
+    match state.contained_abs(path) {
+        Ok(relative) => relative.to_string_lossy().into_owned(),
+        Err(_) => path.to_string_lossy().into_owned(),
+    }
+}
+
 impl Default for RedirectSetup {
     fn default() -> Self {
         Self::new()
@@ -433,7 +443,7 @@ impl RedirectSetup {
             let (op_type, path, undo_data) = match modification {
                 FileModification::Created { path } => {
                     // File was created by redirection
-                    let path_str = path.to_string_lossy().to_string();
+                    let path_str = rooted_path(state, &path);
                     (OperationType::CreateFile, path_str, None)
                 }
 
@@ -442,7 +452,7 @@ impl RedirectSetup {
                     original_content,
                 } => {
                     // File was truncated by > redirection
-                    let path_str = path.to_string_lossy().to_string();
+                    let path_str = rooted_path(state, &path);
                     (
                         OperationType::FileTruncated,
                         path_str,
@@ -455,7 +465,7 @@ impl RedirectSetup {
                     original_size,
                 } => {
                     // File was appended to by >> redirection
-                    let path_str = path.to_string_lossy().to_string();
+                    let path_str = rooted_path(state, &path);
                     // Encode size as bytes
                     let size_bytes = original_size.to_le_bytes().to_vec();
                     (OperationType::FileAppended, path_str, Some(size_bytes))

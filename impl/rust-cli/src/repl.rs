@@ -306,7 +306,7 @@ fn print_status(state: &ShellState) {
     println!(
         "  {}: {}",
         "Sandbox root".bright_black(),
-        state.root.display()
+        state.cwd().display()
     );
     println!(
         "  {}: {}",

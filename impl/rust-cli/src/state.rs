@@ -263,12 +263,16 @@ pub struct Transaction {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub struct ShellState {
-    /// Sandbox root path
+    /// The session root: the directory the shell was started on. It is
+    /// fixed for the life of the session, and nothing the shell does may
+    /// reach outside it. `cd` moves [`Self::cwd`], not this.
     pub root: PathBuf,
 
-    /// The directory the session was started on. Unlike `root`, it never
-    /// changes.
-    session_root: PathBuf,
+    /// The working directory. Always the session root or a directory
+    /// beneath it. Paths a user types are relative to it; paths in the
+    /// history are relative to the session root, so they mean the same
+    /// thing after a `cd`.
+    cwd: PathBuf,
 
     /// An open handle on the session root. Paths given to it are relative
     /// and are resolved beneath it by the operating system, so no symlink
@@ -351,7 +355,7 @@ impl ShellState {
             .context("Failed to open sandbox root")?;
 
         let mut state = Self {
-            session_root: root_path.clone(),
+            cwd: root_path.clone(),
             root_dir,
             root: root_path,
             history: Vec::new(),
@@ -382,6 +386,8 @@ impl ShellState {
 
     /// Record an operation
     pub fn record_operation(&mut self, mut op: Operation) {
+        self.root_operation_path(&mut op);
+
         // Associate with active transaction if any
         if let Some(ref mut txn) = self.active_transaction {
             op.transaction_id = Some(txn.id);
@@ -408,6 +414,8 @@ impl ShellState {
     /// Unlike [`Self::record_operation`], this preserves remaining redo entries
     /// so that multiple sequential redos work correctly.
     pub fn record_redo_operation(&mut self, mut op: Operation) {
+        self.root_operation_path(&mut op);
+
         if let Some(ref mut txn) = self.active_transaction {
             op.transaction_id = Some(txn.id);
             txn.operations.push(op.id);
@@ -575,7 +583,69 @@ impl ShellState {
     /// The directory the session was started on. It does not move with
     /// `cd`.
     pub fn session_root(&self) -> &Path {
-        &self.session_root
+        &self.root
+    }
+
+    /// The working directory: the session root or a directory beneath it.
+    pub fn cwd(&self) -> &Path {
+        &self.cwd
+    }
+
+    /// Change the working directory to `target`, which must be a directory
+    /// inside the session root once every symbolic link in it is resolved.
+    ///
+    /// # Errors
+    ///
+    /// Fails if `target` is not a directory or lies outside the session
+    /// root. The working directory is then unchanged.
+    pub fn set_cwd(&mut self, target: &Path) -> Result<()> {
+        let resolved = fs::canonicalize(target)
+            .with_context(|| format!("cd: {}: No such file or directory", target.display()))?;
+        if !resolved.is_dir() {
+            anyhow::bail!("cd: {}: Not a directory", target.display());
+        }
+        if !resolved.starts_with(&self.root) {
+            anyhow::bail!(
+                "cd: {}: outside the session root {}",
+                target.display(),
+                self.root.display()
+            );
+        }
+        self.cwd = resolved;
+        Ok(())
+    }
+
+    /// `typed`, a path relative to the working directory, as a path
+    /// relative to the session root. This is the form the history stores.
+    /// A path that does not lie inside the session root is returned as it
+    /// was typed.
+    pub fn rooted(&self, typed: &str) -> String {
+        match self.contained(typed) {
+            Ok(relative) if relative.as_os_str() == "." => String::new(),
+            Ok(relative) => relative.to_string_lossy().into_owned(),
+            Err(_) => typed.to_string(),
+        }
+    }
+
+    /// The location of a path recorded in the history. Recorded paths are
+    /// relative to the session root, whatever the working directory is now.
+    pub fn resolve_op_path(&self, recorded: &str) -> PathBuf {
+        resolve_under_root(&self.root, recorded)
+    }
+
+    /// Rewrite the path of an operation about to be recorded so that it is
+    /// relative to the session root. Variable operations carry a name, not
+    /// a path, and are left alone. A move carries two paths.
+    fn root_operation_path(&self, op: &mut Operation) {
+        match op.op_type {
+            OperationType::SetVariable | OperationType::UnsetVariable => {}
+            OperationType::Move => {
+                let rooted: Vec<String> =
+                    op.path.split('\0').map(|part| self.rooted(part)).collect();
+                op.path = rooted.join("\0");
+            }
+            _ => op.path = self.rooted(&op.path),
+        }
     }
 
     /// The handle on the session root. Use it, with a path from
@@ -599,7 +669,7 @@ impl ShellState {
     /// [`Self::resolve_path`].
     pub fn contained_abs(&self, full: &Path) -> Result<PathBuf> {
         let relative = full
-            .strip_prefix(&self.session_root)
+            .strip_prefix(&self.root)
             .map_err(|_| anyhow::anyhow!("{} is outside the session root", full.display()))?;
         Ok(if relative.as_os_str().is_empty() {
             PathBuf::from(".")
@@ -611,7 +681,12 @@ impl ShellState {
     /// Resolve a path relative to sandbox root
     /// Prevents path traversal attacks via `..` components
     pub fn resolve_path(&self, path: &str) -> PathBuf {
-        resolve_under_root(&self.root, path)
+        if path.starts_with('/') || self.cwd == self.root {
+            return resolve_under_root(&self.root, path);
+        }
+        // Relative to the working directory, which is inside the root.
+        let cwd = self.cwd.strip_prefix(&self.root).unwrap_or(Path::new(""));
+        resolve_under_root(&self.root, &format!("{}/{}", cwd.to_string_lossy(), path))
     }
 
     /// Get root path as string (for Lean FFI)
