@@ -144,6 +144,18 @@ reproduce. Absence of a tool is an open obligation, not a passing leg
 | `impl/rust-cli/tests/model_oracle_correspondence.rs`
 | Sampled, precondition-respecting sequences only; a divergence would be a real bug but agreement is not a proof
 
+| Undo then redo, and redo then undo, are identities on the undo/redo stack model (single step and `n`-fold)
+| proven-with-postulates
+| Idris2 0.8.0, `idris2 --build valence-shell.ipkg` (`--total`), re-run 2026-11-17, plus the `believe_me` gate; CI `idris-verification.yml`
+| `proofs/idris2/src/Filesystem/Composition.idr`: `undoRedoIdentity`, `undoRedoComposition`, and (2026-11-17) `redoUndoIdentity`, `undoRedoUndoIdentity`, `redoUndoComposition`
+| `redoUndoIdentity` and `redoUndoComposition` use no axiom; they are conditional on a per-step reversibility premise. `undoRedoIdentity` and its corollary `undoRedoUndoIdentity` discharge that premise through lemmas resting on the registered `axStringEqRefl`. The model has five operations (mkdir, rmdir, touch, rm, write) on a flat path map: no cp, mv, links, modes, ownership, variables or redirections. It says nothing about the Rust `redo`
+
+| The Rust `undo`/`redo` round trip restores state for every operation type that reaches the history
+| tested-only
+| `cargo test --test redo_roundtrip_tests` (22 tests: 19 operation scenarios, 48 random sequences via `proptest`) and `test_redo_then_undo_correspondence`
+| `impl/rust-cli/tests/redo_roundtrip_tests.rs`, `impl/rust-cli/tests/correspondence_tests.rs`
+| Whole-sandbox comparison (bytes, modes, owners, link targets, one shell variable). Three scenarios assert only the redo laws because undo itself loses data there (mode on `rm`/`rmdir`, exported flag on `unset`); random sequences exclude symbolic links for the same reason; the `chown` scenario runs only as root. Not a proof and not a refinement of the Idris2 model
+
 | Idris2 ABI layout, encodings and round-trips match the C header
 | tested-only
 | `--total`, plus `scripts/check-abi-layout.sh`

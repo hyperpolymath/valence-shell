@@ -47,6 +47,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   row can be `proven`; the Mizar target swallows failure (`|| echo`). Both are
   logged as AP-6, AP-7 and AP-8 in the audit.
 
+=== Fixed — 2026-11-17 (redo keeps undo data; undo of redirections)
+
+- `redo` recorded the re-applied operation with no undo data, so
+  `rm f; undo; redo; undo` restored `f` empty, a redone `chmod`/`chown` changed
+  nothing and could not be undone, and a second redo of `cp`/`ln -s` failed.
+  Each operation now has one function that checks its preconditions, captures
+  its undo data and applies it; the command and `redo` both call it.
+- `redo` now restores what an operation produced (the mode of a `chmod`, the
+  owner of a `chown`, the bytes a `>`/`>>` redirection wrote, a variable's
+  value). `undo` reads that state just before reversing it and keeps it in
+  memory with the redo entry. File content over `VSH_REDO_CAPTURE_LIMIT` bytes
+  (shell or environment variable; default 10 MiB; `0` = no limit) is not kept,
+  and redo of that entry says so.
+- A `redo` that fails changes nothing and stays on the redo stack. `redo` of
+  `cp`, `mv` and `touch` no longer overwrites a path that reappeared after the
+  undo.
+- Undo of a `>`/`>>` redirection failed whenever the sandbox root was not `/`
+  (the default root is the current directory): the history held an absolute
+  path that undo resolved under the root a second time. History paths for
+  redirections are now relative to the root.
+- `touch` creates its file with `create_new`, so it no longer writes through a
+  dangling symbolic link.
+- Idris2 model: `redoUndoIdentity`, `undoRedoUndoIdentity`,
+  `redoUndoComposition` added to `Filesystem.Composition` (`proven` for the
+  model; the Rust link stays `tested-only`).
+- Known and *not* fixed here (tests exclude them, see
+  `impl/rust-cli/tests/redo_roundtrip_tests.rs`): undo of `rm`/`rmdir` does
+  not restore the mode; undo of `unset` does not restore the exported flag;
+  `rm`, `chmod` and redirections follow symbolic links and their undo does not
+  account for it.
+
 === Planned
 - Glob expansion (*.txt, ?.rs, [a-z]*)
 - Quote processing (proper escaping, single/double quotes)
