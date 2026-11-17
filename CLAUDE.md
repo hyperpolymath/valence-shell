@@ -217,7 +217,7 @@ valence-shell/
   proofs/
     lean4/              # Lean recheck leg + executable model oracle (101 theorems)
     coq/                # CIC proofs + extraction (131 theorems, 0 admits — re-verified 2026-07-16, Coq 8.18.0)
-    agda/               # Theory source of truth (owner ruling 2026-11-09); 10 modules, 0 postulates, --safe --without-K --cubical-compatible
+    agda/               # Theory source of truth (owner ruling 2026-11-09); 14 modules (10 filesystem, 4 journal model), 0 postulates, --safe --without-K --cubical-compatible
     z3/                 # SMT checks (ASSUMED; 2 files definitional, 3 axiomatic)
     idris2/             # ABI carrier (0 holes, 0 partials, 2 primitive-eq axioms)
   docs/                 # Design docs, roadmaps, PROOF_HOLES_AUDIT.adoc

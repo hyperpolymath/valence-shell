@@ -22,6 +22,10 @@ theorems (owner ruling 2026-11-09, per `standards` PROOF-POLICY §1). The Lean 4
 | `SymlinkOperations.agda`      | Symlink creation + traversal.
 | `RMOOperations.agda`          | Remove-Match-Obliterate (GDPR-relevant).
 | `PreconditionWitnesses.agda` | One inhabitant per operation precondition (non-vacuity).
+| `JournalFraming.agda`        | Journal record framing and decoder: a torn or altered record is rejected, never misread.
+| `JournalReplay.agda`         | Journal events and replay: history is append-only; rollback leaves no live operation.
+| `JournalModel.agda`          | File and crash model; recovery after a crash is the synced events plus a prefix of the unsynced ones.
+| `JournalWitnesses.agda`      | One instance of the journal model's parameters, and worked cases closed by `refl`.
 | `All.agda`                   | Imports every module; the file CI checks.
 |===
 
@@ -48,7 +52,7 @@ cd proofs/agda
 agda --safe --without-K --cubical-compatible All.agda
 ```
 
-This is the estate invocation (PROOF-POLICY §2.1). It checks all ten modules
+This is the estate invocation (PROOF-POLICY §2.1). It checks all fourteen modules
 under Agda 2.7.0.1 + agda-stdlib v2.2; CI runs the same command
 (`.github/workflows/agda.yml`). See `VERIFICATION.adoc` for the receipt.
 

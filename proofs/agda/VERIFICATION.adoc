@@ -28,6 +28,53 @@ Toolchain digest: Agda release archive sha256
 installed from the upstream archive, not Guix: an open §6 `deviation`,
 recorded in the workflow and in `PROOF-NEEDS.adoc`.
 
+== What was run (2026-11-17): journal model added
+
+[cols="3,2",options="header"]
+|===
+| Invocation | Agda 2.7.0.1 + agda-stdlib v2.2 (`6cd04e46`)
+
+| `bash scripts/check-agda.sh` (the invocation above, plus the import-graph
+  check), from a clean `_build`
+| exit 0; all 14 modules checked
+|===
+
+Four modules joined the cone: `JournalFraming`, `JournalReplay`,
+`JournalModel`, `JournalWitnesses` (route-plan Phase C, step C1). They carry
+the same options, no `postulate` and no escape pragma. Their assumptions are
+module parameters, and `JournalWitnesses` builds one instance of all of them,
+so the theorems are not vacuous.
+
+What they state, and for what:
+
+* `JournalFraming`: a record is length, payload, checksum. A record cut short
+  at any point is rejected (`step-torn`); what the decoder accepts is byte
+  for byte a run of well-formed records at the front of the input
+  (`decode-sound`). Neither needs any property of the checksum.
+* `JournalReplay`: events other than a snapshot never remove or reorder
+  history (`run-ids`); after a rollback no operation of that transaction is
+  live (`rollback-no-live`).
+* `JournalModel`: if a crash keeps the synced bytes and a prefix of the
+  unsynced bytes, loading yields the synced events followed by a prefix of
+  the unsynced events (`crash-recovery`), so one pending write is
+  all-or-nothing (`write-atomic`).
+
+Limits, which the module headers repeat:
+
+* These are theorems about the model. The Rust journal is not derived from
+  them, and on this date it does not yet follow them (the redesign is
+  step C2).
+* The crash model is an assumption about the storage. It does not cover
+  reordered or partly written blocks, or stale bytes in the unsynced region.
+* A checksum cannot rule out bytes that were never written as a record but
+  happen to match; `decode-sound` says exactly what acceptance means.
+
+Mutation check (2026-11-17, local): six edits were each rejected by the type
+checker. They were: a wrong left-over tail and a wrong recovered state in
+the worked cases; dropping the checksum test; dropping the canonical-header
+test; rollback that marks nothing; and `step-torn` without its "something
+was cut off" premise. The unedited tree passed as the control.
+
 == What changed to get there
 
 * *`funext` removed.* Whole-filesystem equalities are now pointwise
