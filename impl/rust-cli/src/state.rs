@@ -266,6 +266,15 @@ pub struct ShellState {
     /// Sandbox root path
     pub root: PathBuf,
 
+    /// The directory the session was started on. Unlike `root`, it never
+    /// changes.
+    session_root: PathBuf,
+
+    /// An open handle on the session root. Paths given to it are relative
+    /// and are resolved beneath it by the operating system, so no symlink
+    /// and no `..` can make them name anything outside the session root.
+    root_dir: cap_std::fs::Dir,
+
     /// Operation history (append-only)
     pub history: Vec<Operation>,
 
@@ -338,7 +347,12 @@ impl ShellState {
             fs::canonicalize(&root_path).context("Failed to canonicalize sandbox root")?;
         let state_file = root_path.join(".vsh_state.json");
 
+        let root_dir = cap_std::fs::Dir::open_ambient_dir(&root_path, cap_std::ambient_authority())
+            .context("Failed to open sandbox root")?;
+
         let mut state = Self {
+            session_root: root_path.clone(),
+            root_dir,
             root: root_path,
             history: Vec::new(),
             redo_stack: VecDeque::new(),
@@ -556,6 +570,36 @@ impl ShellState {
                 .collect(),
             None => Vec::new(),
         }
+    }
+
+    /// The handle on the session root. Use it, with a path from
+    /// [`Self::contained`], for anything that creates, changes or removes a
+    /// file.
+    pub fn root_dir(&self) -> &cap_std::fs::Dir {
+        &self.root_dir
+    }
+
+    /// `path`, as typed relative to the working directory, as a path
+    /// relative to the session root, for use with [`Self::root_dir`].
+    ///
+    /// # Errors
+    ///
+    /// Fails if the path lies outside the session root.
+    pub fn contained(&self, path: &str) -> Result<PathBuf> {
+        self.contained_abs(&self.resolve_path(path))
+    }
+
+    /// As [`Self::contained`], for a path already resolved by
+    /// [`Self::resolve_path`].
+    pub fn contained_abs(&self, full: &Path) -> Result<PathBuf> {
+        let relative = full
+            .strip_prefix(&self.session_root)
+            .map_err(|_| anyhow::anyhow!("{} is outside the session root", full.display()))?;
+        Ok(if relative.as_os_str().is_empty() {
+            PathBuf::from(".")
+        } else {
+            relative.to_path_buf()
+        })
     }
 
     /// Resolve a path relative to sandbox root

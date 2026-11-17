@@ -37,9 +37,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 /// Holes that are open today. See the module documentation.
-const KNOWN_OPEN: &[&str] = &[
-    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o",
-];
+const KNOWN_OPEN: &[&str] = &["a", "b", "c", "d", "e", "f", "g", "h", "i", "m", "n", "o"];
 
 /// Every hole this file tests.
 const ALL_HOLES: &[&str] = &[
@@ -292,16 +290,35 @@ fn hole_f_undo_after_cd_targets_the_original_path() {
     });
 }
 
-/// (g) `cd ..` at the root does not let later commands write outside it.
+/// (g) `cd ..` at the root does not let later commands reach outside it:
+/// not to create, not to write, and not to remove.
 #[test]
 fn hole_g_cd_cannot_leave_the_root() {
     hole("g", || {
         let sandbox = Sandbox::new();
+        let parent = sandbox.temp.path();
+        fs::write(parent.join("bystander"), "KEEP\n").unwrap();
         sandbox.vsh("cd ..; touch escaped");
-        if sandbox.temp.path().join("escaped").exists() {
-            Err("`cd ..; touch escaped` created a file outside the root".into())
-        } else {
+        sandbox.vsh("cd ..; mkdir escaped_dir");
+        sandbox.vsh("cd ..; echo x > escaped_out");
+        sandbox.vsh("cd ..; rm bystander");
+        let mut reached = Vec::new();
+        for (name, command) in [
+            ("escaped", "touch"),
+            ("escaped_dir", "mkdir"),
+            ("escaped_out", ">"),
+        ] {
+            if parent.join(name).exists() {
+                reached.push(format!("`{command}` created {name} outside the root"));
+            }
+        }
+        if !parent.join("bystander").exists() {
+            reached.push("`rm` removed a file outside the root".into());
+        }
+        if reached.is_empty() {
             Ok(())
+        } else {
+            Err(reached.join("; "))
         }
     });
 }
@@ -358,6 +375,7 @@ fn hole_j_redirection_does_not_follow_a_symlink_out_of_the_root() {
         fs::write(&victim, "ORIGINAL\n").unwrap();
         symlink(&victim, sandbox.root.join("link")).unwrap();
         sandbox.vsh("echo PWNED > link");
+        sandbox.vsh("echo MORE >> link");
         let content = read(&victim);
         if content == "ORIGINAL\n" {
             Ok(())

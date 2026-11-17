@@ -91,8 +91,12 @@ pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
         anyhow::bail!("Parent directory does not exist (ENOENT)");
     }
 
-    // Execute operation
-    fs::create_dir(&full_path).context("mkdir failed")?;
+    // Execute operation, beneath the session root.
+    let contained = state.contained(path)?;
+    state
+        .root_dir()
+        .create_dir(&contained)
+        .context("mkdir failed")?;
 
     // Record in history
     let op = Operation::new(OperationType::Mkdir, path.to_string(), None);
@@ -221,7 +225,16 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
         anyhow::bail!("Parent directory does not exist (ENOENT)");
     }
 
-    fs::write(&full_path, "").context("touch failed")?;
+    // Create beneath the session root. `create_new` also closes the gap
+    // between the existence check above and the creation.
+    let contained = state.contained(path)?;
+    state
+        .root_dir()
+        .open_with(
+            &contained,
+            cap_std::fs::OpenOptions::new().write(true).create_new(true),
+        )
+        .context("touch failed")?;
 
     let op = Operation::new(OperationType::CreateFile, path.to_string(), None);
     let op_id = op.id;
@@ -439,8 +452,12 @@ pub fn mv(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
         anyhow::bail!("Parent of destination does not exist (ENOENT)");
     }
 
-    // Execute operation
-    fs::rename(&src_path, &dst_path).context("mv failed")?;
+    // Execute operation, beneath the session root.
+    let (from, to) = (state.contained(src)?, state.contained(dst)?);
+    state
+        .root_dir()
+        .rename(&from, state.root_dir(), &to)
+        .context("mv failed")?;
 
     // Record: store both paths null-separated for undo
     // path = "src\0dst" so undo can move dst back to src

@@ -1,0 +1,114 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= Containment experiment: capability handles (`cap-std`), 2026-11-17
+:toc: preamble
+
+The route plan asks for a one-day experiment before the sandbox escapes are
+fixed (`docs/plans/VSH-ROUTE-PLAN-2026-11-04.adoc`, Phase 1; step B1 of the
+2026-11-17 amendment): route a few commands through a directory handle from
+the `cap-std` crate, and decide from the result how the shell is contained.
+
+*Result: go.* The mechanism closes the symlink and `..` escapes for the
+commands ported, with a small change and no test regressions. It does not
+cover hard links, which need their own check.
+
+== The question
+
+Today the shell contains paths lexically: it joins the path to the root and
+removes `..` components. It never asks where the path leads on disk, so a
+symlink inside the root reaches outside it (holes j, k, l, m), and `cd`
+moves the root itself (holes f, g).
+
+Three ways to fix that were rated in the plan: capability handles (elegance
+9 / dependability 8), a hand-written `openat2` and `O_NOFOLLOW` walk (6 / 7),
+and more lexical checks (3 / 3, which is what fails today).
+
+A capability handle is an open directory. Every path given to it is relative,
+and the operating system resolves it beneath that directory (`openat2` with
+`RESOLVE_BENEATH` on Linux 5.6 and later), so a path cannot name anything
+outside, whatever symlinks it passes through.
+
+== Part 1: the crate alone
+
+A stand-alone program opened a handle on a root directory and tried each
+escape (Measured, Linux 6.18, `cap-std` 4.0.3):
+
+[cols="3,2",options="header"]
+|===
+| Attempt | Result
+
+| Write through a symlink to a file outside (absolute or relative target) | Refused; the outside file is unchanged
+| Create a file or directory under a symlink to an outside directory | Refused
+| Rename a file into a symlink to an outside directory | Refused
+| `../escaped`, `sub/../../escaped`, and opening `..` | Refused
+| An absolute path | Refused (paths must be relative to the handle)
+| `sub/../inside` (stays in the root) | Allowed
+| Write through a symlink whose target is inside the root | Allowed
+| Open for writing a hard link whose other name is outside the root | *Allowed.* The link count (2) is visible on the open file
+|===
+
+Cost of 20,000 file creations, one run each, release build: at the top of the
+root, 0.93 s through the handle against 0.23 s through `std::fs`; six
+directories deep, 0.18 s against 0.25 s. The two runs disagree on which is
+faster, so the only safe reading is that the cost is tens of microseconds per
+operation at most, which does not matter for a shell.
+
+== Part 2: in the shell
+
+`ShellState` gained a handle on the session root, opened once at start, and a
+function that turns a typed path into a path relative to the session root (or
+refuses it if it lies outside). Four commands were moved onto the handle:
+`touch`, `mkdir`, `mv`, and output redirection (`>` and `>>`, both the
+built-in and the external-command paths).
+
+[cols="2,3",options="header"]
+|===
+| Measure | Value
+
+| Source change | 3 files under `src/`, 101 lines added, 21 removed
+| New crates in `Cargo.lock` | 11 (304 to 315): `cap-std`, `cap-primitives`, `io-lifetimes`, `io-extras`, `ambient-authority`, `fs-set-times`, `maybe-owned`, `ipnet`, `rustix-linux-procfs`, and `winx` (Windows only)
+| Licences of those crates | `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`, or `MIT OR Apache-2.0`
+| Debug binary size | 61.9 MB to 64.3 MB
+| `cargo test --no-fail-fast` | 843 passed, 0 failed, as before the change
+| Hole tests (`tests/regressions_parsed_path.rs`) | j, k and l no longer reproduce and left the open list
+|===
+
+Hole g (`cd ..; touch escaped`) also stopped reproducing for the four ported
+commands. That was too narrow a test: `cd ..; rm bystander` still removes a
+file outside the root, because `rm` is not ported and `cd` still moves the
+root. The test for g now covers `touch`, `mkdir`, `>` and `rm`, and g stays on
+the open list.
+
+== What it does not do
+
+* *Hard links* (hole n). A hard link inside the root to a file outside it is
+  an ordinary file as far as path resolution goes. Content operations must
+  check the link count on the open file and refuse a count above one.
+* *Commands not yet ported.* About 200 other filesystem calls in the shell
+  still use `std::fs` with a lexically resolved path. Containment holds only
+  where the handle is used. A lint that bans `std::fs` outside one module is
+  needed to keep it that way.
+* *`cd`.* The working directory is still stored by overwriting the root.
+  Fixing f and g needs a session root that never moves and a separate working
+  directory.
+* *External commands.* A program the shell runs is not confined by the
+  handle; it runs as the user.
+* *Other platforms.* Not run on macOS or Windows. On systems without
+  `openat2`, `cap-std` resolves paths itself, one component at a time; that
+  path was not exercised here.
+
+== Decision and next steps
+
+Capability handles are adopted for containment (route plan step B2):
+
+. Port the remaining commands, `rm` and `obliterate` first.
+. Give the shell a fixed session root and a separate working directory;
+  record history paths relative to the session root.
+. Refuse content operations on files with more than one hard link, and
+  refuse `obliterate` on a symlink.
+. Add the lint, so that a new `std::fs` call outside the filesystem module
+  fails the build.
+
+The same handle answers the question of where the shell's own state lives: a
+second handle on a state directory outside the session root, which no
+root-relative path can reach.

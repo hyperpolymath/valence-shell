@@ -73,15 +73,21 @@ where
     for (redirect, path) in resolved_redirects {
         match redirect {
             Redirection::Output { .. } | Redirection::BothOutput { .. } => {
-                fs::write(&path, &output)
+                let contained = state.contained_abs(&path)?;
+                state
+                    .root_dir()
+                    .write(&contained, &output)
                     .with_context(|| format!("Failed to write to: {}", path.display()))?;
             }
 
             Redirection::Append { .. } => {
-                let mut f = OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&path)
+                let contained = state.contained_abs(&path)?;
+                let mut f = state
+                    .root_dir()
+                    .open_with(
+                        &contained,
+                        cap_std::fs::OpenOptions::new().create(true).append(true),
+                    )
                     .with_context(|| format!("Failed to open for append: {}", path.display()))?;
                 f.write_all(output.as_bytes())?;
             }
@@ -316,8 +322,20 @@ impl RedirectSetup {
         let expanded = crate::parser::expand_variables(file, state);
         let path = state.resolve_path(&expanded);
 
+        // Look at the target beneath the session root first. A path that
+        // leaves the root through a symlink is refused here, before anything
+        // is read for undo or opened for writing.
+        let contained = state.contained_abs(&path)?;
+        let exists = match state.root_dir().metadata(&contained) {
+            Ok(_) => true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+            Err(e) => {
+                return Err(e).with_context(|| format!("Cannot redirect to: {}", path.display()))
+            }
+        };
+
         // Record original state for undo
-        if path.exists() {
+        if exists {
             if append {
                 let metadata = fs::metadata(&path)
                     .with_context(|| format!("Failed to stat file: {}", path.display()))?;
@@ -352,17 +370,18 @@ impl RedirectSetup {
                 .push(FileModification::Created { path: path.clone() });
         }
 
-        // Open file for writing
-        let file = if append {
-            OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)
-                .with_context(|| format!("Failed to open file for append: {}", path.display()))?
+        // Open file for writing, beneath the session root.
+        let mut options = cap_std::fs::OpenOptions::new();
+        if append {
+            options.create(true).append(true);
         } else {
-            File::create(&path)
-                .with_context(|| format!("Failed to create file: {}", path.display()))?
-        };
+            options.write(true).create(true).truncate(true);
+        }
+        let file = state
+            .root_dir()
+            .open_with(&contained, &options)
+            .with_context(|| format!("Failed to open file for writing: {}", path.display()))?
+            .into_std();
 
         self.opened_files.push(file);
 
