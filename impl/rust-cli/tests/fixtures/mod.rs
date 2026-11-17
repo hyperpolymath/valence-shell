@@ -96,9 +96,14 @@ pub fn sandbox() -> (Sandbox, vsh::state::ShellState) {
 /// the commands it starts inherit it. A test that runs `cd` in the test
 /// process therefore moves every other test in the same binary, and when
 /// its temporary directory is removed the process is left in a directory
-/// that no longer exists. Take this at the start of such a test. It lets
-/// one such test run at a time, and puts the directory back when the test
-/// ends, whether it passes or fails.
+/// that no longer exists. Take this in such a test, before its first `cd`.
+/// It lets one such test run at a time, and puts the directory back when
+/// the test ends, whether it passes or fails.
+///
+/// Declare it *after* the temporary directory the test works in. Locals
+/// are dropped in the reverse of the order they are declared in, so the
+/// working directory is then put back before the temporary directory is
+/// removed, and the process is never left in a removed directory.
 #[allow(dead_code)]
 pub struct ProcessDirectory {
     saved: PathBuf,

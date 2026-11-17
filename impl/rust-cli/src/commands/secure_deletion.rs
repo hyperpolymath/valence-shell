@@ -178,11 +178,24 @@ fn open_for_obliteration(dir: &Dir, contained: &Path) -> Result<(cap_std::fs::Fi
     Ok((file, opened.len()))
 }
 
+/// Overwrite the open `file` three times, remove its name, and make the
+/// removal durable in its directory.
+fn overwrite_and_unlink(
+    dir: &Dir,
+    contained: &Path,
+    file: cap_std::fs::File,
+    file_size: u64,
+) -> Result<()> {
+    overwrite_and_remove_name(dir, contained, file, file_size)?;
+    sync_directory(dir, contained.parent())
+}
+
 /// Overwrite the open `file` three times, then remove its name.
 ///
 /// The name is removed only if it still refers to the file that was
-/// overwritten.
-fn overwrite_and_unlink(
+/// overwritten. The removal is not yet durable: the caller syncs the
+/// directory.
+fn overwrite_and_remove_name(
     dir: &Dir,
     contained: &Path,
     file: cap_std::fs::File,
@@ -200,8 +213,7 @@ fn overwrite_and_unlink(
         bail!("Path was replaced during the overwrite; the name was left in place");
     }
     dir.remove_file(contained)
-        .context("Failed to delete file after overwrite")?;
-    sync_directory(dir, contained.parent())
+        .context("Failed to delete file after overwrite")
 }
 
 /// Make a removal durable in its directory.
@@ -529,10 +541,27 @@ fn destroy_planned(
     verbose: bool,
     obliterated: &mut usize,
 ) -> Result<()> {
+    destroy_planned_with(root, plan, contained, verbose, obliterated, sync_directory)
+}
+
+/// [`destroy_planned`], with the step that makes a removal durable passed
+/// in as `durable`, so that a test can make that step fail.
+fn destroy_planned_with(
+    root: &Dir,
+    plan: &DirPlan,
+    contained: &Path,
+    verbose: bool,
+    obliterated: &mut usize,
+    durable: impl Fn(&Dir, Option<&Path>) -> Result<()>,
+) -> Result<()> {
     for file_path in &plan.files {
         let (file, file_size) = open_for_obliteration(root, file_path)?;
-        overwrite_and_unlink(root, file_path, file, file_size)?;
+        overwrite_and_remove_name(root, file_path, file, file_size)?;
+        // Counted as soon as the name is gone. Making the removal durable
+        // can still fail, and the audit entry must then not report one
+        // file fewer than were destroyed.
         *obliterated += 1;
+        durable(root, file_path.parent())?;
         if verbose {
             println!("  🔥 {}", file_path.display());
         }
@@ -543,12 +572,12 @@ fn destroy_planned(
     }
     for dir_path in &plan.dirs {
         root.remove_dir(dir_path)?;
-        sync_directory(root, dir_path.parent())?;
+        durable(root, dir_path.parent())?;
     }
 
     // Remove root directory
     root.remove_dir(contained)?;
-    sync_directory(root, contained.parent())
+    durable(root, contained.parent())
 }
 
 /// Obliterate a directory and its contents (recursive)
@@ -755,6 +784,40 @@ mod tests {
         let after = fs::read(&file_path).unwrap();
         assert_eq!(after.len(), original.len());
         assert_ne!(&after[..], original);
+    }
+
+    /// A file whose name is gone has been destroyed, whether or not its
+    /// directory could then be synced. Counting it only after the sync left
+    /// the audit entry one file short ("failed after 0 of 2 files" with one
+    /// file gone).
+    #[test]
+    fn test_a_file_is_counted_once_its_name_is_gone() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir(temp_dir.path().join("d")).unwrap();
+        fs::write(temp_dir.path().join("d/one"), b"first").unwrap();
+        fs::write(temp_dir.path().join("d/two"), b"second").unwrap();
+        let root = Dir::open_ambient_dir(temp_dir.path(), cap_std::ambient_authority()).unwrap();
+        let mut plan = DirPlan::default();
+        plan_dir(&root, Path::new("d"), &mut plan).unwrap();
+        assert_eq!(plan.files.len(), 2);
+
+        let mut destroyed = 0usize;
+        let result = destroy_planned_with(
+            &root,
+            &plan,
+            Path::new("d"),
+            false,
+            &mut destroyed,
+            |_, _| bail!("the directory could not be synced"),
+        );
+
+        assert!(
+            result.is_err(),
+            "the failed sync must stop the obliteration"
+        );
+        let left = fs::read_dir(temp_dir.path().join("d")).unwrap().count();
+        assert_eq!(left, 1, "one file was destroyed before the sync failed");
+        assert_eq!(destroyed, 1, "the destroyed file must be counted");
     }
 
     #[test]

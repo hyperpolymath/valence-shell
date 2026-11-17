@@ -358,6 +358,29 @@ fn modification_time(meta: &crate::state::FileMeta) -> Option<std::time::SystemT
     }
 }
 
+/// Remove the regular file at `contained` (beneath the session root), which
+/// `named` describes, and return what undo needs to put it back: its content
+/// and what the file was. `command` names the caller in the error.
+///
+/// A file that cannot be read cannot be restored, so it is not removed:
+/// saving it as empty would lose it on undo.
+fn remove_keeping(
+    state: &ShellState,
+    contained: &std::path::Path,
+    named: &cap_std::fs::Metadata,
+    command: &str,
+) -> Result<(Vec<u8>, Option<crate::state::FileMeta>)> {
+    let content = state.root_dir().read(contained).with_context(|| {
+        format!("{command} refused: the file cannot be read, so it could not be restored by undo")
+    })?;
+    let meta = file_meta(named);
+    state
+        .root_dir()
+        .remove_file(contained)
+        .with_context(|| format!("{command} failed"))?;
+    Ok((content, meta))
+}
+
 /// Remove a file at the specified path.
 ///
 /// The file's content is preserved for undo. This operation is reversible via [`undo`]
@@ -415,18 +438,7 @@ pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
         Operation::new(OperationType::Unlink, path.to_string(), None)
             .with_undo_data(link_target_bytes(&target))
     } else {
-        // Save the content and what the file was, so that undo can restore
-        // it. A file that cannot be read cannot be restored, so it is not
-        // removed: saving it as empty would lose it on undo.
-        let content = state
-            .root_dir()
-            .read(&contained)
-            .context("rm refused: the file cannot be read, so it could not be restored by undo")?;
-        let meta = file_meta(&named);
-        state
-            .root_dir()
-            .remove_file(&contained)
-            .context("rm failed")?;
+        let (content, meta) = remove_keeping(state, &contained, &named, "rm")?;
         let op = Operation::new(OperationType::DeleteFile, path.to_string(), None)
             .with_undo_data(content);
         match meta {
@@ -1012,12 +1024,20 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 fs::remove_file(&path).context("Undo touch failed")?;
             }
             OperationType::CreateFile => {
-                let content = op.undo_data.as_deref().unwrap_or_default();
+                // A record with no content cannot put the file back. An
+                // empty file in its place would look like a restore.
+                let content = op
+                    .undo_data
+                    .as_deref()
+                    .context("Undo rm failed: the record holds no content")?;
                 restore_file(state, &op.path, content, op.undo_meta.as_ref())
                     .context("Undo rm failed")?;
             }
             OperationType::WriteFile => {
-                let content = op.undo_data.as_deref().unwrap_or_default();
+                let content = op
+                    .undo_data
+                    .as_deref()
+                    .context("Undo write failed: the record holds no content")?;
                 restore_file(state, &op.path, content, None).context("Undo write failed")?;
             }
             OperationType::FileAppended => {
@@ -1202,6 +1222,11 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
 
         let path = state.resolve_op_path(&op.path);
 
+        // What a removal or a truncation destroys this time: the content,
+        // and for a removal what the file was. The new record carries it,
+        // so that it can be undone like the first one.
+        let mut kept: Option<(Vec<u8>, Option<crate::state::FileMeta>)> = None;
+
         // Re-execute the original operation
         match op.op_type {
             OperationType::Mkdir => {
@@ -1214,15 +1239,31 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 fs::write(&path, "").context("Redo touch failed")?;
             }
             OperationType::DeleteFile => {
-                fs::remove_file(&path).context("Redo rm failed")?;
+                // As `rm` does it: beneath the session root, and keeping
+                // the content. Without it, `rm f; undo; redo; undo` put an
+                // empty file in place of `f`.
+                let contained = state.contained_abs(&path)?;
+                let named = state
+                    .root_dir()
+                    .symlink_metadata(&contained)
+                    .context("Redo rm failed")?;
+                if !named.is_file() {
+                    anyhow::bail!("Redo rm failed: {} is not a regular file now", op.path);
+                }
+                kept = Some(remove_keeping(state, &contained, &named, "Redo rm")?);
             }
             OperationType::WriteFile => {
                 // Would need new content
                 anyhow::bail!("WriteFile redo not yet implemented");
             }
             OperationType::FileTruncated => {
-                // Redo truncate: truncate file (original undo_data was the old content)
-                fs::write(&path, "").context("Redo truncate failed")?;
+                // Empty the file again, keeping what it holds now, as the
+                // redirection did.
+                let contained = state.contained_abs(&path)?;
+                let content =
+                    crate::redirection::truncate_keeping(state.root_dir(), &contained, &path)
+                        .context("Redo truncate failed")?;
+                kept = Some((content, None));
             }
             OperationType::FileAppended => {
                 // Cannot redo append without knowing what was appended
@@ -1307,14 +1348,18 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
         }
 
         let mut new_op = Operation::new(op.op_type, op.path.clone(), None);
-        // A copy, a link and the removal of a link are redone from what the
-        // first record carried (the source, the link's target), and undoing
-        // or redoing the new record needs it again. Without it, `rm link;
-        // undo; redo; undo` failed with "Missing symlink target for undo".
-        if matches!(
+        if let Some((content, meta)) = kept {
+            new_op.undo_data = Some(content);
+            new_op.undo_meta = meta;
+        } else if matches!(
             op.op_type,
             OperationType::CopyFile | OperationType::Symlink | OperationType::Unlink
         ) {
+            // A copy, a link and the removal of a link are redone from what
+            // the first record carried (the source, the link's target), and
+            // undoing or redoing the new record needs it again. Without it,
+            // `rm link; undo; redo; undo` failed with "Missing symlink
+            // target for undo".
             new_op.undo_data = op.undo_data.clone();
             new_op.undo_meta = op.undo_meta;
         }
@@ -1528,16 +1573,22 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                 OperationType::DeleteFile => {
                     fs::remove_file(&path).context("Failed to remove file")
                 }
-                OperationType::CreateFile => {
-                    let content = op.undo_data.as_deref().unwrap_or_default();
-                    restore_file(state, &op.path, content, op.undo_meta.as_ref())
-                        .context("Failed to restore file")
-                }
-                OperationType::WriteFile => {
-                    let content = op.undo_data.as_deref().unwrap_or_default();
-                    restore_file(state, &op.path, content, None)
-                        .context("Failed to restore file content")
-                }
+                OperationType::CreateFile => op
+                    .undo_data
+                    .as_deref()
+                    .context("Failed to restore file: the record holds no content")
+                    .and_then(|content| {
+                        restore_file(state, &op.path, content, op.undo_meta.as_ref())
+                            .context("Failed to restore file")
+                    }),
+                OperationType::WriteFile => op
+                    .undo_data
+                    .as_deref()
+                    .context("Failed to restore file content: the record holds no content")
+                    .and_then(|content| {
+                        restore_file(state, &op.path, content, None)
+                            .context("Failed to restore file content")
+                    }),
                 OperationType::FileAppended => {
                     // Rollback append: truncate file to original size
                     if let Some(size_bytes) = op.undo_data.as_ref() {

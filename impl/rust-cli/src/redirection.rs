@@ -309,6 +309,58 @@ fn open_existing_target(
     root.open_with(contained, &options)
 }
 
+/// Refuse an open redirect target that must not be written to. `shown` is
+/// its path, for the message.
+fn check_writable_target(meta: &cap_std::fs::Metadata, shown: &Path) -> Result<()> {
+    if !meta.is_file() {
+        anyhow::bail!(
+            "Output redirection target is not a file: {}",
+            shown.display()
+        );
+    }
+    // A file with more than one hard link has other names, which may lie
+    // outside the session root. Writing to it would change what those
+    // names hold, so it is refused.
+    let links = cap_fs_ext::MetadataExt::nlink(meta);
+    if links > 1 {
+        anyhow::bail!(
+            "Cannot redirect to {}: the file has {} hard links, and writing to it \
+             would change the data under its other names too",
+            shown.display(),
+            links
+        )
+    }
+    Ok(())
+}
+
+/// Empty the file at `contained` (beneath the session root `root`) and
+/// return what it held, for redoing a `>` redirection. `shown` is its path,
+/// for the messages.
+///
+/// As for the redirection itself, the file is opened once, checked, read
+/// and then truncated through that one handle, so the bytes returned are
+/// those of the file that was emptied.
+pub(crate) fn truncate_keeping(
+    root: &cap_std::fs::Dir,
+    contained: &Path,
+    shown: &Path,
+) -> Result<Vec<u8>> {
+    let mut target = open_existing_target(root, contained, false)
+        .with_context(|| format!("Failed to open file for writing: {}", shown.display()))?;
+    let meta = target
+        .metadata()
+        .with_context(|| format!("Failed to stat file: {}", shown.display()))?;
+    check_writable_target(&meta, shown)?;
+    let mut original_content = Vec::new();
+    target
+        .read_to_end(&mut original_content)
+        .with_context(|| format!("Failed to read file for backup: {}", shown.display()))?;
+    target
+        .set_len(0)
+        .with_context(|| format!("Failed to truncate: {}", shown.display()))?;
+    Ok(original_content)
+}
+
 /// The absolute path of the file that `contained` names once the links in
 /// it are followed, checked to be the file that was opened (`opened` is the
 /// open file's metadata).
@@ -461,24 +513,7 @@ impl RedirectSetup {
         let meta = target
             .metadata()
             .with_context(|| format!("Failed to stat file: {}", path.display()))?;
-        if !meta.is_file() {
-            anyhow::bail!(
-                "Output redirection target is not a file: {}",
-                path.display()
-            );
-        }
-        // A file with more than one hard link has other names, which may
-        // lie outside the session root. Writing to it would change what
-        // those names hold, so it is refused.
-        let links = cap_fs_ext::MetadataExt::nlink(&meta);
-        if links > 1 {
-            anyhow::bail!(
-                "Cannot redirect to {}: the file has {} hard links, and writing to it \
-                 would change the data under its other names too",
-                path.display(),
-                links
-            )
-        }
+        check_writable_target(&meta, &path)?;
 
         // The record names the file that is changed. Through a link
         // (`echo x > alias`) that is the link's target: the bytes saved for
@@ -1141,6 +1176,52 @@ mod tests {
         }
         // The first one truncated the file, and kept what it held.
         assert_eq!(fs::read(root.join("dir/real")).unwrap(), b"");
+    }
+
+    /// A truncation that is redone empties the file a second time, and its
+    /// record must hold the content again. It held none, so `echo x > f;
+    /// undo; redo; undo` left `f` empty.
+    #[cfg(unix)]
+    #[test]
+    fn test_a_redone_truncation_can_be_undone_again() {
+        let temp = TempDir::new().unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap();
+        let mut state = test_state(&root);
+        fs::write(root.join("f"), "ORIGINAL").unwrap();
+
+        let mut setup = RedirectSetup::new();
+        setup.setup_output_redirect("f", &state, false).unwrap();
+        setup.record_for_undo(&mut state).unwrap();
+        assert_eq!(fs::read(root.join("f")).unwrap(), b"");
+
+        crate::commands::undo(&mut state, 1, false).unwrap();
+        assert_eq!(fs::read(root.join("f")).unwrap(), b"ORIGINAL");
+        crate::commands::redo(&mut state, 1, false).unwrap();
+        assert_eq!(fs::read(root.join("f")).unwrap(), b"");
+        crate::commands::undo(&mut state, 1, false).unwrap();
+        assert_eq!(fs::read(root.join("f")).unwrap(), b"ORIGINAL");
+    }
+
+    /// Redoing a truncation makes the checks the redirection made: a file
+    /// that has gained another name since is not emptied.
+    #[cfg(unix)]
+    #[test]
+    fn test_a_truncation_is_not_redone_on_a_file_with_another_name() {
+        let temp = TempDir::new().unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap();
+        let mut state = test_state(&root);
+        fs::write(root.join("f"), "ORIGINAL").unwrap();
+
+        let mut setup = RedirectSetup::new();
+        setup.setup_output_redirect("f", &state, false).unwrap();
+        setup.record_for_undo(&mut state).unwrap();
+        crate::commands::undo(&mut state, 1, false).unwrap();
+        fs::hard_link(root.join("f"), root.join("other-name")).unwrap();
+
+        let refused = crate::commands::redo(&mut state, 1, false).unwrap_err();
+
+        assert!(format!("{refused:#}").contains("hard links"), "{refused:#}");
+        assert_eq!(fs::read(root.join("other-name")).unwrap(), b"ORIGINAL");
     }
 
     /// A link whose target does not exist is refused, and nothing is made.

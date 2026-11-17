@@ -23,8 +23,8 @@ fn run(state: &mut ShellState, command: &str) -> anyhow::Result<()> {
 
 #[test]
 fn cd_moves_the_working_directory_and_never_the_root() {
-    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
+    let _directory = fixtures::hold_process_directory();
     fs::create_dir_all(sandbox.root.join("a/b")).unwrap();
 
     run(&mut state, "cd a").unwrap();
@@ -46,8 +46,8 @@ fn cd_moves_the_working_directory_and_never_the_root() {
 
 #[test]
 fn cd_cannot_go_above_the_root() {
-    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
+    let _directory = fixtures::hold_process_directory();
     fs::create_dir(sandbox.root.join("a")).unwrap();
 
     // `..` at the root stays at the root, as it does at `/`.
@@ -65,8 +65,8 @@ fn cd_cannot_go_above_the_root() {
 
 #[test]
 fn cd_does_not_follow_a_symlink_out_of_the_root() {
-    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
+    let _directory = fixtures::hold_process_directory();
     symlink(&sandbox.outside, sandbox.root.join("out")).unwrap();
     fs::create_dir(sandbox.root.join("real")).unwrap();
     symlink("real", sandbox.root.join("in")).unwrap();
@@ -85,8 +85,8 @@ fn cd_does_not_follow_a_symlink_out_of_the_root() {
 
 #[test]
 fn cd_accepts_a_real_absolute_path_inside_the_root_and_a_root_relative_one() {
-    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
+    let _directory = fixtures::hold_process_directory();
     fs::create_dir_all(sandbox.root.join("a/b")).unwrap();
 
     let real = sandbox.root.join("a/b");
@@ -100,8 +100,8 @@ fn cd_accepts_a_real_absolute_path_inside_the_root_and_a_root_relative_one() {
 
 #[test]
 fn paths_are_relative_to_the_working_directory() {
-    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
+    let _directory = fixtures::hold_process_directory();
     fs::create_dir(sandbox.root.join("sub")).unwrap();
 
     run(&mut state, "cd sub").unwrap();
@@ -119,8 +119,8 @@ fn paths_are_relative_to_the_working_directory() {
 
 #[test]
 fn undo_after_cd_reverses_the_operation_that_was_made() {
-    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
+    let _directory = fixtures::hold_process_directory();
     fs::create_dir(sandbox.root.join("sub")).unwrap();
     fs::write(sandbox.root.join("sub/f"), "KEEP").unwrap();
 
@@ -150,8 +150,8 @@ fn undo_after_cd_reverses_the_operation_that_was_made() {
 
 #[test]
 fn rollback_after_cd_reverses_the_operations_that_were_made() {
-    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
+    let _directory = fixtures::hold_process_directory();
     fs::create_dir(sandbox.root.join("sub")).unwrap();
 
     run(&mut state, "begin t").unwrap();
@@ -246,11 +246,11 @@ fn a_redirected_ls_lists_the_working_directory() {
 /// enter it. A typed name is always text; this is reached through a link.
 #[test]
 fn a_directory_whose_name_is_not_text_is_not_entered() {
-    let _directory = fixtures::hold_process_directory();
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
     let (sandbox, mut state) = sandbox();
+    let _directory = fixtures::hold_process_directory();
     let odd = sandbox.root.join(OsStr::from_bytes(b"d\xff"));
     fs::create_dir(&odd).unwrap();
     symlink(&odd, sandbox.root.join("link")).unwrap();
@@ -268,8 +268,8 @@ fn a_directory_whose_name_is_not_text_is_not_entered() {
 /// with `..` stopping at the session root.
 #[test]
 fn a_relative_path_is_resolved_against_the_working_directory() {
-    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
+    let _directory = fixtures::hold_process_directory();
     fs::create_dir_all(sandbox.root.join("sub/deeper")).unwrap();
     run(&mut state, "cd sub/deeper").unwrap();
     let cwd = sandbox.root.join("sub/deeper");
@@ -286,8 +286,8 @@ fn a_relative_path_is_resolved_against_the_working_directory() {
 /// next undo failed or removed another file.
 #[test]
 fn a_redo_from_another_directory_is_recorded_under_its_own_path() {
-    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
+    let _directory = fixtures::hold_process_directory();
     fs::create_dir(sandbox.root.join("sub")).unwrap();
     fs::write(sandbox.root.join("sub/f"), "another file").unwrap();
     vsh::commands::touch(&mut state, "f", false).unwrap();
@@ -312,8 +312,8 @@ fn a_redo_from_another_directory_is_recorded_under_its_own_path() {
 /// none.
 #[test]
 fn a_copy_made_below_the_root_is_redone_from_its_own_source() {
-    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
+    let _directory = fixtures::hold_process_directory();
     fs::create_dir(sandbox.root.join("sub")).unwrap();
     fs::write(sandbox.root.join("sub/a"), "the source").unwrap();
     fs::write(sandbox.root.join("a"), "another file").unwrap();

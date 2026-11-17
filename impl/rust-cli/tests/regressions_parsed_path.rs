@@ -4,7 +4,9 @@
 //!
 //! Source: `docs/plans/VSH-ROUTE-PLAN-2026-11-04.adoc`, section 3.2 (holes a
 //! to n) and the 2026-11-17 review (hole o). Every reproduction below was
-//! re-run against `main` on 2026-11-17 and still failed.
+//! re-run against `main` on 2026-11-17 and still failed. Hole p was found
+//! the same day, in the scrub that closed hole d
+//! (`docs/audits/2026-11-17-capstd-experiment.adoc`).
 //!
 //! # How to read this file
 //!
@@ -37,11 +39,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 /// Holes that are open today. See the module documentation.
-const KNOWN_OPEN: &[&str] = &["b", "o"];
+const KNOWN_OPEN: &[&str] = &["b", "o", "p"];
 
 /// Every hole this file tests.
 const ALL_HOLES: &[&str] = &[
-    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o",
+    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
 ];
 
 /// Hold one hole's check against [`KNOWN_OPEN`].
@@ -485,6 +487,39 @@ fn hole_o_undo_after_rollback_does_not_reverse_twice() {
             Err(format!(
                 "undo after rollback failed: {}",
                 text(&output).lines().last().unwrap_or_default()
+            ))
+        }
+    });
+}
+
+/// (p) After obliterate, no earlier content of the file survives in the
+/// shell's own state, under whatever name it was saved.
+///
+/// The scrub of hole (d) finds the records of a file by its path. Content
+/// that was saved while the file had another name is recorded under that
+/// name, and is not found: `mv a b; obliterate b` leaves what `a` held.
+/// The same holds for content saved through a symbolic link that has been
+/// removed since, in a history written before redirections recorded the
+/// file they changed.
+#[test]
+fn hole_p_obliterate_scrubs_contents_saved_under_an_earlier_name() {
+    hole("p", || {
+        let sandbox = Sandbox::new();
+        sandbox.vsh_ok("echo SECRETP > a; echo b > a; mv a b; obliterate b --force");
+        assert!(
+            !sandbox.root.join("b").exists(),
+            "obliterate should remove b"
+        );
+        let holders: Vec<String> = files_under(sandbox.temp.path())
+            .into_iter()
+            .filter(|path| holds_secret(&fs::read(path).unwrap(), "SECRETP"))
+            .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        if holders.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "the content saved under the earlier name is still in {holders:?}"
             ))
         }
     });

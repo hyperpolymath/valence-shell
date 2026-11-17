@@ -43,8 +43,8 @@ fn tilde_slash_path_expands_to_home_slash_path() {
 /// which `cd` does not change.
 #[test]
 fn tilde_plus_expands_to_the_working_directory() {
-    let _directory = fixtures::hold_process_directory();
     let temp = tempdir().unwrap();
+    let _directory = fixtures::hold_process_directory();
     let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
     let root = state.root.clone();
 
@@ -68,8 +68,8 @@ fn tilde_plus_expands_to_the_working_directory() {
 /// wherever the shell's parent had last been.
 #[test]
 fn tilde_minus_expands_to_the_previous_directory() {
-    let _directory = fixtures::hold_process_directory();
     let temp = tempdir().unwrap();
+    let _directory = fixtures::hold_process_directory();
     let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
     let root = state.root.clone();
 
@@ -145,8 +145,8 @@ fn tilde_expands_in_variable_assignments() -> Result<()> {
 /// sandbox root itself to the home directory. That was runtime hole g.
 #[test]
 fn cd_with_tilde_is_confined_to_the_session_root() -> Result<()> {
-    let _directory = fixtures::hold_process_directory();
     let temp = tempdir()?;
+    let _directory = fixtures::hold_process_directory();
     let mut state = ShellState::new(temp.path().to_str().unwrap())?;
     let root = state.root.clone();
 

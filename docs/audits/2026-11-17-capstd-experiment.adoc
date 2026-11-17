@@ -147,8 +147,47 @@ A redirection's target is now opened once:
   resolved, so `echo x > alias` is recorded under the file `alias` points
   to. `obliterate` of that file then finds the record.
 
-Input redirection is still opened by an ordinary path (once), and the paths
-that undo and redo a redirection are not ported.
+Input redirection is still opened by an ordinary path (once). Undoing an
+append or the creation of a file, and redoing the creation of a file, still
+go by an ordinary path.
+
+== Follow-up the same day: redo, and a gap in the scrub
+
+Review found that a removal which is redone lost the file. The record made by
+`redo` held no content, and undo of a removal with no content wrote an empty
+file, readable by its owner only, and reported success: `rm f; undo; redo;
+undo` left `f` empty. A redone truncation (`echo x > f; undo; redo; undo`)
+lost the content in the same way.
+
+* `redo` of a removal now removes the file as `rm` does: beneath the root,
+  keeping the content and the file's permissions, owner and modification
+  time. `redo` of a truncation empties the file as the redirection does: one
+  open, the same checks, the content read from the file that is emptied.
+  What is kept is what the file holds at that moment, which is not always
+  what the first run saved.
+* Undo of a removal or of a truncation whose record holds no content now
+  fails and writes nothing. Such a record can come from `redo` in an earlier
+  build.
+* The audit entry of a directory obliteration that fails part of the way
+  counts a file as soon as its name is removed. It was counted after the
+  directory was synced, so a failed sync reported one file too few.
+
+One gap in the scrub of obliterated content was found while this was
+checked, and is not closed. The scrub finds the records of a file by path:
+the path as recorded, and where that path leads now. Content that was saved
+while the file had another name is not found:
+
+* `echo secret > a; echo x > a; mv a b; obliterate b` leaves `secret` in the
+  saved history, under the name `a`;
+* so does content saved through a symbolic link that has been removed
+  since, in a history written before redirections recorded the file they
+  changed.
+
+It is listed as hole (p) in `impl/rust-cli/tests/regressions_parsed_path.rs`.
+That test fails if the hole closes and the list is not updated. Closing it
+needs a decision on how a record identifies its file: by the names the
+history gives the file over time, by the device and inode read when the
+content is saved, or both. The decision is open.
 
 == Decision and next steps
 

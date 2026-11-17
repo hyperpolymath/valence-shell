@@ -11,7 +11,7 @@ use std::fs;
 use std::os::unix::fs::{symlink, PermissionsExt};
 use std::time::{Duration, UNIX_EPOCH};
 use vsh::commands;
-use vsh::state::{OperationType, ShellState};
+use vsh::state::{Operation, OperationType, ShellState};
 
 #[test]
 fn undo_of_rm_restores_content_mode_and_modification_time() {
@@ -136,4 +136,92 @@ fn a_redone_rm_of_a_link_can_be_undone_again() {
 
     commands::undo(&mut state, 1, false).unwrap();
     assert_eq!(fs::read_link(&link).unwrap().to_str(), Some("target"));
+}
+
+/// A removal that is redone removes the file a second time, and its record
+/// must hold the content again. It held none, so `rm f; undo; redo; undo`
+/// put an empty file, readable by its owner only, in place of `f`.
+#[test]
+fn a_redone_rm_can_be_undone_again() {
+    let (sandbox, mut state) = sandbox();
+    let path = sandbox.root.join("f");
+    fs::write(&path, "precious").unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).unwrap();
+
+    commands::rm(&mut state, "f", false).unwrap();
+    commands::undo(&mut state, 1, false).unwrap();
+    commands::redo(&mut state, 1, false).unwrap();
+    assert!(!path.exists());
+
+    commands::undo(&mut state, 1, false).unwrap();
+    assert_eq!(fs::read(&path).unwrap(), b"precious");
+    assert_eq!(
+        fs::metadata(&path).unwrap().permissions().mode() & 0o7777,
+        0o640
+    );
+}
+
+/// The redone removal keeps what the file holds when it is removed. That
+/// is not always what the first removal saved: the file can have been
+/// changed in between.
+#[test]
+fn a_redone_rm_keeps_what_the_file_holds_then() {
+    let (sandbox, mut state) = sandbox();
+    let path = sandbox.root.join("f");
+    fs::write(&path, "first").unwrap();
+
+    commands::rm(&mut state, "f", false).unwrap();
+    commands::undo(&mut state, 1, false).unwrap();
+    fs::write(&path, "changed since").unwrap();
+    commands::redo(&mut state, 1, false).unwrap();
+    commands::undo(&mut state, 1, false).unwrap();
+
+    assert_eq!(fs::read(&path).unwrap(), b"changed since");
+}
+
+/// A removal whose record holds no content cannot be undone. Undo used to
+/// write an empty file in its place and report success.
+#[test]
+fn undo_of_a_removal_with_no_content_fails_and_creates_nothing() {
+    let (sandbox, mut state) = sandbox();
+    state.record_operation(Operation::new(
+        OperationType::DeleteFile,
+        "gone".to_string(),
+        None,
+    ));
+
+    let refused = commands::undo(&mut state, 1, false).unwrap_err();
+
+    assert!(
+        format!("{refused:#}").contains("holds no content"),
+        "{refused:#}"
+    );
+    assert!(!sandbox.root.join("gone").exists());
+}
+
+/// What is redone must still be a regular file. A removal is not redone on
+/// a directory or a link that has taken the file's place.
+#[test]
+fn a_removal_is_not_redone_on_something_that_is_not_a_regular_file() {
+    let (sandbox, mut state) = sandbox();
+    let path = sandbox.root.join("f");
+    fs::write(&path, "content").unwrap();
+
+    commands::rm(&mut state, "f", false).unwrap();
+    commands::undo(&mut state, 1, false).unwrap();
+    fs::remove_file(&path).unwrap();
+    symlink(sandbox.outside.join("victim"), &path).unwrap();
+    fs::write(sandbox.outside.join("victim"), "OUTSIDE").unwrap();
+
+    let refused = commands::redo(&mut state, 1, false).unwrap_err();
+
+    assert!(
+        format!("{refused:#}").contains("not a regular file"),
+        "{refused:#}"
+    );
+    assert!(fs::symlink_metadata(&path).unwrap().is_symlink());
+    assert_eq!(
+        fs::read(sandbox.outside.join("victim")).unwrap(),
+        b"OUTSIDE"
+    );
 }
