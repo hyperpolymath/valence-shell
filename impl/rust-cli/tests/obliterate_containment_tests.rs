@@ -335,3 +335,194 @@ fn obliterate_scrubs_what_the_history_holds_under_another_name() {
     let reloaded = ShellState::new(sandbox.root.to_str().unwrap()).unwrap();
     assert!(!reloaded.history.iter().any(holds_it), "in the saved state");
 }
+
+/// Start the built shell in `root`. A redirection changes where the
+/// process writes, so a case with one needs a process of its own.
+fn shell(root: &std::path::Path, script: &str) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_vsh"))
+        .arg("-r")
+        .arg(root)
+        .arg("-c")
+        .arg(script)
+        .current_dir(root)
+        .env("NO_COLOR", "1")
+        .env_remove("RUST_BACKTRACE")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("start the built shell")
+}
+
+/// Whether an operation's undo data holds `content`.
+fn holds(op: &vsh::state::Operation, content: &[u8]) -> bool {
+    op.undo_data
+        .as_deref()
+        .is_some_and(|data| data.windows(content.len()).any(|part| part == content))
+}
+
+/// A write through a link saves the bytes of the link's target. The record
+/// was kept under the link's name, so obliterating the target left its
+/// earlier content in the saved history, and `undo` could bring it back.
+/// The record is now kept under the file that was changed, so it is found
+/// even when the link has been removed since.
+#[test]
+fn obliterate_scrubs_content_that_was_saved_through_a_link() {
+    for remove_the_link_first in [false, true] {
+        let (sandbox, _state) = sandbox();
+        fs::write(sandbox.root.join("real"), "SECRET-THROUGH-LINK").unwrap();
+        symlink("real", sandbox.root.join("alias")).unwrap();
+        let mut script = String::from("echo replacement > alias; ");
+        if remove_the_link_first {
+            script.push_str("rm alias; ");
+        }
+        script.push_str("obliterate real --force");
+
+        let output = shell(&sandbox.root, &script);
+
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(!sandbox.root.join("real").exists());
+        let reloaded = ShellState::new(sandbox.root.to_str().unwrap()).unwrap();
+        assert!(
+            !reloaded
+                .history
+                .iter()
+                .any(|op| holds(op, b"SECRET-THROUGH-LINK")),
+            "the saved history still holds the content (link removed first: \
+             {remove_the_link_first})"
+        );
+    }
+}
+
+/// Operations that age out of the history are written to the archive with
+/// their undo data. Obliterate scrubbed the history and left that copy.
+#[test]
+fn obliterate_scrubs_the_history_archive_too() {
+    let (sandbox, mut state) = sandbox();
+    let archive = sandbox.outside.join("history-archive.jsonl");
+    state.max_history_size = Some(1);
+    state.history_archive_path = Some(archive.clone());
+    fs::write(sandbox.root.join("f"), "ARCHIVED-SECRET").unwrap();
+    fs::write(sandbox.root.join("other"), "OTHER-CONTENT").unwrap();
+    // The removal of `f` holds its content. Undoing it puts `f` back, and
+    // the next operation pushes that record out of the history, into the
+    // archive.
+    vsh::commands::rm(&mut state, "f", false).unwrap();
+    vsh::commands::undo(&mut state, 1, false).unwrap();
+    vsh::commands::rm(&mut state, "other", false).unwrap();
+    let archived = |archive: &std::path::Path| -> Vec<vsh::state::Operation> {
+        fs::read_to_string(archive)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect()
+    };
+    assert!(
+        archived(&archive)
+            .iter()
+            .any(|op| holds(op, b"ARCHIVED-SECRET")),
+        "the set-up did not put the content into the archive"
+    );
+
+    obliterate_path(&mut state, "f", false, true).unwrap();
+
+    let after = archived(&archive);
+    assert!(
+        !after.iter().any(|op| holds(op, b"ARCHIVED-SECRET")),
+        "the archive still holds the content"
+    );
+    // The record of `f` is still there, without the content, and what the
+    // archive holds about another path is untouched.
+    assert!(after.iter().any(|op| op.path == "f"));
+    assert!(after.iter().any(|op| holds(op, b"OTHER-CONTENT")));
+}
+
+/// The audit entries name the path as the history records it, relative to
+/// the session root. They used to carry the path as it was typed, so an
+/// obliteration made in `sub` was audited as `f` and recorded as `sub/f`.
+#[test]
+fn an_obliteration_below_the_root_is_audited_under_the_path_the_history_records() {
+    let (sandbox, mut state) = sandbox();
+    fs::create_dir(sandbox.root.join("sub")).unwrap();
+    fs::write(sandbox.root.join("sub/f"), "CONTENT").unwrap();
+    state.set_cwd(&sandbox.root.join("sub")).unwrap();
+
+    obliterate_path(&mut state, "f", false, true).unwrap();
+
+    assert_eq!(state.history.last().unwrap().path, "sub/f");
+    let log = audit_log(&sandbox);
+    let paths: Vec<String> = log
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .map(|entry| entry["path"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(paths, ["sub/f", "sub/f"], "{log}");
+}
+
+/// An obliteration that fails after it has begun is recorded as failed.
+/// By then the intent is in the audit log and the history has been
+/// scrubbed. The error used to be returned with nothing more written: an
+/// intent with no outcome, and no record in the history, although data
+/// was gone.
+///
+/// The shell walks the directory, then asks. While it waits, a file is put
+/// where the walk did not see one, so the directory cannot be removed
+/// after its files have been destroyed.
+#[test]
+fn an_obliteration_that_fails_part_way_is_recorded_as_failed() {
+    use std::io::{Read, Write};
+    use std::process::{Command, Stdio};
+
+    let (sandbox, _state) = sandbox();
+    fs::create_dir_all(sandbox.root.join("dir/inner")).unwrap();
+    fs::write(sandbox.root.join("dir/a"), "CONTENT").unwrap();
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_vsh"))
+        .arg("-r")
+        .arg(&sandbox.root)
+        .arg("-c")
+        .arg("obliterate dir")
+        .current_dir(&sandbox.root)
+        .env("NO_COLOR", "1")
+        .env_remove("RUST_BACKTRACE")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("start the built shell");
+    let mut stdout = child.stdout.take().unwrap();
+    let mut seen = Vec::new();
+    let mut byte = [0u8; 1];
+    while !seen.ends_with(b"[y/N] ") {
+        assert_eq!(
+            stdout.read(&mut byte).unwrap(),
+            1,
+            "the shell ended before it asked: {}",
+            String::from_utf8_lossy(&seen)
+        );
+        seen.push(byte[0]);
+    }
+    fs::write(sandbox.root.join("dir/inner/late"), "LATE").unwrap();
+    child.stdin.take().unwrap().write_all(b"y\n").unwrap();
+    let status = child.wait().unwrap();
+
+    assert!(!status.success(), "the command must report the failure");
+    assert!(!sandbox.root.join("dir/a").exists(), "`a` was destroyed");
+    assert!(sandbox.root.join("dir/inner/late").exists());
+    let log = audit_log(&sandbox);
+    assert!(log.contains("obliterate-dir-intent"), "{log}");
+    assert!(
+        log.contains("obliterate-dir-failed-after-1-of-1-files"),
+        "{log}"
+    );
+    let reloaded = ShellState::new(sandbox.root.to_str().unwrap()).unwrap();
+    assert!(
+        reloaded
+            .history
+            .iter()
+            .any(|op| op.op_type == vsh::state::OperationType::Obliterate && op.path == "dir"),
+        "the history has no record of the obliteration"
+    );
+}

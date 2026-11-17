@@ -118,3 +118,22 @@ fn undo_restores_a_link_whose_target_is_not_text() {
     commands::undo(&mut state, 1, false).unwrap();
     assert_eq!(fs::read_link(&link).unwrap().as_os_str(), target);
 }
+
+/// A link that is removed, put back and removed again (`rm link; undo;
+/// redo`) can be put back again. The redone record used to lose the link's
+/// target, so the second undo failed with "Missing symlink target for
+/// undo".
+#[test]
+fn a_redone_rm_of_a_link_can_be_undone_again() {
+    let (sandbox, mut state) = sandbox();
+    let link = sandbox.root.join("link");
+    symlink("target", &link).unwrap();
+
+    commands::rm(&mut state, "link", false).unwrap();
+    commands::undo(&mut state, 1, false).unwrap();
+    commands::redo(&mut state, 1, false).unwrap();
+    assert!(fs::symlink_metadata(&link).is_err());
+
+    commands::undo(&mut state, 1, false).unwrap();
+    assert_eq!(fs::read_link(&link).unwrap().to_str(), Some("target"));
+}

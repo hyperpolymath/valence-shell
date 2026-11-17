@@ -777,9 +777,100 @@ impl ShellState {
         ) {
             return false;
         }
+        // An operation on a link itself (making it, removing it, moving
+        // it) is about the link. Any other operation went through the link
+        // to the file it points at: `echo x > alias` saved the bytes of the
+        // target under the name `alias`. Such a record is also compared by
+        // where its path leads now, with the last link followed too.
+        let on_the_link = matches!(
+            op.op_type,
+            OperationType::Symlink | OperationType::Unlink | OperationType::Move
+        );
         op.path.split('\0').any(|recorded| {
             Path::new(recorded).starts_with(Path::new(rooted))
                 || self.real_location(recorded).starts_with(target)
+                || (!on_the_link
+                    && fs::canonicalize(self.resolve_op_path(recorded))
+                        .is_ok_and(|real| real.starts_with(target)))
+        })
+    }
+
+    /// Take out of the history archive what it holds about a path that is
+    /// about to be obliterated: the undo data of every archived operation
+    /// that [`Self::scrub_obliterated`] would have scrubbed in the history.
+    ///
+    /// Operations that age out of the history are written to the archive
+    /// with their undo data, which can be the content that is being
+    /// obliterated. Scrubbing only the history left that copy on disk.
+    ///
+    /// The archive is rewritten through a temporary file and renamed into
+    /// place, so it is either the old archive or the scrubbed one. A line
+    /// that cannot be read as an operation is kept as it is. Nothing is
+    /// done when no archive is configured or none has been written yet.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the archive cannot be read or rewritten. The caller must
+    /// then not obliterate.
+    pub(crate) fn scrub_archive(&self, rooted: &str) -> Result<()> {
+        use std::io::Write;
+
+        let Some(archive_path) = self.history_archive_path.as_ref() else {
+            return Ok(());
+        };
+        if rooted.is_empty() {
+            return Ok(());
+        }
+        let archived = match fs::read_to_string(archive_path) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => {
+                return Err(e).with_context(|| {
+                    format!("Failed to read history archive {}", archive_path.display())
+                })
+            }
+        };
+
+        let target = self.real_location(rooted);
+        let mut changed = false;
+        let mut scrubbed = String::with_capacity(archived.len());
+        for line in archived.lines() {
+            match serde_json::from_str::<Operation>(line) {
+                Ok(mut op)
+                    if (op.undo_data.is_some() || op.undo_meta.is_some())
+                        && self.concerns(&op, rooted, &target) =>
+                {
+                    op.undo_data = None;
+                    op.undo_meta = None;
+                    scrubbed.push_str(&serde_json::to_string(&op)?);
+                    changed = true;
+                }
+                _ => scrubbed.push_str(line),
+            }
+            scrubbed.push('\n');
+        }
+        if !changed {
+            return Ok(());
+        }
+
+        let mut temporary = archive_path.clone().into_os_string();
+        temporary.push(".scrub");
+        let temporary = PathBuf::from(temporary);
+        let written = (|| -> std::io::Result<()> {
+            let mut file = fs::File::create(&temporary)?;
+            file.write_all(scrubbed.as_bytes())?;
+            file.sync_all()?;
+            fs::rename(&temporary, archive_path)?;
+            if let Some(parent) = archive_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+                fs::File::open(parent)?.sync_all()?;
+            }
+            Ok(())
+        })();
+        written.with_context(|| {
+            format!(
+                "Failed to rewrite history archive {}",
+                archive_path.display()
+            )
         })
     }
 
@@ -873,7 +964,17 @@ impl ShellState {
 
     /// Resolve a path relative to sandbox root
     /// Prevents path traversal attacks via `..` components
+    ///
+    /// A path that starts with `/` is read from the session root, with one
+    /// exception: a real path that lies inside the session root is that
+    /// path. `pwd`, `$PWD`, `~+` and `~-` all give real paths, and reading
+    /// them from the session root added the root a second time, so
+    /// `touch ~+/f` failed in every directory. `cd` already read them this
+    /// way. The result is inside the session root either way.
     pub fn resolve_path(&self, path: &str) -> PathBuf {
+        if path.starts_with('/') && Path::new(path).starts_with(&self.root) {
+            return normalise_within(&self.root, Path::new(path));
+        }
         if path.starts_with('/') || self.cwd == self.root {
             return resolve_under_root(&self.root, path);
         }
@@ -1342,6 +1443,38 @@ mod tests {
             .map(|op| op.path.as_str())
             .collect();
         assert_eq!(kept, ["directory/h", "dir2"]);
+    }
+
+    /// A record of a write made through a link holds the bytes of the
+    /// link's target, under the link's name. Obliterating the target must
+    /// reach it. A record about the link itself (making it, removing it)
+    /// is about the link, and stays.
+    #[cfg(unix)]
+    #[test]
+    fn test_scrub_reaches_content_recorded_under_a_link_to_the_file() {
+        let root = tempfile::tempdir().unwrap();
+        let mut state = ShellState::new(root.path().to_str().unwrap()).unwrap();
+        fs::write(root.path().join("real"), "now").unwrap();
+        std::os::unix::fs::symlink("real", root.path().join("alias")).unwrap();
+        for op_type in [
+            OperationType::FileTruncated,
+            OperationType::Symlink,
+            OperationType::Unlink,
+        ] {
+            state.record_rooted_operation(
+                Operation::new(op_type, "alias".to_string(), None).with_undo_data(b"data".to_vec()),
+            );
+        }
+
+        state.scrub_obliterated("real", Uuid::new_v4());
+
+        let kept: Vec<OperationType> = state
+            .history
+            .iter()
+            .filter(|op| op.undo_data.is_some())
+            .map(|op| op.op_type)
+            .collect();
+        assert_eq!(kept, [OperationType::Symlink, OperationType::Unlink]);
     }
 
     #[test]

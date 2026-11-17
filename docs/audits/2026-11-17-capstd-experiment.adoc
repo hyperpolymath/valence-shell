@@ -122,6 +122,34 @@ failure. The directory is now opened as a file for syncing. The existing
 tests did not catch this; the hole test for d did, because its set-up runs
 `obliterate`.
 
+== Follow-up the same day: one open per redirection
+
+Review found that a redirection's target was opened more than once: by the
+set-up (beneath the root, with the check on hard links), and then again by
+whatever wrote to it. For a built-in the second open was beneath the root,
+without the check. For an external command it was an ordinary `File::create`
+on the name. A name given to another file between the two opens was
+followed: a hard link to a file outside the root was truncated and written,
+and for an external command so was the target of a symbolic link.
+
+A redirection's target is now opened once:
+
+* It is opened beneath the root without truncating it. The file type and the
+  link count are read from the open file. Only then is it truncated.
+* A file that does not exist is created exclusively. A file that another
+  program makes at that moment is not taken for a new one. One consequence:
+  a redirection to a symbolic link whose target does not exist is refused
+  (bash creates the target).
+* The bytes saved for undo are read through the same handle, opened with
+  `O_NOATIME` where the system has it.
+* Built-ins and external commands write through duplicates of that handle.
+* The history records the file that was changed, with the links in the path
+  resolved, so `echo x > alias` is recorded under the file `alias` points
+  to. `obliterate` of that file then finds the record.
+
+Input redirection is still opened by an ordinary path (once), and the paths
+that undo and redo a redirection are not ported.
+
 == Decision and next steps
 
 Capability handles are adopted for containment (route plan step B2):

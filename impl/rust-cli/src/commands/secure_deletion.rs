@@ -89,11 +89,42 @@ fn refuse_inside_transaction(state: &ShellState) -> Result<()> {
 /// one fails, the destruction has already happened, so the caller only
 /// warns.
 fn append_rmo_residue(state: &ShellState, op: &Operation, outcome: &str) -> Result<()> {
+    append_rmo_entry(state, op, outcome, None)
+}
+
+/// As [`append_rmo_residue`], with the text of the error that ended the
+/// obliteration, if one did.
+fn append_rmo_entry(
+    state: &ShellState,
+    op: &Operation,
+    outcome: &str,
+    error: Option<String>,
+) -> Result<()> {
     let log_path = state.session_root().join(".vsh-audit.log");
     let log =
         crate::audit_log::AuditLog::new(log_path, None).context("RMO audit log unavailable")?;
-    let entry = crate::audit_log::AuditEntry::from_operation(op, outcome, None);
+    let entry = crate::audit_log::AuditEntry::from_operation(op, outcome, error);
     log.append(&entry).context("RMO audit entry not written")
+}
+
+/// Record an obliteration that began and then failed.
+///
+/// By this point the audit log holds the intent entry, and the history has
+/// been scrubbed and saved: its earlier operations on the path are marked
+/// as undone by this one. Returning the error alone left the log with an
+/// intent and no outcome, and the history without the operation, although
+/// some or all of the data may be gone. So the outcome is written (with
+/// the error), and the operation is recorded, before the error is returned.
+fn record_failed_obliteration(
+    state: &mut ShellState,
+    op: Operation,
+    outcome: &str,
+    error: &anyhow::Error,
+) {
+    if let Err(e) = append_rmo_entry(state, &op, outcome, Some(format!("{error:#}"))) {
+        eprintln!("warning: RMO audit outcome not written: {e:#}");
+    }
+    state.record_rooted_operation(op);
 }
 
 /// The regular file at `contained`, opened for overwriting, and its size.
@@ -407,22 +438,28 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
     }
 
     // Steps 1 and 2: the audit entry, then the history. Nothing is
-    // destroyed before both are done.
-    let op = Operation::new(OperationType::Obliterate, path.to_string(), None);
+    // destroyed before both are done. The operation names the path as the
+    // history stores it, relative to the session root, so that the audit
+    // entries and the history record name the same file whatever the
+    // working directory is.
+    let op = Operation::new(OperationType::Obliterate, state.rooted(path), None);
     let op_id = op.id;
-    prepare_obliteration(state, &op, path, "obliterate-intent")?;
+    prepare_obliteration(state, &op, "obliterate-intent")?;
 
     // Step 3: Secure overwrite, then delete the name.
     if verbose {
         println!("🔥 3-pass overwrite (random / zeros / 0xFF) + unlink...");
     }
-    overwrite_and_unlink(state.root_dir(), &contained, file, file_size)?;
+    if let Err(e) = overwrite_and_unlink(state.root_dir(), &contained, file, file_size) {
+        record_failed_obliteration(state, op, "obliterate-failed", &e);
+        return Err(e);
+    }
 
     // Step 4: Record the outcome, and the irreversible operation (NO undo_data).
     if let Err(e) = append_rmo_residue(state, &op, "obliterated") {
         eprintln!("warning: RMO audit outcome not written: {e:#}");
     }
-    state.record_operation(op);
+    state.record_rooted_operation(op);
 
     // Output
     println!(
@@ -459,15 +496,16 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
 /// content as undo data; if the history could not be saved without it, the
 /// content would outlive the file in the saved state. If either step fails,
 /// nothing is obliterated.
-fn prepare_obliteration(
-    state: &mut ShellState,
-    op: &Operation,
-    path: &str,
-    intent: &str,
-) -> Result<()> {
+fn prepare_obliteration(state: &mut ShellState, op: &Operation, intent: &str) -> Result<()> {
     append_rmo_residue(state, op, intent)
         .context("Nothing was obliterated, because the audit entry could not be written")?;
-    let scrubbed = state.scrub_obliterated(&state.rooted(path), op.id);
+    // The archive of operations that aged out of the history can hold the
+    // content too.
+    state.scrub_archive(&op.path).context(
+        "Nothing was obliterated, because the history archive could not be rewritten without \
+         the earlier contents of what was to be obliterated",
+    )?;
+    let scrubbed = state.scrub_obliterated(&op.path, op.id);
     if let Err(e) = state.save_history() {
         // The file stays, so the history must still be able to undo what
         // was done to it.
@@ -478,6 +516,39 @@ fn prepare_obliteration(
         );
     }
     Ok(())
+}
+
+/// Destroy what [`plan_dir`] found: the files, the links, the directories
+/// deepest first, and then the directory `contained` itself. `obliterated`
+/// counts the files destroyed, and holds the count reached if this fails
+/// part of the way.
+fn destroy_planned(
+    root: &Dir,
+    plan: &DirPlan,
+    contained: &Path,
+    verbose: bool,
+    obliterated: &mut usize,
+) -> Result<()> {
+    for file_path in &plan.files {
+        let (file, file_size) = open_for_obliteration(root, file_path)?;
+        overwrite_and_unlink(root, file_path, file, file_size)?;
+        *obliterated += 1;
+        if verbose {
+            println!("  🔥 {}", file_path.display());
+        }
+    }
+    for link in &plan.links {
+        // Removing a link removes only the link; its target is not touched.
+        root.remove_file(link)?;
+    }
+    for dir_path in &plan.dirs {
+        root.remove_dir(dir_path)?;
+        sync_directory(root, dir_path.parent())?;
+    }
+
+    // Remove root directory
+    root.remove_dir(contained)?;
+    sync_directory(root, contained.parent())
 }
 
 /// Obliterate a directory and its contents (recursive)
@@ -563,39 +634,30 @@ pub fn obliterate_dir(
     }
 
     // The audit entry, then the history, before anything is destroyed.
-    let op = Operation::new(OperationType::Obliterate, path.to_string(), None);
+    let op = Operation::new(OperationType::Obliterate, state.rooted(path), None);
     let op_id = op.id;
-    prepare_obliteration(state, &op, path, "obliterate-dir-intent")?;
+    prepare_obliteration(state, &op, "obliterate-dir-intent")?;
 
     // Obliterate the files, remove the links, then the directories, deepest
     // first.
     let mut obliterated = 0usize;
-    for file_path in &plan.files {
-        let (file, file_size) = open_for_obliteration(state.root_dir(), file_path)?;
-        overwrite_and_unlink(state.root_dir(), file_path, file, file_size)?;
-        obliterated += 1;
-        if verbose {
-            println!("  🔥 {}", file_path.display());
-        }
+    if let Err(e) = destroy_planned(
+        state.root_dir(),
+        &plan,
+        &contained,
+        verbose,
+        &mut obliterated,
+    ) {
+        let outcome = format!("obliterate-dir-failed-after-{obliterated}-of-{file_count}-files");
+        record_failed_obliteration(state, op, &outcome, &e);
+        return Err(e);
     }
-    for link in &plan.links {
-        // Removing a link removes only the link; its target is not touched.
-        state.root_dir().remove_file(link)?;
-    }
-    for dir_path in &plan.dirs {
-        state.root_dir().remove_dir(dir_path)?;
-        sync_directory(state.root_dir(), dir_path.parent())?;
-    }
-
-    // Remove root directory
-    state.root_dir().remove_dir(&contained)?;
-    sync_directory(state.root_dir(), contained.parent())?;
 
     // Record the outcome and the operation.
     if let Err(e) = append_rmo_residue(state, &op, "obliterated-dir") {
         eprintln!("warning: RMO audit outcome not written: {e:#}");
     }
-    state.record_operation(op);
+    state.record_rooted_operation(op);
 
     println!(
         "{} {} {}",

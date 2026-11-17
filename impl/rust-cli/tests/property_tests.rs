@@ -1125,9 +1125,13 @@ fn evaluate_all_shapes(state: &mut vsh::state::ShellState, a: i64, b: i64, op: &
         format!("{unary}a {op} {unary}b"),
         format!("{unary}(a {op} b)"),
     ] {
-        if let Ok(parsed) = vsh::arith::parse_arithmetic(&expression) {
-            let _ = vsh::arith::eval_arith(&parsed, state);
-        }
+        // Every expression here is in the supported syntax, so it must
+        // parse. Skipping one that did not would let a parser fault pass.
+        // The evaluation may still fail: a zero divisor, a negative
+        // exponent and a shift count out of range are among the cases.
+        let parsed = vsh::arith::parse_arithmetic(&expression)
+            .unwrap_or_else(|e| panic!("`{expression}` did not parse: {e:#}"));
+        let _ = vsh::arith::eval_arith(&parsed, state);
     }
 }
 

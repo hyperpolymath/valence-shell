@@ -23,6 +23,7 @@ fn run(state: &mut ShellState, command: &str) -> anyhow::Result<()> {
 
 #[test]
 fn cd_moves_the_working_directory_and_never_the_root() {
+    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
     fs::create_dir_all(sandbox.root.join("a/b")).unwrap();
 
@@ -45,6 +46,7 @@ fn cd_moves_the_working_directory_and_never_the_root() {
 
 #[test]
 fn cd_cannot_go_above_the_root() {
+    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
     fs::create_dir(sandbox.root.join("a")).unwrap();
 
@@ -63,6 +65,7 @@ fn cd_cannot_go_above_the_root() {
 
 #[test]
 fn cd_does_not_follow_a_symlink_out_of_the_root() {
+    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
     symlink(&sandbox.outside, sandbox.root.join("out")).unwrap();
     fs::create_dir(sandbox.root.join("real")).unwrap();
@@ -82,6 +85,7 @@ fn cd_does_not_follow_a_symlink_out_of_the_root() {
 
 #[test]
 fn cd_accepts_a_real_absolute_path_inside_the_root_and_a_root_relative_one() {
+    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
     fs::create_dir_all(sandbox.root.join("a/b")).unwrap();
 
@@ -96,6 +100,7 @@ fn cd_accepts_a_real_absolute_path_inside_the_root_and_a_root_relative_one() {
 
 #[test]
 fn paths_are_relative_to_the_working_directory() {
+    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
     fs::create_dir(sandbox.root.join("sub")).unwrap();
 
@@ -114,6 +119,7 @@ fn paths_are_relative_to_the_working_directory() {
 
 #[test]
 fn undo_after_cd_reverses_the_operation_that_was_made() {
+    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
     fs::create_dir(sandbox.root.join("sub")).unwrap();
     fs::write(sandbox.root.join("sub/f"), "KEEP").unwrap();
@@ -144,6 +150,7 @@ fn undo_after_cd_reverses_the_operation_that_was_made() {
 
 #[test]
 fn rollback_after_cd_reverses_the_operations_that_were_made() {
+    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
     fs::create_dir(sandbox.root.join("sub")).unwrap();
 
@@ -239,6 +246,7 @@ fn a_redirected_ls_lists_the_working_directory() {
 /// enter it. A typed name is always text; this is reached through a link.
 #[test]
 fn a_directory_whose_name_is_not_text_is_not_entered() {
+    let _directory = fixtures::hold_process_directory();
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
@@ -260,6 +268,7 @@ fn a_directory_whose_name_is_not_text_is_not_entered() {
 /// with `..` stopping at the session root.
 #[test]
 fn a_relative_path_is_resolved_against_the_working_directory() {
+    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
     fs::create_dir_all(sandbox.root.join("sub/deeper")).unwrap();
     run(&mut state, "cd sub/deeper").unwrap();
@@ -277,6 +286,7 @@ fn a_relative_path_is_resolved_against_the_working_directory() {
 /// next undo failed or removed another file.
 #[test]
 fn a_redo_from_another_directory_is_recorded_under_its_own_path() {
+    let _directory = fixtures::hold_process_directory();
     let (sandbox, mut state) = sandbox();
     fs::create_dir(sandbox.root.join("sub")).unwrap();
     fs::write(sandbox.root.join("sub/f"), "another file").unwrap();
@@ -294,4 +304,69 @@ fn a_redo_from_another_directory_is_recorded_under_its_own_path() {
         fs::read_to_string(sandbox.root.join("sub/f")).unwrap(),
         "another file"
     );
+}
+
+/// A copy made below the session root is redone from its own source. The
+/// record kept the source as it was typed, so `cd sub; cp a b; undo;
+/// cd ..; redo` copied the `a` of the session root, or failed if there was
+/// none.
+#[test]
+fn a_copy_made_below_the_root_is_redone_from_its_own_source() {
+    let _directory = fixtures::hold_process_directory();
+    let (sandbox, mut state) = sandbox();
+    fs::create_dir(sandbox.root.join("sub")).unwrap();
+    fs::write(sandbox.root.join("sub/a"), "the source").unwrap();
+    fs::write(sandbox.root.join("a"), "another file").unwrap();
+    run(&mut state, "cd sub").unwrap();
+    vsh::commands::cp(&mut state, "a", "b", false).unwrap();
+    vsh::commands::undo(&mut state, 1, false).unwrap();
+    assert!(!sandbox.root.join("sub/b").exists());
+    run(&mut state, "cd ..").unwrap();
+
+    vsh::commands::redo(&mut state, 1, false).unwrap();
+    assert_eq!(fs::read(sandbox.root.join("sub/b")).unwrap(), b"the source");
+
+    // The redone record still names the source: it can be undone and
+    // redone again.
+    vsh::commands::undo(&mut state, 1, false).unwrap();
+    assert!(!sandbox.root.join("sub/b").exists());
+    vsh::commands::redo(&mut state, 1, false).unwrap();
+    assert_eq!(fs::read(sandbox.root.join("sub/b")).unwrap(), b"the source");
+}
+
+/// A real path inside the session root names that file, for every
+/// built-in. `pwd`, `$PWD`, `~+` and `~-` give real paths, and they used
+/// to be read from the session root, which added the root a second time:
+/// `cd sub; touch ~+/f` failed with "Parent directory does not exist".
+#[test]
+fn a_real_path_inside_the_root_names_that_file() {
+    let (sandbox, state) = sandbox();
+    fs::create_dir(sandbox.root.join("sub")).unwrap();
+    let real = sandbox.root.join("sub/f");
+
+    assert_eq!(state.resolve_path(real.to_str().unwrap()), real);
+    // `..` is still held inside the root.
+    let climbing = format!("{}/../../../etc/passwd", sandbox.root.display());
+    assert_eq!(
+        state.resolve_path(&climbing),
+        sandbox.root.join("etc/passwd")
+    );
+    // Any other absolute path is read from the session root, as before.
+    assert_eq!(
+        state.resolve_path("/etc/passwd"),
+        sandbox.root.join("etc/passwd")
+    );
+
+    let output = shell(
+        &sandbox.root,
+        "cd sub; touch ~+/made; mkdir ~+/dir; cd dir; touch ~-/second",
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(sandbox.root.join("sub/made").is_file());
+    assert!(sandbox.root.join("sub/dir").is_dir());
+    assert!(sandbox.root.join("sub/second").is_file());
 }

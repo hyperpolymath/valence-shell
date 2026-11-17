@@ -6,6 +6,8 @@
 //! It now runs globally via `expand_variables`, so `mkdir ~/foo`,
 //! `echo ~`, `touch ~/bar`, etc. all work.
 
+mod fixtures;
+
 use anyhow::Result;
 use tempfile::tempdir;
 use vsh::executable::ExecutableCommand;
@@ -41,6 +43,7 @@ fn tilde_slash_path_expands_to_home_slash_path() {
 /// which `cd` does not change.
 #[test]
 fn tilde_plus_expands_to_the_working_directory() {
+    let _directory = fixtures::hold_process_directory();
     let temp = tempdir().unwrap();
     let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
     let root = state.root.clone();
@@ -65,6 +68,7 @@ fn tilde_plus_expands_to_the_working_directory() {
 /// wherever the shell's parent had last been.
 #[test]
 fn tilde_minus_expands_to_the_previous_directory() {
+    let _directory = fixtures::hold_process_directory();
     let temp = tempdir().unwrap();
     let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
     let root = state.root.clone();
@@ -141,6 +145,7 @@ fn tilde_expands_in_variable_assignments() -> Result<()> {
 /// sandbox root itself to the home directory. That was runtime hole g.
 #[test]
 fn cd_with_tilde_is_confined_to_the_session_root() -> Result<()> {
+    let _directory = fixtures::hold_process_directory();
     let temp = tempdir()?;
     let mut state = ShellState::new(temp.path().to_str().unwrap())?;
     let root = state.root.clone();
@@ -171,4 +176,27 @@ fn cd_with_tilde_is_confined_to_the_session_root() -> Result<()> {
     assert_eq!(state.cwd(), root);
     assert_eq!(state.root, root);
     Ok(())
+}
+
+/// The directory a tilde stands for is used as it is. It used to be read
+/// for variables with the rest of the word, so in a working directory
+/// named `cash$NAME`, `~+` named `cashvalue`.
+#[test]
+fn a_directory_named_like_a_variable_is_not_expanded() {
+    let temp = tempdir().unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
+    let here = state.root.join("cash$NAME");
+    std::fs::create_dir(&here).unwrap();
+    state.set_variable("NAME", "value");
+    state.set_cwd(&here).unwrap();
+    state.previous_dir = Some(here.clone());
+
+    for tilde in ["~+", "~-"] {
+        assert_eq!(expand_variables(tilde, &state), here.to_string_lossy());
+        // What follows the directory is still read for variables.
+        assert_eq!(
+            expand_variables(&format!("{tilde}/$NAME"), &state),
+            format!("{}/value", here.display())
+        );
+    }
 }

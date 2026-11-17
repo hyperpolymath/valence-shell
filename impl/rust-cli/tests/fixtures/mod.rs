@@ -89,3 +89,41 @@ pub fn sandbox() -> (Sandbox, vsh::state::ShellState) {
         state,
     )
 }
+
+/// Holds the working directory of the test process still for one test.
+///
+/// `cd` moves the working directory of the whole process, as a shell must:
+/// the commands it starts inherit it. A test that runs `cd` in the test
+/// process therefore moves every other test in the same binary, and when
+/// its temporary directory is removed the process is left in a directory
+/// that no longer exists. Take this at the start of such a test. It lets
+/// one such test run at a time, and puts the directory back when the test
+/// ends, whether it passes or fails.
+#[allow(dead_code)]
+pub struct ProcessDirectory {
+    saved: PathBuf,
+    _one_at_a_time: std::sync::MutexGuard<'static, ()>,
+}
+
+/// See [`ProcessDirectory`].
+#[allow(dead_code)]
+pub fn hold_process_directory() -> ProcessDirectory {
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    // A test that failed while holding the lock leaves it poisoned. The
+    // directory was put back all the same, so the lock is still good.
+    let guard = ONE_AT_A_TIME
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    ProcessDirectory {
+        saved: std::env::current_dir().unwrap_or_else(|_| std::env::temp_dir()),
+        _one_at_a_time: guard,
+    }
+}
+
+impl Drop for ProcessDirectory {
+    fn drop(&mut self) {
+        // Nothing useful can be done if this fails, and a panic in a
+        // destructor would hide the test's own result.
+        let _ = std::env::set_current_dir(&self.saved);
+    }
+}

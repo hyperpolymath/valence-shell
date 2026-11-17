@@ -507,8 +507,12 @@ pub fn cp(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
 
     // Record in history: path = dst, undo_data = src path for reference
     // Undo = delete the destination file
+    //
+    // The source is stored relative to the session root, as the destination
+    // is. Stored as typed, a copy made in `sub` was redone from the root
+    // with the wrong source: another file of that name, or none.
     let op = Operation::new(OperationType::CopyFile, dst.to_string(), None)
-        .with_undo_data(src.as_bytes().to_vec());
+        .with_undo_data(state.rooted(src).into_bytes());
     let op_id = op.id;
     state.record_operation(op);
 
@@ -1233,7 +1237,8 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                     .as_ref()
                     .map(|d| String::from_utf8_lossy(d).to_string())
                     .context("Missing source path for redo cp")?;
-                let src_path = state.resolve_path(&src);
+                // The source is recorded relative to the session root.
+                let src_path = state.resolve_op_path(&src);
                 fs::copy(&src_path, &path).context("Redo cp failed")?;
             }
             OperationType::Move => {
@@ -1301,7 +1306,18 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
         }
 
-        let new_op = Operation::new(op.op_type, op.path.clone(), None);
+        let mut new_op = Operation::new(op.op_type, op.path.clone(), None);
+        // A copy, a link and the removal of a link are redone from what the
+        // first record carried (the source, the link's target), and undoing
+        // or redoing the new record needs it again. Without it, `rm link;
+        // undo; redo; undo` failed with "Missing symlink target for undo".
+        if matches!(
+            op.op_type,
+            OperationType::CopyFile | OperationType::Symlink | OperationType::Unlink
+        ) {
+            new_op.undo_data = op.undo_data.clone();
+            new_op.undo_meta = op.undo_meta;
+        }
         let new_id = new_op.id;
         state.record_redo_operation(new_op);
 
