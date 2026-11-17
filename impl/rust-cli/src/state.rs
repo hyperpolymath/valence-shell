@@ -312,6 +312,12 @@ pub struct ShellState {
     /// persist must write a full snapshot rather than append.
     snapshot_pending: bool,
 
+    /// Size in bytes the journal file should have on disk. If the file is
+    /// removed, moved or rewritten from inside the shell (it lives in the
+    /// command root), appending would leave a sequence gap that discards the
+    /// whole history on reload, so a mismatch forces a full snapshot.
+    journal_len: u64,
+
     /// Last exit code from external command (for $? support)
     pub last_exit_code: i32,
 
@@ -382,6 +388,7 @@ impl ShellState {
             journal_entries: 0,
             undone_run: 0..0,
             snapshot_pending: false,
+            journal_len: 0,
             last_exit_code: 0,
             previous_dir: None,
             variables: HashMap::new(),
@@ -768,8 +775,19 @@ impl ShellState {
         } else {
             self.journal_seq += count as u64;
             self.journal_entries += count;
+            self.journal_len = fs::metadata(&self.journal_file).map_or(0, |m| m.len());
         }
         appended
+    }
+
+    /// Whether the files on disk are still the ones this state wrote: the
+    /// journal has the expected size, and the snapshot the journal builds on
+    /// still exists. Either can be removed or moved by a command, since both
+    /// live in the command root.
+    fn persistence_intact(&self) -> bool {
+        let journal_len = fs::metadata(&self.journal_file).map_or(0, |m| m.len());
+        let snapshot_seq = self.journal_seq - self.journal_entries as u64;
+        journal_len == self.journal_len && (snapshot_seq == 0 || self.state_file.exists())
     }
 
     /// The journal is folded into a fresh snapshot once it holds at least
@@ -781,6 +799,7 @@ impl ShellState {
         self.snapshot_pending
             || (self.journal_entries >= JOURNAL_MIN_ENTRIES
                 && 2 * self.journal_entries >= self.history.len())
+            || !self.persistence_intact()
     }
 
     /// Write a full snapshot and empty the journal.
@@ -790,6 +809,16 @@ impl ShellState {
     /// the journal sequence number it includes, so a crash between the rename
     /// and the journal truncation cannot replay entries twice.
     fn save(&mut self) -> Result<()> {
+        let saved = self.write_snapshot();
+        // Transaction boundaries are only recorded by a snapshot, so a failed
+        // one must be retried before anything is appended to the journal.
+        if saved.is_err() {
+            self.snapshot_pending = true;
+        }
+        saved
+    }
+
+    fn write_snapshot(&mut self) -> Result<()> {
         use std::io::Write;
 
         let state = SerializableStateRef {
@@ -822,6 +851,7 @@ impl ShellState {
                 .set_len(0)?;
         }
         self.journal_entries = 0;
+        self.journal_len = 0;
         self.snapshot_pending = false;
 
         Ok(())
@@ -845,6 +875,7 @@ impl ShellState {
             // a multi-byte character, and that must count as a torn line
             // rather than make the whole file unreadable.
             let journal = crate::fs_pure::read_to_end(&self.journal_file)?;
+            self.journal_len = journal.len() as u64;
             let body = journal.strip_suffix(b"\n").unwrap_or(&journal);
             // A last line with no newline may parse, but the next append
             // would be glued onto it (`}{`), losing both lines on the
@@ -1826,6 +1857,52 @@ mod tests {
         let reloaded = reopen(&root);
         assert_eq!(reloaded.history.len(), 3);
         assert_eq!(summary(&reloaded), summary(&restarted));
+    }
+
+    #[test]
+    fn test_removed_journal_is_rebuilt_not_gapped() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        record(&mut state, "a");
+        record(&mut state, "b");
+        // e.g. `rm .vsh_state.journal` from inside the shell.
+        fs::remove_file(&state.journal_file).unwrap();
+        record(&mut state, "c");
+
+        let reloaded = reopen(&root);
+        assert_eq!(reloaded.history.len(), 3);
+        assert_eq!(summary(&reloaded), summary(&state));
+    }
+
+    #[test]
+    fn test_removed_snapshot_is_rebuilt_not_gapped() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        record(&mut state, "a");
+        state.save().unwrap();
+        record(&mut state, "b");
+        fs::remove_file(&state.state_file).unwrap();
+        record(&mut state, "c");
+
+        let reloaded = reopen(&root);
+        assert_eq!(reloaded.history.len(), 3);
+        assert_eq!(summary(&reloaded), summary(&state));
+    }
+
+    #[test]
+    fn test_failed_snapshot_is_retried_before_appending() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        record(&mut state, "a");
+        // A directory in the snapshot's place makes the rename fail.
+        fs::create_dir(&state.state_file).unwrap();
+        assert!(state.save().is_err());
+        assert!(state.snapshot_pending);
+
+        fs::remove_dir(&state.state_file).unwrap();
+        record(&mut state, "b");
+        assert!(state.state_file.is_file(), "the next persist must snapshot");
+        assert!(!state.snapshot_pending);
     }
 
     #[test]
