@@ -59,7 +59,7 @@ They close when the underlying alert closes.
 | RE005 | fixed | The ignored stress suite no longer runs under `continue-on-error` in `compilation_tests.yml`; see <<stress>>.
 | WH008 (3) | fixed | See the Secret Scanner section.
 | SD022 (2) | fixed | Both paths named another tree (`echidna/src/rust/`, the Agda tarball path `agda-2.7.0.1/src/data/lib`); now qualified.
-| SD009 | left for the owner | `ffi/zig/src/main.zig` has no SPDX header. Licence edits are owner-only (estate doctrine 6).
+| SD009 | fixed (owner-authorised, 2026-11-17) | `ffi/zig/src/main.zig` did have an SPDX identifier, on line 6 of its leading comment; the rule looks at line 1. The identifier (unchanged, `MPL-2.0`) now sits on line 1, and the file carries exactly one. An earlier entry here said the file had no header; that was wrong.
 | SD004 (6), SD007 | left for the owner | Moving `.machine_readable/6a2/` into deed clauses needs the estate converter (kyX, standards D312/D313); writing the clauses by hand would guess at metadata.
 | `known_fake_action_sha` (3), `download_then_run_shell` (1) in `alkahest-shell-transmuter/` | left for upstream | Owner ruling: fix the canonical alkahest repository, then re-sync this copy. These workflows never run here.
 |===

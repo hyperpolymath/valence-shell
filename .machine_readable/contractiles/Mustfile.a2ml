@@ -63,7 +63,7 @@ hooks fail if any check fails.
 
 ### repo-deed-present
 - description: The repo deed holds the descriptiles; the retired 6a2 A2ML files are archived (D312, D313)
-- run: test -f valence-shell_chora.deed && test -f archive/a2ml-v1/MIGRATION-LEDGER.adoc && test ! -e .machine_readable/6a2
+- run: test -f valence-shell_chora.deed && test -f archive/a2ml-v1/MIGRATION-LEDGER.adoc && test ! -e .machine_readable/6a2 && for f in STATE.a2ml META.a2ml ECOSYSTEM.a2ml AGENTIC.a2ml NEUROSYM.a2ml PLAYBOOK.a2ml 0-AI-MANIFEST.a2ml anchor-ANCHOR.a2ml README.adoc; do test -f "archive/a2ml-v1/6a2-$f.txt" || exit 1; done
 - severity: critical
 
 ### self-validating-structure
