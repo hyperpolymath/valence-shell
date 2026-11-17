@@ -1186,6 +1186,16 @@ file in a way that could change its access time, and after a restart
 single-step `undo` rescanned the run of undone operations at the end of the
 history on every step.
 
+A fourth finding followed. When a reversal was done on the disk but the saved
+state could not be written (a full disk, for one), rollback printed a warning,
+carried on, and reported success, so the saved state could fall behind the
+disk by the whole transaction. Rollback now stops at the first reversal it
+cannot save and returns an error, with the transaction left open; the next
+write that succeeds saves the whole state. The saved state is then at most
+one operation behind the disk. Every other command still only warns when its
+record cannot be saved; what they should do is an open decision (section
+14.5). `cargo test`: 896 passed, 0 failed, 15 ignored.
+
 Not proved: the model's `rollback-no-live` speaks of the operations that are
 in the history. That an open transaction's operations all stay there is a
 rule of the writer, tested here and not stated in the model.
@@ -1262,6 +1272,24 @@ loss. Today that is damage, and the shell refuses to start (OD-40).
 
 The recommendation is the first, with C5 still built. It is not taken without
 a ruling, because it changes what OD-40 refuses.
+
+*A record that cannot be saved* (raised by review of the rollback, section
+14.4c). The shell does an operation and then writes its record. If the write
+fails, the operation has happened and the saved state does not know. Today
+every command except rollback prints a warning and reports success.
+
+[cols="5,1,4",options="header"]
+|===
+|Option |E / D |Notes
+
+|Write the intent first: a record of what is about to be done, then the operation, then a record that it was done. If the first record cannot be written, the operation is not done. After a crash, an intent without its completion is settled by looking at the files |9 / 9 |The saved state is never behind the disk. It is the write-ahead rule of databases, and it needs each operation to say what the files look like before and after, which is what the change-set engine (Phase E) is to provide. Two records per operation
+|Do the operation, and if its record cannot be saved, return an error that says so. A script or an agent then sees a failure and can stop |7 / 8 |Small. The saved state can still be one operation behind after a crash between the operation and its record
+|Keep the warning |3 / 3 |A script does not see it. This is today's behaviour
+|===
+
+The recommendation is the second now, as part of the first engine release, and
+the first with the change-set engine. Neither is taken without a ruling: both
+change what every command returns.
 
 === 14.6 Stop rules added
 

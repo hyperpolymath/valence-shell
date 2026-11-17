@@ -1447,7 +1447,7 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
 
     if ops.is_empty() {
         // Nothing to reverse, but the transaction must not stay open.
-        state.abort_transaction();
+        close_rolled_back(state)?;
         println!("{}", "Nothing to rollback".bright_yellow());
         return Ok(());
     }
@@ -1481,6 +1481,8 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
     // operations were reversed before it.
     let mut failed_rollbacks: Vec<(String, String)> = Vec::new();
     let mut reversed = 0usize;
+    // Set when a reversal was done on the disk but could not be saved.
+    let mut unsaved = false;
 
     // Undo all operations in reverse order
     for op in ops.iter().rev() {
@@ -1650,6 +1652,7 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                 Ok(()) => {
                     state.mark_undone(op.id, txn_id);
                     reversed += 1;
+                    unsaved = !state.is_saved();
                 }
                 Err(e) => failed_rollbacks.push((op.path.clone(), e.to_string())),
             }
@@ -1664,15 +1667,39 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
         // that could not be reversed (a file renamed, then written to), so
         // reversing them out of order could put the wrong content in the
         // wrong place.
-        if !failed_rollbacks.is_empty() {
+        //
+        // Stop as well when a reversal could not be saved. Going on would
+        // put the saved state further behind the disk with each operation;
+        // stopping keeps it at most one operation behind.
+        if !failed_rollbacks.is_empty() || unsaved {
             break;
         }
+    }
+
+    if unsaved {
+        eprintln!(
+            "{} {} of {} operations were reversed, but the saved state could not be \
+             written, so the last reversal is not recorded in it.",
+            "Rollback stopped:".bright_red(),
+            reversed,
+            ops.len()
+        );
+        eprintln!(
+            "The transaction is still open. Fix the cause and run rollback again before \
+             closing the shell: the next write that succeeds saves the whole state."
+        );
+        anyhow::bail!(
+            "Transaction rollback stopped: the saved state could not be written \
+             after {} of {} operations were reversed",
+            reversed,
+            ops.len()
+        )
     }
 
     // Report results
     if failed_rollbacks.is_empty() {
         // Everything is reversed: close the transaction as rolled back.
-        state.abort_transaction();
+        close_rolled_back(state)?;
         println!(
             "{} {} operations",
             "Transaction rolled back:".bright_green(),
@@ -1702,6 +1729,25 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
             ops.len()
         )
     }
+}
+
+/// Close the open transaction as rolled back, and report it if that could
+/// not be saved.
+fn close_rolled_back(state: &mut ShellState) -> Result<()> {
+    state.abort_transaction();
+    if state.is_saved() {
+        return Ok(());
+    }
+    eprintln!(
+        "{} every operation was reversed and the transaction is closed, but the \
+         saved state could not be written.",
+        "Rollback not saved:".bright_red()
+    );
+    eprintln!(
+        "The next write that succeeds saves the whole state. If the shell is closed \
+         before that, the transaction will be shown as open when it starts again."
+    );
+    anyhow::bail!("Transaction rolled back, but the saved state could not be written")
 }
 
 /// Display the operation dependency graph (DAG).

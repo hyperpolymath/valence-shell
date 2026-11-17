@@ -17,6 +17,7 @@ use fixtures::tempfile::TempDir;
 use std::fs;
 use uuid::Uuid;
 use vsh::commands;
+use vsh::journal::SimStorage;
 use vsh::state::{Operation, OperationType, ShellState};
 
 fn open(root: &TempDir) -> ShellState {
@@ -293,6 +294,79 @@ fn rollback_is_refused_when_an_operation_of_the_transaction_is_missing() {
 
     commands::commit_transaction(&mut state).unwrap();
     assert!(state.active_transaction.is_none());
+}
+
+/// A state whose saved form goes to simulated storage, which can be made to
+/// refuse writes.
+fn open_on(root: &TempDir, storage: &SimStorage) -> ShellState {
+    ShellState::with_storage(root.path().to_str().unwrap(), Box::new(storage.clone())).unwrap()
+}
+
+/// A reversal that is done on the disk but cannot be saved stops the
+/// rollback with an error, so the saved state is never more than one
+/// operation behind the disk. Before, rollback went on and reported success.
+#[test]
+fn rollback_stops_when_a_reversal_cannot_be_saved() {
+    let root = TempDir::new().unwrap();
+    let storage = SimStorage::new();
+    let mut state = open_on(&root, &storage);
+    commands::begin_transaction(&mut state, "t").unwrap();
+    commands::touch(&mut state, "a", false).unwrap();
+    commands::touch(&mut state, "b", false).unwrap();
+    assert!(state.is_saved());
+
+    // The storage stops taking writes.
+    storage.fail_append(true);
+    storage.fail_replace(true);
+    let stopped = commands::rollback_transaction(&mut state).unwrap_err();
+    assert!(
+        stopped.to_string().contains("could not be written"),
+        "{stopped}"
+    );
+    assert!(!root.path().join("b").exists(), "the newest was reversed");
+    assert!(root.path().join("a").exists(), "the next was not attempted");
+    assert!(state.active_transaction.is_some());
+    assert!(!state.is_saved());
+
+    // Writes work again. The rollback finishes and the saved state agrees.
+    storage.fail_append(false);
+    storage.fail_replace(false);
+    commands::rollback_transaction(&mut state).unwrap();
+    assert!(!root.path().join("a").exists());
+    assert!(state.active_transaction.is_none());
+    assert!(state.is_saved());
+
+    let reloaded = open_on(&root, &storage);
+    assert!(reloaded.active_transaction.is_none());
+    assert!(live(&reloaded).is_empty());
+}
+
+/// Closing the transaction is a write too. If it cannot be saved, rollback
+/// says so; the next write that succeeds saves the whole state.
+#[test]
+fn rollback_reports_a_close_that_cannot_be_saved() {
+    let root = TempDir::new().unwrap();
+    let storage = SimStorage::new();
+    let mut state = open_on(&root, &storage);
+    commands::begin_transaction(&mut state, "t").unwrap();
+
+    storage.fail_append(true);
+    storage.fail_replace(true);
+    let unsaved = commands::rollback_transaction(&mut state).unwrap_err();
+    assert!(
+        unsaved.to_string().contains("could not be written"),
+        "{unsaved}"
+    );
+    assert!(state.active_transaction.is_none());
+    assert!(!state.is_saved());
+    // A restart now would still show the transaction as open.
+    assert!(open_on(&root, &storage).active_transaction.is_some());
+
+    storage.fail_append(false);
+    storage.fail_replace(false);
+    commands::touch(&mut state, "later", false).unwrap();
+    assert!(state.is_saved());
+    assert!(open_on(&root, &storage).active_transaction.is_none());
 }
 
 /// Redo reads a file to keep its contents before it removes or truncates

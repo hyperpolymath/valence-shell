@@ -541,6 +541,14 @@ impl ShellState {
         Ok(())
     }
 
+    /// Whether the saved state holds everything this state has done.
+    ///
+    /// It does not after a write to it has failed. The next write that
+    /// succeeds saves the whole state again and puts that right.
+    pub fn is_saved(&self) -> bool {
+        !self.rewrite_pending
+    }
+
     /// How many operations at the front of the history may be dropped: all
     /// of them, or those before the first operation of the open transaction.
     fn droppable_prefix(&self) -> usize {

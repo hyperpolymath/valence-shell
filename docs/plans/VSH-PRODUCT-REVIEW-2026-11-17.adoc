@@ -571,8 +571,13 @@ three marked *checked*, which were re-read by hand.
 *Record of what was done*
 
 * `auditd` records system calls. It can record the calls a shell makes for a
-  built-in command, but not which command line caused them (corrected after
-  review; not re-read on a primary page).
+  built-in command. Each event carries the title and command-line parameters
+  of the process that made the call (the `proctitle` field), so a command
+  given as `sh -c '...'` can appear there, and a command typed into a running
+  shell does not (corrected twice after review; the field is from the audit
+  field dictionary, read 2026-11-17, and the rest is not re-read on a primary
+  page).
+  https://github.com/linux-audit/audit-documentation/blob/main/specs/fields/field-dictionary.csv,
   `sudo` records sessions and `sudo_logsrvd` collects them; Teleport records
   terminal sessions and says recordings can be evaded.
   https://man7.org/linux/man-pages/man7/audit.rules.7.html,
