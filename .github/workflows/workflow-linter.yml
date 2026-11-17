@@ -32,7 +32,7 @@ jobs:
             [ -f "$f" ] || continue
             if ! awk '/^---[[:space:]]*$/ { next } /^#/ { print; next } { exit }' "$f" \
                  | grep -q "^# SPDX-License-Identifier:"; then
-              echo "ERROR: $f has no SPDX-License-Identifier in its leading comment block"
+              echo "ERROR: $f has no SPDX-License-Identifier in its leading comment block" >&2
               errors=$((errors + 1))
             fi
           done
