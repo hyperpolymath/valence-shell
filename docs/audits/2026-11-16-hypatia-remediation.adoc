@@ -112,9 +112,13 @@ Shell bugs fixed (`src/state.rs`, `src/commands.rs`):
   keeps the cost amortised O(1). Snapshots are written to a temporary file
   and renamed, and record the last journal sequence number they contain, so
   a crash cannot tear the snapshot or replay an entry twice. A torn journal
-  line or a sequence gap ends replay. After the fix, 1,000 touches take
+  line or a sequence gap ends replay and forces the next save to be a full
+  snapshot, so operations made after a crash are not stranded behind the
+  bad line (Codex review on #229). After the fix, 1,000 touches take
   0.04 s. Seven new unit tests in `state.rs` cover replay, compaction, trim,
-  a torn tail, crash-after-rename and transactions.
+  a torn tail, crash-after-rename and transactions; two more cover
+  operations after a torn tail and `cd -` surviving a restart (`cd` now
+  journals `previous_dir`).
 * *O(n²) single-step undo.* Each `undo 1` walked past every already-undone
   operation to pick its target, then searched for that target again from the
   oldest end of the history to mark it. A checked hint for the block of undone operations removes the rescan:
@@ -190,8 +194,6 @@ Still open:
 * *macOS.* The suite is not run there: `PATH_MAX` is 1024, so the
   1,000-level test cannot pass with absolute paths, and the rest was not
   measured on macOS.
-* `previous_dir` (set by `cd` without a save) reaches disk at the next
-  snapshot, not at the next operation as before.
 * Neither the journal nor the snapshot is `fsync`ed (the old `fs::write`
   was not either), the files keep the default mode, and they still live in
   the session root. Route plan items E1d and G2
