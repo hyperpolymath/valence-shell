@@ -46,6 +46,15 @@ fn help_for_one_command_describes_it() {
     assert!(stdout.contains("mkdir"), "stdout: {stdout}");
 }
 
+/// The topic is expanded like any other operand.
+#[test]
+fn help_takes_its_topic_from_a_variable() {
+    let (code, stdout, stderr) = vsh("topic=mkdir; help $topic");
+
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert!(stdout.contains("Create a directory"), "stdout: {stdout}");
+}
+
 #[test]
 fn help_for_an_unknown_command_says_so() {
     let (code, _, stderr) = vsh("help nosuchcommand");

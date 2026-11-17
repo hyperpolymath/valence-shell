@@ -126,3 +126,4 @@
 {"id": "rm-04", "rc": 0, "out": "0\n", "cmd": "mkdir d; touch d/x; rm -r d; ls | wc -l"}
 {"id": "rm-05", "rc": 0, "out": "0\n", "cmd": "touch a; touch b; rm a b; ls | wc -l"}
 {"id": "builtin-20", "rc": 1, "out": "", "cmd": "exit 1 2; echo after"}
+{"id": "builtin-21", "rc": 2, "out": "", "cmd": "exit nope 2; echo after"}

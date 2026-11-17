@@ -75,7 +75,9 @@ impl ExecutableCommand for Command {
         match self {
             // Filesystem operations (reversible)
             Command::Mkdir { path, redirects } => {
-                let expanded_path = expand_operand("mkdir", path, state)?;
+                let Some(expanded_path) = expand_operand("mkdir", path, state) else {
+                    return Ok(REFUSED);
+                };
                 if redirects.is_empty() {
                     commands::mkdir(state, &expanded_path, false)?;
                 } else {
@@ -87,7 +89,9 @@ impl ExecutableCommand for Command {
             }
 
             Command::Rmdir { path, redirects } => {
-                let expanded_path = expand_operand("rmdir", path, state)?;
+                let Some(expanded_path) = expand_operand("rmdir", path, state) else {
+                    return Ok(REFUSED);
+                };
                 if redirects.is_empty() {
                     commands::rmdir(state, &expanded_path, false)?;
                 } else {
@@ -99,7 +103,9 @@ impl ExecutableCommand for Command {
             }
 
             Command::Touch { path, redirects } => {
-                let expanded_path = expand_operand("touch", path, state)?;
+                let Some(expanded_path) = expand_operand("touch", path, state) else {
+                    return Ok(REFUSED);
+                };
                 if redirects.is_empty() {
                     commands::touch(state, &expanded_path, false)?;
                 } else {
@@ -111,7 +117,9 @@ impl ExecutableCommand for Command {
             }
 
             Command::Rm { path, redirects } => {
-                let expanded_path = expand_operand("rm", path, state)?;
+                let Some(expanded_path) = expand_operand("rm", path, state) else {
+                    return Ok(REFUSED);
+                };
                 if redirects.is_empty() {
                     commands::rm(state, &expanded_path, false)?;
                 } else {
@@ -127,7 +135,9 @@ impl ExecutableCommand for Command {
                 force,
                 redirects,
             } => {
-                let expanded_path = expand_operand("obliterate", path, state)?;
+                let Some(expanded_path) = expand_operand("obliterate", path, state) else {
+                    return Ok(REFUSED);
+                };
                 if redirects.is_empty() {
                     commands::secure_deletion::obliterate_path(
                         state,
@@ -148,8 +158,12 @@ impl ExecutableCommand for Command {
                 dst,
                 redirects,
             } => {
-                let expanded_src = expand_operand("cp", src, state)?;
-                let expanded_dst = expand_operand("cp", dst, state)?;
+                let Some(expanded_src) = expand_operand("cp", src, state) else {
+                    return Ok(REFUSED);
+                };
+                let Some(expanded_dst) = expand_operand("cp", dst, state) else {
+                    return Ok(REFUSED);
+                };
                 if redirects.is_empty() {
                     commands::cp(state, &expanded_src, &expanded_dst, false)?;
                 } else {
@@ -165,8 +179,12 @@ impl ExecutableCommand for Command {
                 dst,
                 redirects,
             } => {
-                let expanded_src = expand_operand("mv", src, state)?;
-                let expanded_dst = expand_operand("mv", dst, state)?;
+                let Some(expanded_src) = expand_operand("mv", src, state) else {
+                    return Ok(REFUSED);
+                };
+                let Some(expanded_dst) = expand_operand("mv", dst, state) else {
+                    return Ok(REFUSED);
+                };
                 if redirects.is_empty() {
                     commands::mv(state, &expanded_src, &expanded_dst, false)?;
                 } else {
@@ -182,8 +200,12 @@ impl ExecutableCommand for Command {
                 link,
                 redirects,
             } => {
-                let expanded_target = expand_operand("ln", target, state)?;
-                let expanded_link = expand_operand("ln", link, state)?;
+                let Some(expanded_target) = expand_operand("ln", target, state) else {
+                    return Ok(REFUSED);
+                };
+                let Some(expanded_link) = expand_operand("ln", link, state) else {
+                    return Ok(REFUSED);
+                };
                 if redirects.is_empty() {
                     commands::symlink(state, &expanded_target, &expanded_link, false)?;
                 } else {
@@ -205,13 +227,15 @@ impl ExecutableCommand for Command {
                 if crate::parser::is_chmod_option(&expanded_mode)
                     && !crate::parser::is_chmod_option(mode)
                 {
-                    return Err(Refusal(format!(
-                        "chmod: '{mode}' expands to '{expanded_mode}', an option the built-in \
-                         chmod does not handle; nothing was done"
-                    ))
-                    .into());
+                    eprintln!(
+                        "vsh: chmod: '{mode}' expands to '{expanded_mode}', an option the \
+                         built-in chmod does not handle; nothing was done"
+                    );
+                    return Ok(REFUSED);
                 }
-                let expanded_path = expand_operand("chmod", path, state)?;
+                let Some(expanded_path) = expand_operand("chmod", path, state) else {
+                    return Ok(REFUSED);
+                };
                 if redirects.is_empty() {
                     commands::chmod(state, &expanded_mode, &expanded_path, false)?;
                 } else {
@@ -228,8 +252,12 @@ impl ExecutableCommand for Command {
                 path,
                 redirects,
             } => {
-                let expanded_owner = expand_operand("chown", owner, state)?;
-                let expanded_path = expand_operand("chown", path, state)?;
+                let Some(expanded_owner) = expand_operand("chown", owner, state) else {
+                    return Ok(REFUSED);
+                };
+                let Some(expanded_path) = expand_operand("chown", path, state) else {
+                    return Ok(REFUSED);
+                };
                 if redirects.is_empty() {
                     commands::chown(state, &expanded_owner, &expanded_path, false)?;
                 } else {
@@ -290,15 +318,35 @@ impl ExecutableCommand for Command {
             }
 
             Command::Help { topic } => {
+                let topic = topic
+                    .as_ref()
+                    .map(|t| crate::parser::expand_variables(t, state));
                 crate::help::display_help(topic.as_deref(), crate::help::HelpTier::Verbose)?;
                 Ok(ExecutionResult::Success)
             }
 
             // Exit commands
             Command::Exit { code, too_many } => {
+                // A status that is not a number comes first: status 2, and
+                // the shell ends, whatever else was given (bash and dash).
+                let status = match code {
+                    Some(code) => {
+                        let text = crate::parser::expand_variables(code, state);
+                        match text.trim().parse::<i64>() {
+                            // Only the low eight bits reach the caller (POSIX).
+                            Ok(status) => Some((status & 0xFF) as i32),
+                            Err(_) => {
+                                eprintln!("vsh: exit: {}: numeric argument required", text);
+                                state.last_exit_code = 2;
+                                return Ok(ExecutionResult::Exit);
+                            }
+                        }
+                    }
+                    None => None,
+                };
                 // More than one operand is an error. A shell that is running
-                // a script stops there with status 1, as bash and dash do. A
-                // shell a person is typing into reports it and stays open.
+                // a script stops there with status 1, as bash does. A shell a
+                // person is typing into reports it and stays open.
                 if *too_many {
                     eprintln!("vsh: exit: too many arguments");
                     state.last_exit_code = 1;
@@ -308,17 +356,9 @@ impl ExecutableCommand for Command {
                         ExecutionResult::Exit
                     });
                 }
-                // `exit` alone keeps the status of the last command. Only the low
-                // eight bits of a given status reach the caller (POSIX).
-                if let Some(code) = code {
-                    let text = crate::parser::expand_variables(code, state);
-                    match text.trim().parse::<i64>() {
-                        Ok(status) => state.last_exit_code = (status & 0xFF) as i32,
-                        Err(_) => {
-                            eprintln!("vsh: exit: {}: numeric argument required", text);
-                            state.last_exit_code = 2;
-                        }
-                    }
+                // `exit` alone keeps the status of the last command.
+                if let Some(status) = status {
+                    state.last_exit_code = status;
                 }
                 Ok(ExecutionResult::Exit)
             }
@@ -327,10 +367,13 @@ impl ExecutableCommand for Command {
             // Navigation (built-ins but not reversible)
             Command::Ls { path, redirects } => {
                 // Expand variables in path
-                let expanded_path = path
-                    .as_ref()
-                    .map(|p| expand_operand("ls", p, state))
-                    .transpose()?;
+                let expanded_path = match path {
+                    Some(p) => match expand_operand("ls", p, state) {
+                        Some(expanded) => Some(expanded),
+                        None => return Ok(REFUSED),
+                    },
+                    None => None,
+                };
 
                 if redirects.is_empty() {
                     // Direct output to terminal
@@ -405,10 +448,13 @@ impl ExecutableCommand for Command {
                 use std::path::PathBuf;
 
                 // Expand variables in path first
-                let expanded_path = path
-                    .as_ref()
-                    .map(|p| expand_operand("cd", p, state))
-                    .transpose()?;
+                let expanded_path = match path {
+                    Some(p) => match expand_operand("cd", p, state) {
+                        Some(expanded) => Some(expanded),
+                        None => return Ok(REFUSED),
+                    },
+                    None => None,
+                };
 
                 let target = if let Some(ref p) = expanded_path {
                     if p == "-" {
@@ -1501,8 +1547,14 @@ impl ExecutableCommand for Command {
     }
 }
 
-/// Expand a built-in's operand, and refuse it if the expansion made it read
-/// as an option.
+/// What a built-in returns when it has refused its operands: it has done
+/// nothing, and it fails with status 1. This is a result like any other
+/// failed command's, so whatever ran the command goes on: a script, a
+/// function body, a loop, or a person at the prompt.
+const REFUSED: ExecutionResult = ExecutionResult::ExternalCommand { exit_code: 1 };
+
+/// Expand a built-in's operand. If the expansion made it read as an option,
+/// say so and return `None`; the caller then returns [`REFUSED`].
 ///
 /// The parser has already refused the options a built-in does not handle,
 /// but it sees the words as written. An operand written `$opt` passes it and
@@ -1511,33 +1563,21 @@ impl ExecutableCommand for Command {
 /// to make a directory named `-p`.
 ///
 /// A word that already read as an option when it was written can only have
-/// come after `--`, which makes it an operand, so it is let through.
-fn expand_operand(name: &str, raw: &str, state: &ShellState) -> Result<String> {
+/// come after `--`, which makes it an operand, so it is let through. A word
+/// after `--` that becomes one only by expansion (`mkdir -- "$name"`) is
+/// still refused: the parser does not hand on where `--` stood. The message
+/// says how to name such a file.
+fn expand_operand(name: &str, raw: &str, state: &ShellState) -> Option<String> {
     let expanded = crate::parser::expand_variables(raw, state);
     if crate::parser::reads_as_option(&expanded) && !crate::parser::reads_as_option(raw) {
-        return Err(Refusal(format!(
-            "{name}: '{raw}' expands to '{expanded}', which reads as an option the built-in \
-             {name} does not handle; nothing was done (write ./{expanded} to name a file)"
-        ))
-        .into());
+        eprintln!(
+            "vsh: {name}: '{raw}' expands to '{expanded}', which reads as an option the \
+             built-in {name} does not handle; nothing was done (write ./{expanded} to name a file)"
+        );
+        return None;
     }
-    Ok(expanded)
+    Some(expanded)
 }
-
-/// A built-in refused its operands once they were expanded, and did nothing.
-///
-/// A script treats this like a refusal found while the line was parsed: the
-/// command fails with status 1 and the script goes on.
-#[derive(Debug)]
-pub struct Refusal(pub String);
-
-impl std::fmt::Display for Refusal {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl std::error::Error for Refusal {}
 
 /// Execute a shell function call with arguments.
 ///

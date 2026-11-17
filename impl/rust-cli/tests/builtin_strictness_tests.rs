@@ -249,6 +249,26 @@ fn a_refusal_after_expansion_does_not_end_the_script() {
     assert!(tree(dir.path()).is_empty());
 }
 
+/// The same inside a function, a loop and an `if`: the refused command fails
+/// and the body goes on. A refusal used to be an error there, which ended
+/// the whole enclosing command.
+#[test]
+fn a_refusal_after_expansion_does_not_end_a_function_a_loop_or_an_if() {
+    for script in [
+        "f() { opt=-p; mkdir $opt; echo after; }; f",
+        "for x in 1; do opt=-p; mkdir $opt; echo after; done",
+        "if true; then opt=-p; mkdir $opt; echo after; fi",
+    ] {
+        let dir = tempfile::tempdir().expect("temporary directory");
+
+        let run = vsh(dir.path(), script);
+
+        assert_eq!(run.stdout, "after\n", "`{script}`: stderr {}", run.stderr);
+        assert!(run.stderr.contains("expands to '-p'"), "`{script}`");
+        assert!(tree(dir.path()).is_empty(), "`{script}` made something");
+    }
+}
+
 /// What an expansion may still produce: a mode that starts with a dash, and
 /// the lone dash that means the previous directory.
 #[test]
@@ -281,6 +301,25 @@ fn exit_with_too_many_operands_stops_the_script() {
         run.stderr
     );
     assert!(!dir.path().join("after").exists());
+}
+
+/// A status that is not a number comes before the count of operands: status
+/// 2, and the script stops, as under bash and dash.
+#[test]
+fn exit_with_a_status_that_is_not_a_number_ends_with_status_two() {
+    for script in ["exit nope; touch after", "exit nope 2; touch after"] {
+        let dir = tempfile::tempdir().expect("temporary directory");
+
+        let run = vsh(dir.path(), script);
+
+        assert_eq!(run.code, 2, "`{script}`");
+        assert!(
+            run.stderr.contains("numeric argument required"),
+            "`{script}`: stderr {}",
+            run.stderr
+        );
+        assert!(!dir.path().join("after").exists(), "`{script}`");
+    }
 }
 
 #[test]

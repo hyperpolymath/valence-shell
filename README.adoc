@@ -53,7 +53,7 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 
 [NOTE]
 ====
-*Measured, not claimed.* `impl/rust-cli/tests/conformance_battery.rs` starts the built shell on 127 everyday command lines and compares the result with bash. On 2026-11-17, 66 match. The cases that fail are listed in `impl/rust-cli/tests/conformance/known_failing.txt`, which may only shrink. Below, `[x]` means it works through the built shell, `[~]` means in part, and the limit is stated.
+*Measured, not claimed.* `impl/rust-cli/tests/conformance_battery.rs` starts the built shell on 128 everyday command lines and compares the result with bash. On 2026-11-17, 67 match. The cases that fail are listed in `impl/rust-cli/tests/conformance/known_failing.txt`, which may only shrink. Below, `[x]` means it works through the built shell, `[~]` means in part, and the limit is stated.
 ====
 
 * [~] Built-in file commands with undo: `mkdir`, `rmdir`, `touch`, `rm`, `cp`, `mv`, `ln -s`, `chmod`, `chown`, in their plain forms only (one operand each, two for `cp`, `mv` and `ln -s`; no options). An option or an extra operand is refused and nothing is done

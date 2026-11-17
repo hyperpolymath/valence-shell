@@ -61,7 +61,7 @@ Recorded from GNU bash 5.2.21 on 2026-11-17, each case in an empty directory.
 The five `rm-NN` cases were written by hand from the POSIX description of `rm`.
 
 Cases were chosen to give the same result on any Linux system: they create the
-files they use and do not depend on what a system directory holds. Of the 127
+files they use and do not depend on what a system directory holds. Of the 128
 cases, 21 use syntax only bash has; `dash` matches bash on the rest.
 
 The test is built on Linux only. The expectations are from Linux, and several
