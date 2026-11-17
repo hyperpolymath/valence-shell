@@ -281,6 +281,7 @@ pub enum Command {
     /// `help [command]`
     Help {
         topic: Option<String>,
+        redirects: Vec<Redirection>,
     },
     Ls {
         path: Option<String>,
@@ -3418,21 +3419,32 @@ fn parse_base_command(
             })
         }
         "chmod" => {
+            // `--` ends the options here as it does for the other built-ins:
+            // what follows is the mode and the file, whatever they look like.
+            let options_ended = args.first().is_some_and(|first| first == "--");
+            let args = if options_ended { &args[1..] } else { &args[..] };
             // The first argument is the mode, which may itself start with `-`
             // (`chmod -x f`), so only the option spellings are refused there.
-            if let Some(first) = args.first() {
-                if is_chmod_option(first) {
-                    return Err(anyhow!(
-                        "chmod: option '{first}' is not supported by the built-in chmod; nothing was done"
-                    ));
+            if !options_ended {
+                if let Some(first) = args.first() {
+                    if is_chmod_option(first) {
+                        return Err(anyhow!(
+                            "chmod: option '{first}' is not supported by the built-in chmod; nothing was done"
+                        ));
+                    }
                 }
             }
             if args.len() < 2 {
                 return Err(anyhow!("chmod: usage: chmod MODE FILE"));
             }
+            let mut after_mode: Vec<String> = Vec::new();
+            if options_ended {
+                after_mode.push("--".to_string());
+            }
+            after_mode.extend_from_slice(&args[1..]);
             let (_, operands) = builtin_operands(
                 "chmod",
-                &args[1..],
+                &after_mode,
                 &[],
                 1,
                 1,
@@ -3571,6 +3583,7 @@ fn parse_base_command(
                 builtin_operands("help", &args, &[], 0, 1, "help: missing operand")?;
             Ok(Command::Help {
                 topic: operands.first().cloned(),
+                redirects,
             })
         }
         "ls" => {

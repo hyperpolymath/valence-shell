@@ -269,6 +269,26 @@ fn a_refusal_after_expansion_does_not_end_a_function_a_loop_or_an_if() {
     }
 }
 
+/// `--` ends the options for `chmod` as for the other built-ins. It used to
+/// be taken for an option itself and refused.
+#[test]
+fn chmod_takes_its_mode_after_a_double_dash() {
+    let dir = fixture();
+
+    let run = vsh(dir.path(), "chmod -- 600 a; chmod -- -w b");
+
+    assert_eq!(run.code, 0, "stderr: {}", run.stderr);
+    let mode = |name: &str| {
+        fs::metadata(dir.path().join(name))
+            .expect("metadata")
+            .permissions()
+            .mode()
+            & 0o777
+    };
+    assert_eq!(mode("a"), 0o600);
+    assert_eq!(mode("b") & 0o222, 0, "write permission was removed");
+}
+
 /// What an expansion may still produce: a mode that starts with a dash, and
 /// the lone dash that means the previous directory.
 #[test]

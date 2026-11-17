@@ -317,11 +317,19 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::Success)
             }
 
-            Command::Help { topic } => {
+            Command::Help { topic, redirects } => {
                 let topic = topic
                     .as_ref()
                     .map(|t| crate::parser::expand_variables(t, state));
-                crate::help::display_help(topic.as_deref(), crate::help::HelpTier::Verbose)?;
+                let show =
+                    || crate::help::display_help(topic.as_deref(), crate::help::HelpTier::Verbose);
+                if redirects.is_empty() {
+                    show()?;
+                } else {
+                    // `help mkdir > file`: the redirection was parsed and
+                    // then dropped, so the text went to the terminal.
+                    redirection::capture_and_redirect(redirects, state, |_| show())?;
+                }
                 Ok(ExecutionResult::Success)
             }
 

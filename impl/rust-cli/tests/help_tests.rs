@@ -55,6 +55,33 @@ fn help_takes_its_topic_from_a_variable() {
     assert!(stdout.contains("Create a directory"), "stdout: {stdout}");
 }
 
+/// `help` takes a redirection like any command that prints. The redirection
+/// used to be parsed and dropped: no file was made and the text went to the
+/// terminal.
+#[test]
+fn help_can_be_redirected_to_a_file() {
+    let dir = tempfile::tempdir().expect("temporary directory");
+    let output = Command::new(env!("CARGO_BIN_EXE_vsh"))
+        .arg("-r")
+        .arg(dir.path())
+        .arg("-c")
+        .arg("help mkdir > out")
+        .current_dir(dir.path())
+        .env("NO_COLOR", "1")
+        .env_remove("RUST_BACKTRACE")
+        .stdin(Stdio::null())
+        .output()
+        .expect("start the built shell");
+
+    assert!(output.status.success());
+    let written = std::fs::read_to_string(dir.path().join("out")).expect("the file was made");
+    assert!(written.contains("Create a directory"), "{written}");
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains("Create a directory"),
+        "the text should not also go to standard output"
+    );
+}
+
 #[test]
 fn help_for_an_unknown_command_says_so() {
     let (code, _, stderr) = vsh("help nosuchcommand");
