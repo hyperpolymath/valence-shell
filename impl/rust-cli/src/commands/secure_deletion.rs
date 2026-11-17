@@ -467,11 +467,17 @@ fn prepare_obliteration(
 ) -> Result<()> {
     append_rmo_residue(state, op, intent)
         .context("Nothing was obliterated, because the audit entry could not be written")?;
-    state.scrub_obliterated(&state.rooted(path), op.id);
-    state.save_history().context(
-        "Nothing was obliterated, because the history could not be saved without the \
-         earlier contents of what was to be obliterated",
-    )
+    let scrubbed = state.scrub_obliterated(&state.rooted(path), op.id);
+    if let Err(e) = state.save_history() {
+        // The file stays, so the history must still be able to undo what
+        // was done to it.
+        state.restore_scrubbed(scrubbed);
+        return Err(e).context(
+            "Nothing was obliterated, because the history could not be saved without the \
+             earlier contents of what was to be obliterated",
+        );
+    }
+    Ok(())
 }
 
 /// Obliterate a directory and its contents (recursive)

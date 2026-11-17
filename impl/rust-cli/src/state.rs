@@ -269,6 +269,15 @@ pub struct Transaction {
     pub committed: bool,
 }
 
+/// What [`ShellState::scrub_obliterated`] changed: the operations as they
+/// were, with their places in the history, and the redo stack as it was if
+/// anything was taken off it.
+#[derive(Debug)]
+pub struct Scrubbed {
+    operations: Vec<(usize, Operation)>,
+    redo_stack: Option<VecDeque<Operation>>,
+}
+
 /// Main shell state managing operation history, undo/redo stacks, and transactions.
 ///
 /// The state is persisted to `~/.cache/vsh/state.json` and restored on shell startup.
@@ -449,9 +458,12 @@ impl ShellState {
     ///
     /// Unlike [`Self::record_operation`], this preserves remaining redo entries
     /// so that multiple sequential redos work correctly.
+    ///
+    /// The path of a redone operation comes from the history, so it is
+    /// relative to the session root already and is recorded as it is.
+    /// Reading it against the working directory again recorded `sub/f` for
+    /// `f` when the redo was done from `sub`.
     pub fn record_redo_operation(&mut self, mut op: Operation) {
-        self.root_operation_path(&mut op);
-
         if let Some(ref mut txn) = self.active_transaction {
             op.transaction_id = Some(txn.id);
             txn.operations.push(op.id);
@@ -647,6 +659,18 @@ impl ShellState {
                 self.root.display()
             );
         }
+        // The history stores paths as text. In a directory whose name is not
+        // text, every operation would be recorded under a different path,
+        // and undo would act on that one. The shell does not enter a
+        // directory it could not name in its history. (A name typed at the
+        // prompt is always text; this is reached through a symbolic link.)
+        if resolved.to_str().is_none() {
+            anyhow::bail!(
+                "cd: {}: the directory's name is not valid UTF-8, so operations there \
+                 could not be recorded for undo",
+                target.display()
+            );
+        }
         self.cwd = resolved;
         Ok(())
     }
@@ -678,20 +702,37 @@ impl ShellState {
     /// obliterated) and are marked undone by the obliteration `by`, so that
     /// no later `undo` or `redo` can bring any of it back. The caller
     /// records the obliteration next, which saves the scrubbed history.
-    pub fn scrub_obliterated(&mut self, rooted: &str, by: Uuid) {
+    ///
+    /// A recorded path concerns the obliterated one if it is that path or
+    /// lies beneath it, as written or once the symbolic links in its
+    /// directories are resolved. The same file can be reached under two
+    /// names when a link inside the session root points at its directory;
+    /// comparing the names as written left the other name's records, and
+    /// the content in them, in place.
+    ///
+    /// Returns what was changed, so that [`Self::restore_scrubbed`] can put
+    /// it back if the scrubbed history then cannot be saved.
+    pub fn scrub_obliterated(&mut self, rooted: &str, by: Uuid) -> Scrubbed {
+        let mut scrubbed = Scrubbed {
+            operations: Vec::new(),
+            redo_stack: None,
+        };
         if rooted.is_empty() {
-            return;
+            return scrubbed;
         }
+        let target = self.real_location(rooted);
         // By path component, so that it holds whatever separator the
         // platform writes: `dir` contains `dir/f`, and not `directory`.
-        let within = |recorded: &str| Path::new(recorded).starts_with(Path::new(rooted));
-        let concerns = |op: &Operation| {
-            !matches!(
-                op.op_type,
-                OperationType::SetVariable | OperationType::UnsetVariable
-            ) && op.path.split('\0').any(within)
-        };
-        for op in self.history.iter_mut().filter(|op| concerns(op)) {
+        let concerned: Vec<bool> = self
+            .history
+            .iter()
+            .map(|op| self.concerns(op, rooted, &target))
+            .collect();
+        for (index, op) in self.history.iter_mut().enumerate() {
+            if !concerned[index] {
+                continue;
+            }
+            scrubbed.operations.push((index, op.clone()));
             op.undo_data = None;
             op.undo_meta = None;
             if !op.undone {
@@ -699,7 +740,74 @@ impl ShellState {
                 op.undone_by = Some(by);
             }
         }
-        self.redo_stack.retain(|op| !concerns(op));
+        let kept: VecDeque<Operation> = self
+            .redo_stack
+            .iter()
+            .filter(|op| !self.concerns(op, rooted, &target))
+            .cloned()
+            .collect();
+        if kept.len() != self.redo_stack.len() {
+            scrubbed.redo_stack = Some(std::mem::replace(&mut self.redo_stack, kept));
+        }
+        scrubbed
+    }
+
+    /// Put back what [`Self::scrub_obliterated`] changed. For an
+    /// obliteration that did not go ahead: the file is still there, so the
+    /// history must still be able to undo what was done to it.
+    pub fn restore_scrubbed(&mut self, scrubbed: Scrubbed) {
+        for (index, op) in scrubbed.operations {
+            if let Some(slot) = self.history.get_mut(index) {
+                *slot = op;
+            }
+        }
+        if let Some(redo_stack) = scrubbed.redo_stack {
+            self.redo_stack = redo_stack;
+        }
+    }
+
+    /// Whether a recorded operation is about `rooted`, whose real location
+    /// is `target`, or about something beneath it.
+    fn concerns(&self, op: &Operation, rooted: &str, target: &Path) -> bool {
+        if matches!(
+            op.op_type,
+            OperationType::SetVariable
+                | OperationType::UnsetVariable
+                | OperationType::HardwareErase
+        ) {
+            return false;
+        }
+        op.path.split('\0').any(|recorded| {
+            Path::new(recorded).starts_with(Path::new(rooted))
+                || self.real_location(recorded).starts_with(target)
+        })
+    }
+
+    /// Where a recorded path is now, with the symbolic links in its
+    /// directories resolved as far as they still exist. The last component
+    /// is kept as written: a record about a link is about the link, not
+    /// about what it points to.
+    fn real_location(&self, recorded: &str) -> PathBuf {
+        let path = self.resolve_op_path(recorded);
+        let Some(name) = path.file_name().map(std::ffi::OsStr::to_os_string) else {
+            return path;
+        };
+        let mut missing = Vec::new();
+        let mut directory = path.parent();
+        while let Some(current) = directory {
+            if let Ok(real) = fs::canonicalize(current) {
+                let mut location = real;
+                location.extend(missing.iter().rev());
+                location.push(&name);
+                return location;
+            }
+            match current.file_name() {
+                Some(part) => missing.push(part.to_os_string()),
+                None => break,
+            }
+            directory = current.parent();
+        }
+        path
     }
 
     /// Rewrite the path of an operation about to be recorded so that it is
@@ -739,10 +847,23 @@ impl ShellState {
 
     /// As [`Self::contained`], for a path already resolved by
     /// [`Self::resolve_path`].
+    ///
+    /// # Errors
+    ///
+    /// Fails if the path lies outside the session root, or is not valid
+    /// UTF-8. The history stores paths as text. A path that is not text
+    /// would be stored as a different path, and undo would then act on
+    /// that one, so the operation is refused before anything is done.
     pub fn contained_abs(&self, full: &Path) -> Result<PathBuf> {
         let relative = full
             .strip_prefix(&self.root)
             .map_err(|_| anyhow::anyhow!("{} is outside the session root", full.display()))?;
+        if relative.to_str().is_none() {
+            anyhow::bail!(
+                "{} is not valid UTF-8, so it could not be recorded for undo; nothing was done",
+                full.display()
+            );
+        }
         Ok(if relative.as_os_str().is_empty() {
             PathBuf::from(".")
         } else {

@@ -300,14 +300,29 @@ fn print_help() {
     );
 }
 
+/// The session root and the working directory, as `status` shows them. The
+/// two differ after `cd`; the sandbox boundary is the first.
+fn location_lines(state: &ShellState) -> [String; 2] {
+    [
+        format!(
+            "  {}: {}",
+            "Sandbox root".bright_black(),
+            state.session_root().display()
+        ),
+        format!(
+            "  {}: {}",
+            "Working directory".bright_black(),
+            state.cwd().display()
+        ),
+    ]
+}
+
 fn print_status(state: &ShellState) {
     println!("{}", "═══ Shell Status ═══".bright_blue().bold());
     println!();
-    println!(
-        "  {}: {}",
-        "Sandbox root".bright_black(),
-        state.cwd().display()
-    );
+    for line in location_lines(state) {
+        println!("{line}");
+    }
     println!(
         "  {}: {}",
         "Total operations".bright_black(),
@@ -339,4 +354,31 @@ fn print_status(state: &ShellState) {
         "Completed transactions".bright_black(),
         state.transactions.len()
     );
+}
+
+#[cfg(test)]
+mod status_display_tests {
+    use super::*;
+
+    /// After `cd`, `status` still names the session root as the sandbox
+    /// root, and shows the working directory beside it. It used to show the
+    /// working directory under the label "Sandbox root".
+    #[test]
+    fn status_shows_the_session_root_and_the_working_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(temp.path()).unwrap();
+        std::fs::create_dir(root.join("sub")).unwrap();
+        let mut state = ShellState::new(root.to_str().unwrap()).unwrap();
+        state.set_cwd(&root.join("sub")).unwrap();
+
+        let [sandbox, working] = location_lines(&state);
+
+        assert!(sandbox.contains("Sandbox root"));
+        assert!(sandbox.ends_with(&root.display().to_string()), "{sandbox}");
+        assert!(working.contains("Working directory"));
+        assert!(
+            working.ends_with(&root.join("sub").display().to_string()),
+            "{working}"
+        );
+    }
 }

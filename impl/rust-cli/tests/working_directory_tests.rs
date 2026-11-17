@@ -233,21 +233,65 @@ fn a_redirected_ls_lists_the_working_directory() {
     assert!(!listing.contains("at-root"), "{listing}");
 }
 
-/// A working directory whose name is not text is used as the path it is.
-/// It used to be written out as text and read back, which named another
-/// directory.
+/// The history stores paths as text. A directory whose name is not text
+/// cannot be named there: an operation in it would be recorded under a
+/// different path, and undo would act on that one. So the shell does not
+/// enter it. A typed name is always text; this is reached through a link.
 #[test]
-fn a_working_directory_whose_name_is_not_text_resolves_relative_paths() {
+fn a_directory_whose_name_is_not_text_is_not_entered() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
     let (sandbox, mut state) = sandbox();
     let odd = sandbox.root.join(OsStr::from_bytes(b"d\xff"));
     fs::create_dir(&odd).unwrap();
-    state.set_cwd(&odd).unwrap();
+    symlink(&odd, sandbox.root.join("link")).unwrap();
 
-    assert_eq!(state.resolve_path("f"), odd.join("f"));
-    assert_eq!(state.resolve_path("./a/../f"), odd.join("f"));
-    assert_eq!(state.resolve_path("../f"), sandbox.root.join("f"));
-    assert_eq!(state.resolve_path("../../../f"), sandbox.root.join("f"));
+    let refused = run(&mut state, "cd link").unwrap_err();
+
+    assert!(
+        format!("{refused:#}").contains("not valid UTF-8"),
+        "{refused:#}"
+    );
+    assert_eq!(state.cwd(), sandbox.root);
+}
+
+/// A relative path is resolved against the working directory as a path,
+/// with `..` stopping at the session root.
+#[test]
+fn a_relative_path_is_resolved_against_the_working_directory() {
+    let (sandbox, mut state) = sandbox();
+    fs::create_dir_all(sandbox.root.join("sub/deeper")).unwrap();
+    run(&mut state, "cd sub/deeper").unwrap();
+    let cwd = sandbox.root.join("sub/deeper");
+
+    assert_eq!(state.resolve_path("f"), cwd.join("f"));
+    assert_eq!(state.resolve_path("./a/../f"), cwd.join("f"));
+    assert_eq!(state.resolve_path("../f"), sandbox.root.join("sub/f"));
+    assert_eq!(state.resolve_path("../../../../f"), sandbox.root.join("f"));
+}
+
+/// A redone operation is recorded under the path it has in the history,
+/// wherever the redo is done from. It used to be read against the working
+/// directory again: `touch f; undo; cd sub; redo` recorded `sub/f`, and the
+/// next undo failed or removed another file.
+#[test]
+fn a_redo_from_another_directory_is_recorded_under_its_own_path() {
+    let (sandbox, mut state) = sandbox();
+    fs::create_dir(sandbox.root.join("sub")).unwrap();
+    fs::write(sandbox.root.join("sub/f"), "another file").unwrap();
+    vsh::commands::touch(&mut state, "f", false).unwrap();
+    vsh::commands::undo(&mut state, 1, false).unwrap();
+    run(&mut state, "cd sub").unwrap();
+
+    vsh::commands::redo(&mut state, 1, false).unwrap();
+    assert!(sandbox.root.join("f").exists());
+    assert_eq!(state.history.last().unwrap().path, "f");
+
+    vsh::commands::undo(&mut state, 1, false).unwrap();
+    assert!(!sandbox.root.join("f").exists());
+    assert_eq!(
+        fs::read_to_string(sandbox.root.join("sub/f")).unwrap(),
+        "another file"
+    );
 }

@@ -274,6 +274,19 @@ fn nothing_is_destroyed_when_the_scrubbed_history_cannot_be_saved() {
     fs::write(sandbox.root.join("f"), "SECRET").unwrap();
     fs::create_dir(sandbox.root.join("d")).unwrap();
     fs::write(sandbox.root.join("d/inner"), "INNER").unwrap();
+    // The history takes a copy of each file's content, as it would have
+    // from earlier work on them.
+    for name in ["f", "d/inner"] {
+        vsh::commands::rm(&mut state, name, false).unwrap();
+        vsh::commands::undo(&mut state, 1, false).unwrap();
+    }
+    let holds = |state: &ShellState, content: &[u8]| {
+        state
+            .history
+            .iter()
+            .any(|op| op.undo_data.as_deref() == Some(content))
+    };
+    let redo_entries = state.get_redo_stack().len();
     // A directory where the saved state should be: it cannot be written.
     let saved = sandbox.root.join(".vsh_state.json");
     let _ = fs::remove_file(&saved);
@@ -288,4 +301,37 @@ fn nothing_is_destroyed_when_the_scrubbed_history_cannot_be_saved() {
     }
     assert_eq!(fs::read(sandbox.root.join("f")).unwrap(), b"SECRET");
     assert_eq!(fs::read(sandbox.root.join("d/inner")).unwrap(), b"INNER");
+    // The files are still there, so the history must still be able to undo
+    // what was done to them: the scrub is put back when the save fails.
+    assert!(holds(&state, b"SECRET"));
+    assert!(holds(&state, b"INNER"));
+    assert_eq!(state.get_redo_stack().len(), redo_entries);
+}
+
+/// One file can have two names when a link inside the session root points
+/// at its directory. Obliterating it under one name removes what the
+/// history holds about it under the other. Comparing the names as written
+/// left the other name's record, and the content in it, in place.
+#[test]
+fn obliterate_scrubs_what_the_history_holds_under_another_name() {
+    let (sandbox, mut state) = sandbox();
+    fs::create_dir(sandbox.root.join("real")).unwrap();
+    fs::write(sandbox.root.join("real/secret"), "SECRET-CONTENT").unwrap();
+    // The history takes a copy of the content under the name `real/secret`.
+    vsh::commands::rm(&mut state, "real/secret", false).unwrap();
+    vsh::commands::undo(&mut state, 1, false).unwrap();
+    symlink("real", sandbox.root.join("alias")).unwrap();
+
+    obliterate_path(&mut state, "alias/secret", false, true).unwrap();
+
+    assert!(!sandbox.root.join("real/secret").exists());
+    let holds_it =
+        |op: &vsh::state::Operation| op.undo_data.as_deref() == Some(b"SECRET-CONTENT".as_slice());
+    assert!(!state.history.iter().any(holds_it), "in the history");
+    assert!(
+        !state.get_redo_stack().iter().any(holds_it),
+        "in the redo stack"
+    );
+    let reloaded = ShellState::new(sandbox.root.to_str().unwrap()).unwrap();
+    assert!(!reloaded.history.iter().any(holds_it), "in the saved state");
 }
