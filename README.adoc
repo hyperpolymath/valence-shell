@@ -50,19 +50,28 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 * [x] MAA Framework: Mutually Assured Accountability with audit trails
 
 == Shell Features (v0.9.0)
-* [x] Unix Pipelines: Multi-stage pipelines (`cmd1 | cmd2 | cmd3`)
-* [x] I/O Redirections: All POSIX redirections (`>`, `>>`, `<`, `2>`, `2>>`, `&>`, `2>&1`)
-* [x] Process Substitution: `<(cmd)` and `>(cmd)` with FIFO implementation
-* [x] Arithmetic Expansion: `$expr` with full operator support
-* [x] Here Documents: `<<DELIMITER`, `<←DELIMITER`, `<<<word`
-* [x] Job Control: Background jobs, `fg`, `bg`, `kill`, job specifications
-* [x] Shell Variables: `$VAR`, `export`, assignment, expansion
+
+[NOTE]
+====
+*Measured, not claimed.* `impl/rust-cli/tests/conformance_battery.rs` starts the built shell on 126 everyday command lines and compares the result with bash. On 2026-11-17, 66 match. The cases that fail are listed in `impl/rust-cli/tests/conformance/known_failing.txt`, which may only shrink. Below, `[x]` means it works through the built shell, `[~]` means in part, and the limit is stated.
+====
+
+* [~] Built-in file commands with undo: `mkdir`, `rmdir`, `touch`, `rm`, `cp`, `mv`, `ln -s`, `chmod`, `chown`, in their plain forms only (one operand each, two for `cp`, `mv` and `ln -s`; no options). An option or an extra operand is refused and nothing is done
+* [ ] Wildcard, brace and tilde expansion: applied only when the command also has a redirection
+* [ ] Quoting: a quoted `*`, `?`, `[`, `{` or `~` reaches other programs with a backslash added
+* [x] Unix Pipelines: Multi-stage pipelines of external programs (`cmd1 | cmd2 | cmd3`)
+* [~] I/O Redirections: `>`, `>>`, `<` and here strings work. A redirection on a built-in command is resolved inside the session root, so `2>/dev/null` fails there
+* [~] Process Substitution: `<(cmd)` and `>(cmd)` are in the source; not exercised by the battery
+* [~] Arithmetic Expansion: `$((expr))` works as the whole value of an assignment, not inside an argument
+* [~] Here Documents: here strings (`<<<word`) work; a here document passed with `-c` does not
+* [~] Job Control: `&` at the end of a line and `jobs` work; Ctrl-Z does not suspend a running program
+* [~] Shell Variables: assignment and expansion work; `export` does not reach the programs that are run
 * [~] RMO: `obliterate` implements best-effort 3-pass file overwrite + unlink + an unsigned audit residue; CoW filesystems, SSD remapping, snapshots, replicas, crash timing, and legal compliance remain outside that guarantee. Audit-log HMAC chaining is available when a key is supplied, but RMO does not yet provision one. See link:docs/RMO-DURABILITY-BOUNDARY.adoc[the exact boundary].
 * [x] Syntax Highlighting: Real-time color-coded REPL
 * [x] Command Correction: Intelligent typo suggestions
 * [x] Friendly Errors: fish-style helpful error messages
 * [x] Smart Pager: Auto-paging for long output
-* [x] 3-Tier Help: Quick/verbose/man page documentation
+* [x] Help: `help` lists the commands and `help <command>` describes one; there are no manual pages
 * [x] 794 Tests Passing: Unit, correspondence, integration, property, security, doctests (0 failures, 14 ignored) — `tested-only` in the proof ledger, not proofs
 
 == Implementation
