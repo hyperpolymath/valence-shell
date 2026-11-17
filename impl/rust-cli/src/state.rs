@@ -843,12 +843,16 @@ impl ShellState {
         }
 
         if self.journal_file.exists() {
-            let journal = crate::fs_pure::read_to_string(&self.journal_file)?;
+            // Read bytes, not a string: a crash can tear the last line inside
+            // a multi-byte character, and that must count as a torn line
+            // rather than make the whole file unreadable.
+            let journal = crate::fs_pure::read_to_end(&self.journal_file)?;
+            let body = journal.strip_suffix(b"\n").unwrap_or(&journal);
             let mut replayed_all = true;
-            for line in journal.lines() {
+            for line in body.split(|&b| b == b'\n').filter(|_| !body.is_empty()) {
                 // A torn line (crash mid-append) ends the replay, and so does
                 // a sequence gap: replay keeps the longest consistent prefix.
-                let Ok(JournalLine { seq, entry }) = serde_json::from_str::<JournalLine>(line)
+                let Ok(JournalLine { seq, entry }) = serde_json::from_slice::<JournalLine>(line)
                 else {
                     replayed_all = false;
                     break;
@@ -1802,6 +1806,30 @@ mod tests {
         let reloaded = reopen(&root);
         assert_eq!(reloaded.history.len(), 3);
         assert_eq!(summary(&reloaded), summary(&restarted));
+    }
+
+    #[test]
+    fn test_journal_torn_inside_multibyte_char_reopens() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        record(&mut state, "a");
+        {
+            use std::io::Write;
+            let mut journal = fs::OpenOptions::new()
+                .append(true)
+                .open(&state.journal_file)
+                .unwrap();
+            // "é" is 0xC3 0xA9; stop after the first byte.
+            journal
+                .write_all(b"{\"seq\":2,\"entry\":{\"Record\":{\"path\":\"caf\xC3")
+                .unwrap();
+        }
+
+        let mut reopened = reopen(&root);
+        assert_eq!(summary(&reopened), summary(&state));
+        record(&mut reopened, "b");
+        let reloaded = reopen(&root);
+        assert_eq!(reloaded.history.len(), 2);
     }
 
     #[test]
