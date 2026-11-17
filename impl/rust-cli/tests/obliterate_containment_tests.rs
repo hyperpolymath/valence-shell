@@ -287,3 +287,30 @@ fn the_session_root_itself_cannot_be_obliterated() {
     assert!(obliterate_path(&mut state, ".", false, true).is_err());
     assert_eq!(fs::read(sandbox.root.join("f")).unwrap(), b"DATA");
 }
+
+/// The history may hold a file's earlier content as undo data. Obliterate
+/// forgets it and saves the history before it destroys anything. If that
+/// save fails, the content would outlive the file in the saved state, so
+/// nothing is obliterated. Before, the file was destroyed first and a failed
+/// save was only a warning.
+#[test]
+fn nothing_is_destroyed_when_the_scrubbed_history_cannot_be_saved() {
+    let (sandbox, mut state) = sandbox();
+    fs::write(sandbox.root.join("f"), "SECRET").unwrap();
+    fs::create_dir(sandbox.root.join("d")).unwrap();
+    fs::write(sandbox.root.join("d/inner"), "INNER").unwrap();
+    // A directory where the saved state should be: it cannot be written.
+    let saved = sandbox.root.join(".vsh_state.json");
+    let _ = fs::remove_file(&saved);
+    fs::create_dir(&saved).unwrap();
+
+    for target in ["f", "d"] {
+        let refused = obliterate_path(&mut state, target, false, true).unwrap_err();
+        assert!(
+            format!("{refused:#}").contains("history could not be saved"),
+            "{refused:#}"
+        );
+    }
+    assert_eq!(fs::read(sandbox.root.join("f")).unwrap(), b"SECRET");
+    assert_eq!(fs::read(sandbox.root.join("d/inner")).unwrap(), b"INNER");
+}

@@ -321,7 +321,7 @@ impl ExecutableCommand for Command {
                         let target = if let Some(ref p) = expanded_path {
                             s.resolve_path(p)
                         } else {
-                            s.root.clone()
+                            s.cwd().to_path_buf()
                         };
 
                         if !target.is_dir() {

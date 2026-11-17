@@ -122,3 +122,23 @@ fn rm_does_not_reach_through_a_symlinked_directory() {
     );
     assert!(state.history.is_empty());
 }
+
+/// A link target is a string of bytes and need not be text. Undo of `rm`
+/// puts back the same bytes. It used to store the target as text, with what
+/// was not text replaced, and so made a link to a different path.
+#[test]
+fn undo_restores_a_link_whose_target_is_not_text() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let (sandbox, mut state) = sandbox();
+    let target = OsStr::from_bytes(b"t\xffarget");
+    let link = sandbox.root.join("link");
+    symlink(target, &link).unwrap();
+
+    commands::rm(&mut state, "link", false).unwrap();
+    assert!(fs::symlink_metadata(&link).is_err());
+
+    commands::undo(&mut state, 1, false).unwrap();
+    assert_eq!(fs::read_link(&link).unwrap().as_os_str(), target);
+}

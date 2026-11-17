@@ -413,18 +413,27 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
     append_rmo_residue(state, &op, "obliterate-intent")
         .context("Nothing was obliterated, because the audit entry could not be written")?;
 
-    // Step 2: Secure overwrite, then delete the name.
+    // Step 2: Forget what the history holds about this file, and save
+    // that, before anything is destroyed. Earlier operations may hold the
+    // file's content as undo data. If the history could not be saved
+    // without it, that content would outlive the file in the saved state,
+    // so nothing is obliterated.
+    state.scrub_obliterated(&state.rooted(path), op_id);
+    state.save_history().context(
+        "Nothing was obliterated, because the history could not be saved without the \
+         file's earlier contents",
+    )?;
+
+    // Step 3: Secure overwrite, then delete the name.
     if verbose {
         println!("🔥 3-pass overwrite (random / zeros / 0xFF) + unlink...");
     }
     overwrite_and_unlink(state.root_dir(), &contained, file, file_size)?;
 
-    // Step 3: Record the outcome, and the irreversible operation (NO undo_data).
+    // Step 4: Record the outcome, and the irreversible operation (NO undo_data).
     if let Err(e) = append_rmo_residue(state, &op, "obliterated") {
         eprintln!("warning: RMO audit outcome not written: {e:#}");
     }
-    // Earlier operations on this file may hold its content as undo data.
-    state.scrub_obliterated(&state.rooted(path), op_id);
     state.record_operation(op);
 
     // Output
@@ -542,6 +551,14 @@ pub fn obliterate_dir(
     append_rmo_residue(state, &op, "obliterate-dir-intent")
         .context("Nothing was obliterated, because the audit entry could not be written")?;
 
+    // Forget what the history holds about anything in this directory, and
+    // save that, before anything is destroyed (as for a single file).
+    state.scrub_obliterated(&state.rooted(path), op_id);
+    state.save_history().context(
+        "Nothing was obliterated, because the history could not be saved without the \
+         earlier contents of the files in this directory",
+    )?;
+
     // Obliterate the files, remove the links, then the directories, deepest
     // first.
     let mut obliterated = 0usize;
@@ -570,8 +587,6 @@ pub fn obliterate_dir(
     if let Err(e) = append_rmo_residue(state, &op, "obliterated-dir") {
         eprintln!("warning: RMO audit outcome not written: {e:#}");
     }
-    // Earlier operations on anything in this directory may hold content.
-    state.scrub_obliterated(&state.rooted(path), op_id);
     state.record_operation(op);
 
     println!(

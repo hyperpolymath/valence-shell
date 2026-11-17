@@ -413,7 +413,17 @@ impl ShellState {
     /// Record an operation
     pub fn record_operation(&mut self, mut op: Operation) {
         self.root_operation_path(&mut op);
+        self.record_rooted_operation(op);
+    }
 
+    /// Record an operation whose path is already relative to the session
+    /// root.
+    ///
+    /// [`Self::record_operation`] takes a path as it was typed and makes it
+    /// relative to the root, reading it against the working directory. A
+    /// path that is relative to the root already must not go through that
+    /// again: from `sub`, `sub/f` would become `sub/sub/f`.
+    pub fn record_rooted_operation(&mut self, mut op: Operation) {
         // Associate with active transaction if any
         if let Some(ref mut txn) = self.active_transaction {
             op.transaction_id = Some(txn.id);
@@ -672,12 +682,9 @@ impl ShellState {
         if rooted.is_empty() {
             return;
         }
-        let within = |recorded: &str| {
-            recorded == rooted
-                || recorded
-                    .strip_prefix(rooted)
-                    .is_some_and(|rest| rest.starts_with('/'))
-        };
+        // By path component, so that it holds whatever separator the
+        // platform writes: `dir` contains `dir/f`, and not `directory`.
+        let within = |recorded: &str| Path::new(recorded).starts_with(Path::new(rooted));
         let concerns = |op: &Operation| {
             !matches!(
                 op.op_type,
@@ -701,6 +708,9 @@ impl ShellState {
     fn root_operation_path(&self, op: &mut Operation) {
         match op.op_type {
             OperationType::SetVariable | OperationType::UnsetVariable => {}
+            // A hardware erase names a device (`/dev/nvme0n1`), not a file
+            // in the session root. The record must keep that name.
+            OperationType::HardwareErase => {}
             OperationType::Move => {
                 let rooted: Vec<String> =
                     op.path.split('\0').map(|part| self.rooted(part)).collect();
@@ -746,9 +756,11 @@ impl ShellState {
         if path.starts_with('/') || self.cwd == self.root {
             return resolve_under_root(&self.root, path);
         }
-        // Relative to the working directory, which is inside the root.
-        let cwd = self.cwd.strip_prefix(&self.root).unwrap_or(Path::new(""));
-        resolve_under_root(&self.root, &format!("{}/{}", cwd.to_string_lossy(), path))
+        // Relative to the working directory, which is inside the root. The
+        // working directory is used as the path it is: its name may hold
+        // bytes that are not text, and writing it out as text and reading
+        // it back would name another directory.
+        resolve_under_base(&self.root, &self.cwd, path)
     }
 
     /// Get root path as string (for Lean FFI)
@@ -772,6 +784,13 @@ impl ShellState {
     }
 
     /// Save state to file
+    /// Save the history now, and report a failure. The recording functions
+    /// only warn when a save fails; a caller that must not go on without
+    /// the save uses this.
+    pub(crate) fn save_history(&self) -> Result<()> {
+        self.save()
+    }
+
     fn save(&self) -> Result<()> {
         let state = SerializableState {
             history: self.history.clone(),
@@ -1117,7 +1136,21 @@ pub fn resolve_under_root(root: &Path, path: &str) -> PathBuf {
     } else {
         root.join(path)
     };
+    normalise_within(root, &raw)
+}
 
+/// Resolve the relative `path` against `base`, a directory inside the
+/// sandbox `root`, under the same rule as [`resolve_under_root`].
+///
+/// `base` is joined as the path it is. Its name may hold bytes that are not
+/// text, which writing it out as text and reading it back would change.
+pub fn resolve_under_base(root: &Path, base: &Path, path: &str) -> PathBuf {
+    normalise_within(root, &base.join(path))
+}
+
+/// Drop `.` components and apply `..` components of `raw`, never going above
+/// `root`.
+fn normalise_within(root: &Path, raw: &Path) -> PathBuf {
     // Normalize path components to prevent traversal via ..
     let mut normalized = PathBuf::new();
     for component in raw.components() {
@@ -1149,6 +1182,46 @@ pub fn resolve_under_root(root: &Path, path: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A hardware erase names a device, not a file under the session root.
+    /// Its record keeps that name. It used to be rewritten as `dev/nvme0n1`.
+    #[test]
+    fn test_a_hardware_erase_record_keeps_its_device_name() {
+        let root = tempfile::tempdir().unwrap();
+        let mut state = ShellState::new(root.path().to_str().unwrap()).unwrap();
+
+        state.record_operation(Operation::new(
+            OperationType::HardwareErase,
+            "/dev/nvme0n1".to_string(),
+            None,
+        ));
+
+        assert_eq!(state.history.last().unwrap().path, "/dev/nvme0n1");
+    }
+
+    /// Scrubbing an obliterated directory reaches what is inside it and
+    /// nothing else: not a neighbour whose name only starts the same way.
+    #[test]
+    fn test_scrub_reaches_what_is_inside_the_directory_and_nothing_else() {
+        let root = tempfile::tempdir().unwrap();
+        let mut state = ShellState::new(root.path().to_str().unwrap()).unwrap();
+        for path in ["dir", "dir/f", "dir/deep/g", "directory/h", "dir2"] {
+            state.record_rooted_operation(
+                Operation::new(OperationType::DeleteFile, path.to_string(), None)
+                    .with_undo_data(b"content".to_vec()),
+            );
+        }
+
+        state.scrub_obliterated("dir", Uuid::new_v4());
+
+        let kept: Vec<&str> = state
+            .history
+            .iter()
+            .filter(|op| op.undo_data.is_some())
+            .map(|op| op.path.as_str())
+            .collect();
+        assert_eq!(kept, ["directory/h", "dir2"]);
+    }
 
     #[test]
     fn test_operation_inverse() {

@@ -2364,12 +2364,19 @@ fn apply_substring(value: &str, offset: i32, length: Option<usize>) -> String {
 /// Expands an unquoted leading `~` in a word:
 ///
 /// - `~` or `~/path`  → `$HOME` / `$HOME/path`
-/// - `~+` or `~+/...` → `$PWD` / `$PWD/...`
-/// - `~-` or `~-/...` → `$OLDPWD` / `$OLDPWD/...`
+/// - `~+` or `~+/...` → the working directory
+/// - `~-` or `~-/...` → the directory the shell was in before the last `cd`
+///
+/// The working directory and the one before it are the shell's own. The
+/// process's `PWD` and `OLDPWD` are what the shell was started with, and `cd`
+/// does not change them, so reading them gave stale answers: after
+/// `cd sub`, `cd ~-` went wherever the shell's parent had last been. Before
+/// the first `cd` there is no previous directory of the shell's own, and
+/// `~-` falls back to the `OLDPWD` it was started with.
 ///
 /// `~user` is not yet supported (requires getpwnam). An escaped `\~`
 /// (produced by `quoted_word_to_string` for quoted `~`) stays literal.
-fn expand_tilde(input: &str) -> String {
+fn expand_tilde(input: &str, state: &crate::state::ShellState) -> String {
     // An escaped tilde `\~` means the tilde was inside quotes — leave it.
     if let Some(stripped) = input.strip_prefix("\\~") {
         let mut s = String::with_capacity(input.len());
@@ -2391,8 +2398,12 @@ fn expand_tilde(input: &str) -> String {
 
     let replacement = match prefix {
         "" => std::env::var("HOME").ok(),
-        "+" => std::env::var("PWD").ok(),
-        "-" => std::env::var("OLDPWD").ok(),
+        "+" => Some(state.cwd().to_string_lossy().into_owned()),
+        "-" => state
+            .previous_dir
+            .as_ref()
+            .map(|dir| dir.to_string_lossy().into_owned())
+            .or_else(|| std::env::var("OLDPWD").ok()),
         _ => {
             // ~user — not implemented yet; leave the tilde literal.
             return input.to_string();
@@ -2410,7 +2421,7 @@ pub fn expand_variables(input: &str, state: &crate::state::ShellState) -> String
     // and only at the start of a word (the word has already been split by
     // the tokeniser). An escaped `\~` (produced by quoted_word_to_string
     // for `'~'` or `"~"`) is left literal.
-    let input = expand_tilde(input);
+    let input = expand_tilde(input, state);
 
     let mut result = String::new();
     let mut chars = input.chars().peekable();

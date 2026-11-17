@@ -481,7 +481,10 @@ impl RedirectSetup {
                 op = op.with_undo_data(data);
             }
 
-            state.record_operation(op);
+            // `path` is relative to the session root already (see
+            // `rooted_path`), so it must not be read against the working
+            // directory a second time.
+            state.record_rooted_operation(op);
         }
 
         Ok(())

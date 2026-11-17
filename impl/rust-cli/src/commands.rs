@@ -14,6 +14,34 @@ use crate::proof_refs;
 use crate::state::{Operation, OperationType, ShellState};
 use crate::verification;
 
+/// The target of a symbolic link as the bytes an operation record stores.
+///
+/// On Unix a link target is a string of bytes and need not be text, so the
+/// bytes are kept as they are. Turning them into text first replaced what
+/// was not text, and undo then made a link to a different path.
+#[cfg(unix)]
+fn link_target_bytes(target: &std::path::Path) -> Vec<u8> {
+    use std::os::unix::ffi::OsStrExt;
+    target.as_os_str().as_bytes().to_vec()
+}
+
+#[cfg(not(unix))]
+fn link_target_bytes(target: &std::path::Path) -> Vec<u8> {
+    target.to_string_lossy().into_owned().into_bytes()
+}
+
+/// The link target an operation record stores, as a path.
+#[cfg(unix)]
+fn link_target_from_bytes(bytes: &[u8]) -> std::path::PathBuf {
+    use std::os::unix::ffi::OsStrExt;
+    std::path::PathBuf::from(std::ffi::OsStr::from_bytes(bytes))
+}
+
+#[cfg(not(unix))]
+fn link_target_from_bytes(bytes: &[u8]) -> std::path::PathBuf {
+    std::path::PathBuf::from(String::from_utf8_lossy(bytes).into_owned())
+}
+
 // Secure deletion (RMO - Remove-Match-Obliterate)
 pub mod secure_deletion;
 
@@ -385,7 +413,7 @@ pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
             .remove_file(&contained)
             .context("rm failed")?;
         Operation::new(OperationType::Unlink, path.to_string(), None)
-            .with_undo_data(target.to_string_lossy().into_owned().into_bytes())
+            .with_undo_data(link_target_bytes(&target))
     } else {
         // Save the content and what the file was, so that undo can restore
         // it. A file that cannot be read cannot be restored, so it is not
@@ -1024,7 +1052,7 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 let target = op
                     .undo_data
                     .as_ref()
-                    .map(|d| String::from_utf8_lossy(d).to_string())
+                    .map(|d| link_target_from_bytes(d))
                     .context("Missing symlink target for undo")?;
                 #[cfg(unix)]
                 std::os::unix::fs::symlink(&target, &path)
@@ -1223,7 +1251,7 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 let target = op
                     .undo_data
                     .as_ref()
-                    .map(|d| String::from_utf8_lossy(d).to_string())
+                    .map(|d| link_target_from_bytes(d))
                     .context("Missing symlink target for redo")?;
                 #[cfg(unix)]
                 std::os::unix::fs::symlink(&target, &path).context("Redo ln -s failed")?;
@@ -1530,7 +1558,7 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                 OperationType::Symlink => {
                     // Rollback unlink: re-create the symlink
                     if let Some(target_bytes) = op.undo_data.as_ref() {
-                        let target = String::from_utf8_lossy(target_bytes).to_string();
+                        let target = link_target_from_bytes(target_bytes);
                         #[cfg(unix)]
                         {
                             std::os::unix::fs::symlink(&target, &path)
