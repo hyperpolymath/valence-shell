@@ -182,9 +182,10 @@ pub enum RedoData {
     /// The ownership undo replaced (`Chown`).
     Owner { uid: u32, gid: u32 },
     /// The value undo replaced, and whether the variable was exported
-    /// (`SetVariable`).
+    /// (`SetVariable`). `None` is a variable that was not set when it was
+    /// undone (removed outside the history, as when a function returns).
     Variable {
-        value: VariableValue,
+        value: Option<VariableValue>,
         exported: bool,
     },
     /// The content was larger than the capture limit, so undo did not keep it
@@ -683,12 +684,30 @@ impl ShellState {
     /// absence). Shared by [`Self::set_variable_tracked`] and redo, so both
     /// capture the same undo data.
     pub fn apply_set_variable(&mut self, name: String, value: VariableValue) -> Operation {
+        self.apply_variable_state(name, Some(value))
+    }
+
+    /// Put a variable into the given state (`None` is not set) and return a
+    /// `SetVariable` operation whose undo data is the state it replaced.
+    /// Redo uses the `None` case for an assignment whose variable was no
+    /// longer set when it was undone.
+    pub fn apply_variable_state(
+        &mut self,
+        name: String,
+        value: Option<VariableValue>,
+    ) -> Operation {
         // Capture previous state for undo
         let previous = self.variables.get(&name).cloned();
         let undo_data = serde_json::to_vec(&previous).unwrap_or_default();
 
-        // Perform the set
-        self.variables.insert(name.clone(), value);
+        match value {
+            Some(value) => {
+                self.variables.insert(name.clone(), value);
+            }
+            None => {
+                self.variables.remove(&name);
+            }
+        }
 
         Operation::new(OperationType::SetVariable, name, None).with_undo_data(undo_data)
     }

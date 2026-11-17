@@ -93,6 +93,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file back with the mode it had when it was undone. It used to come back
   with the default mode, so a file made private in between returned readable
   by others. The owner is not restored.
+- Redo of a redirection that replaced or appended to a file now reads,
+  measures and writes through one open file. Before, a file renamed over the
+  path between the read and the write was overwritten, and the undo data
+  recorded was the other file's.
+- Redo of an assignment whose variable was no longer set when it was undone
+  (a function's local, removed when the function returned) failed with "not
+  captured". It now restores the variable as not set.
 - Idris2 model: `redoUndoIdentity`, `undoRedoUndoIdentity`,
   `redoUndoComposition` added to `Filesystem.Composition`. Their status is
   the proof ledger's row for the undo/redo stack laws

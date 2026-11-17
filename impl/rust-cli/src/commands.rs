@@ -1427,14 +1427,12 @@ fn capture_redo_data(state: &ShellState, op: &Operation) -> Option<RedoData> {
             None
         }
         OperationType::SetVariable => {
-            state
-                .variables
-                .get(&op.path)
-                .cloned()
-                .map(|value| RedoData::Variable {
-                    value,
-                    exported: state.is_exported(&op.path),
-                })
+            // A variable that is no longer set is a state too, not a failed
+            // capture: something outside the history removed it.
+            Some(RedoData::Variable {
+                value: state.variables.get(&op.path).cloned(),
+                exported: state.is_exported(&op.path),
+            })
         }
         OperationType::Mkdir
         | OperationType::Rmdir
@@ -1530,7 +1528,7 @@ fn reapply(state: &mut ShellState, op: &Operation) -> Result<Operation> {
             let Some(RedoData::Variable { value, exported }) = &op.redo_data else {
                 return Err(missing());
             };
-            let new_op = state.apply_set_variable(op.path.clone(), value.clone());
+            let new_op = state.apply_variable_state(op.path.clone(), value.clone());
             // Put the export state back as undo found it, whichever way that
             // was: undo of an assignment drops the export, and something
             // outside the history may have set it since.
@@ -1589,73 +1587,119 @@ fn apply_replace_content(
         anyhow::bail!("Cannot redo {}: {} is not a file", op_type, path);
     }
 
-    let original = crate::fs_pure::read_to_end(&full_path)
-        .with_context(|| format!("Failed to read {} before redo", path))?;
-    // Open without `create`, so the write lands in the file that was read,
-    // and without `truncate`: the new content is written over the old and the
-    // file is cut to length afterwards. The old bytes are then still in place
-    // if the write fails, and putting them back never grows the file. On a
-    // filesystem that overwrites in place, that needs none of the space or
-    // quota the failed write ran out of. It is not a guarantee: a
-    // copy-on-write filesystem can need new space even for an overwrite, and
-    // an I/O error can fail any write, which is why a failed restore is
-    // reported below.
-    use std::io::{Seek, SeekFrom};
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .open(&full_path)
+    let mut file = crate::fs_pure::open_pure_read_write(&full_path)
         .with_context(|| format!("Redo {} failed", op_type))?;
-    let written = file
-        .write_all(content)
-        .and_then(|()| file.set_len(content.len() as u64));
-    if let Err(e) = written {
-        // Only the bytes before the current position can have changed.
-        let restored = file.stream_position().and_then(|position| {
-            let changed = original.len().min(position as usize);
-            file.seek(SeekFrom::Start(0))?;
-            file.write_all(&original[..changed])?;
-            file.set_len(original.len() as u64)
-        });
-        let error = anyhow::Error::new(e).context(format!("Redo {} failed", op_type));
-        return Err(match restored {
-            Ok(()) => error,
-            Err(restore_error) => error.context(format!(
-                "{} could not be restored after a failed redo and may be damaged: {}",
-                path, restore_error
-            )),
-        });
+    match replace_through(&mut file, content) {
+        Ok(original) => {
+            Ok(Operation::new(op_type, path.to_string(), None).with_undo_data(original))
+        }
+        Err(failure) => {
+            let error =
+                anyhow::Error::new(failure.error).context(format!("Redo {} failed", op_type));
+            Err(match failure.cleanup {
+                None => error,
+                Some(restore_error) => error.context(format!(
+                    "{} could not be restored after a failed redo and may be damaged: {}",
+                    path, restore_error
+                )),
+            })
+        }
     }
-
-    Ok(Operation::new(op_type, path.to_string(), None).with_undo_data(original))
 }
 
-/// Append bytes to a file and describe it, without recording it. The returned
-/// `FileAppended` operation carries the size before the append as its undo
-/// data, as the `>>` redirection that first recorded it did.
+/// A write through an open file that failed, and the error from putting the
+/// file back as it was, if that failed too.
+struct WriteFailure {
+    error: std::io::Error,
+    cleanup: Option<std::io::Error>,
+}
+
+/// Replace the whole content of `file` and return what it held before.
+///
+/// It takes a handle, not a path, so the content it returns and the content
+/// it replaces belong to the same file whatever happens to the path meanwhile.
+///
+/// The new content is written over the old and the file is cut to length
+/// afterwards, with no truncation first. The old bytes are then still in
+/// place if the write fails, and putting them back never grows the file. On
+/// a filesystem that overwrites in place, that needs none of the space or
+/// quota the failed write ran out of. It is not a guarantee: a copy-on-write
+/// filesystem can need new space even for an overwrite, and an I/O error can
+/// fail any write, which is why a failed restore is reported.
+fn replace_through(
+    file: &mut fs::File,
+    content: &[u8],
+) -> std::result::Result<Vec<u8>, WriteFailure> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut original = Vec::new();
+    file.seek(SeekFrom::Start(0))
+        .and_then(|_| file.read_to_end(&mut original))
+        .map_err(|error| WriteFailure {
+            error,
+            cleanup: None,
+        })?;
+    let written = file
+        .seek(SeekFrom::Start(0))
+        .and_then(|_| file.write_all(content))
+        .and_then(|()| file.set_len(content.len() as u64));
+    match written {
+        Ok(()) => Ok(original),
+        Err(error) => {
+            // Only the bytes before the current position can have changed.
+            let restored = file.stream_position().and_then(|position| {
+                let changed = original.len().min(position as usize);
+                file.seek(SeekFrom::Start(0))?;
+                file.write_all(&original[..changed])?;
+                file.set_len(original.len() as u64)
+            });
+            Err(WriteFailure {
+                error,
+                cleanup: restored.err(),
+            })
+        }
+    }
+}
+
+/// Append to `file`, which must be open for appending, and return the size
+/// it had before. The size comes from the handle, so it is the size of the
+/// file that was appended to. A partial append is cut off again.
+fn append_through(file: &mut fs::File, appended: &[u8]) -> std::result::Result<u64, WriteFailure> {
+    let original_size = file
+        .metadata()
+        .map_err(|error| WriteFailure {
+            error,
+            cleanup: None,
+        })?
+        .len();
+    match file.write_all(appended) {
+        Ok(()) => Ok(original_size),
+        Err(error) => Err(WriteFailure {
+            error,
+            cleanup: file.set_len(original_size).err(),
+        }),
+    }
+}
+
 fn apply_append(state: &ShellState, path: &str, appended: &[u8]) -> Result<Operation> {
     let full_path = state.resolve_path(path);
     if !full_path.is_file() {
         anyhow::bail!("Cannot redo append: {} is not a file", path);
     }
 
-    let original_size = fs::metadata(&full_path)
-        .with_context(|| format!("Failed to stat {} before redo", path))?
-        .len();
     let mut file = fs::OpenOptions::new()
         .append(true)
         .open(&full_path)
         .context("Redo append failed")?;
-    if let Err(e) = file.write_all(appended) {
-        // Cut off whatever part of the append landed.
-        let error = anyhow::Error::new(e).context("Redo append failed");
-        return Err(match file.set_len(original_size) {
-            Ok(()) => error,
-            Err(cleanup_error) => error.context(format!(
+    let original_size = append_through(&mut file, appended).map_err(|failure| {
+        let error = anyhow::Error::new(failure.error).context("Redo append failed");
+        match failure.cleanup {
+            None => error,
+            Some(cleanup_error) => error.context(format!(
                 "the partial append to {} could not be cut off: {}",
                 path, cleanup_error
             )),
-        });
-    }
+        }
+    })?;
 
     Ok(
         Operation::new(OperationType::FileAppended, path.to_string(), None)
@@ -3199,6 +3243,56 @@ mod tests {
             capture_redo_data(&state, &appended),
             Some(RedoData::NotCaptured(_))
         ));
+    }
+
+    /// `replace_through` and `append_through` take an open file, so what they
+    /// read, measure and change is that file, whatever the path names by
+    /// then. Here another file is renamed over the path after the open.
+    #[test]
+    fn test_redo_writes_go_to_the_file_that_was_opened() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let path = temp.path().join("f");
+        let other = temp.path().join("other");
+
+        fs::write(&path, b"opened").unwrap();
+        let mut file = crate::fs_pure::open_pure_read_write(&path).unwrap();
+        fs::write(&other, b"renamed over the path").unwrap();
+        fs::rename(&other, &path).unwrap();
+        let original = replace_through(&mut file, b"new").ok().unwrap();
+        assert_eq!(original, b"opened");
+        assert_eq!(fs::read(&path).unwrap(), b"renamed over the path");
+
+        fs::write(&path, b"12345").unwrap();
+        let mut file = fs::OpenOptions::new().append(true).open(&path).unwrap();
+        fs::write(&other, b"renamed over the path").unwrap();
+        fs::rename(&other, &path).unwrap();
+        let original_size = append_through(&mut file, b"678").ok().unwrap();
+        assert_eq!(original_size, 5);
+        assert_eq!(fs::read(&path).unwrap(), b"renamed over the path");
+    }
+
+    /// Without a rename in the way: the content and size returned are the
+    /// ones before the write, and the file holds the new content.
+    #[test]
+    fn test_replace_through_and_append_through() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let path = temp.path().join("f");
+
+        fs::write(&path, b"a longer original").unwrap();
+        let mut file = crate::fs_pure::open_pure_read_write(&path).unwrap();
+        assert_eq!(
+            replace_through(&mut file, b"short").ok().unwrap(),
+            b"a longer original"
+        );
+        assert_eq!(fs::read(&path).unwrap(), b"short");
+        // A second call on the same handle starts from the beginning again.
+        assert_eq!(replace_through(&mut file, b"").ok().unwrap(), b"short");
+        assert_eq!(fs::read(&path).unwrap(), b"");
+
+        fs::write(&path, b"12345").unwrap();
+        let mut file = fs::OpenOptions::new().append(true).open(&path).unwrap();
+        assert_eq!(append_through(&mut file, b"678").ok().unwrap(), 5);
+        assert_eq!(fs::read(&path).unwrap(), b"12345678");
     }
 
     #[test]

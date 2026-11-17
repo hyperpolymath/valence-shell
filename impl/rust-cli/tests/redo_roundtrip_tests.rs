@@ -599,6 +599,29 @@ fn assignment_redo_restores_not_exported() {
     );
 }
 
+/// A variable that is no longer set when its assignment is undone is a state
+/// redo must restore, not a failed capture. Shell functions do this: an
+/// assignment inside a function is recorded, and returning from the function
+/// removes the variable without a record.
+#[test]
+fn assignment_redo_restores_a_variable_that_was_not_set() {
+    use vsh::executable::ExecutableCommand;
+    use vsh::parser::parse_command;
+
+    let (_temp, mut state) = setup();
+    parse_command("X=1").unwrap().execute(&mut state).unwrap();
+    parse_command("X=2").unwrap().execute(&mut state).unwrap();
+    // Outside the history: this call records nothing.
+    state.unset_variable("X");
+
+    for cycle in 0..3 {
+        undo(&mut state);
+        assert_eq!(state.get_variable("X"), Some("1"), "cycle {cycle}: undo");
+        redo(&mut state);
+        assert_eq!(state.get_variable("X"), None, "cycle {cycle}: redo");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The mode of a file that undo deletes
 // ---------------------------------------------------------------------------
