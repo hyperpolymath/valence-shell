@@ -195,7 +195,8 @@ Still open:
   1,000-level test cannot pass with absolute paths, and the rest was not
   measured on macOS.
 * Neither the journal nor the snapshot is `fsync`ed (the old `fs::write`
-  was not either), the files keep the default mode, and they still live in
-  the session root. Route plan items E1d and G2
-  (`docs/plans/VSH-ROUTE-PLAN-2026-11-04.adoc`) cover fsync, 0600 and moving
+  was not either), and they still live in the session root. Both are now
+  created with mode 0600 on Unix, since history can hold deleted file
+  contents (Codex review on #229). Route plan items E1d and G2
+  (`docs/plans/VSH-ROUTE-PLAN-2026-11-04.adoc`) still cover fsync and moving
   state out of the root; the journal is a new file they must include.
