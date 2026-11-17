@@ -469,6 +469,89 @@ fn touch_does_not_write_through_a_dangling_symlink() {
 }
 
 // ---------------------------------------------------------------------------
+// Dangling symbolic links at a destination; content that was not captured
+// ---------------------------------------------------------------------------
+
+/// A dangling symbolic link at the destination does not "exist" to
+/// `Path::exists`, and `cp` onto it would write through the link to wherever
+/// it points, which may be outside the sandbox. The runtime precondition
+/// check (`verification::verify_copy_file`, which uses `lstat`) treats it as
+/// occupied; this pins that for `cp` and for its redo.
+#[cfg(unix)]
+#[test]
+fn cp_and_its_redo_refuse_a_dangling_symlink_destination() {
+    let (temp, mut state) = setup();
+    let outside = TempDir::new().expect("tempdir");
+    let escape = outside.path().join("escape");
+    let dst = temp.path().join("dst");
+    fs::write(temp.path().join("src"), b"payload").unwrap();
+
+    commands::cp(&mut state, "src", "dst", false).unwrap();
+    undo(&mut state);
+
+    // Planted between undo and redo: dst -> a path outside the sandbox.
+    std::os::unix::fs::symlink(&escape, &dst).unwrap();
+
+    assert!(commands::redo(&mut state, 1, false).is_err());
+    assert!(!escape.exists(), "redo did not write through the link");
+    assert_eq!(fs::read_link(&dst).unwrap(), escape, "the link is intact");
+    assert_eq!(state.get_redo_stack().len(), 1, "the entry is kept");
+
+    // The command itself refuses too.
+    assert!(commands::cp(&mut state, "src", "dst", false).is_err());
+    assert!(!escape.exists());
+}
+
+/// `mv` onto a dangling symbolic link would replace the link;
+/// `verification::verify_move` refuses it, for the command and for its redo.
+#[cfg(unix)]
+#[test]
+fn mv_and_its_redo_refuse_a_dangling_symlink_destination() {
+    let (temp, mut state) = setup();
+    let src = temp.path().join("src");
+    let dst = temp.path().join("dst");
+    fs::write(&src, b"payload").unwrap();
+
+    commands::mv(&mut state, "src", "dst", false).unwrap();
+    undo(&mut state);
+
+    std::os::unix::fs::symlink("nowhere", &dst).unwrap();
+
+    assert!(commands::redo(&mut state, 1, false).is_err());
+    assert_eq!(fs::read_link(&dst).unwrap(), Path::new("nowhere"));
+    assert_eq!(read(&src), b"payload", "the source was not moved");
+
+    assert!(commands::mv(&mut state, "src", "dst", false).is_err());
+    assert_eq!(fs::read_link(&dst).unwrap(), Path::new("nowhere"));
+}
+
+/// If undo could not read a file's content, redo must refuse to recreate the
+/// file: recreating it empty would silently lose what was in it.
+#[test]
+fn redo_refuses_a_file_whose_content_was_not_captured() {
+    use vsh::state::RedoData;
+
+    let (temp, mut state) = setup();
+    let f = temp.path().join("f");
+
+    commands::touch(&mut state, "f", false).unwrap();
+    fs::write(&f, b"written after the touch").unwrap();
+    undo(&mut state);
+    assert!(!f.exists());
+
+    // What undo records when the read fails (see the unit test of
+    // `capture_redo_data` for the capture side).
+    let entry = state.redo_stack.front_mut().expect("redo entry");
+    assert!(matches!(entry.redo_data, Some(RedoData::Content(_))));
+    entry.redo_data = Some(RedoData::NotCaptured("Permission denied".to_string()));
+
+    let err = commands::redo(&mut state, 1, false).expect_err("redo must refuse");
+    assert!(err.to_string().contains("could not be read"), "{err}");
+    assert!(!f.exists(), "nothing was recreated");
+    assert_eq!(state.get_redo_stack().len(), 1, "the entry is kept");
+}
+
+// ---------------------------------------------------------------------------
 // Mixed sequence
 // ---------------------------------------------------------------------------
 
@@ -705,6 +788,17 @@ mod laws {
             s("reassigning a variable", |_, s| run(s, "X=1"), "X=2"),
             s("unset", |_, s| run(s, "X=1"), "unset X"),
             Scenario {
+                // `export` is not a history operation, so undo reverses the
+                // assignment before it and does not return to the unexported
+                // state. Redo must bring back the value and the export.
+                undo_is_exact: false,
+                ..s(
+                    "export after an assignment",
+                    |_, s| run(s, "X=1"),
+                    "export X",
+                )
+            },
+            Scenario {
                 // Known undo defect: unset does not record the exported flag.
                 undo_is_exact: false,
                 ..s(
@@ -865,6 +959,7 @@ mod laws {
             (0..1000u32, name).prop_map(|(v, n)| format!("/bin/echo a{v} >> {n}")),
             (0..5u32).prop_map(|v| format!("X={v}")),
             Just("unset X".to_string()),
+            Just("export X".to_string()),
         ]
     }
 

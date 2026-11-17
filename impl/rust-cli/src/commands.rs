@@ -431,7 +431,21 @@ fn apply_cp(state: &ShellState, src: &str, dst: &str) -> Result<Operation> {
     }
 
     // Execute operation
-    fs::copy(&src_path, &dst_path).context("cp failed")?;
+    if let Err(e) = fs::copy(&src_path, &dst_path) {
+        // No node existed at the destination before (`verify_copy_file`
+        // checks with `lstat`, so not even a dangling symbolic link), so
+        // whatever part of the copy landed is ours to remove; left behind, it
+        // would block a retry.
+        let error = anyhow::Error::new(e).context("cp failed");
+        return Err(match fs::remove_file(&dst_path) {
+            Ok(()) => error,
+            Err(cleanup_error) if cleanup_error.kind() == std::io::ErrorKind::NotFound => error,
+            Err(cleanup_error) => error.context(format!(
+                "the partial copy {} could not be removed: {}",
+                dst, cleanup_error
+            )),
+        });
+    }
 
     // path = dst, undo_data = src path for reference
     // Undo = delete the destination file
@@ -1108,6 +1122,14 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 REDO_CAPTURE_LIMIT_VAR
             );
         }
+        if let Some(RedoData::NotCaptured(reason)) = &redo_data {
+            eprintln!(
+                "{} {} could not be read ({}): this undo cannot be redone",
+                "Warning:".bright_yellow(),
+                op.path,
+                reason
+            );
+        }
         if let Some(entry) = state.redo_stack.front_mut() {
             if entry.id == orig_id {
                 entry.redo_data = redo_data;
@@ -1262,27 +1284,33 @@ fn capture_redo_data(state: &ShellState, op: &Operation) -> Option<RedoData> {
     };
     match op.op_type {
         OperationType::CreateFile | OperationType::FileTruncated | OperationType::WriteFile => {
-            let size = fs::metadata(&path).ok()?.len();
-            if let Some(skipped) = over_limit(size) {
-                return Some(skipped);
-            }
-            crate::fs_pure::read_to_end(&path)
-                .ok()
-                .map(RedoData::Content)
+            // A file that cannot be read is recorded as such, never as empty:
+            // redo must refuse it, not recreate the file without its content.
+            let read = || -> std::io::Result<RedoData> {
+                let size = fs::metadata(&path)?.len();
+                if let Some(skipped) = over_limit(size) {
+                    return Ok(skipped);
+                }
+                crate::fs_pure::read_to_end(&path).map(RedoData::Content)
+            };
+            Some(read().unwrap_or_else(|e| RedoData::NotCaptured(e.to_string())))
         }
         OperationType::FileAppended => {
             use std::io::{Read, Seek, SeekFrom};
             let original_size =
                 u64::from_le_bytes(op.undo_data.as_ref()?.get(..8)?.try_into().ok()?);
-            let size = fs::metadata(&path).ok()?.len();
-            if let Some(skipped) = over_limit(size.saturating_sub(original_size)) {
-                return Some(skipped);
-            }
-            let mut file = crate::fs_pure::open_pure(&path).ok()?;
-            file.seek(SeekFrom::Start(original_size)).ok()?;
-            let mut appended = Vec::new();
-            file.read_to_end(&mut appended).ok()?;
-            Some(RedoData::Appended(appended))
+            let read = || -> std::io::Result<RedoData> {
+                let size = fs::metadata(&path)?.len();
+                if let Some(skipped) = over_limit(size.saturating_sub(original_size)) {
+                    return Ok(skipped);
+                }
+                let mut file = crate::fs_pure::open_pure(&path)?;
+                file.seek(SeekFrom::Start(original_size))?;
+                let mut appended = Vec::new();
+                file.read_to_end(&mut appended)?;
+                Ok(RedoData::Appended(appended))
+            };
+            Some(read().unwrap_or_else(|e| RedoData::NotCaptured(e.to_string())))
         }
         OperationType::Chmod => {
             #[cfg(unix)]
@@ -1307,11 +1335,16 @@ fn capture_redo_data(state: &ShellState, op: &Operation) -> Option<RedoData> {
             #[cfg(not(unix))]
             None
         }
-        OperationType::SetVariable => state
-            .variables
-            .get(&op.path)
-            .cloned()
-            .map(RedoData::Variable),
+        OperationType::SetVariable => {
+            state
+                .variables
+                .get(&op.path)
+                .cloned()
+                .map(|value| RedoData::Variable {
+                    value,
+                    exported: state.is_exported(&op.path),
+                })
+        }
         OperationType::Mkdir
         | OperationType::Rmdir
         | OperationType::DeleteFile
@@ -1332,7 +1365,7 @@ fn capture_redo_data(state: &ShellState, op: &Operation) -> Option<RedoData> {
 /// the current state. Nothing is recorded here.
 fn reapply(state: &mut ShellState, op: &Operation) -> Result<Operation> {
     // What undo saved for this entry, or an error naming what is missing.
-    let missing = || match op.redo_data {
+    let missing = || match &op.redo_data {
         Some(RedoData::OverLimit { size, limit }) => anyhow::anyhow!(
             "Cannot redo {} {}: its {} bytes were over the {} byte limit when it was undone \
              (set {} to raise it, 0 for no limit)",
@@ -1341,6 +1374,12 @@ fn reapply(state: &mut ShellState, op: &Operation) -> Result<Operation> {
             size,
             limit,
             REDO_CAPTURE_LIMIT_VAR
+        ),
+        Some(RedoData::NotCaptured(reason)) => anyhow::anyhow!(
+            "Cannot redo {} {}: its content could not be read when it was undone ({})",
+            op.op_type,
+            op.path,
+            reason
         ),
         _ => anyhow::anyhow!(
             "Cannot redo {} {}: the state to restore was not captured when it was undone",
@@ -1361,10 +1400,10 @@ fn reapply(state: &mut ShellState, op: &Operation) -> Result<Operation> {
         OperationType::Rmdir => apply_rmdir(state, &op.path),
         OperationType::CreateFile => {
             // Empty for `touch`; the redirected output for a file `>` created.
-            let content: &[u8] = match &op.redo_data {
-                Some(RedoData::Content(content)) => content,
-                Some(RedoData::OverLimit { .. }) => return Err(missing()),
-                _ => &[],
+            // Anything but captured content is refused: recreating the file
+            // empty would silently lose what the redirection wrote.
+            let Some(RedoData::Content(content)) = &op.redo_data else {
+                return Err(missing());
             };
             apply_create_file(state, &op.path, content)
         }
@@ -1397,10 +1436,15 @@ fn reapply(state: &mut ShellState, op: &Operation) -> Result<Operation> {
         }
         OperationType::Unlink => apply_unlink(state, &op.path),
         OperationType::SetVariable => {
-            let Some(RedoData::Variable(value)) = &op.redo_data else {
+            let Some(RedoData::Variable { value, exported }) = &op.redo_data else {
                 return Err(missing());
             };
-            Ok(state.apply_set_variable(op.path.clone(), value.clone()))
+            let new_op = state.apply_set_variable(op.path.clone(), value.clone());
+            // Undo of an assignment also drops the export; put it back.
+            if *exported {
+                state.export_variable(op.path.clone());
+            }
+            Ok(new_op)
         }
         OperationType::UnsetVariable => state
             .apply_unset_variable(&op.path)
@@ -3032,6 +3076,34 @@ mod tests {
     #[test]
     fn test_parse_chmod_invalid_mode() {
         assert!(parse_chmod_mode("xyz", 0o100644).is_err());
+    }
+
+    /// Undo records content it cannot read as `NotCaptured`, never as empty.
+    /// (A directory in the file's place stands in for an unreadable file,
+    /// which root cannot produce with permissions alone.)
+    #[test]
+    fn test_capture_redo_data_records_unreadable_content() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
+        fs::create_dir(temp.path().join("f")).unwrap();
+
+        for op_type in [OperationType::CreateFile, OperationType::FileTruncated] {
+            let op = Operation::new(op_type, "f".to_string(), None);
+            assert!(
+                matches!(
+                    capture_redo_data(&state, &op),
+                    Some(RedoData::NotCaptured(_))
+                ),
+                "{op_type}"
+            );
+        }
+
+        let appended = Operation::new(OperationType::FileAppended, "f".to_string(), None)
+            .with_undo_data(0u64.to_le_bytes().to_vec());
+        assert!(matches!(
+            capture_redo_data(&state, &appended),
+            Some(RedoData::NotCaptured(_))
+        ));
     }
 
     #[test]

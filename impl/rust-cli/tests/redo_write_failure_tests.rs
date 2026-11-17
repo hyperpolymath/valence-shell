@@ -161,6 +161,20 @@ fn redo_that_fails_part_way_through_a_write_changes_nothing() {
     assert!(fs::read(&large).expect("read") == large_before);
     commands::redo(&mut state, 1, false).expect("redo");
 
+    // -- a copy ---------------------------------------------------------------
+    // `cp` works inside the sandbox, so its source lives there.
+    let copy = root.join("copy");
+    fs::write(root.join("copy_src"), &big).expect("write");
+    commands::cp(&mut state, "copy_src", "copy", false).expect("cp");
+    commands::undo(&mut state, 1, false).expect("undo");
+    assert!(!copy.exists());
+
+    redo_under_limit_then_freely(&mut state, unlimited);
+    assert!(!copy.exists(), "no partial copy is left behind");
+
+    commands::redo(&mut state, 1, false).expect("redo once the limit is lifted");
+    assert_eq!(fs::read(&copy).expect("read"), big);
+
     // -- a file a redirection appended to -----------------------------------
     let appended = root.join("appended");
     fs::write(&appended, &before).expect("write");

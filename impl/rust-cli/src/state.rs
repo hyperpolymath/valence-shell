@@ -178,11 +178,18 @@ pub enum RedoData {
     Mode(u32),
     /// The ownership undo replaced (`Chown`).
     Owner { uid: u32, gid: u32 },
-    /// The value undo replaced (`SetVariable`).
-    Variable(VariableValue),
+    /// The value undo replaced, and whether the variable was exported
+    /// (`SetVariable`).
+    Variable {
+        value: VariableValue,
+        exported: bool,
+    },
     /// The content was larger than the capture limit, so undo did not keep it
     /// and this entry cannot be redone.
     OverLimit { size: u64, limit: u64 },
+    /// The content could not be read when the operation was undone (the
+    /// reason is kept), so this entry cannot be redone.
+    NotCaptured(String),
 }
 
 /// A single filesystem operation with complete undo/redo information.

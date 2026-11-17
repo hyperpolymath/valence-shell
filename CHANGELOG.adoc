@@ -69,6 +69,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   damaged content as undo data. `redo` of
   `cp`, `mv` and `touch` no longer overwrites a path that reappeared after the
   undo.
+- `redo` refuses to recreate a file whose content undo could not read
+  (recorded as not captured, with the reason), where it used to recreate it
+  empty. A `cp` whose copy fails part-way removes the partial destination, for
+  the command and for its redo. Redo of an assignment restores the exported
+  flag as well as the value.
 - Undo of a `>`/`>>` redirection failed whenever the sandbox root was not `/`
   (the default root is the current directory): the history held an absolute
   path that undo resolved under the root a second time. History paths for
