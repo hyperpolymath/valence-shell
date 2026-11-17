@@ -1,0 +1,127 @@
+{"_comment": "SPDX-License-Identifier: MPL-2.0. Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>. One case per line: id, expected exit status (rc), expected standard output (out), command line (cmd). Expectations were recorded from GNU bash 5.2.21 on 2026-11-17, except the rm-NN cases, which were written by hand from the POSIX description of rm. See README.adoc in this directory."}
+{"id": "basic-01", "rc": 0, "out": "hello\n", "cmd": "echo hello"}
+{"id": "basic-02", "rc": 0, "out": "a  b c  d\n", "cmd": "echo \"a  b\"   'c  d'"}
+{"id": "basic-03", "rc": 0, "out": "one\ntwo\n", "cmd": "echo one; echo two"}
+{"id": "vars-01", "rc": 0, "out": "5\n", "cmd": "x=5; echo $x"}
+{"id": "vars-02", "rc": 0, "out": "helloworld\n", "cmd": "x=hello; echo \"${x}world\""}
+{"id": "vars-03", "rc": 0, "out": "2\n", "cmd": "x=\"a b\"; echo $x | wc -w"}
+{"id": "vars-04", "rc": 0, "out": "default\n", "cmd": "echo ${UNSET:-default}"}
+{"id": "vars-05", "rc": 0, "out": "def abc 6\n", "cmd": "x=abcdef; echo ${x#abc} ${x%def} ${#x}"}
+{"id": "vars-06", "rc": 0, "out": "HELLO ell\n", "cmd": "x=hello; echo ${x^^} ${x:1:3}"}
+{"id": "vars-07", "rc": 0, "out": "bar\n", "cmd": "export FOO=bar; sh -c 'echo $FOO'"}
+{"id": "vars-08", "rc": 0, "out": "tmp\n", "cmd": "FOO=tmp sh -c 'echo $FOO'"}
+{"id": "vars-09", "rc": 0, "out": "1\n", "cmd": "echo $HOME | grep -c /"}
+{"id": "vars-10", "rc": 0, "out": "0\n1\n", "cmd": "echo $? ; false; echo $?"}
+{"id": "vars-11", "rc": 0, "out": "1\n", "cmd": "echo \"$$\" | grep -c '[0-9]'"}
+{"id": "arith-01", "rc": 0, "out": "7\n", "cmd": "echo $((1+2*3))"}
+{"id": "arith-02", "rc": 0, "out": "3 49\n", "cmd": "x=7; echo $((x % 4)) $((x ** 2))"}
+{"id": "arith-03", "rc": 0, "out": "1\n", "cmd": "i=0; i=$((i+1)); echo $i"}
+{"id": "arith-04", "rc": 0, "out": "7\n", "cmd": "((x=3+4)); echo $x"}
+{"id": "arith-05", "rc": 0, "out": "10\n", "cmd": "let y=2*5; echo $y"}
+{"id": "subst-01", "rc": 0, "out": "nested\n", "cmd": "echo $(echo nested)"}
+{"id": "subst-02", "rc": 0, "out": "today: 20\n", "cmd": "echo \"today: $(date +%Y | cut -c1-2)\""}
+{"id": "subst-03", "rc": 0, "out": "back\n", "cmd": "x=`echo back`; echo $x"}
+{"id": "subst-04", "rc": 0, "out": "deep\n", "cmd": "echo $(echo $(echo deep))"}
+{"id": "pipe-01", "rc": 0, "out": "HELLO\n", "cmd": "echo hello | tr a-z A-Z"}
+{"id": "pipe-02", "rc": 0, "out": "a\nb\n", "cmd": "printf 'b\\na\\nc\\n' | sort | head -2"}
+{"id": "pipe-03", "rc": 0, "out": "3\n", "cmd": "echo hi | cat | cat | wc -c"}
+{"id": "pipe-04", "rc": 0, "out": "0\n", "cmd": "false | true; echo $?"}
+{"id": "pipe-05", "rc": 0, "out": "15\n", "cmd": "seq 1 5 | awk '{s+=$1} END{print s}'"}
+{"id": "redir-01", "rc": 0, "out": "x\n", "cmd": "echo x > f; cat f"}
+{"id": "redir-02", "rc": 0, "out": "2\n", "cmd": "echo x > f; echo y >> f; wc -l < f"}
+{"id": "redir-03", "rc": 0, "out": "rc=2\n", "cmd": "ls /nonexistent 2>/dev/null; echo rc=$?"}
+{"id": "redir-04", "rc": 0, "out": "1\n", "cmd": "ls /nonexistent > out 2>&1; grep -c . out"}
+{"id": "redir-05", "rc": 0, "out": "herestring\n", "cmd": "cat <<< \"herestring\""}
+{"id": "redir-06", "rc": 0, "out": "ok\n", "cmd": "echo err >&2 2>/dev/null; echo ok"}
+{"id": "logic-01", "rc": 0, "out": "yes\n", "cmd": "true && echo yes || echo no"}
+{"id": "logic-02", "rc": 0, "out": "no\n", "cmd": "false && echo yes || echo no"}
+{"id": "logic-03", "rc": 0, "out": "dir\n", "cmd": "[ -d / ] && echo dir"}
+{"id": "logic-04", "rc": 0, "out": "ok\n", "cmd": "[ 3 -gt 2 ] && [ a = a ] && echo ok"}
+{"id": "logic-05", "rc": 0, "out": "match\n", "cmd": "[[ abc == a* ]] && echo match"}
+{"id": "logic-06", "rc": 0, "out": "file\n", "cmd": "test -f /etc/passwd && echo file"}
+{"id": "logic-07", "rc": 0, "out": "negated\n", "cmd": "! false && echo negated"}
+{"id": "if-01", "rc": 0, "out": "t\n", "cmd": "if true; then echo t; else echo f; fi"}
+{"id": "if-02", "rc": 0, "out": "b\n", "cmd": "if [ 1 -eq 2 ]; then echo a; elif [ 1 -eq 1 ]; then echo b; fi"}
+{"id": "if-03", "rc": 0, "out": "big\n", "cmd": "x=3; if (( x > 2 )); then echo big; fi"}
+{"id": "loop-01", "rc": 0, "out": "1\n2\n3\n", "cmd": "for i in 1 2 3; do echo $i; done"}
+{"id": "loop-02", "rc": 0, "out": "n1\nn2\nn3\n", "cmd": "for i in $(seq 3); do echo n$i; done"}
+{"id": "loop-03", "rc": 0, "out": "p1\np2\n", "cmd": "mkdir zzdir; touch zzdir/p1 zzdir/p2; for f in zzdir/p*; do echo ${f##*/}; done"}
+{"id": "loop-04", "rc": 0, "out": "3\n", "cmd": "i=0; while [ $i -lt 3 ]; do i=$((i+1)); done; echo $i"}
+{"id": "loop-05", "rc": 0, "out": "0\n1\n2\n", "cmd": "for ((i=0;i<3;i++)); do echo $i; done"}
+{"id": "loop-06", "rc": 0, "out": "1\n3\n", "cmd": "for i in 1 2 3; do [ $i = 2 ] && continue; echo $i; done"}
+{"id": "loop-07", "rc": 0, "out": "1\n", "cmd": "for i in 1 2 3; do [ $i = 2 ] && break; echo $i; done"}
+{"id": "loop-08", "rc": 0, "out": "once\n", "cmd": "until false; do echo once; break; done"}
+{"id": "loop-09", "rc": 0, "out": "got line\n", "cmd": "while read l; do echo \"got $l\"; done <<< \"line\""}
+{"id": "case-01", "rc": 0, "out": "starts\n", "cmd": "case foo in f*) echo starts;; *) echo other;; esac"}
+{"id": "case-02", "rc": 0, "out": "ab\n", "cmd": "x=b; case $x in a|b) echo ab;; esac"}
+{"id": "func-01", "rc": 0, "out": "in f arg\n", "cmd": "f() { echo \"in f $1\"; }; f arg"}
+{"id": "func-02", "rc": 0, "out": "3\n", "cmd": "f() { return 3; }; f; echo $?"}
+{"id": "func-03", "rc": 0, "out": "inner\nouter\n", "cmd": "f() { local v=inner; echo $v; }; v=outer; f; echo $v"}
+{"id": "func-04", "rc": 0, "out": "g\n", "cmd": "function g { echo g; }; g"}
+{"id": "func-05", "rc": 0, "out": "3\n", "cmd": "f() { echo $#; }; f a b c"}
+{"id": "func-06", "rc": 0, "out": "120\n", "cmd": "fact() { [ $1 -le 1 ] && echo 1 || echo $(( $1 * $(fact $(($1-1))) )); }; fact 5"}
+{"id": "glob-01", "rc": 0, "out": "a.txt b.txt\n", "cmd": "touch a.txt b.txt c.md; echo *.txt"}
+{"id": "glob-02", "rc": 0, "out": "a1 a2\n", "cmd": "touch a1 a2 b1; echo a?"}
+{"id": "glob-03", "rc": 0, "out": "*.nomatch\n", "cmd": "touch x.rs; echo *.nomatch"}
+{"id": "glob-04", "rc": 0, "out": "d/e/f\n", "cmd": "mkdir -p d/e; touch d/e/f; echo d/*/f"}
+{"id": "glob-05", "rc": 0, "out": "a1 a2 b1 b2\n", "cmd": "echo {a,b}{1,2}"}
+{"id": "glob-06", "rc": 0, "out": "1 2 3 4 5\n", "cmd": "echo {1..5}"}
+{"id": "quote-01", "rc": 0, "out": "single $x double $x\n", "cmd": "echo 'single $x' \"double \\$x\""}
+{"id": "quote-02", "rc": 0, "out": "a\\tb a\\tb\n", "cmd": "echo \"a\\tb\" 'a\\tb'"}
+{"id": "quote-03", "rc": 0, "out": "*\n", "cmd": "x='*'; echo \"$x\""}
+{"id": "quote-04", "rc": 0, "out": "tab\there\n", "cmd": "echo $'tab\\there'"}
+{"id": "array-01", "rc": 0, "out": "y 3\n", "cmd": "a=(x y z); echo ${a[1]} ${#a[@]}"}
+{"id": "array-02", "rc": 0, "out": "1\n2\n3\n", "cmd": "a=(1 2 3); for v in \"${a[@]}\"; do echo $v; done"}
+{"id": "array-03", "rc": 0, "out": "v\n", "cmd": "declare -A m; m[k]=v; echo ${m[k]}"}
+{"id": "sub-01", "rc": 1, "out": "1\n0\n", "cmd": "mkdir zzdir; (cd zzdir; pwd | grep -c zzdir); pwd | grep -c zzdir"}
+{"id": "sub-02", "rc": 0, "out": "1\n", "cmd": "x=1; (x=2); echo $x"}
+{"id": "sub-03", "rc": 0, "out": "2\n", "cmd": "{ echo a; echo b; } | wc -l"}
+{"id": "sub-04", "rc": 0, "out": "a\ndone\n", "cmd": "echo a & wait; echo done"}
+{"id": "builtin-01", "rc": 0, "out": "1\n", "cmd": "mkdir zzdir; cd zzdir && pwd | grep -c zzdir"}
+{"id": "builtin-02", "rc": 0, "out": "abc-42\n", "cmd": "printf '%s-%d\\n' abc 42"}
+{"id": "builtin-03", "rc": 0, "out": "two\n", "cmd": "read a b <<< \"one two\"; echo $b"}
+{"id": "builtin-04", "rc": 0, "out": "q 3\n", "cmd": "set -- p q r; echo $2 $#"}
+{"id": "builtin-05", "rc": 1, "out": "", "cmd": "set -e; false; echo notreached"}
+{"id": "builtin-06", "rc": 0, "out": "[]\n", "cmd": "x=1; unset x; echo \"[${x}]\""}
+{"id": "builtin-07", "rc": 0, "out": "1\n", "cmd": "type echo | head -1 | grep -c echo"}
+{"id": "builtin-08", "rc": 127, "out": "", "cmd": "alias ll='echo aliased'; ll"}
+{"id": "builtin-09", "rc": 0, "out": "hi\nbye\n", "cmd": "trap 'echo bye' EXIT; echo hi"}
+{"id": "builtin-10", "rc": 0, "out": "evaled\n", "cmd": "eval 'echo evaled'"}
+{"id": "builtin-11", "rc": 0, "out": "ok\n", "cmd": "shift 2>/dev/null; echo ok"}
+{"id": "builtin-12", "rc": 0, "out": "1\n", "cmd": "mkdir zzdir; pushd zzdir >/dev/null; pwd | grep -c zzdir; popd >/dev/null"}
+{"id": "builtin-13", "rc": 0, "out": "nonl\n", "cmd": "echo -n nonl; echo"}
+{"id": "builtin-14", "rc": 0, "out": "2\n", "cmd": "echo -e 'a\\nb' | wc -l"}
+{"id": "builtin-15", "rc": 7, "out": "", "cmd": "exit 7"}
+{"id": "builtin-16", "rc": 0, "out": "1\n", "cmd": "command -v ls | grep -c ls"}
+{"id": "builtin-17", "rc": 0, "out": "0\n", "cmd": "true; echo ${PIPESTATUS[0]}"}
+{"id": "fs-01", "rc": 0, "out": "c\n", "cmd": "mkdir -p a/b/c && ls a/b"}
+{"id": "fs-02", "rc": 0, "out": "gone\n", "cmd": "mkdir d && rmdir d && echo gone"}
+{"id": "fs-03", "rc": 0, "out": "data\n", "cmd": "echo data > f; cp f g; cat g"}
+{"id": "fs-04", "rc": 0, "out": "data\n", "cmd": "echo data > f; mv f g; cat g"}
+{"id": "fs-05", "rc": 0, "out": "600\n", "cmd": "touch f; chmod 600 f; stat -c %a f"}
+{"id": "fs-06", "rc": 0, "out": "target\n", "cmd": "ln -s target link; readlink link"}
+{"id": "fs-07", "rc": 0, "out": "1\n", "cmd": "touch f; ls -la f | wc -l"}
+{"id": "fs-08", "rc": 0, "out": "2\n", "cmd": "echo a > f; cat f f | wc -l"}
+{"id": "ext-01", "rc": 0, "out": "1\n", "cmd": "ls / | head -1 | wc -l"}
+{"id": "ext-02", "rc": 0, "out": "1\n", "cmd": "env | grep -c '^PATH='"}
+{"id": "ext-03", "rc": 0, "out": "4\n", "cmd": "sh -c 'exit 4'; echo $?"}
+{"id": "ext-04", "rc": 0, "out": "3\n", "cmd": "printf abc | wc -c"}
+{"id": "ext-05", "rc": 0, "out": "slept\n", "cmd": "sleep 0.01; echo slept"}
+{"id": "ext-06", "rc": 0, "out": "aXc\n", "cmd": "echo abc | sed 's/b/X/'"}
+{"id": "ext-07", "rc": 0, "out": "1\n", "cmd": "find . -maxdepth 0 | wc -l"}
+{"id": "ext-08", "rc": 0, "out": "2\n", "cmd": "X=1 Y=2 env | grep -c '^[XY]='"}
+{"id": "redir-07", "rc": 0, "out": "heredoc 2\n", "cmd": "cat <<EOF2\nheredoc $((1+1))\nEOF2"}
+{"id": "quote-05", "rc": 0, "out": "a[b]c * ?\n", "cmd": "echo \"a[b]c\" '*' \"?\""}
+{"id": "ext-09", "rc": 0, "out": "{p}\n", "cmd": "sh -c 'echo \"$1\"' _ '{p}'"}
+{"id": "ext-10", "rc": 0, "out": "one\ntwo\n", "cmd": "echo one > a.txt; echo two > b.txt; cat *.txt"}
+{"id": "loop-10", "rc": 0, "out": "a1\na2\nb1\nb2\n", "cmd": "for i in a b; do for j in 1 2; do echo $i$j; done; done"}
+{"id": "subst-05", "rc": 0, "out": "hi\n", "cmd": "x=$(echo hi); echo $x"}
+{"id": "builtin-18", "rc": 3, "out": "", "cmd": "true; exit 3"}
+{"id": "builtin-19", "rc": 1, "out": "", "cmd": "false; exit"}
+{"id": "fs-09", "rc": 0, "out": "3\n", "cmd": "touch a b c; ls | wc -l"}
+{"id": "fs-10", "rc": 0, "out": "2\n", "cmd": "mkdir x y; ls | wc -l"}
+{"id": "rm-01", "rc": 0, "out": "0\n", "cmd": "touch f; rm f; ls | wc -l"}
+{"id": "rm-02", "rc": 0, "out": "rc=1\n", "cmd": "rm nosuch; echo rc=$?"}
+{"id": "rm-03", "rc": 0, "out": "rc=0\n", "cmd": "rm -f nosuch; echo rc=$?"}
+{"id": "rm-04", "rc": 0, "out": "0\n", "cmd": "mkdir d; touch d/x; rm -r d; ls | wc -l"}
+{"id": "rm-05", "rc": 0, "out": "0\n", "cmd": "touch a b; rm a b; ls | wc -l"}
