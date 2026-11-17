@@ -967,7 +967,7 @@ and ends at a machine-checked gate.
 |Step |What |Gate |Status
 
 |C1 |Journal model in Agda (OD-30): record framing, event replay, a file and crash model |Checks under the estate invocation, in `All.agda` |Done (section 14.4)
-|C2 |One file of length-prefixed, checksummed records behind a small storage interface (append, sync, atomic replace, read), with a real implementation and a simulated one that loses exactly what the model's crash may lose. Compaction writes one snapshot record to a new file, syncs it, renames it over the old one and syncs the directory. A failed load is an error that stops the shell from writing; the files are kept. Rollback writes a record that marks each reversed operation undone. Old `.vsh_state.json` files still load (fixture test) |`KNOWN_OPEN` is empty; the harness also runs against the simulated storage |Next
+|C2 |One file of length-prefixed, checksummed records behind a small storage interface (append, sync, atomic replace, read), with a real implementation and a simulated one that loses exactly what the model's crash may lose. Compaction writes one snapshot record to a new file, syncs it, renames it over the old one and syncs the directory. A failed load is an error that stops the shell from writing; the files are kept. Rollback writes a record that marks each reversed operation undone. Old `.vsh_state.json` files still load (fixture test) |No failing crash class; the harness also runs against the simulated storage |Done (section 14.4a)
 |C3 |State moves out of the command root to an owner-only directory keyed by session root (OD-12a), opened with `O_NOFOLLOW`, checked through the descriptor, and held under an exclusive lock for the life of the shell |Shell commands cannot delete or edit state; a second shell on the same root is refused; a two-instance test passes |Open
 |C4 |Deleted-file contents go to a content-addressed blob store, not into the history |Removing 100 MB no longer writes about 300 MB of JSON |Open
 |===
@@ -1034,6 +1034,34 @@ Limits:
   stale bytes in the unsynced region, are outside it.
 * A checksum cannot rule out bytes that were never written as a record but
   happen to match.
+
+[[c2-result]]
+*14.4a C2 result (Measured 2026-11-17, local).* The shell state now persists
+through `impl/rust-cli/src/journal.rs`: one file, `.vsh_state.journal`, of
+records framed as a 4-byte length, the payload and its SHA-256. Each mutation
+is one record, appended and synced. The crash harness finds no failing class:
+3,079 crash images on the simulated storage (the model's file: synced bytes,
+and every prefix of the unsynced ones, after every storage call) and 3,070
+crash states on real files. Four deliberate bugs (no sync, a trim left out of
+the record, a rollback written as a commit, a torn tail left in place) were
+each caught. `cargo test`: 862 passed, 0 failed. An old `.vsh_state.json` is
+converted on first start and kept under a new name. A sync costs about 0.15 ms
+here (p95 0.43 ms), under the 2 ms threshold for syncing every record; the
+stress suite takes 82 s on disk and 39 s on tmpfs, so its CI step uses tmpfs.
+
+Three behaviours changed with it, each following the model. They are the
+owner's to confirm:
+
+* A saved state that cannot be read stops the shell from starting, with the
+  file left as it is. Before, the shell started with an empty history.
+* Rollback marks the operations it reverses as undone, so `redo` can bring
+  them back one at a time.
+* If rollback cannot reverse an operation, the transaction stays open, to be
+  rolled back again or committed. Before, it was closed with the operation
+  still in place.
+
+Still open in Phase C: the journal lives in the session root (C3), and deleted
+file contents are still inside the history records (C4).
 
 Design choices the model fixes for C2:
 

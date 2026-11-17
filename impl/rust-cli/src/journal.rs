@@ -122,6 +122,11 @@ pub trait Storage {
     /// when it returns: after a crash the contents are the old ones (as any
     /// crash of them) or exactly `bytes`.
     fn replace(&mut self, bytes: &[u8]) -> io::Result<()>;
+
+    /// Keep `bytes` that the journal did not accept, so that dropping them
+    /// from the journal destroys nothing. Returns a description of where
+    /// they were put.
+    fn set_aside(&mut self, bytes: &[u8]) -> io::Result<String>;
 }
 
 impl<S: Storage + ?Sized> Storage for Box<S> {
@@ -136,6 +141,9 @@ impl<S: Storage + ?Sized> Storage for Box<S> {
     }
     fn replace(&mut self, bytes: &[u8]) -> io::Result<()> {
         (**self).replace(bytes)
+    }
+    fn set_aside(&mut self, bytes: &[u8]) -> io::Result<String> {
+        (**self).set_aside(bytes)
     }
 }
 
@@ -291,6 +299,17 @@ impl Storage for FileStorage {
         self.file = None;
         self.sync_dir()
     }
+
+    fn set_aside(&mut self, bytes: &[u8]) -> io::Result<String> {
+        let mut name = self.path.clone().into_os_string();
+        name.push(format!(".rejected.{:016x}", rand_suffix()));
+        let aside = PathBuf::from(name);
+        let mut file = Self::options().write(true).create_new(true).open(&aside)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        self.sync_dir()?;
+        Ok(aside.display().to_string())
+    }
 }
 
 /// A value that differs between calls, for temporary file names. Uniqueness
@@ -310,7 +329,7 @@ fn rand_suffix() -> u64 {
 /// handle to storage it has given away.
 #[derive(Debug, Clone, Default)]
 pub struct SimStorage {
-    state: std::rc::Rc<std::cell::RefCell<SimState>>,
+    state: std::sync::Arc<std::sync::Mutex<SimState>>,
 }
 
 #[derive(Debug, Default)]
@@ -321,6 +340,8 @@ struct SimState {
     /// One entry per storage call that changed something: the state after
     /// it.
     trace: Vec<SimPoint>,
+    /// Byte runs handed to `set_aside`.
+    aside: Vec<Vec<u8>>,
     /// Fail the next calls of these kinds (to test error handling).
     fail_append: bool,
     fail_sync: bool,
@@ -351,6 +372,14 @@ impl SimPoint {
 }
 
 impl SimStorage {
+    fn lock(&self) -> std::sync::MutexGuard<'_, SimState> {
+        // A panic while the lock is held cannot leave the plain data in an
+        // unusable state, so a poisoned lock is still safe to read.
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     /// Empty storage: nothing has been stored yet.
     pub fn new() -> Self {
         Self::default()
@@ -360,7 +389,7 @@ impl SimStorage {
     pub fn with_contents(bytes: Vec<u8>) -> Self {
         let storage = Self::default();
         {
-            let mut state = storage.state.borrow_mut();
+            let mut state = storage.lock();
             state.exists = true;
             state.durable = bytes;
         }
@@ -369,7 +398,7 @@ impl SimStorage {
 
     /// The current state of the simulated file.
     pub fn point(&self) -> SimPoint {
-        let state = self.state.borrow();
+        let state = self.lock();
         SimPoint {
             durable: state.durable.clone(),
             pending: state.pending.clone(),
@@ -378,7 +407,7 @@ impl SimStorage {
 
     /// The state after each storage call so far that changed something.
     pub fn trace(&self) -> Vec<SimPoint> {
-        self.state.borrow().trace.clone()
+        self.lock().trace.clone()
     }
 
     /// Every content a crash now could leave.
@@ -386,19 +415,24 @@ impl SimStorage {
         self.point().crash_images()
     }
 
+    /// Byte runs set aside so far.
+    pub fn set_aside_bytes(&self) -> Vec<Vec<u8>> {
+        self.lock().aside.clone()
+    }
+
     /// Make appends fail until turned off.
     pub fn fail_append(&self, fail: bool) {
-        self.state.borrow_mut().fail_append = fail;
+        self.lock().fail_append = fail;
     }
 
     /// Make syncs fail until turned off.
     pub fn fail_sync(&self, fail: bool) {
-        self.state.borrow_mut().fail_sync = fail;
+        self.lock().fail_sync = fail;
     }
 
     /// Make replacements fail until turned off.
     pub fn fail_replace(&self, fail: bool) {
-        self.state.borrow_mut().fail_replace = fail;
+        self.lock().fail_replace = fail;
     }
 }
 
@@ -417,7 +451,7 @@ fn injected(what: &str) -> io::Error {
 
 impl Storage for SimStorage {
     fn read(&mut self) -> io::Result<Option<Vec<u8>>> {
-        let state = self.state.borrow();
+        let state = self.lock();
         if !state.exists {
             return Ok(None);
         }
@@ -427,7 +461,7 @@ impl Storage for SimStorage {
     }
 
     fn append(&mut self, bytes: &[u8]) -> io::Result<()> {
-        let mut state = self.state.borrow_mut();
+        let mut state = self.lock();
         if state.fail_append {
             return Err(injected("append"));
         }
@@ -438,7 +472,7 @@ impl Storage for SimStorage {
     }
 
     fn sync(&mut self) -> io::Result<()> {
-        let mut state = self.state.borrow_mut();
+        let mut state = self.lock();
         if state.fail_sync {
             return Err(injected("sync"));
         }
@@ -449,7 +483,7 @@ impl Storage for SimStorage {
     }
 
     fn replace(&mut self, bytes: &[u8]) -> io::Result<()> {
-        let mut state = self.state.borrow_mut();
+        let mut state = self.lock();
         if state.fail_replace {
             return Err(injected("replace"));
         }
@@ -458,6 +492,11 @@ impl Storage for SimStorage {
         state.pending.clear();
         state.record();
         Ok(())
+    }
+
+    fn set_aside(&mut self, bytes: &[u8]) -> io::Result<String> {
+        self.lock().aside.push(bytes.to_vec());
+        Ok("memory".to_string())
     }
 }
 

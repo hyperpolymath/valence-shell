@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 use crate::functions::FunctionTable;
+use crate::journal::{self, FileStorage, Storage};
 use crate::posix_builtins::{AliasTable, TrapTable};
 use crate::proof_refs::ProofReference;
 
@@ -245,7 +246,8 @@ pub struct Transaction {
 
 /// Main shell state managing operation history, undo/redo stacks, and transactions.
 ///
-/// The state is persisted to `~/.cache/vsh/state.json` and restored on shell startup.
+/// The state is persisted to `.vsh_state.journal` in the session root and restored on
+/// shell startup.
 /// All filesystem operations are relative to the `root` path.
 ///
 /// # Invariants
@@ -278,26 +280,20 @@ pub struct ShellState {
     /// Completed transactions
     pub transactions: Vec<Transaction>,
 
-    /// State file path for persistence (the snapshot)
-    state_file: PathBuf,
+    /// Where the state is persisted: one journal file of framed records
+    /// (see [`crate::journal`]). Every mutation that must survive a restart
+    /// is one record appended and synced, so a crash leaves the state
+    /// before or after it. The model is `proofs/agda/JournalModel.agda`.
+    storage: Box<dyn Storage + Send>,
 
-    /// Append-only journal of the history mutations made since the last
-    /// snapshot.
-    ///
-    /// Rewriting the whole snapshot on every operation made each operation
-    /// cost O(history length), so a session of n operations cost O(n²) in
-    /// serialisation and disk writes. Hot-path mutations (record, mark-undone,
-    /// trim) are appended here in O(1); the snapshot is rewritten only when
-    /// the journal outgrows it (amortised O(1) per operation) or at the rare
-    /// transaction boundaries.
-    journal_file: PathBuf,
+    /// Records in the journal since its last snapshot record. The journal
+    /// is rewritten as one snapshot once this outgrows the history, which
+    /// keeps persistence amortised O(1) per operation.
+    journal_records: usize,
 
-    /// Sequence number of the last journal entry written or replayed.
-    /// Each snapshot records it, so replay skips entries already folded in.
-    journal_seq: u64,
-
-    /// Journal entries written or replayed since the last snapshot.
-    journal_entries: usize,
+    /// A journal write failed, so the journal may be behind this state or
+    /// end in a partial record. The next persist rewrites it whole.
+    rewrite_pending: bool,
 
     /// Indices of a contiguous block of `history` known to be all undone.
     ///
@@ -307,16 +303,6 @@ pub struct ShellState {
     /// Undo skips this block instead. It is a hint: it is checked before
     /// use and an empty range means "no hint".
     undone_run: std::ops::Range<usize>,
-
-    /// A journal append failed (possibly leaving a torn line), so the next
-    /// persist must write a full snapshot rather than append.
-    snapshot_pending: bool,
-
-    /// Size in bytes the journal file should have on disk. If the file is
-    /// removed, moved or rewritten from inside the shell (it lives in the
-    /// command root), appending would leave a sequence gap that discards the
-    /// whole history on reload, so a mismatch forces a full snapshot.
-    journal_len: u64,
 
     /// Last exit code from external command (for $? support)
     pub last_exit_code: i32,
@@ -362,8 +348,36 @@ pub struct ShellState {
 }
 
 impl ShellState {
-    /// Create new shell state with given root
+    /// Create new shell state with given root.
+    ///
+    /// State is kept in `<root>/.vsh_state.journal`. A `.vsh_state.json`
+    /// written by an earlier version is read once, converted, and renamed
+    /// to `.vsh_state.json.migrated`.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the saved state cannot be read or understood. Nothing is
+    /// overwritten in that case: the files are left as they are.
     pub fn new(root: &str) -> Result<Self> {
+        let root_path = Self::prepare_root(root)?;
+        let storage = FileStorage::new(root_path.join(JOURNAL_FILE_NAME));
+        let legacy = root_path.join(LEGACY_STATE_FILE_NAME);
+        Self::open(root_path, Box::new(storage), Some(&legacy))
+    }
+
+    /// Create shell state that persists to `storage` instead of a file
+    /// under the root. Used by tests to run the shell against simulated
+    /// storage.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::new`].
+    pub fn with_storage(root: &str, storage: Box<dyn Storage + Send>) -> Result<Self> {
+        let root_path = Self::prepare_root(root)?;
+        Self::open(root_path, storage, None)
+    }
+
+    fn prepare_root(root: &str) -> Result<PathBuf> {
         let root_path = PathBuf::from(root);
 
         // Ensure root exists
@@ -371,24 +385,24 @@ impl ShellState {
             fs::create_dir_all(&root_path).context("Failed to create sandbox root")?;
         }
 
-        let root_path =
-            fs::canonicalize(&root_path).context("Failed to canonicalize sandbox root")?;
-        let state_file = root_path.join(".vsh_state.json");
-        let journal_file = root_path.join(".vsh_state.journal");
+        fs::canonicalize(&root_path).context("Failed to canonicalize sandbox root")
+    }
 
+    fn open(
+        root_path: PathBuf,
+        storage: Box<dyn Storage + Send>,
+        legacy: Option<&Path>,
+    ) -> Result<Self> {
         let mut state = Self {
             root: root_path,
             history: Vec::new(),
             redo_stack: VecDeque::new(),
             active_transaction: None,
             transactions: Vec::new(),
-            state_file,
-            journal_file,
-            journal_seq: 0,
-            journal_entries: 0,
+            storage,
+            journal_records: 0,
+            rewrite_pending: false,
             undone_run: 0..0,
-            snapshot_pending: false,
-            journal_len: 0,
             last_exit_code: 0,
             previous_dir: None,
             variables: HashMap::new(),
@@ -404,8 +418,9 @@ impl ShellState {
             aliases: AliasTable::new(),
         };
 
-        // Try to load existing state
-        state.load().ok();
+        // A saved state that cannot be loaded is an error, not an empty
+        // history: starting empty would let the next write replace it.
+        state.load(legacy)?;
 
         Ok(state)
     }
@@ -427,7 +442,7 @@ impl ShellState {
         self.redo_stack.clear();
 
         // Persist state - warn on failure but don't abort
-        if let Err(e) = self.persist_recorded(trimmed) {
+        if let Err(e) = self.persist(Mutation::Recorded { trim: trimmed }) {
             eprintln!("{} Failed to save state: {}", "Warning:".bright_yellow(), e);
             eprintln!("Operation succeeded but may not persist across restarts");
         }
@@ -447,7 +462,7 @@ impl ShellState {
         let trimmed = self.enforce_history_limit();
 
         // Persist state - warn on failure but don't abort
-        if let Err(e) = self.persist_recorded(trimmed) {
+        if let Err(e) = self.persist(Mutation::Recorded { trim: trimmed }) {
             eprintln!("{} Failed to save state: {}", "Warning:".bright_yellow(), e);
             eprintln!("Redo succeeded but may not persist across restarts");
         }
@@ -587,8 +602,9 @@ impl ShellState {
             .find(|&i| self.history[i].id == op_id)
             .or_else(|| self.history.iter().rposition(|o| o.id == op_id));
 
+        // An operation already undone keeps its first mark, as in the model.
         let found = match index {
-            Some(i) => {
+            Some(i) if !self.history[i].undone => {
                 let op = &mut self.history[i];
                 op.undone = true;
                 op.undone_by = Some(undone_by);
@@ -598,15 +614,15 @@ impl ShellState {
                 self.extend_undone_run(i);
                 true
             }
-            None => false,
+            _ => false,
         };
 
         // Persist state - warn on failure
         let persisted = if found {
-            self.persist_entries(&[JournalEntryRef::Undone {
+            self.persist(Mutation::Undone {
                 id: op_id,
                 undone_by,
-            }])
+            })
         } else {
             Ok(())
         };
@@ -637,7 +653,7 @@ impl ShellState {
         self.active_transaction = Some(txn);
 
         // Persist state - warn on failure
-        if let Err(e) = self.save() {
+        if let Err(e) = self.persist(Mutation::Begun) {
             eprintln!(
                 "{} Failed to save transaction start: {}",
                 "Warning:".bright_yellow(),
@@ -660,7 +676,7 @@ impl ShellState {
         self.transactions.push(committed);
 
         // Persist state - warn on failure
-        if let Err(e) = self.save() {
+        if let Err(e) = self.persist(Mutation::Committed) {
             eprintln!(
                 "{} Failed to save transaction commit: {}",
                 "Warning:".bright_yellow(),
@@ -675,9 +691,7 @@ impl ShellState {
     /// restart without waiting for the next snapshot.
     pub fn set_previous_dir(&mut self, dir: PathBuf) {
         self.previous_dir = Some(dir);
-        let persisted =
-            self.persist_entries(&[JournalEntryRef::PreviousDir(self.previous_dir.clone())]);
-        if let Err(e) = persisted {
+        if let Err(e) = self.persist(Mutation::PreviousDir) {
             eprintln!(
                 "{} Failed to save previous directory: {}",
                 "Warning:".bright_yellow(),
@@ -686,13 +700,22 @@ impl ShellState {
         }
     }
 
-    /// Drop the active transaction without committing it (after a rollback)
-    /// and persist that, so a restart does not resurrect it.
+    /// Close the active transaction as rolled back, and persist that, so a
+    /// restart does not resurrect it.
+    ///
+    /// Every operation of the transaction that is not yet marked undone is
+    /// marked undone by the transaction, as the model's `rolledBack` event
+    /// does. Call this only once those operations have been reversed on
+    /// disk; [`crate::commands::rollback_transaction`] does that.
     pub fn abort_transaction(&mut self) {
-        self.active_transaction = None;
+        let Some(txn) = self.active_transaction.take() else {
+            return;
+        };
+        Self::mark_rolled_back(&mut self.history, &txn);
+        self.undone_run = 0..0;
 
         // Persist state - warn on failure
-        if let Err(e) = self.save() {
+        if let Err(e) = self.persist(Mutation::RolledBack) {
             eprintln!(
                 "{} Failed to save transaction rollback: {}",
                 "Warning:".bright_yellow(),
@@ -739,173 +762,141 @@ impl ShellState {
         self.redo_stack.pop_front()
     }
 
-    /// Persist the operation just pushed by `record_operation` or
-    /// `record_redo_operation`, plus the history trim it caused.
-    fn persist_recorded(&mut self, trimmed: usize) -> Result<()> {
-        if self.journal_due_for_snapshot() {
-            return self.save();
+    /// Mark as undone, by the transaction, each of its operations that is
+    /// not undone yet.
+    fn mark_rolled_back(history: &mut [Operation], txn: &Transaction) {
+        let members: HashSet<Uuid> = txn.operations.iter().copied().collect();
+        for op in history.iter_mut() {
+            if !op.undone && members.contains(&op.id) {
+                op.undone = true;
+                op.undone_by = Some(txn.id);
+            }
         }
-        // With `max_history_size == Some(0)` the operation is trimmed at once
-        // and there is nothing to journal; fall back to a snapshot.
-        let Some(op) = self.history.last() else {
-            return self.save();
+    }
+
+    /// Persist one mutation that has just been applied to this state, as
+    /// one journal record, appended and synced.
+    fn persist(&mut self, mutation: Mutation) -> Result<()> {
+        if self.journal_due_for_rewrite() {
+            return self.rewrite_journal();
+        }
+        let event = match mutation {
+            Mutation::Recorded { trim } => match self.history.last() {
+                Some(op) => EventRef::Recorded { op, trim },
+                // With `max_history_size == Some(0)` the operation is trimmed
+                // at once and there is nothing to append.
+                None => return self.rewrite_journal(),
+            },
+            Mutation::Undone { id, undone_by } => EventRef::Undone { id, undone_by },
+            Mutation::Begun => match self.active_transaction.as_ref() {
+                Some(txn) => EventRef::Begun(txn),
+                None => return Ok(()),
+            },
+            Mutation::Committed => EventRef::Committed,
+            Mutation::RolledBack => EventRef::RolledBack,
+            Mutation::PreviousDir => EventRef::PreviousDir(self.previous_dir.as_ref()),
         };
-        // The record and its trim are one line, so a crash cannot persist the
-        // new operation without the history-limit trim it caused.
-        let entries = [JournalEntryRef::Record { op, trim: trimmed }];
-        let appended = append_journal(&self.journal_file, self.journal_seq, &entries);
-        self.after_append(appended, entries.len())
-    }
-
-    /// Persist journal entries that do not borrow from `self`.
-    fn persist_entries(&mut self, entries: &[JournalEntryRef<'_>]) -> Result<()> {
-        if self.journal_due_for_snapshot() {
-            return self.save();
-        }
-        let appended = append_journal(&self.journal_file, self.journal_seq, entries);
-        self.after_append(appended, entries.len())
-    }
-
-    /// Account for a journal append of `count` entries. A failed append may
-    /// have left a torn line, which ends replay, so the next persist writes a
-    /// full snapshot (and empties the journal) instead of appending after it.
-    fn after_append(&mut self, appended: Result<()>, count: usize) -> Result<()> {
-        if appended.is_err() {
-            self.snapshot_pending = true;
-        } else {
-            self.journal_seq += count as u64;
-            self.journal_entries += count;
-            self.journal_len = fs::metadata(&self.journal_file).map_or(0, |m| m.len());
+        let appended = append_event(self.storage.as_mut(), &event);
+        match appended {
+            Ok(()) => self.journal_records += 1,
+            // The journal may now end in a partial record, and it lacks this
+            // mutation. Rewrite it whole before appending again.
+            Err(_) => self.rewrite_pending = true,
         }
         appended
     }
 
-    /// Whether the files on disk are still the ones this state wrote: the
-    /// journal has the expected size, and the snapshot the journal builds on
-    /// still exists. Either can be removed or moved by a command, since both
-    /// live in the command root.
-    fn persistence_intact(&self) -> bool {
-        let journal_len = fs::metadata(&self.journal_file).map_or(0, |m| m.len());
-        let snapshot_seq = self.journal_seq - self.journal_entries as u64;
-        journal_len == self.journal_len && (snapshot_seq == 0 || self.state_file.exists())
+    /// The journal is rewritten as one snapshot record once it holds at
+    /// least half as many records as the history has operations (and at
+    /// least `JOURNAL_MIN_RECORDS`). A rewrite costs O(history length),
+    /// which is then at most twice the number of records it absorbs, so
+    /// persistence stays amortised O(1) per operation.
+    fn journal_due_for_rewrite(&self) -> bool {
+        self.rewrite_pending
+            || (self.journal_records >= JOURNAL_MIN_RECORDS
+                && 2 * self.journal_records >= self.history.len())
     }
 
-    /// The journal is folded into a fresh snapshot once it holds at least
-    /// half as many entries as the history has operations (and at least
-    /// `JOURNAL_MIN_ENTRIES`). A snapshot costs O(history length), which is
-    /// then at most twice the number of entries it absorbs, so persistence
-    /// stays amortised O(1) per operation.
-    fn journal_due_for_snapshot(&self) -> bool {
-        self.snapshot_pending
-            || (self.journal_entries >= JOURNAL_MIN_ENTRIES
-                && 2 * self.journal_entries >= self.history.len())
-            || !self.persistence_intact()
-    }
-
-    /// Write a full snapshot and empty the journal.
+    /// Replace the journal with one snapshot record of the current state.
     ///
-    /// The snapshot is written to a temporary file and renamed over the old
-    /// one, so a crash leaves either the old or the new snapshot. It records
-    /// the journal sequence number it includes, so a crash between the rename
-    /// and the journal truncation cannot replay entries twice.
-    fn save(&mut self) -> Result<()> {
-        let saved = self.write_snapshot();
-        // Transaction boundaries are only recorded by a snapshot, so a failed
-        // one must be retried before anything is appended to the journal.
-        if saved.is_err() {
-            self.snapshot_pending = true;
-        }
-        saved
-    }
-
-    fn write_snapshot(&mut self) -> Result<()> {
-        use std::io::Write;
-
-        let state = SerializableStateRef {
+    /// The storage replaces the file all-or-nothing, so a crash leaves the
+    /// old journal or the new one, and both load to this state (model:
+    /// `compaction-safe`).
+    fn rewrite_journal(&mut self) -> Result<()> {
+        let snapshot = EventRef::Snapshot(SnapshotRef {
+            version: SNAPSHOT_VERSION,
             history: &self.history,
             transactions: &self.transactions,
             active_transaction: self.active_transaction.as_ref(),
             previous_dir: self.previous_dir.as_ref(),
-            journal_seq: self.journal_seq,
-        };
-
-        let file_name = format!(".vsh_state.json.{}.tmp", Uuid::new_v4().simple());
-        let tmp = self.state_file.with_file_name(file_name);
-        let written = (|| -> Result<()> {
-            let mut out = std::io::BufWriter::new(create_private(&tmp)?);
-            serde_json::to_writer(&mut out, &state)?;
-            out.flush()?;
-            fs::rename(&tmp, &self.state_file)?;
-            Ok(())
-        })();
-        if written.is_err() {
-            let _ = fs::remove_file(&tmp);
+        });
+        let replaced = encode_event(&snapshot)
+            .and_then(|bytes| self.storage.replace(&bytes).map_err(anyhow::Error::from));
+        match replaced {
+            Ok(()) => {
+                self.journal_records = 0;
+                self.rewrite_pending = false;
+            }
+            Err(_) => self.rewrite_pending = true,
         }
-        written?;
-
-        // Everything journalled so far is now in the snapshot.
-        if self.journal_file.exists() {
-            fs::OpenOptions::new()
-                .write(true)
-                .open(&self.journal_file)?
-                .set_len(0)?;
-        }
-        self.journal_entries = 0;
-        self.journal_len = 0;
-        self.snapshot_pending = false;
-
-        Ok(())
+        replaced
     }
 
-    /// Load state from the snapshot, then replay the journal on top of it.
-    fn load(&mut self) -> Result<()> {
-        if self.state_file.exists() {
-            let json = crate::fs_pure::read_to_string(&self.state_file)?;
-            let state: SerializableState = serde_json::from_str(&json)?;
+    /// Rewrite the journal as one snapshot now. Normal operation does this
+    /// by itself; tests call it to exercise the rewrite.
+    #[doc(hidden)]
+    pub fn compact_journal(&mut self) -> Result<()> {
+        self.rewrite_journal()
+    }
 
-            self.history = state.history;
-            self.transactions = state.transactions;
-            self.active_transaction = state.active_transaction;
-            self.previous_dir = state.previous_dir;
-            self.journal_seq = state.journal_seq;
-        }
-
-        if self.journal_file.exists() {
-            // Read bytes, not a string: a crash can tear the last line inside
-            // a multi-byte character, and that must count as a torn line
-            // rather than make the whole file unreadable.
-            let journal = crate::fs_pure::read_to_end(&self.journal_file)?;
-            self.journal_len = journal.len() as u64;
-            let body = journal.strip_suffix(b"\n").unwrap_or(&journal);
-            // A last line with no newline may parse, but the next append
-            // would be glued onto it (`}{`), losing both lines on the
-            // following reload. Treat it like a torn tail: keep what parses,
-            // then snapshot before appending again.
-            let mut replayed_all = journal.is_empty() || journal.ends_with(b"\n");
-            for line in body.split(|&b| b == b'\n').filter(|_| !body.is_empty()) {
-                // A torn line (crash mid-append) ends the replay, and so does
-                // a sequence gap: replay keeps the longest consistent prefix.
-                let Ok(JournalLine { seq, entry }) = serde_json::from_slice::<JournalLine>(line)
-                else {
-                    replayed_all = false;
-                    break;
-                };
-                if seq <= self.journal_seq {
-                    continue; // already folded into the snapshot
+    /// Load the saved state by replaying the journal.
+    ///
+    /// Bytes at the end of the journal that are not a complete record are
+    /// what an interrupted write leaves. They are set aside, reported, and
+    /// removed from the journal, so that later records are not appended
+    /// behind them. A complete record that is not a known event is an
+    /// error: nothing is skipped.
+    fn load(&mut self, legacy: Option<&Path>) -> Result<()> {
+        let stored = self
+            .storage
+            .read()
+            .context("Failed to read the saved shell state")?;
+        match stored {
+            // An empty journal holds nothing, so it does not stand in the
+            // way of converting an older state file.
+            Some(bytes) if !bytes.is_empty() => {
+                let decoded = journal::decode(&bytes);
+                for (index, payload) in decoded.records.iter().enumerate() {
+                    let event: Event = serde_json::from_slice(payload).with_context(|| {
+                        format!(
+                            "Saved shell state is damaged: record {} is not a known event",
+                            index + 1
+                        )
+                    })?;
+                    self.apply_event(event)?;
                 }
-                if seq != self.journal_seq + 1 {
-                    replayed_all = false;
-                    break;
+                if decoded.accepted < bytes.len() {
+                    let rejected = &bytes[decoded.accepted..];
+                    let kept = self
+                        .storage
+                        .set_aside(rejected)
+                        .context("Failed to set aside an incomplete record of the saved state")?;
+                    eprintln!(
+                        "{} the saved shell state ended in {} bytes that are not a complete \
+                         record (an interrupted write). They were set aside in {}.",
+                        "Warning:".bright_yellow(),
+                        rejected.len(),
+                        kept
+                    );
+                    self.storage
+                        .replace(&bytes[..decoded.accepted])
+                        .context("Failed to repair the end of the saved shell state")?;
                 }
-                self.replay(entry);
-                self.journal_seq = seq;
-                self.journal_entries += 1;
             }
-            // Entries appended after a torn line or gap would be skipped by
-            // every later reload. Make the next persist write a full snapshot,
-            // which also truncates the journal, instead of appending.
-            if !replayed_all {
-                self.snapshot_pending = true;
+            _ => {
+                if let Some(legacy) = legacy.filter(|path| path.exists()) {
+                    self.migrate_legacy(legacy)?;
+                }
             }
         }
 
@@ -915,12 +906,52 @@ impl ShellState {
         Ok(())
     }
 
-    /// Apply one journal entry to the in-memory history. Mirrors what the
-    /// live mutation did, minus side effects (archiving, redo stack, I/O);
-    /// the redo stack is not persisted, as before.
-    fn replay(&mut self, entry: JournalEntry) {
-        match entry {
-            JournalEntry::Record { op, trim } => {
+    /// Read a `.vsh_state.json` written before the journal existed, write
+    /// it out as a journal, and rename the old file out of the way.
+    fn migrate_legacy(&mut self, legacy: &Path) -> Result<()> {
+        let json = crate::fs_pure::read_to_end(legacy)
+            .with_context(|| format!("Failed to read {}", legacy.display()))?;
+        let snapshot: Snapshot = serde_json::from_slice(&json)
+            .with_context(|| format!("{} is not a valid saved shell state", legacy.display()))?;
+        self.apply_event(Event::Snapshot(snapshot))?;
+        self.rewrite_journal()
+            .context("Failed to convert the saved shell state to a journal")?;
+
+        let mut migrated = legacy.as_os_str().to_owned();
+        migrated.push(".migrated");
+        if let Err(e) = fs::rename(legacy, &migrated) {
+            eprintln!(
+                "{} could not rename {} after converting it: {}",
+                "Warning:".bright_yellow(),
+                legacy.display(),
+                e
+            );
+        }
+        Ok(())
+    }
+
+    /// Apply one journal event to the in-memory state (model: `apply`).
+    /// Mirrors what the live mutation did, minus side effects (archiving,
+    /// redo stack, I/O); the redo stack is not persisted.
+    fn apply_event(&mut self, event: Event) -> Result<()> {
+        match event {
+            Event::Snapshot(snapshot) => {
+                if snapshot.version > SNAPSHOT_VERSION {
+                    anyhow::bail!(
+                        "Saved shell state has format version {}, newer than this vsh \
+                         understands ({})",
+                        snapshot.version,
+                        SNAPSHOT_VERSION
+                    );
+                }
+                self.history = snapshot.history;
+                self.transactions = snapshot.transactions;
+                self.active_transaction = snapshot.active_transaction;
+                self.previous_dir = snapshot.previous_dir;
+                self.journal_records = 0;
+                return Ok(());
+            }
+            Event::Recorded { op, trim } => {
                 if let Some(txn) = self.active_transaction.as_mut() {
                     if op.transaction_id == Some(txn.id) {
                         txn.operations.push(op.id);
@@ -930,16 +961,36 @@ impl ShellState {
                 let trim = trim.min(self.history.len());
                 self.history.drain(0..trim);
             }
-            JournalEntry::Undone { id, undone_by } => {
+            Event::Undone { id, undone_by } => {
                 if let Some(op) = self.history.iter_mut().rev().find(|o| o.id == id) {
-                    op.undone = true;
-                    op.undone_by = Some(undone_by);
+                    if !op.undone {
+                        op.undone = true;
+                        op.undone_by = Some(undone_by);
+                    }
                 }
             }
-            JournalEntry::PreviousDir(dir) => {
+            Event::Begun(txn) => {
+                if self.active_transaction.is_none() {
+                    self.active_transaction = Some(txn);
+                }
+            }
+            Event::Committed => {
+                if let Some(mut txn) = self.active_transaction.take() {
+                    txn.committed = true;
+                    self.transactions.push(txn);
+                }
+            }
+            Event::RolledBack => {
+                if let Some(txn) = self.active_transaction.take() {
+                    Self::mark_rolled_back(&mut self.history, &txn);
+                }
+            }
+            Event::PreviousDir(dir) => {
                 self.previous_dir = dir;
             }
         }
+        self.journal_records += 1;
+        Ok(())
     }
 
     // =========================================================================
@@ -1235,103 +1286,104 @@ impl ShellState {
     }
 }
 
+/// The journal file, inside the session root.
+const JOURNAL_FILE_NAME: &str = ".vsh_state.journal";
+
+/// The single-file state written before the journal existed.
+const LEGACY_STATE_FILE_NAME: &str = ".vsh_state.json";
+
+/// Layout version written into every snapshot record.
+const SNAPSHOT_VERSION: u32 = 1;
+
+/// Minimum number of journal records before the journal is rewritten as one
+/// snapshot.
+const JOURNAL_MIN_RECORDS: usize = 1024;
+
+/// The whole persisted state (model: the `State` in a `snapshot` event).
+/// A `.vsh_state.json` from before the journal has the same fields, without
+/// `version`.
 #[derive(Deserialize)]
-struct SerializableState {
+struct Snapshot {
+    #[serde(default)]
+    version: u32,
     history: Vec<Operation>,
     transactions: Vec<Transaction>,
     active_transaction: Option<Transaction>,
     #[serde(default)]
     previous_dir: Option<PathBuf>,
-    /// Last journal sequence number folded into this snapshot (0 for
-    /// snapshots written before the journal existed).
-    #[serde(default)]
-    journal_seq: u64,
 }
 
-/// Borrowing twin of [`SerializableState`], so a snapshot does not clone the
-/// whole history first.
+/// Borrowing twin of [`Snapshot`], so a rewrite does not clone the whole
+/// history first.
 #[derive(Serialize)]
-struct SerializableStateRef<'a> {
+struct SnapshotRef<'a> {
+    version: u32,
     history: &'a [Operation],
     transactions: &'a [Transaction],
     active_transaction: Option<&'a Transaction>,
     previous_dir: Option<&'a PathBuf>,
-    journal_seq: u64,
 }
 
-/// Minimum journal length before it is folded into a snapshot.
-const JOURNAL_MIN_ENTRIES: usize = 1024;
-
-/// One history mutation in the journal (`.vsh_state.journal`, JSON lines).
+/// One journal record (model: `Event` in `proofs/agda/JournalReplay.agda`).
 #[derive(Deserialize)]
-enum JournalEntry {
+enum Event {
+    /// The whole state; what a journal rewrite leaves as its only record.
+    Snapshot(Snapshot),
     /// An operation appended to the history, then the oldest `trim`
-    /// operations dropped by the history size limit (0 when under it).
-    Record {
+    /// operations dropped by the history size limit (0 when under it). One
+    /// record, so a crash cannot keep the operation without its trim.
+    Recorded {
         op: Operation,
         #[serde(default)]
         trim: usize,
     },
     /// An operation marked undone.
     Undone { id: Uuid, undone_by: Uuid },
+    /// A transaction opened.
+    Begun(Transaction),
+    /// The open transaction committed.
+    Committed,
+    /// The open transaction rolled back: each of its operations not yet
+    /// undone is marked undone by it, and it is closed.
+    RolledBack,
     /// The directory `cd -` returns to, as set by `cd`.
     PreviousDir(Option<PathBuf>),
 }
 
-/// Borrowing twin of [`JournalEntry`]; serialises to the same shape.
+/// Borrowing twin of [`Event`]; serialises to the same shape.
 #[derive(Serialize)]
-enum JournalEntryRef<'a> {
-    Record { op: &'a Operation, trim: usize },
+enum EventRef<'a> {
+    Snapshot(SnapshotRef<'a>),
+    Recorded { op: &'a Operation, trim: usize },
     Undone { id: Uuid, undone_by: Uuid },
-    PreviousDir(Option<PathBuf>),
+    Begun(&'a Transaction),
+    Committed,
+    RolledBack,
+    PreviousDir(Option<&'a PathBuf>),
 }
 
-/// Create (or truncate) a persistence file readable only by its owner.
-/// History can hold the contents of deleted files in `undo_data`, so the
-/// journal and snapshot must not inherit a permissive umask.
-fn create_private(path: &Path) -> std::io::Result<fs::File> {
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    options.open(path)
+/// A mutation already applied to the state, to be persisted. It names the
+/// event; [`ShellState::persist`] reads the data from the state.
+enum Mutation {
+    Recorded { trim: usize },
+    Undone { id: Uuid, undone_by: Uuid },
+    Begun,
+    Committed,
+    RolledBack,
+    PreviousDir,
 }
 
-#[derive(Deserialize)]
-struct JournalLine {
-    seq: u64,
-    entry: JournalEntry,
+/// The framed journal record for `event`.
+fn encode_event(event: &EventRef<'_>) -> Result<Vec<u8>> {
+    let payload = serde_json::to_vec(event)?;
+    Ok(journal::frame(&payload)?)
 }
 
-#[derive(Serialize)]
-struct JournalLineRef<'a, 'b> {
-    seq: u64,
-    entry: &'b JournalEntryRef<'a>,
-}
-
-/// Append `entries` to the journal as JSON lines numbered from
-/// `last_seq + 1`. Lines are streamed to the file rather than built in memory
-/// first, since a `Record` can carry a large `undo_data` payload; small
-/// entries still reach the file in a single write.
-fn append_journal(path: &Path, last_seq: u64, entries: &[JournalEntryRef<'_>]) -> Result<()> {
-    use std::io::Write;
-    let mut options = fs::OpenOptions::new();
-    options.create(true).append(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600); // see create_private
-    }
-    let file = options.open(path)?;
-    let mut out = std::io::BufWriter::with_capacity(64 * 1024, file);
-    for (seq, entry) in (last_seq + 1..).zip(entries) {
-        serde_json::to_writer(&mut out, &JournalLineRef { seq, entry })?;
-        out.write_all(b"\n")?;
-    }
-    out.flush()?;
+/// Append `event` to the journal and make it durable.
+fn append_event(storage: &mut dyn Storage, event: &EventRef<'_>) -> Result<()> {
+    let bytes = encode_event(event)?;
+    storage.append(&bytes)?;
+    storage.sync()?;
     Ok(())
 }
 
@@ -1742,8 +1794,10 @@ mod tests {
     }
 
     // ========================================================================
-    // Persistence: snapshot + journal
+    // Persistence: the journal
     // ========================================================================
+
+    use crate::journal::SimStorage;
 
     fn persisted_root() -> tempfile::TempDir {
         tempfile::TempDir::new().unwrap()
@@ -1751,6 +1805,39 @@ mod tests {
 
     fn reopen(root: &tempfile::TempDir) -> ShellState {
         ShellState::new(root.path().to_str().unwrap()).unwrap()
+    }
+
+    fn journal_path(root: &tempfile::TempDir) -> PathBuf {
+        root.path().join(JOURNAL_FILE_NAME)
+    }
+
+    /// The payloads of the records in the journal file, as text.
+    fn journal_records(root: &tempfile::TempDir) -> Vec<String> {
+        let bytes = fs::read(journal_path(root)).unwrap();
+        let decoded = journal::decode(&bytes);
+        assert_eq!(decoded.accepted, bytes.len(), "journal should be clean");
+        decoded
+            .records
+            .iter()
+            .map(|payload| String::from_utf8(payload.to_vec()).unwrap())
+            .collect()
+    }
+
+    /// A state on simulated storage, and a handle to that storage.
+    fn sim_state(root: &tempfile::TempDir) -> (ShellState, SimStorage) {
+        let storage = SimStorage::new();
+        let state =
+            ShellState::with_storage(root.path().to_str().unwrap(), Box::new(storage.clone()))
+                .unwrap();
+        (state, storage)
+    }
+
+    /// A state loaded from simulated storage holding `bytes`.
+    fn sim_reopen(root: &tempfile::TempDir, bytes: Vec<u8>) -> Result<ShellState> {
+        ShellState::with_storage(
+            root.path().to_str().unwrap(),
+            Box::new(SimStorage::with_contents(bytes)),
+        )
     }
 
     fn record(state: &mut ShellState, path: &str) -> Uuid {
@@ -1777,23 +1864,28 @@ mod tests {
         record(&mut state, "c");
         state.mark_undone(b, Uuid::new_v4());
 
-        // Hot-path operations only append to the journal.
-        assert!(state.journal_file.exists());
-        assert!(!state.state_file.exists());
+        // One record per mutation, and no other state file.
+        assert_eq!(journal_records(&root).len(), 4);
+        assert!(!root.path().join(LEGACY_STATE_FILE_NAME).exists());
 
         let reloaded = reopen(&root);
         assert_eq!(summary(&reloaded), summary(&state));
     }
 
     #[test]
-    fn test_journal_folds_into_snapshot_and_reloads() {
+    fn test_journal_is_rewritten_as_one_snapshot_and_reloads() {
         let root = persisted_root();
         let mut state = reopen(&root);
-        for i in 0..(JOURNAL_MIN_ENTRIES + 10) {
+        for i in 0..(JOURNAL_MIN_RECORDS + 10) {
             record(&mut state, &format!("f{i}"));
         }
-        assert!(state.state_file.exists(), "journal should have compacted");
-        assert!(state.journal_entries < JOURNAL_MIN_ENTRIES);
+        assert!(state.journal_records < JOURNAL_MIN_RECORDS);
+        let records = journal_records(&root);
+        assert!(
+            records.len() < JOURNAL_MIN_RECORDS,
+            "journal should be compact"
+        );
+        assert!(records[0].starts_with("{\"Snapshot\""));
 
         let reloaded = reopen(&root);
         assert_eq!(summary(&reloaded), summary(&state));
@@ -1816,22 +1908,52 @@ mod tests {
     }
 
     #[test]
-    fn test_journal_torn_tail_is_ignored() {
+    fn test_record_and_trim_share_one_record() {
+        let root = persisted_root();
+        let mut state = reopen(&root);
+        state.max_history_size = Some(3);
+        for i in 0..5 {
+            record(&mut state, &format!("f{i}"));
+        }
+        // One record per operation: no trim can be split from its record.
+        let records = journal_records(&root);
+        assert_eq!(records.len(), 5);
+        assert!(records[4].contains("\"trim\":1"));
+    }
+
+    /// An interrupted write leaves part of a record at the end of the file.
+    fn append_torn_record(root: &tempfile::TempDir) -> Vec<u8> {
+        use std::io::Write;
+        let whole = journal::frame(b"{\"Recorded\":{\"op\":{\"path\":\"caf\xC3\xA9\"}}}").unwrap();
+        let torn = whole[..whole.len() - 5].to_vec();
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .open(journal_path(root))
+            .unwrap();
+        file.write_all(&torn).unwrap();
+        torn
+    }
+
+    #[test]
+    fn test_torn_tail_is_set_aside_and_ignored() {
         let root = persisted_root();
         let mut state = reopen(&root);
         record(&mut state, "a");
         record(&mut state, "b");
-        {
-            use std::io::Write;
-            let mut journal = fs::OpenOptions::new()
-                .append(true)
-                .open(&state.journal_file)
-                .unwrap();
-            journal.write_all(b"{\"seq\":3,\"entry\":{\"Rec").unwrap();
-        }
+        let torn = append_torn_record(&root);
 
         let reloaded = reopen(&root);
         assert_eq!(summary(&reloaded), summary(&state));
+
+        // The journal is clean again, and the torn bytes were kept.
+        assert_eq!(journal_records(&root).len(), 2);
+        let aside: Vec<PathBuf> = fs::read_dir(root.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.to_string_lossy().contains(".rejected."))
+            .collect();
+        assert_eq!(aside.len(), 1);
+        assert_eq!(fs::read(&aside[0]).unwrap(), torn);
     }
 
     #[test]
@@ -1839,150 +1961,42 @@ mod tests {
         let root = persisted_root();
         let mut state = reopen(&root);
         record(&mut state, "a");
-        {
-            use std::io::Write;
-            let mut journal = fs::OpenOptions::new()
-                .append(true)
-                .open(&state.journal_file)
-                .unwrap();
-            journal.write_all(b"{\"seq\":2,\"entry\":{\"Rec").unwrap();
-        }
+        append_torn_record(&root);
 
         // The restarted shell keeps working after the crash...
         let mut restarted = reopen(&root);
         record(&mut restarted, "b");
         record(&mut restarted, "c");
 
-        // ...and those later operations must not hide behind the torn line.
+        // ...and those later operations must not hide behind the torn record.
         let reloaded = reopen(&root);
         assert_eq!(reloaded.history.len(), 3);
         assert_eq!(summary(&reloaded), summary(&restarted));
-    }
-
-    #[test]
-    fn test_removed_journal_is_rebuilt_not_gapped() {
-        let root = persisted_root();
-        let mut state = reopen(&root);
-        record(&mut state, "a");
-        record(&mut state, "b");
-        // e.g. `rm .vsh_state.journal` from inside the shell.
-        fs::remove_file(&state.journal_file).unwrap();
-        record(&mut state, "c");
-
-        let reloaded = reopen(&root);
-        assert_eq!(reloaded.history.len(), 3);
-        assert_eq!(summary(&reloaded), summary(&state));
-    }
-
-    #[test]
-    fn test_removed_snapshot_is_rebuilt_not_gapped() {
-        let root = persisted_root();
-        let mut state = reopen(&root);
-        record(&mut state, "a");
-        state.save().unwrap();
-        record(&mut state, "b");
-        fs::remove_file(&state.state_file).unwrap();
-        record(&mut state, "c");
-
-        let reloaded = reopen(&root);
-        assert_eq!(reloaded.history.len(), 3);
-        assert_eq!(summary(&reloaded), summary(&state));
-    }
-
-    #[test]
-    fn test_failed_snapshot_is_retried_before_appending() {
-        let root = persisted_root();
-        let mut state = reopen(&root);
-        record(&mut state, "a");
-        // A directory in the snapshot's place makes the rename fail.
-        fs::create_dir(&state.state_file).unwrap();
-        assert!(state.save().is_err());
-        assert!(state.snapshot_pending);
-
-        fs::remove_dir(&state.state_file).unwrap();
-        record(&mut state, "b");
-        assert!(state.state_file.is_file(), "the next persist must snapshot");
-        assert!(!state.snapshot_pending);
-    }
-
-    #[test]
-    fn test_journal_without_final_newline_is_repaired() {
-        let root = persisted_root();
-        let mut state = reopen(&root);
-        record(&mut state, "a");
-        // Crash after the last record but before its newline.
-        let journal = fs::read(&state.journal_file).unwrap();
-        fs::write(&state.journal_file, journal.strip_suffix(b"\n").unwrap()).unwrap();
-
-        let mut restarted = reopen(&root);
-        assert_eq!(restarted.history.len(), 1, "the complete record is kept");
-        record(&mut restarted, "b");
-
-        let reloaded = reopen(&root);
-        assert_eq!(reloaded.history.len(), 2);
-        assert_eq!(summary(&reloaded), summary(&restarted));
-    }
-
-    #[test]
-    fn test_record_and_trim_share_one_journal_line() {
-        let root = persisted_root();
-        let mut state = reopen(&root);
-        state.max_history_size = Some(3);
-        for i in 0..5 {
-            record(&mut state, &format!("f{i}"));
-        }
-        let journal = fs::read_to_string(&state.journal_file).unwrap();
-        // One line per operation: no trim can be split from its record.
-        assert_eq!(journal.lines().count(), 5);
-        assert!(journal.lines().last().unwrap().contains("\"trim\":1"));
     }
 
     #[cfg(unix)]
     #[test]
-    fn test_persistence_files_are_private() {
+    fn test_journal_file_is_private() {
         use std::os::unix::fs::PermissionsExt;
         let root = persisted_root();
         let mut state = reopen(&root);
         record(&mut state, "a");
-        state.save().unwrap();
+        state.compact_journal().unwrap();
         record(&mut state, "b");
-        for file in [&state.journal_file, &state.state_file] {
-            let mode = fs::metadata(file).unwrap().permissions().mode() & 0o777;
-            assert_eq!(mode, 0o600, "{}", file.display());
-        }
+        let mode = fs::metadata(journal_path(&root))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600);
     }
 
     #[test]
-    fn test_journal_torn_inside_multibyte_char_reopens() {
-        let root = persisted_root();
-        let mut state = reopen(&root);
-        record(&mut state, "a");
-        {
-            use std::io::Write;
-            let mut journal = fs::OpenOptions::new()
-                .append(true)
-                .open(&state.journal_file)
-                .unwrap();
-            // "é" is 0xC3 0xA9; stop after the first byte.
-            journal
-                .write_all(b"{\"seq\":2,\"entry\":{\"Record\":{\"path\":\"caf\xC3")
-                .unwrap();
-        }
-
-        let mut reopened = reopen(&root);
-        assert_eq!(summary(&reopened), summary(&state));
-        record(&mut reopened, "b");
-        let reloaded = reopen(&root);
-        assert_eq!(reloaded.history.len(), 2);
-    }
-
-    #[test]
-    fn test_previous_dir_survives_reload_without_snapshot() {
+    fn test_previous_dir_survives_reload() {
         let root = persisted_root();
         let mut state = reopen(&root);
         record(&mut state, "a");
         state.set_previous_dir(PathBuf::from("/tmp/elsewhere"));
-        assert!(!state.state_file.exists(), "no snapshot should be needed");
 
         let reloaded = reopen(&root);
         assert_eq!(
@@ -1992,32 +2006,257 @@ mod tests {
     }
 
     #[test]
-    fn test_snapshot_skips_already_folded_journal_entries() {
+    fn test_transaction_boundaries_are_journal_records() {
         let root = persisted_root();
         let mut state = reopen(&root);
-        record(&mut state, "a");
-        record(&mut state, "b");
-        let stale_journal = fs::read(&state.journal_file).unwrap();
+        let txn = state.begin_transaction("t").unwrap();
+        let a = record(&mut state, "a");
+        state.commit_transaction().unwrap();
 
-        // Simulate a crash after the snapshot rename but before the journal
-        // was truncated: the journal still holds entries the snapshot has.
-        state.save().unwrap();
-        fs::write(&state.journal_file, stale_journal).unwrap();
+        // Begin, record and commit are three appended records: no rewrite.
+        let records = journal_records(&root);
+        assert_eq!(records.len(), 3);
+        assert!(records[0].starts_with("{\"Begun\""));
+        assert_eq!(records[2], "\"Committed\"");
 
         let reloaded = reopen(&root);
+        assert!(reloaded.active_transaction.is_none());
+        assert_eq!(reloaded.transactions.len(), 1);
+        assert_eq!(reloaded.transactions[0].id, txn);
+        assert!(reloaded.transactions[0].committed);
+        assert_eq!(reloaded.transactions[0].operations, vec![a]);
         assert_eq!(summary(&reloaded), summary(&state));
     }
 
     #[test]
-    fn test_rolled_back_transaction_does_not_survive_reload() {
+    fn test_rolled_back_transaction_is_closed_and_its_operations_undone() {
         let root = persisted_root();
         let mut state = reopen(&root);
-        state.begin_transaction("t").unwrap();
-        record(&mut state, "a");
+        let before = record(&mut state, "before");
+        let txn = state.begin_transaction("t").unwrap();
+        let a = record(&mut state, "a");
+        let b = record(&mut state, "b");
+        let undo = Uuid::new_v4();
+        state.mark_undone(b, undo);
         state.abort_transaction();
+
+        assert!(state.active_transaction.is_none());
+        assert_eq!(
+            summary(&state),
+            vec![
+                (before, false, None),
+                (a, true, Some(txn)),
+                // Already undone inside the transaction: keeps its first mark.
+                (b, true, Some(undo)),
+            ]
+        );
+        assert!(state
+            .last_n_undoable(usize::MAX)
+            .iter()
+            .all(|op| op.id == before));
 
         let reloaded = reopen(&root);
         assert!(reloaded.active_transaction.is_none());
+        assert_eq!(summary(&reloaded), summary(&state));
+    }
+
+    #[test]
+    fn test_unknown_record_is_an_error_and_nothing_is_overwritten() {
+        let root = persisted_root();
+        let (mut state, storage) = sim_state(&root);
+        record(&mut state, "a");
+        let mut bytes = storage.point().durable;
+        journal::write_frame(&mut bytes, b"{\"FromTheFuture\":1}").unwrap();
+
+        let storage = SimStorage::with_contents(bytes.clone());
+        let opened =
+            ShellState::with_storage(root.path().to_str().unwrap(), Box::new(storage.clone()));
+        let message = format!("{:#}", opened.err().expect("load must fail"));
+        assert!(
+            message.contains("record 2 is not a known event"),
+            "{message}"
+        );
+        assert_eq!(storage.point().durable, bytes, "storage must be untouched");
+        assert!(storage.trace().is_empty());
+    }
+
+    #[test]
+    fn test_newer_snapshot_version_is_refused() {
+        let root = persisted_root();
+        let payload = format!(
+            "{{\"Snapshot\":{{\"version\":{},\"history\":[],\"transactions\":[],\"active_transaction\":null}}}}",
+            SNAPSHOT_VERSION + 1
+        );
+        let bytes = journal::frame(payload.as_bytes()).unwrap();
+        let message = format!(
+            "{:#}",
+            sim_reopen(&root, bytes).err().expect("load must fail")
+        );
+        assert!(message.contains("newer than this vsh"), "{message}");
+    }
+
+    /// `.vsh_state.json` exactly as `main` wrote it before the journal:
+    /// pretty-printed, no version, undo data as a number array.
+    const LEGACY_STATE: &str = r#"{
+  "history": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "op_type": "Mkdir",
+      "path": "project",
+      "timestamp": "2026-10-01T09:30:00.123456789Z",
+      "transaction_id": null,
+      "undo_data": null,
+      "undone": false,
+      "undone_by": null
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "op_type": "DeleteFile",
+      "path": "project/notes.txt",
+      "timestamp": "2026-10-01T09:31:00Z",
+      "transaction_id": null,
+      "undo_data": [104, 105, 10],
+      "undone": true,
+      "undone_by": "33333333-3333-4333-8333-333333333333"
+    },
+    {
+      "id": "44444444-4444-4444-8444-444444444444",
+      "op_type": "CreateFile",
+      "path": "project/draft.txt",
+      "timestamp": "2026-10-01T09:32:00Z",
+      "transaction_id": "55555555-5555-4555-8555-555555555555",
+      "undo_data": null,
+      "undone": false,
+      "undone_by": null
+    }
+  ],
+  "transactions": [
+    {
+      "id": "66666666-6666-4666-8666-666666666666",
+      "name": "earlier",
+      "started": "2026-10-01T09:00:00Z",
+      "operations": [],
+      "committed": true
+    }
+  ],
+  "active_transaction": {
+    "id": "55555555-5555-4555-8555-555555555555",
+    "name": "draft",
+    "started": "2026-10-01T09:31:30Z",
+    "operations": ["44444444-4444-4444-8444-444444444444"],
+    "committed": false
+  },
+  "previous_dir": "/home/someone"
+}"#;
+
+    #[test]
+    fn test_legacy_state_file_is_converted_and_kept() {
+        let root = persisted_root();
+        let legacy = root.path().join(LEGACY_STATE_FILE_NAME);
+        fs::write(&legacy, LEGACY_STATE).unwrap();
+
+        let state = reopen(&root);
+        assert_eq!(state.history.len(), 3);
+        assert_eq!(state.history[0].op_type, OperationType::Mkdir);
+        assert_eq!(state.history[1].undo_data.as_deref(), Some(&b"hi\n"[..]));
+        assert!(state.history[1].undone);
+        assert_eq!(state.transactions.len(), 1);
+        let txn = state.active_transaction.as_ref().unwrap();
+        assert_eq!(txn.name, "draft");
+        assert_eq!(txn.operations, vec![state.history[2].id]);
+        assert_eq!(
+            state.previous_dir.as_deref(),
+            Some(Path::new("/home/someone"))
+        );
+
+        // The journal now holds the state; the old file is renamed, not lost.
+        assert!(!legacy.exists());
+        let migrated = root.path().join(".vsh_state.json.migrated");
+        assert_eq!(fs::read_to_string(migrated).unwrap(), LEGACY_STATE);
+        assert_eq!(journal_records(&root).len(), 1);
+
+        let reloaded = reopen(&root);
+        assert_eq!(summary(&reloaded), summary(&state));
+        assert_eq!(
+            reloaded.active_transaction.as_ref().unwrap().operations,
+            txn.operations
+        );
+    }
+
+    #[test]
+    fn test_legacy_state_file_is_converted_beside_an_empty_journal() {
+        let root = persisted_root();
+        fs::write(root.path().join(LEGACY_STATE_FILE_NAME), LEGACY_STATE).unwrap();
+        fs::write(journal_path(&root), b"").unwrap();
+
+        let state = reopen(&root);
+        assert_eq!(state.history.len(), 3);
+        assert_eq!(journal_records(&root).len(), 1);
+    }
+
+    #[test]
+    fn test_damaged_legacy_state_file_is_an_error_and_is_kept() {
+        let root = persisted_root();
+        let legacy = root.path().join(LEGACY_STATE_FILE_NAME);
+        let damaged = &LEGACY_STATE[..LEGACY_STATE.len() / 2];
+        fs::write(&legacy, damaged).unwrap();
+
+        assert!(ShellState::new(root.path().to_str().unwrap()).is_err());
+        assert_eq!(fs::read_to_string(&legacy).unwrap(), damaged);
+        assert!(!journal_path(&root).exists());
+    }
+
+    #[test]
+    fn test_failed_append_is_repaired_by_the_next_persist() {
+        let root = persisted_root();
+        let (mut state, storage) = sim_state(&root);
+        record(&mut state, "a");
+
+        storage.fail_append(true);
+        record(&mut state, "b"); // warns; the journal lacks "b"
+        assert!(state.rewrite_pending);
+        storage.fail_append(false);
+
+        record(&mut state, "c");
+        assert!(!state.rewrite_pending);
+        let reloaded = sim_reopen(&root, storage.point().durable).unwrap();
+        assert_eq!(reloaded.history.len(), 3);
+        assert_eq!(summary(&reloaded), summary(&state));
+    }
+
+    #[test]
+    fn test_failed_sync_is_repaired_by_the_next_persist() {
+        let root = persisted_root();
+        let (mut state, storage) = sim_state(&root);
+        record(&mut state, "a");
+
+        storage.fail_sync(true);
+        record(&mut state, "b"); // appended, never made durable
+        assert!(state.rewrite_pending);
+        storage.fail_sync(false);
+
+        state.mark_undone(state.history[0].id, Uuid::new_v4());
+        assert!(!state.rewrite_pending);
+        let point = storage.point();
+        assert!(point.pending.is_empty());
+        let reloaded = sim_reopen(&root, point.durable).unwrap();
+        assert_eq!(summary(&reloaded), summary(&state));
+    }
+
+    #[test]
+    fn test_failed_rewrite_is_retried() {
+        let root = persisted_root();
+        let (mut state, storage) = sim_state(&root);
+        record(&mut state, "a");
+
+        storage.fail_replace(true);
+        assert!(state.compact_journal().is_err());
+        assert!(state.rewrite_pending);
+        storage.fail_replace(false);
+
+        record(&mut state, "b");
+        assert!(!state.rewrite_pending);
+        let reloaded = sim_reopen(&root, storage.point().durable).unwrap();
         assert_eq!(summary(&reloaded), summary(&state));
     }
 

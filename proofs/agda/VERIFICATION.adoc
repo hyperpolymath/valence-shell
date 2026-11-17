@@ -61,9 +61,12 @@ What they state, and for what:
 
 Limits, which the module headers repeat:
 
-* These are theorems about the model. The Rust journal is not derived from
-  them, and on this date it does not yet follow them (the redesign is
-  step C2).
+* These are theorems about the model. The Rust journal
+  (`impl/rust-cli/src/journal.rs`, `state.rs`) was rewritten the same day to
+  mirror it, but is not derived from it or proved against it. The link is
+  test evidence: the crash-point harness runs the shell on simulated storage
+  that implements the model's file and checks every crash image the model
+  allows.
 * The crash model is an assumption about the storage. It does not cover
   reordered or partly written blocks, or stale bytes in the unsynced region.
 * A checksum cannot rule out bytes that were never written as a record but

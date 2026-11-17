@@ -119,6 +119,19 @@ Shell bugs fixed (`src/state.rs`, `src/commands.rs`):
   a torn tail, crash-after-rename and transactions; two more cover
   operations after a torn tail and `cd -` surviving a restart (`cd` now
   journals `previous_dir`).
++
+*Superseded later on 2026-11-17.* Review kept finding crash-consistency
+defects in that two-file design (a snapshot beside a journal), and a
+crash-point harness confirmed two failing classes. It was replaced by one
+file of length-prefixed, checksummed records, each appended and synced,
+following an Agda model (`proofs/agda/JournalModel.agda`). The journal is
+rewritten as a single snapshot record, all-or-nothing, at the same threshold.
+A failed load is now an error instead of an empty history, and an old
+`.vsh_state.json` is converted on first start and kept as
+`.vsh_state.json.migrated`. The crash harness
+(`impl/rust-cli/tests/journal_crash_tests.rs`) finds no failing class on the
+new format. The amortised cost is unchanged; each operation now also pays
+one sync.
 * *O(n²) single-step undo.* Each `undo 1` walked past every already-undone
   operation to pick its target, then searched for that target again from the
   oldest end of the history to mark it. A checked hint for the block of undone operations removes the rescan:
@@ -129,6 +142,12 @@ Shell bugs fixed (`src/state.rs`, `src/commands.rs`):
   without saving. That had been masked by the next operation's full rewrite,
   and the journal would have exposed it. It now goes through
   `ShellState::abort_transaction`, which saves.
+* *Rollback left reversed operations live* (found in review, also on
+  `main`): `begin t; touch f; rollback; undo` failed with "No such file or
+  directory". Rollback now marks each operation undone as it reverses it,
+  skips operations already undone inside the transaction, and closes the
+  transaction only when every operation has been reversed. If one cannot
+  be, the transaction stays open so the rollback can be run again.
 
 Test expectations corrected (`tests/stress_tests.rs`):
 
@@ -158,7 +177,11 @@ Test expectations corrected (`tests/stress_tests.rs`):
   (measured: 2.3 MB).
 
 Measured (debug build, 4 cores, each test run alone with the CI flags):
-whole suite 29-51 s across three runs.
+whole suite 29-51 s across three runs. These are the timings of the two-file
+design. With the single-file journal and a sync per record, the whole suite
+takes 82 s on this machine's ext4 disk and 39 s on tmpfs (one run each). The
+CI step therefore puts its temporary directories on tmpfs, so that it
+measures the shell's own cost and not the runner's disk.
 
 [cols="3,1",options="header"]
 |===
@@ -194,9 +217,8 @@ Still open:
 * *macOS.* The suite is not run there: `PATH_MAX` is 1024, so the
   1,000-level test cannot pass with absolute paths, and the rest was not
   measured on macOS.
-* Neither the journal nor the snapshot is `fsync`ed (the old `fs::write`
-  was not either), and they still live in the session root. Both are now
-  created with mode 0600 on Unix, since history can hold deleted file
-  contents (Codex review on #229). Route plan items E1d and G2
-  (`docs/plans/VSH-ROUTE-PLAN-2026-11-04.adoc`) still cover fsync and moving
-  state out of the root; the journal is a new file they must include.
+* The journal still lives in the session root, so shell commands can delete
+  or edit it, and two shells on one root are not kept apart. It is created
+  with mode 0600, never opened through a symlink, and synced on every
+  record. Moving it to an owner-only directory under an exclusive lock is
+  the next step (route plan section 14.3, C3).

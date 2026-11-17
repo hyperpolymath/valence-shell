@@ -1313,18 +1313,24 @@ pub fn commit_transaction(state: &mut ShellState) -> Result<()> {
     Ok(())
 }
 
-/// Rollback the current transaction, reversing all operations atomically.
+/// Rollback the current transaction, reversing its operations.
 ///
-/// Undoes all operations in the active transaction started with [`begin_transaction`].
-/// Operations are reversed in LIFO order. Reports partial failures if any rollback fails.
+/// Undoes the operations of the active transaction started with
+/// [`begin_transaction`], newest first. Each operation is marked undone as
+/// soon as it has been reversed, so a later `undo` does not try to reverse
+/// it again and an interrupted rollback can be resumed. Operations already
+/// undone inside the transaction are left alone.
+///
+/// The transaction is closed only when every operation has been reversed.
+/// If one cannot be (the reversal fails, or the operation has no inverse),
+/// the transaction stays open: run `rollback` again once the cause is
+/// fixed, or `commit` to keep what remains.
 ///
 /// # Arguments
 /// * `state` - Mutable shell state for transaction management
 ///
 /// # Errors
-/// Returns error if:
-/// - No active transaction
-/// - Rollback operations fail (reports which operations failed)
+/// Returns error if an operation could not be reversed (reports which).
 ///
 /// # Examples
 /// ```no_run
@@ -1338,13 +1344,21 @@ pub fn commit_transaction(state: &mut ShellState) -> Result<()> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
+    let Some(txn_id) = state.active_transaction.as_ref().map(|txn| txn.id) else {
+        println!("{}", "Nothing to rollback".bright_yellow());
+        return Ok(());
+    };
+
     let ops: Vec<_> = state
         .current_transaction_ops()
         .iter()
+        .filter(|o| !o.undone)
         .map(|o| (*o).clone())
         .collect();
 
     if ops.is_empty() {
+        // Nothing to reverse, but the transaction must not stay open.
+        state.abort_transaction();
         println!("{}", "Nothing to rollback".bright_yellow());
         return Ok(());
     }
@@ -1514,18 +1528,24 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                 }
             };
 
-            // Collect failures
-            if let Err(e) = result {
-                failed_rollbacks.push((op.path.clone(), e.to_string()));
+            // Record each reversal as it happens, so the history never
+            // shows a reversed operation as live.
+            match result {
+                Ok(()) => state.mark_undone(op.id, txn_id),
+                Err(e) => failed_rollbacks.push((op.path.clone(), e.to_string())),
             }
+        } else {
+            failed_rollbacks.push((
+                op.path.clone(),
+                format!("{} cannot be reversed", op.op_type),
+            ));
         }
     }
 
-    // Clear the transaction (and persist that it is gone)
-    state.abort_transaction();
-
     // Report results
     if failed_rollbacks.is_empty() {
+        // Everything is reversed: close the transaction as rolled back.
+        state.abort_transaction();
         println!(
             "{} {} operations",
             "Transaction rolled back:".bright_green(),
@@ -1544,6 +1564,10 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
         for (path, err) in &failed_rollbacks {
             eprintln!("  {} {}: {}", "Failed:".bright_red(), path, err);
         }
+        eprintln!(
+            "The transaction is still open. Run rollback again once the cause is fixed, \
+             or commit to keep the remaining operations."
+        );
 
         anyhow::bail!(
             "Transaction rollback incomplete: {}/{} operations failed",

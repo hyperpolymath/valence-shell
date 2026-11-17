@@ -86,9 +86,12 @@ jobs:
         run: cargo test --verbose
 
       # The ignored stress suite (tests/stress_tests.rs) gates the build. It was
-      # repaired on 2026-11-17 (see docs/audits/2026-11-16-hypatia-remediation.adoc)
-      # and runs in 30-50 s locally, so 5 minutes leaves wide margin for a slow
-      # runner; there is deliberately no continue-on-error (Hypatia RE005).
+      # repaired on 2026-11-17 (see docs/audits/2026-11-16-hypatia-remediation.adoc);
+      # there is deliberately no continue-on-error (Hypatia RE005).
+      # The shell syncs its journal after every operation, so on a real disk
+      # this suite mostly measures the disk (82 s on ext4 against 39 s on tmpfs
+      # locally). TMPDIR points at tmpfs so that the step measures the shell,
+      # and 5 minutes leaves wide margin.
       # Linux only: stress_deep_nesting_1000_levels needs 1000 directory levels
       # in one absolute path (~2,000 bytes), which fits Linux's PATH_MAX of 4096
       # but not macOS's 1024.
@@ -96,6 +99,8 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: impl/rust-cli
         timeout-minutes: 5
+        env:
+          TMPDIR: /dev/shm
         run: cargo test --test stress_tests -- --ignored --test-threads=1
 
   # ============================================================

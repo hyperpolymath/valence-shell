@@ -15,9 +15,9 @@
 //! `cargo test --test stress_tests -- --ignored --test-threads=1`
 //! (see `.github/workflows/compilation_tests.yml`).
 //!
-//! The shell keeps its persisted state in `.vsh_state.json` (snapshot) and
-//! `.vsh_state.journal` inside the sandbox root, so directory listings below
-//! account for those files explicitly.
+//! The shell keeps its persisted state in `.vsh_state.journal` inside the
+//! sandbox root, so directory listings below account for files with the
+//! `.vsh_state` prefix explicitly.
 
 mod fixtures;
 

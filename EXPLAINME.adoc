@@ -127,10 +127,10 @@ reproduce. Absence of a tool is an open obligation, not a passing leg
 | About the model only. The crash model (synced bytes survive; the unsynced part survives as a prefix) is an assumption about storage, and reordered or partly written blocks are outside it. No property of the checksum is proved or needed
 
 | The Rust journal follows the journal model
-| open
-| `impl/rust-cli/tests/journal_crash_tests.rs` (crash-point harness)
-| `impl/rust-cli/src/state.rs`
-| The code predates the model. Its two-file journal (a snapshot and an append log) fails two crash classes, which the harness pins in `KNOWN_OPEN`. Until the code is rebuilt on the model's storage interface this row stays `open`; after that it can be at most `tested-only`
+| tested-only
+| `cargo test --test journal_crash_tests`: 3,079 crash images on simulated storage that implements the model's file, and 3,070 crash states on real files, none failing (2026-11-17, local); four deliberate bugs were each caught
+| `impl/rust-cli/src/journal.rs`, `impl/rust-cli/src/state.rs`, `impl/rust-cli/tests/journal_crash_tests.rs`
+| Written to mirror the model, not derived from it or proved against it. One scripted session, not all sessions. The journal file still lives in the session root, so the shell's own commands can delete or alter it; the model does not cover that
 
 | Same theorems restated in Z3 (Isabelle and Mizar archived 2026-11-09)
 | argued (the ledger word for PROOF-POLICY §5 `ASSUMED`: a direct SMT run with no proof certificate)
