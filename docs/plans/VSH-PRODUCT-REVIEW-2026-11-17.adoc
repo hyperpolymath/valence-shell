@@ -10,8 +10,11 @@ Jonathan Jewell (hyperpolymath)
 :sectanchors:
 
 *Date:* 2026-11-17
-*Status:* REVIEW, for owner decision. Nothing here changes the route plan
-(`VSH-ROUTE-PLAN-2026-11-04.adoc`) until the owner rules on section 10.
+*Status:* REVIEW. The owner ruled on section 10 on 2026-11-17: route B (engine
+first), the truthful baseline next on its own branch, the capture experiment to
+decide the first front end, and hole (b) left for the change-set engine. The
+rulings are OD-42 to OD-45 in the route plan (`VSH-ROUTE-PLAN-2026-11-04.adoc`).
+The text below is as written before those rulings.
 
 *Asked for:* a harsh review of the whole shell plan: what the product is and
 what it is for; how it compares, in function and in modularity, with bash, NGS,

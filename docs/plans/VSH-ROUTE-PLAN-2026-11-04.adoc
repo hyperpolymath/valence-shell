@@ -184,6 +184,47 @@ unmergeable until C3 lands: its journal is crash-safe, but still inside the
 session root and without a lock between two shells.
 |===
 
+A third set, given by selector the same day, after the product review
+(section 14.10; `VSH-PRODUCT-REVIEW-2026-11-17.adoc`):
+
+[cols="1,4,5",options="header"]
+|===
+|# |Ruling |Effect
+
+|*OD-42* |*The engine is the product, and front ends come in stages.* The
+shell interpreter is one front end among several and comes last (the elegant
+arm, E 9 / D 8). Growing the interpreter first (E 4 / D 4), putting an existing
+shell core in front now (E 6 / D 6) and building for agents only (E 7 / D 7)
+were not taken.
+|The stages S0 to S6 of the review's section 8 are the forward order. Phases A,
+B, C3 to C5, D and E of this plan are stage S1. The POSIX items in
+`ROADMAP.adoc` ("v0.10.x") and the "Immediate priorities" of the root
+`CLAUDE.md` are parked; those files are corrected in S0.
+
+|*OD-43* |*The truthful baseline (S0) comes next, on its own branch*,
+`claude/vsh-product-gate`, cut from `main` (E 9 / D 9).
+|New gate *G0, use*: what is claimed for a front end equals what a battery run
+in CI shows, as a ratchet. Scope of S0: the battery; built-in commands refuse
+options and extra operands they do not handle; `help` works; the three texts of
+the review's section 2.7 are reworded; `[ … ]`, the exit status of `exit` and
+the 50 ms wait on every program are fixed.
+
+|*OD-44* |*The capture experiment decides the first front end* (E 9 / D 8). It
+runs as soon as the journal and the store for old contents (C4) exist. GO:
+capture of any command first, with the plug-in a thin layer over it. NO-GO: a
+plug-in for bash, zsh and fish with the engine's own commands.
+|Order after S0: B (the rest) → C3, C4 → the capture experiment → the first
+release of the engine, with D and E alongside.
+
+|*OD-45* |*Hole (b) waits for the change-set engine* (the out-of-the-box arm,
+E 8 / D 5). The elegant arm was a footprint check now, with a forced undo that
+first keeps a copy (E 9 / D 9). It is not taken.
+|Recorded once, as the estate's "elegance by default" rule asks: until change
+sets land in S1, `undo` can still overwrite what another program has written to
+a file since the operation. `b` stays in `KNOWN_OPEN` on valence-shell#232, and
+Phase B closes without it.
+|===
+
 '''''
 
 == 0. Bottom line
@@ -1213,5 +1254,6 @@ hole (b). It is in `VSH-PRODUCT-REVIEW-2026-11-17.adoc`.
 * Its main finding for this plan: gates G1 to G11 say nothing about use as a
   shell. It proposes a gate G0 (what is claimed equals what a battery shows)
   and a staged model in which each step is a product.
-* It changes nothing here until the owner rules on its section 10. Hole (b)
-  stays open and is not implemented meanwhile.
+* The owner ruled on its section 10 the same day: OD-42 to OD-45, in "Owner
+  rulings (2026-11-17)" above. Hole (b) stays open until the change-set engine
+  (OD-45).
