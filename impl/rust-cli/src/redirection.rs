@@ -398,12 +398,23 @@ impl RedirectSetup {
     pub fn record_for_undo(self, state: &mut ShellState) -> Result<()> {
         use crate::state::{Operation, OperationType};
 
+        // History paths are relative to the sandbox root: undo and redo resolve
+        // them under the root again, so a resolved absolute path would be
+        // resolved twice and miss the file.
+        let root = PathBuf::from(state.root());
+        let history_path = |path: &Path| {
+            path.strip_prefix(&root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .to_string()
+        };
+
         // Clone modifications to avoid moving out of Drop type
         for modification in self.modifications.clone() {
             let (op_type, path, undo_data) = match modification {
                 FileModification::Created { path } => {
                     // File was created by redirection
-                    let path_str = path.to_string_lossy().to_string();
+                    let path_str = history_path(&path);
                     (OperationType::CreateFile, path_str, None)
                 }
 
@@ -412,7 +423,7 @@ impl RedirectSetup {
                     original_content,
                 } => {
                     // File was truncated by > redirection
-                    let path_str = path.to_string_lossy().to_string();
+                    let path_str = history_path(&path);
                     (
                         OperationType::FileTruncated,
                         path_str,
@@ -425,7 +436,7 @@ impl RedirectSetup {
                     original_size,
                 } => {
                     // File was appended to by >> redirection
-                    let path_str = path.to_string_lossy().to_string();
+                    let path_str = history_path(&path);
                     // Encode size as bytes
                     let size_bytes = original_size.to_le_bytes().to_vec();
                     (OperationType::FileAppended, path_str, Some(size_bytes))

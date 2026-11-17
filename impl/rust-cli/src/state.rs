@@ -73,7 +73,7 @@ pub enum OperationType {
     /// undo_data contains original file size (u64 encoded as bytes)
     FileAppended,
     /// Copy file: reversible via deleting the destination
-    /// undo_data contains destination path (src stored in path field)
+    /// path stores the destination, undo_data stores the source path
     CopyFile,
     /// Move/rename: reversible via moving back
     /// path stores "src\0dst" (null-separated pair)
@@ -157,6 +157,34 @@ impl std::fmt::Display for OperationType {
     }
 }
 
+/// What [`crate::commands::redo`] needs in order to re-apply an undone operation.
+///
+/// `undo_data` records the state *before* an operation, so undo can go back.
+/// Going forward again needs the state *after* it, which some operations never
+/// recorded (the mode a `chmod` set, the bytes a `>` redirection wrote).
+/// [`crate::commands::undo`] reads that state just before it reverses the
+/// operation and keeps it here, on the redo-stack entry.
+///
+/// This lives in memory only (the redo stack is not persisted), so it adds
+/// nothing to the saved state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RedoData {
+    /// Whole content of the file undo deleted or replaced
+    /// (`CreateFile`, `FileTruncated`, `WriteFile`).
+    Content(Vec<u8>),
+    /// The bytes undo cut off the end of the file (`FileAppended`).
+    Appended(Vec<u8>),
+    /// The mode undo replaced (`Chmod`).
+    Mode(u32),
+    /// The ownership undo replaced (`Chown`).
+    Owner { uid: u32, gid: u32 },
+    /// The value undo replaced (`SetVariable`).
+    Variable(VariableValue),
+    /// The content was larger than the capture limit, so undo did not keep it
+    /// and this entry cannot be redone.
+    OverLimit { size: u64, limit: u64 },
+}
+
 /// A single filesystem operation with complete undo/redo information.
 ///
 /// Each operation is assigned a unique UUID and records all data needed for reversal.
@@ -195,6 +223,11 @@ pub struct Operation {
 
     /// The operation ID that undid this one (if any)
     pub undone_by: Option<Uuid>,
+
+    /// The state undo replaced, kept on redo-stack entries so redo can put it
+    /// back. Never persisted; `None` everywhere else.
+    #[serde(skip)]
+    pub redo_data: Option<RedoData>,
 }
 
 impl Operation {
@@ -208,6 +241,7 @@ impl Operation {
             undo_data: None,
             undone: false,
             undone_by: None,
+            redo_data: None,
         }
     }
 
@@ -630,40 +664,50 @@ impl ShellState {
     ///
     /// Records the previous value (or absence) so the operation can be reversed.
     pub fn set_variable_tracked(&mut self, name: impl Into<String>, value: impl Into<String>) {
-        let name = name.into();
-        let value = value.into();
+        let op = self.apply_set_variable(name.into(), VariableValue::Scalar(value.into()));
+        self.record_operation(op);
+    }
 
+    /// Set a variable and return the operation describing it, without
+    /// recording it. The operation's undo data is the previous value (or its
+    /// absence). Shared by [`Self::set_variable_tracked`] and redo, so both
+    /// capture the same undo data.
+    pub fn apply_set_variable(&mut self, name: String, value: VariableValue) -> Operation {
         // Capture previous state for undo
         let previous = self.variables.get(&name).cloned();
         let undo_data = serde_json::to_vec(&previous).unwrap_or_default();
 
         // Perform the set
-        self.variables
-            .insert(name.clone(), VariableValue::Scalar(value));
+        self.variables.insert(name.clone(), value);
 
-        // Record operation
-        let op = Operation::new(OperationType::SetVariable, name, None).with_undo_data(undo_data);
-        self.record_operation(op);
+        Operation::new(OperationType::SetVariable, name, None).with_undo_data(undo_data)
     }
 
     /// Unset a shell variable with undo tracking.
     pub fn unset_variable_tracked(&mut self, name: &str) {
+        // Nothing to unset is a no-op with no record.
+        if let Some(op) = self.apply_unset_variable(name) {
+            self.record_operation(op);
+        }
+    }
+
+    /// Unset a variable and return the operation describing it, without
+    /// recording it; `None` if the variable was not set. Shared by
+    /// [`Self::unset_variable_tracked`] and redo.
+    pub fn apply_unset_variable(&mut self, name: &str) -> Option<Operation> {
         // Capture previous state for undo
         let previous = self.variables.get(name).cloned();
-        if previous.is_none() {
-            // Nothing to unset — no-op, no record
-            return;
-        }
+        previous.as_ref()?;
         let undo_data = serde_json::to_vec(&previous).unwrap_or_default();
 
         // Perform the unset
         self.variables.remove(name);
         self.exported_vars.remove(name);
 
-        // Record operation
-        let op = Operation::new(OperationType::UnsetVariable, name.to_string(), None)
-            .with_undo_data(undo_data);
-        self.record_operation(op);
+        Some(
+            Operation::new(OperationType::UnsetVariable, name.to_string(), None)
+                .with_undo_data(undo_data),
+        )
     }
 
     /// Get a shell variable value (scalar only)

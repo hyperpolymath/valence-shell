@@ -559,6 +559,66 @@ fn test_redo_correspondence() -> Result<()> {
     Ok(())
 }
 
+/// Test: Redo then undo returns to the undone state, and redo restores the
+/// whole executed state: the filesystem and the history record.
+///
+/// Model: `proofs/idris2/src/Filesystem/Composition.idr`
+/// - `undoRedoIdentity`: `undo (execute op s) >>= redo = Just (execute op s)`.
+///   The equality is on the whole `UndoState`, so it covers the undo stack,
+///   not only the filesystem.
+/// - `undoRedoUndoIdentity` and `redoUndoIdentity`: a redo followed by an
+///   undo is the identity.
+///
+/// The Rust counterpart of "the same undo-stack entry" is a history record
+/// with the same type, path and undo data. Redo used to record the operation
+/// with no undo data, so the filesystem matched after redo but the record did
+/// not, and the next undo restored an empty file. This is `tested-only`
+/// evidence about the Rust code, not a mechanised correspondence.
+#[test]
+fn test_redo_then_undo_correspondence() -> Result<()> {
+    let temp = tempdir()?;
+    let mut state = ShellState::new(temp.path().to_str().unwrap())?;
+    let dir = temp.path().join("dir");
+    let file = temp.path().join("dir/file");
+    let content: &[u8] = &[0x00, 0xff, b'v', b's', b'h', b'\n'];
+
+    mkdir(&mut state, "dir", false)?;
+    fs::write(&file, content)?;
+    rm(&mut state, "dir/file", false)?;
+    rmdir(&mut state, "dir", false)?;
+
+    // The executed state: nothing left, three records.
+    let executed: Vec<_> = state
+        .history
+        .iter()
+        .map(|op| (op.op_type, op.path.clone(), op.undo_data.clone()))
+        .collect();
+    assert!(!dir.exists());
+
+    for cycle in 0..3 {
+        // undo: back to the directory holding the file, byte for byte.
+        vsh::commands::undo(&mut state, 2, false)?;
+        assert_eq!(fs::read(&file)?, content, "cycle {cycle}: undo");
+
+        // redo: the executed state again, records included.
+        vsh::commands::redo(&mut state, 2, false)?;
+        assert!(!dir.exists(), "cycle {cycle}: redo");
+        let live: Vec<_> = state
+            .history
+            .iter()
+            .filter(|op| !op.undone)
+            .map(|op| (op.op_type, op.path.clone(), op.undo_data.clone()))
+            .collect();
+        assert_eq!(live, executed, "cycle {cycle}: records after redo");
+    }
+
+    // redo then undo: the undone state, byte for byte.
+    vsh::commands::undo(&mut state, 2, false)?;
+    assert_eq!(fs::read(&file)?, content);
+
+    Ok(())
+}
+
 /// Test: Multiple undo/redo cycles maintain correctness
 #[test]
 fn test_undo_redo_cycles() -> Result<()> {
