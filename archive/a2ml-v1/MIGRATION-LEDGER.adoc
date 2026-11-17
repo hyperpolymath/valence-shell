@@ -197,7 +197,7 @@ archive is verbatim and an SPDX edit is the owner's (owner input, row X-1).
 |===
 | ID | Item | Disposition
 | U-1 | `.claude/CLAUDE.md` "Machine-Readable Artefacts" list | Updated to name the deed, this ledger and the archive (SD007). Nothing else in the file was changed.
-| U-2 | `.claude/CLAUDE.md` language-policy table, row "Guile Scheme" | Still names `.machine_readable/6a2/STATE.a2ml`, `META.a2ml` and `ECOSYSTEM.a2ml`. Left as written: the rest of the file is owner policy. Hypatia's SD007 pattern `.machine_readable/6a2/` still matches that row, so *SD007 stays open until the owner edits it.*
+| U-2 | `.claude/CLAUDE.md` language-policy table, row "Guile Scheme" | Named `.machine_readable/6a2/STATE.a2ml`, `META.a2ml` and `ECOSYSTEM.a2ml`. *Resolved 2026-11-17:* the row now points at `valence-shell_chora.deed`, following the absolute-zero precedent; the row's language rule is unchanged. SD007 clears.
 | U-3 | `docs/README.adoc` (two references) | Updated to the deed, `PROOF_HOLES_AUDIT.adoc` and the archived STATE.
 | U-4 | `proofs/coq/README.adoc` (three references) | Updated to the archived STATE and the live authorities. The file's own counts (`admitted = 1`) disagree with `docs/PROOF_HOLES_AUDIT.adoc` (0 admits); recorded, not corrected.
 | U-5 | `ROADMAP.adoc` "Current Status" | The path updated to the archived STATE. The "~74%" figure is left as written (S-4).
@@ -224,7 +224,7 @@ archive is verbatim and an SPDX edit is the owner's (owner input, row X-1).
 | `deed_lint.js --anchor`, `--egress`, `--contractiles`, `--rsr-profile` | PASS | Each reports no such clause.
 | standards `deed_canon` reader (from `scripts/check-canon-lockstep.sh`) | PASS | Reads `2.1.5` and both hashes.
 | `.github/scripts/check-bridge-forbidden-phrases.sh` | PASS | Run after the edits.
-| `git grep -n '6a2/'` | 2 live hits, both owner items | `.claude/CLAUDE.md` language table (U-2) and the frozen `Mustfile.a2ml` checks (O-2). Every other hit is in this archive and ledger, a `CHANGELOG.adoc` history entry (this change's included), a dated audit record, or the out-of-scope subproject (O-9).
+| `git grep -n '6a2/'` | 1 live hit, an owner item | The frozen `Mustfile.a2ml` checks (O-2). Every other hit is in this archive and ledger, a `CHANGELOG.adoc` history entry (this change's included), a dated audit record, or the out-of-scope subproject (O-9).
 |===
 
 == Open items (owner)
@@ -234,7 +234,7 @@ archive is verbatim and an SPDX edit is the owner's (owner input, row X-1).
 . The maturity level (S-2).
 . Whether the bridges become `(related …)` edges, and with which relationship (E-4).
 . The AGENTIC constraints as `Mustfile.deed` edicts (A-2).
-. The `.claude/CLAUDE.md` language-table row (U-2); the `ROADMAP.adoc` items (U-6); the PLAYBOOK steps (P-4).
+. The `ROADMAP.adoc` items (U-6); the PLAYBOOK steps (P-4).
 . When to move to the A7 split descriptile deeds, with their affirmation (T-1).
 . Confirm the `:repo-uuid` read from the registry (I-1).
 . SPDX headers on the two archived files that lack them (X-1).
