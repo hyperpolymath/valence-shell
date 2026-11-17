@@ -1455,8 +1455,12 @@ fn apply_replace_content(
     // Open without `create`, so the write lands in the file that was read,
     // and without `truncate`: the new content is written over the old and the
     // file is cut to length afterwards. The old bytes are then still in place
-    // if the write fails, and putting them back never grows the file, so it
-    // does not need the space or quota the failed write ran out of.
+    // if the write fails, and putting them back never grows the file. On a
+    // filesystem that overwrites in place, that needs none of the space or
+    // quota the failed write ran out of. It is not a guarantee: a
+    // copy-on-write filesystem can need new space even for an overwrite, and
+    // an I/O error can fail any write, which is why a failed restore is
+    // reported below.
     use std::io::{Seek, SeekFrom};
     let mut file = fs::OpenOptions::new()
         .write(true)
