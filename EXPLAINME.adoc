@@ -153,7 +153,7 @@ reproduce. Absence of a tool is an open obligation, not a passing leg
 | The Rust `undo`/`redo` round trip restores state for every operation type that reaches the history
 | tested-only
 | `cargo test --test redo_roundtrip_tests` (22 tests: 19 operation scenarios, 48 random sequences via `proptest`) and `test_redo_then_undo_correspondence`
-| `impl/rust-cli/tests/redo_roundtrip_tests.rs`, `impl/rust-cli/tests/correspondence_tests.rs`
+| `impl/rust-cli/tests/redo_roundtrip_tests.rs`, `impl/rust-cli/tests/redo_write_failure_tests.rs` (a redo whose write fails part-way, forced with `RLIMIT_FSIZE`), `impl/rust-cli/tests/correspondence_tests.rs`
 | Whole-sandbox comparison (bytes, modes, owners, link targets, one shell variable). Three scenarios assert only the redo laws because undo itself loses data there (mode on `rm`/`rmdir`, exported flag on `unset`); random sequences exclude symbolic links for the same reason; the `chown` scenario runs only as root. Not a proof and not a refinement of the Idris2 model
 
 | Idris2 ABI layout, encodings and round-trips match the C header

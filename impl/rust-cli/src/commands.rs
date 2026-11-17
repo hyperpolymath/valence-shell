@@ -265,7 +265,13 @@ fn apply_create_file(state: &ShellState, path: &str, content: &[u8]) -> Result<O
         .create_new(true)
         .open(&full_path)
         .context("touch failed")?;
-    file.write_all(content).context("touch failed")?;
+    if let Err(e) = file.write_all(content) {
+        // A partial file must not outlive the failure: it was not there
+        // before, and it would block a retry.
+        drop(file);
+        let _ = fs::remove_file(&full_path);
+        return Err(anyhow::Error::new(e).context("touch failed"));
+    }
 
     Ok(Operation::new(
         OperationType::CreateFile,
@@ -1439,8 +1445,23 @@ fn apply_replace_content(
         .truncate(true)
         .open(&full_path)
         .with_context(|| format!("Redo {} failed", op_type))?;
-    file.write_all(content)
-        .with_context(|| format!("Redo {} failed", op_type))?;
+    if let Err(e) = file.write_all(content) {
+        // Put back what was there, so a failed redo leaves the file as it
+        // found it and a retry captures the right undo data.
+        use std::io::{Seek, SeekFrom};
+        let restored = file
+            .set_len(0)
+            .and_then(|()| file.seek(SeekFrom::Start(0)))
+            .and_then(|_| file.write_all(&original));
+        let error = anyhow::Error::new(e).context(format!("Redo {} failed", op_type));
+        return Err(match restored {
+            Ok(()) => error,
+            Err(restore_error) => error.context(format!(
+                "{} could not be restored after a failed redo: {}",
+                path, restore_error
+            )),
+        });
+    }
 
     Ok(Operation::new(op_type, path.to_string(), None).with_undo_data(original))
 }
@@ -1461,7 +1482,11 @@ fn apply_append(state: &ShellState, path: &str, appended: &[u8]) -> Result<Opera
         .append(true)
         .open(&full_path)
         .context("Redo append failed")?;
-    file.write_all(appended).context("Redo append failed")?;
+    if let Err(e) = file.write_all(appended) {
+        // Cut off whatever part of the append landed.
+        let _ = file.set_len(original_size);
+        return Err(anyhow::Error::new(e).context("Redo append failed"));
+    }
 
     Ok(
         Operation::new(OperationType::FileAppended, path.to_string(), None)

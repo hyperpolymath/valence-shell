@@ -60,7 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   memory with the redo entry. File content over `VSH_REDO_CAPTURE_LIMIT` bytes
   (shell or environment variable; default 10 MiB; `0` = no limit) is not kept,
   and redo of that entry says so.
-- A `redo` that fails changes nothing and stays on the redo stack. `redo` of
+- A `redo` that fails changes nothing and stays on the redo stack, including
+  when a file write fails part-way (the partial file is removed, or the
+  previous content put back). `redo` of
   `cp`, `mv` and `touch` no longer overwrites a path that reappeared after the
   undo.
 - Undo of a `>`/`>>` redirection failed whenever the sandbox root was not `/`
@@ -70,8 +72,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `touch` creates its file with `create_new`, so it no longer writes through a
   dangling symbolic link.
 - Idris2 model: `redoUndoIdentity`, `undoRedoUndoIdentity`,
-  `redoUndoComposition` added to `Filesystem.Composition` (`proven` for the
-  model; the Rust link stays `tested-only`).
+  `redoUndoComposition` added to `Filesystem.Composition`. Their status is
+  the proof ledger's row for the undo/redo stack laws
+  (`proven-with-postulates`); the Rust link stays `tested-only`.
 - Known and *not* fixed here (tests exclude them, see
   `impl/rust-cli/tests/redo_roundtrip_tests.rs`): undo of `rm`/`rmdir` does
   not restore the mode; undo of `unset` does not restore the exported flag;
