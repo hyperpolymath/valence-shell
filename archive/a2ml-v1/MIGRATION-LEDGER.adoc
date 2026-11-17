@@ -201,7 +201,7 @@ archive is verbatim and an SPDX edit is the owner's (owner input, row X-1).
 | U-3 | `docs/README.adoc` (two references) | Updated to the deed, `PROOF_HOLES_AUDIT.adoc` and the archived STATE.
 | U-4 | `proofs/coq/README.adoc` (three references) | Updated to the archived STATE and the live authorities. The file's own counts (`admitted = 1`) disagree with `docs/PROOF_HOLES_AUDIT.adoc` (0 admits); recorded, not corrected.
 | U-5 | `ROADMAP.adoc` "Current Status" | The path updated to the archived STATE. The "~74%" figure is left as written (S-4).
-| U-6 | `ROADMAP.adoc` open items "Add `[dogfooding-status]` to STATE.a2ml" and "Add 3+ ADRs to META.a2ml" | Left as written (owner's roadmap). Both name retired files, which may no longer be written; the ADR target is now `(adr …)` entries (T-1). Owner input.
+| U-6 | `ROADMAP.adoc` open items "Add `[dogfooding-status]` to STATE.a2ml" and "Add 3+ ADRs to META.a2ml" | Both named retired files. The tasks are kept, reworded to drop the file names and marked "target pending", so nobody is sent to edit an archive (Codex review on #229). Where dogfooding status lives, and when ADRs become `(adr …)` entries (T-1), is still owner input.
 | U-7 | `.machine_readable/bot_directives/README.adoc` | The `AGENTIC.a2ml` line now names the deed's `(agentic …)` clause.
 | U-8 | Dated records: `CHANGELOG.adoc` history, `docs/audits/*`, `docs/governance/CRG-AUDIT-2026-04-18.adoc`, `docs/reports/*` | Left as written.
 |===
