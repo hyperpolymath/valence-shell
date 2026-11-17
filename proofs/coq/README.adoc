@@ -16,11 +16,11 @@ extraction.
 
 | `filesystem_model.v`
 | Core `Filesystem = Path -> option FSNode` model + structural lemmas.
-  Note: this finite-domain model is why `is_empty_dir_dec`
-  (`posix_errors.v`) is a theorem proved with classical logic
-  (`Classical.classic`), not a custom axiom; see `[coq-proof-status]
+  Note: this function-based model is why `is_empty_dir_dec`
+  (`posix_errors.v`) is a theorem proved with classical logic, not a
+  custom axiom (see "Proof-debt status" below, and `[coq-proof-status]
   axiom-detail` in the archived
-  `../../archive/a2ml-v1/6a2-STATE.a2ml.txt`.
+  `../../archive/a2ml-v1/6a2-STATE.a2ml.txt`).
 
 | `filesystem_composition.v`
 | Composition theorems. Contains no `admit.` or `Admitted.` markers:
@@ -71,10 +71,19 @@ make all                      # via auto-emitted Makefile
 == Proof-debt status
 
 * `admitted = 0` — no `admit.` or `Admitted.` marker in any `.v` file.
-* One justified classical dependency: `is_empty_dir_dec`, a theorem
-  proved with `Classical.classic` (infinite-domain decidability;
-  migration path: switch to `FMaps.t FSNode`). No custom `Axiom`.
-* All other proofs constructively closed.
+* No custom `Axiom`. The proofs do depend on three standard-library
+  axioms (`Print Assumptions`, Coq 8.18.0, re-run 2026-11-17):
+** *Classical logic:* `is_empty_dir_dec` uses
+   `excluded_middle_informative`, so it depends on
+   `Classical_Prop.classic` and
+   `ClassicalEpsilon.constructive_indefinite_description`
+   (decidability over an infinite domain; migration path: switch to
+   `FMaps.t FSNode`).
+** *Functional extensionality:* the reversibility theorems, for example
+   `mkdir_rmdir_reversible` and `single_op_reversible`, depend on
+   `FunctionalExtensionality.functional_extensionality_dep`, because a
+   filesystem is a function and they state equality of filesystems.
+* So these proofs are not constructive, and are not axiom-free.
 
 Authoritative status in `../../docs/PROOF_HOLES_AUDIT.adoc` and the
 Proof Ledger of `../../EXPLAINME.adoc`. The former `[coq-proof-status]`
