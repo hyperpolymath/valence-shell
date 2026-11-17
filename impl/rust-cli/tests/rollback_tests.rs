@@ -164,6 +164,89 @@ fn a_reversal_that_fails_on_disk_leaves_the_transaction_open_to_retry() {
     assert!(live(&state).is_empty());
 }
 
+/// After a failed reversal, rollback stops. Older operations may depend on
+/// the one that failed, so they are not reversed out of order.
+#[test]
+fn rollback_stops_at_the_first_failed_reversal() {
+    let root = TempDir::new().unwrap();
+    let mut state = open(&root);
+    commands::begin_transaction(&mut state, "t").unwrap();
+    commands::touch(&mut state, "older", false).unwrap();
+    commands::touch(&mut state, "newer", false).unwrap();
+    let older = state.history[0].id;
+
+    // The newest operation is reversed first, and its reversal will fail.
+    fs::remove_file(root.path().join("newer")).unwrap();
+    assert!(commands::rollback_transaction(&mut state).is_err());
+
+    // The older operation was not touched.
+    assert!(root.path().join("older").exists());
+    assert!(live(&state).contains(&older));
+    assert!(state.active_transaction.is_some());
+}
+
+/// The history size limit can drop a transaction's oldest operations. What
+/// is left cannot stand for the whole transaction, so rollback is refused.
+#[test]
+fn rollback_is_refused_when_the_history_limit_dropped_part_of_the_transaction() {
+    let root = TempDir::new().unwrap();
+    let mut state = open(&root);
+    state.max_history_size = Some(1);
+    commands::begin_transaction(&mut state, "t").unwrap();
+    commands::touch(&mut state, "a", false).unwrap();
+    commands::touch(&mut state, "b", false).unwrap();
+    assert_eq!(
+        state.history.len(),
+        1,
+        "the limit dropped the first operation"
+    );
+
+    let refused = commands::rollback_transaction(&mut state).unwrap_err();
+    assert!(
+        refused.to_string().contains("no longer in the history"),
+        "{refused}"
+    );
+    assert!(root.path().join("a").exists());
+    assert!(root.path().join("b").exists());
+    assert!(state.active_transaction.is_some());
+
+    commands::commit_transaction(&mut state).unwrap();
+    assert!(state.active_transaction.is_none());
+}
+
+/// Records that lack the data their reversal needs are found before
+/// anything is reversed, whatever the operation type.
+#[test]
+fn rollback_checks_every_kind_of_undo_data_first() {
+    for (kind, undo_data) in [
+        (OperationType::DeleteFile, None),
+        (OperationType::WriteFile, None),
+        (OperationType::FileTruncated, None),
+        (OperationType::SetVariable, None),
+        (OperationType::SetVariable, Some(b"not json".to_vec())),
+        (OperationType::UnsetVariable, None),
+    ] {
+        let root = TempDir::new().unwrap();
+        let mut state = open(&root);
+        commands::begin_transaction(&mut state, "t").unwrap();
+        commands::touch(&mut state, "kept", false).unwrap();
+        let mut op = Operation::new(kind, "x".to_string(), None);
+        op.undo_data = undo_data.clone();
+        state.record_operation(op);
+
+        let refused = commands::rollback_transaction(&mut state).unwrap_err();
+        assert!(
+            refused.to_string().contains("refused"),
+            "{kind:?} with {undo_data:?}: {refused}"
+        );
+        assert!(
+            root.path().join("kept").exists(),
+            "{kind:?}: nothing reversed"
+        );
+        assert!(!root.path().join("x").exists(), "{kind:?}: nothing written");
+    }
+}
+
 #[test]
 fn rollback_skips_operations_already_undone_inside_the_transaction() {
     let root = TempDir::new().unwrap();

@@ -1335,6 +1335,14 @@ fn rollback_blocker(op: &crate::state::Operation) -> Option<String> {
         }),
         OperationType::Symlink => undo.is_none(),
         OperationType::Move => !op.path.contains('\0'),
+        // Restoring a removed file, or a file's earlier content, needs that
+        // content. Without it the reversal would write an empty file.
+        OperationType::CreateFile | OperationType::WriteFile => undo.is_none(),
+        // Restoring a variable needs its earlier value, in the form the
+        // shell saved it. Anything else would be read as "it was unset".
+        OperationType::SetVariable => undo.is_none_or(|data| {
+            serde_json::from_slice::<Option<crate::state::VariableValue>>(data).is_err()
+        }),
         _ => false,
     };
     blocked.then(|| {
@@ -1386,6 +1394,29 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
         return Ok(());
     };
 
+    // Every operation of the transaction must still be in the history. The
+    // history size limit can drop the oldest ones; reversing only what is
+    // left and then closing the transaction would leave those in place
+    // behind a transaction recorded as rolled back.
+    let dropped = state.active_transaction.as_ref().map_or(0, |txn| {
+        txn.operations
+            .iter()
+            .filter(|id| !state.history.iter().any(|op| op.id == **id))
+            .count()
+    });
+    if dropped > 0 {
+        eprintln!(
+            "{} {} of this transaction's operations are no longer in the history \
+             (the history size limit dropped them), so it cannot be rolled back. \
+             Nothing was changed. Commit to close the transaction.",
+            "Rollback refused:".bright_red(),
+            dropped
+        );
+        anyhow::bail!(
+            "Transaction rollback refused: {dropped} operations are no longer in the history"
+        )
+    }
+
     let ops: Vec<_> = state
         .current_transaction_ops()
         .iter()
@@ -1425,8 +1456,10 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
         )
     }
 
-    // Collect rollback failures
+    // The failure that stopped the rollback, if any, and how many
+    // operations were reversed before it.
     let mut failed_rollbacks: Vec<(String, String)> = Vec::new();
+    let mut reversed = 0usize;
 
     // Undo all operations in reverse order
     for op in ops.iter().rev() {
@@ -1593,7 +1626,10 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
             // Record each reversal as it happens, so the history never
             // shows a reversed operation as live.
             match result {
-                Ok(()) => state.mark_undone(op.id, txn_id),
+                Ok(()) => {
+                    state.mark_undone(op.id, txn_id);
+                    reversed += 1;
+                }
                 Err(e) => failed_rollbacks.push((op.path.clone(), e.to_string())),
             }
         } else {
@@ -1601,6 +1637,14 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                 op.path.clone(),
                 format!("{} cannot be reversed", op.op_type),
             ));
+        }
+
+        // Stop at the first failure. Older operations may depend on the one
+        // that could not be reversed (a file renamed, then written to), so
+        // reversing them out of order could put the wrong content in the
+        // wrong place.
+        if !failed_rollbacks.is_empty() {
+            break;
         }
     }
 
@@ -1615,12 +1659,12 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
         );
         Ok(())
     } else {
-        let succeeded = ops.len() - failed_rollbacks.len();
         eprintln!(
-            "{} {} succeeded, {} failed",
+            "{} {} reversed, {} failed, {} not attempted",
             "Partial rollback:".bright_yellow(),
-            succeeded,
-            failed_rollbacks.len()
+            reversed,
+            failed_rollbacks.len(),
+            ops.len() - reversed - failed_rollbacks.len()
         );
 
         for (path, err) in &failed_rollbacks {
@@ -1632,8 +1676,8 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
         );
 
         anyhow::bail!(
-            "Transaction rollback incomplete: {}/{} operations failed",
-            failed_rollbacks.len(),
+            "Transaction rollback incomplete: {} of {} operations reversed",
+            reversed,
             ops.len()
         )
     }

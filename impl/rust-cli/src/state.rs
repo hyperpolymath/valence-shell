@@ -866,6 +866,19 @@ impl ShellState {
             // way of converting an older state file.
             Some(bytes) if !bytes.is_empty() => {
                 let decoded = journal::decode(&bytes);
+                // A whole record that fails its checksum is damage, not an
+                // interrupted write. Stop before anything is changed: the
+                // records after it may be good, and only a person can decide
+                // what to keep.
+                if decoded.tail == journal::Tail::Damaged {
+                    anyhow::bail!(
+                        "Saved shell state is damaged: record {} fails its checksum \
+                         ({} of {} bytes are readable). Nothing was changed.",
+                        decoded.records.len() + 1,
+                        decoded.accepted,
+                        bytes.len()
+                    );
+                }
                 for (index, payload) in decoded.records.iter().enumerate() {
                     let event: Event = serde_json::from_slice(payload).with_context(|| {
                         format!(
@@ -909,8 +922,13 @@ impl ShellState {
     /// Read a `.vsh_state.json` written before the journal existed, write
     /// it out as a journal, and rename the old file out of the way.
     fn migrate_legacy(&mut self, legacy: &Path) -> Result<()> {
-        let json = crate::fs_pure::read_to_end(legacy)
-            .with_context(|| format!("Failed to read {}", legacy.display()))?;
+        // Read it under the same rules as the journal: a regular file, owned
+        // by this user, with one name, never through a symbolic link, and
+        // readable by its owner only from now on. It holds the same data.
+        let json = FileStorage::new(legacy)
+            .read()
+            .with_context(|| format!("Failed to read {}", legacy.display()))?
+            .with_context(|| format!("{} disappeared while it was read", legacy.display()))?;
         let snapshot: Snapshot = serde_json::from_slice(&json)
             .with_context(|| format!("{} is not a valid saved shell state", legacy.display()))?;
         self.apply_event(Event::Snapshot(snapshot))?;
@@ -2078,6 +2096,78 @@ mod tests {
         );
         assert_eq!(storage.point().durable, bytes, "storage must be untouched");
         assert!(storage.trace().is_empty());
+    }
+
+    #[test]
+    fn test_damaged_record_is_an_error_and_nothing_is_overwritten() {
+        let root = persisted_root();
+        let (mut state, storage) = sim_state(&root);
+        record(&mut state, "a");
+        record(&mut state, "b");
+        record(&mut state, "c");
+        let good = storage.point().durable;
+
+        // Flip a bit in the middle record's payload. The third record is
+        // still intact after it.
+        let first_len =
+            journal::decode(&good).records[0].len() + journal::HEADER_LEN + journal::SUM_LEN;
+        let mut damaged = good.clone();
+        damaged[first_len + journal::HEADER_LEN + 3] ^= 0x01;
+
+        let storage = SimStorage::with_contents(damaged.clone());
+        let opened =
+            ShellState::with_storage(root.path().to_str().unwrap(), Box::new(storage.clone()));
+        let message = format!("{:#}", opened.err().expect("load must fail"));
+        assert!(message.contains("record 2 fails its checksum"), "{message}");
+        assert_eq!(
+            storage.point().durable,
+            damaged,
+            "storage must be untouched"
+        );
+        assert!(storage.trace().is_empty());
+        assert!(storage.set_aside_bytes().is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_legacy_state_file_that_is_a_symlink_or_fifo_is_refused() {
+        let root = persisted_root();
+        let legacy = root.path().join(LEGACY_STATE_FILE_NAME);
+
+        // A symlink to a real state file elsewhere is not followed.
+        let elsewhere = root.path().join("elsewhere.json");
+        fs::write(&elsewhere, LEGACY_STATE).unwrap();
+        std::os::unix::fs::symlink(&elsewhere, &legacy).unwrap();
+        assert!(ShellState::new(root.path().to_str().unwrap()).is_err());
+        assert!(!journal_path(&root).exists());
+        fs::remove_file(&legacy).unwrap();
+
+        // A FIFO is refused without waiting for a writer.
+        nix::unistd::mkfifo(&legacy, nix::sys::stat::Mode::S_IRWXU).unwrap();
+        let root_path = root.path().to_str().unwrap().to_string();
+        let (done, finished) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = done.send(ShellState::new(&root_path).is_err());
+        });
+        let refused = finished
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("opening the shell must not block on a FIFO");
+        assert!(refused);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_legacy_state_file_is_made_private_before_it_is_kept() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = persisted_root();
+        let legacy = root.path().join(LEGACY_STATE_FILE_NAME);
+        fs::write(&legacy, LEGACY_STATE).unwrap();
+        fs::set_permissions(&legacy, fs::Permissions::from_mode(0o644)).unwrap();
+
+        reopen(&root);
+        let migrated = root.path().join(".vsh_state.json.migrated");
+        let mode = fs::metadata(migrated).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
     }
 
     #[test]

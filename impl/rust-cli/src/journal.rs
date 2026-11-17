@@ -84,15 +84,58 @@ fn step(bytes: &[u8]) -> Option<(&[u8], usize)> {
     (sum == checksum(payload)).then_some((payload, frame_end))
 }
 
+/// What follows the accepted records in a journal file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tail {
+    /// Nothing. The journal is clean.
+    Clean,
+    /// An incomplete record: the file ends before the record's length field,
+    /// payload or checksum does. This is what an interrupted append leaves,
+    /// and all it can leave if a crash keeps a prefix of what was written.
+    Torn,
+    /// A complete record whose checksum does not match its payload. An
+    /// interrupted append cannot produce this; the file has been damaged.
+    Damaged,
+}
+
 /// The result of decoding a journal file (model: `Decoded`).
 #[derive(Debug, PartialEq, Eq)]
 pub struct Decoded<'a> {
     /// The payloads of the records accepted, in order.
     pub records: Vec<&'a [u8]>,
     /// How many bytes those records occupy. The bytes from here to the end
-    /// of the input were not accepted; the journal is clean exactly when
-    /// this equals the input length.
+    /// of the input were not accepted.
     pub accepted: usize,
+    /// What the bytes that were not accepted are.
+    ///
+    /// The distinction has one blind spot. Damage to a length field that
+    /// makes the record appear to run past the end of the file looks the
+    /// same as an interrupted append, and is reported as [`Tail::Torn`].
+    pub tail: Tail,
+}
+
+/// Classify the bytes after the last accepted record.
+fn classify_tail(rest: &[u8]) -> Tail {
+    if rest.is_empty() {
+        return Tail::Clean;
+    }
+    let Some(header) = rest.get(..HEADER_LEN) else {
+        return Tail::Torn;
+    };
+    // The slice is exactly HEADER_LEN bytes, so the conversion cannot fail.
+    let len = header
+        .try_into()
+        .map(|bytes: [u8; HEADER_LEN]| u32::from_le_bytes(bytes) as usize)
+        .unwrap_or(usize::MAX);
+    let complete = HEADER_LEN
+        .checked_add(len)
+        .and_then(|end| end.checked_add(SUM_LEN))
+        .is_some_and(|frame_end| frame_end <= rest.len());
+    if complete {
+        Tail::Damaged
+    } else {
+        Tail::Torn
+    }
 }
 
 /// Decode as many records as the front of `bytes` holds (model: `decode`).
@@ -103,7 +146,12 @@ pub fn decode(bytes: &[u8]) -> Decoded<'_> {
         records.push(payload);
         accepted += used;
     }
-    Decoded { records, accepted }
+    let tail = classify_tail(&bytes[accepted..]);
+    Decoded {
+        records,
+        accepted,
+        tail,
+    }
 }
 
 /// Where the journal's bytes live (model: `File`, with `append`, `sync` and
@@ -214,6 +262,18 @@ impl FileStorage {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 format!("{} is owned by another user", self.path.display()),
+            ));
+        }
+        // A second name for the file means writes here would land in
+        // whatever that other name is, which may not be ours to change.
+        if meta.nlink() != 1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "{} has {} hard links; refusing to use it",
+                    self.path.display(),
+                    meta.nlink()
+                ),
             ));
         }
         if meta.mode() & 0o077 != 0 {
@@ -557,6 +617,40 @@ mod tests {
         let decoded = decode(&bytes);
         assert_eq!(decoded.records, payloads);
         assert_eq!(decoded.accepted, bytes.len());
+        assert_eq!(decoded.tail, Tail::Clean);
+    }
+
+    /// A cut anywhere inside a record is an interrupted append; a changed
+    /// byte in a whole record's payload or checksum is damage.
+    #[test]
+    fn a_cut_record_is_torn_and_a_changed_record_is_damaged() {
+        let first = frame(b"first").unwrap();
+        let bytes = frames(&[b"first", b"second", b"third"]);
+
+        // Every cut that is not on a record boundary.
+        let boundaries = [
+            0,
+            first.len(),
+            first.len() + frame(b"second").unwrap().len(),
+        ];
+        for cut in 0..bytes.len() {
+            let expected = if boundaries.contains(&cut) {
+                Tail::Clean
+            } else {
+                Tail::Torn
+            };
+            assert_eq!(decode(&bytes[..cut]).tail, expected, "cut at {cut}");
+        }
+
+        // A flipped bit in the second record's payload or checksum, with the
+        // third record still after it.
+        for i in first.len() + HEADER_LEN..first.len() + HEADER_LEN + 6 + SUM_LEN {
+            let mut damaged = bytes.clone();
+            damaged[i] ^= 0x01;
+            let decoded = decode(&damaged);
+            assert_eq!(decoded.records, [b"first"], "byte {i}");
+            assert_eq!(decoded.tail, Tail::Damaged, "byte {i}");
+        }
     }
 
     /// Model: `decode-crash` with nothing synced. Every prefix of a run of
@@ -743,6 +837,20 @@ mod tests {
                 .recv_timeout(std::time::Duration::from_secs(10))
                 .expect("storage calls on a FIFO must not block");
             assert_eq!(outcome, (true, true));
+        }
+
+        #[test]
+        fn a_file_with_a_second_hard_link_is_refused_and_left_alone() {
+            let (dir, mut storage) = storage();
+            let other = dir.path().join("someone-elses");
+            fs::write(&other, b"theirs").unwrap();
+            fs::set_permissions(&other, fs::Permissions::from_mode(0o644)).unwrap();
+            fs::hard_link(&other, storage.path()).unwrap();
+
+            assert!(storage.append(b"x").is_err());
+            assert!(storage.read().is_err());
+            assert_eq!(fs::read(&other).unwrap(), b"theirs");
+            assert_eq!(mode(&other), 0o644, "its permissions are not changed");
         }
 
         #[test]
