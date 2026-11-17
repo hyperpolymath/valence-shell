@@ -147,6 +147,43 @@ on a branch and was not converging under point fixes (section 14.2).
 |The separate working plan written on 2026-11-17. Section 14 is that plan.
 |===
 
+A second set, given by selector later the same day, once the journal (steps C1
+and C2 of section 14.3) was in place:
+
+[cols="1,4,5",options="header"]
+|===
+|# |Ruling |Effect
+
+|*OD-38* |*`redo` can bring rolled-back operations back, one at a time.* Rollback
+is an undo of each operation of the transaction (E 8 / D 8). Treating a rollback
+as one history entry, undone as a whole (E 9 / D 6), was the more elegant arm
+and is not taken now.
+|As implemented. Test: `redo_brings_rolled_back_operations_back_in_order`.
+
+|*OD-39* |*Rollback checks first.* Before reversing anything it checks that every
+operation can be reversed and refuses the whole rollback otherwise. A failure
+found only while reversing leaves the transaction open (E 9 / D 9).
+|Implemented for what an operation's record shows: no inverse (obliterate,
+hardware erase), or missing undo data. It does not yet simulate the reversals
+against the disk, so a failure that only the filesystem knows about is still
+found part-way through. A full dry run needs the executable model of Phase D.
+
+|*OD-40* |*An unreadable saved state stops the shell, and a recovery command is
+added*: `vsh --recover` shows what is readable and lets the user keep the
+readable part or move the file aside (E 8 / D 8).
+|The shell already refuses to start and leaves the file untouched. The recovery
+command is new work, listed in section 14.3 as C5, after the journal branch is
+mergeable.
+
+|*OD-41* |*Holes first.* The journal branch stops at C2. The sandbox escapes
+(Phase B) come next, and the capability-handle experiment B1 decides both the
+containment mechanism and where the state lives.
+|OD-36's order from this point: A → C1, C2 (done) → *B* → C3, C4, C5 → D → E → F.
+This returns to "holes before anything else". valence-shell#230 stays
+unmergeable until C3 lands: its journal is crash-safe, but still inside the
+session root and without a lock between two shells.
+|===
+
 '''''
 
 == 0. Bottom line
@@ -970,7 +1007,10 @@ and ends at a machine-checked gate.
 |C2 |One file of length-prefixed, checksummed records behind a small storage interface (append, sync, atomic replace, read), with a real implementation and a simulated one that loses exactly what the model's crash may lose. Compaction writes one snapshot record to a new file, syncs it, renames it over the old one and syncs the directory. A failed load is an error that stops the shell from writing; the files are kept. Rollback writes a record that marks each reversed operation undone. Old `.vsh_state.json` files still load (fixture test) |No failing crash class; the harness also runs against the simulated storage |Done (section 14.4a)
 |C3 |State moves out of the command root to an owner-only directory keyed by session root (OD-12a), opened with `O_NOFOLLOW`, checked through the descriptor, and held under an exclusive lock for the life of the shell |The shell's own (built-in) commands cannot delete or edit state, because it lies outside the root they are confined to: a test runs `rm`, `>` and `obliterate` against the state path and finds it unchanged. A second shell on the same root is refused; a two-instance test passes. Not covered: an external command runs as the user and can reach the state by its absolute path, like any other file of theirs. Keeping external commands out needs process isolation, which is not part of this step |Open
 |C4 |Deleted-file contents go to a content-addressed blob store, not into the history |Removing 100 MB no longer writes about 300 MB of JSON |Open
+|C5 |`vsh --recover` (OD-40): for a saved state the shell refuses to load, show how many records are readable and what stops the rest, then keep the readable part or move the file aside, on the user's choice. Nothing is deleted |A damaged journal can be brought back to a state the shell starts on, with the damaged bytes kept |Open
 |===
+
+By OD-41, C3, C4 and C5 run after Phase B.
 
 *Phase B. Runtime holes (this plan's Phase 1).*
 
@@ -1049,19 +1089,22 @@ converted on first start and kept under a new name. A sync costs about 0.15 ms
 here (p95 0.43 ms), under the 2 ms threshold for syncing every record; the
 stress suite takes 82 s on disk and 39 s on tmpfs, so its CI step uses tmpfs.
 
-Three behaviours changed with it, each following the model. They are the
-owner's to confirm:
+Three behaviours changed with it, each following the model. The owner ruled on
+them the same day (OD-38 to OD-40):
 
 * A saved state that cannot be read stops the shell from starting, with the
-  file left as it is. Before, the shell started with an empty history.
+  file left as it is. Before, the shell started with an empty history. A
+  recovery command follows (OD-40, step C5).
 * Rollback marks the operations it reverses as undone, so `redo` can bring
-  them back one at a time.
-* If rollback cannot reverse an operation, the transaction stays open, to be
-  rolled back again or committed. Before, it was closed with the operation
-  still in place.
+  them back one at a time (OD-38).
+* Rollback first checks that every operation can be reversed, and refuses
+  otherwise with nothing changed. If a reversal then fails on the disk, the
+  transaction stays open, to be rolled back again or committed (OD-39).
+  Before, it was closed with the operation still in place.
 
-Still open in Phase C: the journal lives in the session root (C3), and deleted
-file contents are still inside the history records (C4).
+Still open in Phase C, and now after Phase B (OD-41): the journal lives in the
+session root (C3), deleted file contents are still inside the history records
+(C4), and there is no recovery command (C5).
 
 Design choices the model fixes for C2:
 

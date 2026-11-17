@@ -1313,6 +1313,38 @@ pub fn commit_transaction(state: &mut ShellState) -> Result<()> {
     Ok(())
 }
 
+/// Why `op` cannot be reversed, as far as its record alone shows: it has no
+/// inverse, or the data its inverse needs was not recorded.
+///
+/// This does not look at the disk. A reversal can still fail for a reason
+/// only the filesystem knows (a file removed by another program, say);
+/// [`rollback_transaction`] then leaves the transaction open.
+fn rollback_blocker(op: &crate::state::Operation) -> Option<String> {
+    let Some(inverse) = op.op_type.inverse() else {
+        return Some(format!("{} cannot be reversed", op.op_type));
+    };
+    let undo = op.undo_data.as_deref();
+    let blocked = match inverse {
+        OperationType::FileAppended => undo.is_none_or(|data| data.len() < 8),
+        OperationType::Chmod => undo.is_none_or(|data| data.len() < 4),
+        OperationType::Chown => undo.is_none_or(|data| {
+            let text = String::from_utf8_lossy(data);
+            let mut parts = text.splitn(2, ':');
+            let valid = |part: Option<&str>| part.is_some_and(|p| p.parse::<u32>().is_ok());
+            !(valid(parts.next()) && valid(parts.next()))
+        }),
+        OperationType::Symlink => undo.is_none(),
+        OperationType::Move => !op.path.contains('\0'),
+        _ => false,
+    };
+    blocked.then(|| {
+        format!(
+            "the data needed to reverse this {} was not recorded",
+            op.op_type
+        )
+    })
+}
+
 /// Rollback the current transaction, reversing its operations.
 ///
 /// Undoes the operations of the active transaction started with
@@ -1321,10 +1353,15 @@ pub fn commit_transaction(state: &mut ShellState) -> Result<()> {
 /// it again and an interrupted rollback can be resumed. Operations already
 /// undone inside the transaction are left alone.
 ///
+/// Before anything is reversed, every operation is checked: if one has no
+/// inverse (`obliterate`, for example) or lacks the data its inverse needs,
+/// the rollback is refused and nothing is changed. That check reads only
+/// the operation records, not the disk.
+///
 /// The transaction is closed only when every operation has been reversed.
-/// If one cannot be (the reversal fails, or the operation has no inverse),
-/// the transaction stays open: run `rollback` again once the cause is
-/// fixed, or `commit` to keep what remains.
+/// If a reversal fails on the disk, the transaction stays open: run
+/// `rollback` again once the cause is fixed, or `commit` to keep what
+/// remains.
 ///
 /// # Arguments
 /// * `state` - Mutable shell state for transaction management
@@ -1361,6 +1398,31 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
         state.abort_transaction();
         println!("{}", "Nothing to rollback".bright_yellow());
         return Ok(());
+    }
+
+    // Check first: if any operation is known not to be reversible, refuse
+    // the whole rollback before touching the disk, so a transaction is
+    // never left half rolled back for a reason that was knowable.
+    let blockers: Vec<(&str, String)> = ops
+        .iter()
+        .filter_map(|op| rollback_blocker(op).map(|why| (op.path.as_str(), why)))
+        .collect();
+    if !blockers.is_empty() {
+        eprintln!(
+            "{} {} of {} operations cannot be reversed. Nothing was changed.",
+            "Rollback refused:".bright_red(),
+            blockers.len(),
+            ops.len()
+        );
+        for (path, why) in &blockers {
+            eprintln!("  {} {}: {}", "Blocked:".bright_red(), path, why);
+        }
+        eprintln!("The transaction is still open. Commit to keep its operations.");
+        anyhow::bail!(
+            "Transaction rollback refused: {}/{} operations cannot be reversed",
+            blockers.len(),
+            ops.len()
+        )
     }
 
     // Collect rollback failures

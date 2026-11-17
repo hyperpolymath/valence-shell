@@ -146,8 +146,11 @@ one sync.
   `main`): `begin t; touch f; rollback; undo` failed with "No such file or
   directory". Rollback now marks each operation undone as it reverses it,
   skips operations already undone inside the transaction, and closes the
-  transaction only when every operation has been reversed. If one cannot
-  be, the transaction stays open so the rollback can be run again.
+  transaction only when every operation has been reversed. It first checks
+  each operation's record and refuses the whole rollback, changing nothing,
+  if one has no inverse or lacks its undo data (owner ruling OD-39). If a
+  reversal then fails on the disk, the transaction stays open so the
+  rollback can be run again.
 
 Test expectations corrected (`tests/stress_tests.rs`):
 
