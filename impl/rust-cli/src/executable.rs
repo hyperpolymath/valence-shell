@@ -279,7 +279,22 @@ impl ExecutableCommand for Command {
             }
 
             // Exit commands
-            Command::Exit | Command::Quit => Ok(ExecutionResult::Exit),
+            Command::Exit { code } => {
+                // `exit` alone keeps the status of the last command. Only the low
+                // eight bits of a given status reach the caller (POSIX).
+                if let Some(code) = code {
+                    let text = crate::parser::expand_variables(code, state);
+                    match text.trim().parse::<i64>() {
+                        Ok(status) => state.last_exit_code = (status & 0xFF) as i32,
+                        Err(_) => {
+                            eprintln!("vsh: exit: {}: numeric argument required", text);
+                            state.last_exit_code = 2;
+                        }
+                    }
+                }
+                Ok(ExecutionResult::Exit)
+            }
+            Command::Quit => Ok(ExecutionResult::Exit),
 
             // Navigation (built-ins but not reversible)
             Command::Ls { path, redirects } => {
@@ -442,12 +457,14 @@ impl ExecutableCommand for Command {
                     .map(|arg| crate::parser::expand_variables(arg, state))
                     .collect();
 
+                // The parser has already checked for the closing `]` and
+                // removed it, so the arguments are a plain `test` expression.
                 let exit_code = if redirects.is_empty() {
-                    crate::test_command::execute_test(&expanded_args, true)?
+                    crate::test_command::execute_test(&expanded_args, false)?
                 } else {
                     let mut code = 0;
                     redirection::capture_and_redirect(redirects, state, |_s| {
-                        code = crate::test_command::execute_test(&expanded_args, true)?;
+                        code = crate::test_command::execute_test(&expanded_args, false)?;
                         Ok(())
                     })?;
                     code
@@ -1244,7 +1261,7 @@ impl ExecutableCommand for Command {
                     format!("history {}", count)
                 }
             }
-            Command::Exit => "exit".to_string(),
+            Command::Exit { .. } => "exit".to_string(),
             Command::Quit => "quit".to_string(),
             Command::Begin { name } => format!("begin {}", name),
             Command::Commit => "commit".to_string(),

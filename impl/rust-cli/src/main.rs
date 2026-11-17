@@ -186,6 +186,10 @@ fn main() -> Result<()> {
         print_banner();
     }
 
+    // An interactive shell leaves with the status of its last command, or the
+    // one given to `exit`. The one-shot subcommands leave with 0 or an error.
+    let interactive = matches!(cli.command, Some(Commands::Shell) | None);
+
     match cli.command {
         Some(Commands::Mkdir { path }) => {
             commands::mkdir(&mut state, &path, cli.verbose)?;
@@ -240,6 +244,10 @@ fn main() -> Result<()> {
         }
     }
 
+    if interactive {
+        std::process::exit(state.last_exit_code);
+    }
+
     Ok(())
 }
 
@@ -276,7 +284,9 @@ fn execute_script_content(content: &str, state: &mut state::ShellState) -> Resul
             Ok(cmd) => {
                 let result = cmd.execute(state)?;
                 match result {
-                    ExecutionResult::Exit => return Ok(()),
+                    // `exit` has already set the status to leave with. Stop
+                    // here; the EXIT trap and the exit itself follow the loop.
+                    ExecutionResult::Exit => break,
                     ExecutionResult::ExternalCommand { exit_code }
                     | ExecutionResult::Return { exit_code } => {
                         state.last_exit_code = exit_code;

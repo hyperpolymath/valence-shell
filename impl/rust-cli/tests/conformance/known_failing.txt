@@ -25,15 +25,11 @@ subst-04  # echo $(echo $(echo deep))
 pipe-05  # seq 1 5 | awk '{s+=$1} END{print s}'
 redir-03  # ls /nonexistent 2>/dev/null; echo rc=$?
 redir-04  # ls /nonexistent > out 2>&1; grep -c . out
-logic-03  # [ -d / ] && echo dir
-logic-04  # [ 3 -gt 2 ] && [ a = a ] && echo ok
 logic-05  # [[ abc == a* ]] && echo match
 logic-07  # ! false && echo negated
-if-02  # if [ 1 -eq 2 ]; then echo a; elif [ 1 -eq 1 ]; then echo b; fi
 if-03  # x=3; if (( x > 2 )); then echo big; fi
 loop-02  # for i in $(seq 3); do echo n$i; done
 loop-03  # mkdir zzdir; touch zzdir/p1 zzdir/p2; for f in zzdir/p*; do echo ${f##*/}; done
-loop-04  # i=0; while [ $i -lt 3 ]; do i=$((i+1)); done; echo $i
 loop-05  # for ((i=0;i<3;i++)); do echo $i; done
 loop-06  # for i in 1 2 3; do [ $i = 2 ] && continue; echo $i; done
 loop-07  # for i in 1 2 3; do [ $i = 2 ] && break; echo $i; done
@@ -58,7 +54,6 @@ builtin-05  # set -e; false; echo notreached
 builtin-06  # x=1; unset x; echo "[${x}]"
 builtin-07  # type echo | head -1 | grep -c echo
 builtin-12  # mkdir zzdir; pushd zzdir >/dev/null; pwd | grep -c zzdir; popd >/dev/null
-builtin-15  # exit 7
 builtin-16  # command -v ls | grep -c ls
 builtin-17  # true; echo ${PIPESTATUS[0]}
 fs-01  # mkdir -p a/b/c && ls a/b
@@ -69,8 +64,6 @@ ext-09  # sh -c 'echo "$1"' _ '{p}'
 ext-10  # echo one > a.txt; echo two > b.txt; cat *.txt
 loop-10  # for i in a b; do for j in 1 2; do echo $i$j; done; done
 subst-05  # x=$(echo hi); echo $x
-builtin-18  # true; exit 3
-builtin-19  # false; exit
 fs-09  # touch a b c; ls | wc -l
 fs-10  # mkdir x y; ls | wc -l
 rm-02  # rm nosuch; echo rc=$?

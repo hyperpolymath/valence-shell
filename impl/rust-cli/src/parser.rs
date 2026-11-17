@@ -258,7 +258,10 @@ pub enum Command {
         count: usize,
         show_proofs: bool,
     },
-    Exit,
+    /// `exit [status]`. The status is kept unexpanded until it runs.
+    Exit {
+        code: Option<String>,
+    },
     Quit,
 
     // Transactions
@@ -3432,7 +3435,14 @@ fn parse_base_command(
                 .unwrap_or(10);
             Ok(Command::History { count, show_proofs })
         }
-        "exit" => Ok(Command::Exit),
+        "exit" => {
+            if args.len() > 1 {
+                return Err(anyhow!("exit: too many arguments"));
+            }
+            Ok(Command::Exit {
+                code: args.first().cloned(),
+            })
+        }
         "quit" => Ok(Command::Quit),
 
         // Transactions

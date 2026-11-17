@@ -16,6 +16,27 @@ use crate::redirection::{RedirectSetup, Redirection};
 use crate::signals;
 use crate::state::ShellState;
 
+/// The wait between two checks on a running child.
+///
+/// It starts short, so a program that finishes at once is not held up, and
+/// doubles up to a ceiling, so a long-running one costs almost nothing to
+/// watch. The ceiling is also the longest an interrupt waits to be noticed.
+struct Pause(Duration);
+
+impl Pause {
+    const FIRST: Duration = Duration::from_micros(200);
+    const LONGEST: Duration = Duration::from_millis(20);
+
+    fn new() -> Self {
+        Self(Self::FIRST)
+    }
+
+    fn sleep(&mut self) {
+        std::thread::sleep(self.0);
+        self.0 = (self.0 * 2).min(Self::LONGEST);
+    }
+}
+
 /// Execute an external command with I/O redirections
 ///
 /// Handles:
@@ -64,6 +85,7 @@ pub fn execute_external_with_redirects(
         .context(format!("Failed to spawn: {}", program))?;
 
     // Poll for exit while checking for interrupt
+    let mut pause = Pause::new();
     loop {
         match child.try_wait().context("Failed to wait for child")? {
             Some(status) => {
@@ -86,7 +108,7 @@ pub fn execute_external_with_redirects(
                 }
 
                 // Sleep briefly before next check
-                std::thread::sleep(Duration::from_millis(50));
+                pause.sleep();
             }
         }
     }
@@ -224,6 +246,7 @@ pub fn execute_pipeline(
     let mut final_exit_code = 0;
 
     for (idx, mut child) in children.into_iter().enumerate() {
+        let mut pause = Pause::new();
         loop {
             match child.try_wait().context("Failed to wait for child")? {
                 Some(status) => {
@@ -245,7 +268,7 @@ pub fn execute_pipeline(
                         // Don't record modifications - operation interrupted
                         return Ok(130); // 128 + SIGINT
                     }
-                    std::thread::sleep(Duration::from_millis(50));
+                    pause.sleep();
                 }
             }
         }
@@ -303,6 +326,7 @@ pub fn execute_external(program: &str, args: &[String]) -> Result<i32> {
         .context(format!("Failed to spawn: {}", program))?;
 
     // Poll for exit while checking for interrupt
+    let mut pause = Pause::new();
     loop {
         match child.try_wait().context("Failed to wait for child")? {
             Some(status) => {
@@ -323,7 +347,7 @@ pub fn execute_external(program: &str, args: &[String]) -> Result<i32> {
                 }
 
                 // Sleep briefly before next check
-                std::thread::sleep(Duration::from_millis(50));
+                pause.sleep();
             }
         }
     }
