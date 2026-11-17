@@ -1014,7 +1014,7 @@ v2.2. No postulates and no escape pragmas.
 |Module |What it proves
 
 |`JournalFraming` |A record is a fixed-width length, the payload, then a fixed-width checksum. A record cut short at any point is rejected (`step-torn`). Whatever the decoder accepts is byte for byte a run of well-formed records at the front of the input (`decode-sound`), and re-encoding it gives a clean journal for any input (`decode-normal`). None of this needs any property of the checksum
-|`JournalReplay` |Events other than a snapshot never remove or reorder history (`run-ids`). After a rollback no operation of that transaction is live (`rollback-no-live`)
+|`JournalReplay` |Events other than a snapshot or a trim at the history cap never remove or reorder history (`run-ids`). After a rollback no operation of that transaction is live (`rollback-no-live`)
 |`JournalModel` |A file is durable bytes plus pending bytes. If a crash keeps the durable bytes and a prefix of the pending ones, loading yields the synced events followed by a prefix of the unsynced events (`crash-recovery`). One pending write is all-or-nothing (`write-atomic`). Compaction by all-or-nothing replacement does not change the recovered state (`compaction-safe`)
 |`JournalWitnesses` |One instance of every module parameter, including an event serialisation with a proved round trip, and worked cases closed by `refl`
 |===
@@ -1045,7 +1045,8 @@ Design choices the model fixes for C2:
   to the accepted part before appending again, and keeps the rejected bytes
   aside so that nothing is destroyed silently.
 * A record that does not parse is an error, never a skipped line.
-* The history size cap is applied only at compaction.
+* A record and the history trim it causes at the size cap are one event, so a
+  crash cannot keep one without the other.
 
 === 14.5 Decisions still open
 

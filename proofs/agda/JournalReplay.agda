@@ -7,9 +7,9 @@
 
    * `replay-++`          replaying a log then more events is replaying the
                           longer log;
-   * `run-ids`            events other than a snapshot never remove or
-                          reorder history: the operation ids before are a
-                          prefix of the operation ids after;
+   * `run-ids`            events other than a snapshot or a trim never
+                          remove or reorder history: the operation ids
+                          before are a prefix of the operation ids after;
    * `rollback-closes`    after `rolledBack` no transaction is open;
    * `rollback-no-live`   after `rolledBack` no operation of the rolled-back
                           transaction is still live (not undone);
@@ -29,8 +29,10 @@
      transaction. On `main` as of 2026-11-17 the Rust code does not do this
      (`begin; touch f; rollback; undo` fails); the code is to follow the
      model.
-   * The history size cap is not modelled. It is applied only when the
-     journal is compacted, as a change of state outside these theorems.
+   * The history size cap is part of the record event: `recorded n o`
+     appends `o` and drops the `n` oldest entries, as one event, so a crash
+     cannot keep the new operation without the trim it caused. With `n = 0`
+     it only appends. An event that drops entries is not `Incremental`.
 
    `Op` is the operation record (type, path, undo data); only its id matters
    here.
@@ -38,7 +40,7 @@
    Added 2026-11-17 for route-plan Phase C (journal redesign), step C1.
 -}
 
-open import Data.Nat.Base using (ℕ)
+open import Data.Nat.Base using (ℕ; zero; suc)
 
 module JournalReplay (Op : Set) (opId : Op → ℕ) (Aux : Set) where
 
@@ -47,7 +49,7 @@ open import Data.Unit.Base using (⊤; tt)
 open import Data.Maybe.Base using (Maybe; just; nothing)
 open import Data.Product.Base using (_×_; _,_; proj₁; proj₂; ∃)
 open import Data.Nat.Properties using () renaming (_≟_ to _≟ℕ_)
-open import Data.List.Base using (List; []; _∷_; _++_; map; foldl)
+open import Data.List.Base using (List; []; _∷_; _++_; map; foldl; drop)
 open import Data.List.Properties using (++-assoc; ++-identityʳ; map-++)
 open import Data.List.Membership.Propositional using (_∈_)
 open import Data.List.Membership.DecPropositional _≟ℕ_ using (_∈?_)
@@ -99,7 +101,8 @@ ids = map (λ e → opId (op e))
 -- Events
 
 data Event : Set where
-  recorded   : Op → Event           -- an operation was performed
+  recorded   : ℕ → Op → Event       -- an operation was performed; the
+                                    -- ℕ oldest entries are then dropped
   undone     : ℕ → ℕ → Event        -- target id, id of the undo operation
   begun      : ℕ → Event            -- a transaction was opened
   committed  : Event
@@ -107,9 +110,16 @@ data Event : Set where
   auxSet     : Maybe Aux → Event
   snapshot   : State → Event        -- the whole state (written by compaction)
 
+-- Events that only ever extend the history.
 Incremental : Event → Set
-Incremental (snapshot _) = ⊥
-Incremental _            = ⊤
+Incremental (recorded zero _)    = ⊤
+Incremental (recorded (suc _) _) = ⊥
+Incremental (undone _ _)         = ⊤
+Incremental (begun _)            = ⊤
+Incremental committed            = ⊤
+Incremental rolledBack           = ⊤
+Incremental (auxSet _)           = ⊤
+Incremental (snapshot _)         = ⊥
 
 -- Mark an entry as undone when `d` holds. An entry already undone keeps its
 -- first mark.
@@ -144,7 +154,7 @@ rollbackHistory nothing           h = h
 rollbackHistory (just (txn t os)) h = map (markIn os t) h
 
 apply : Event → State → State
-apply (recorded o)   s = record s { history = history s ++ entry o nothing ∷ []
+apply (recorded n o) s = record s { history = drop n (history s ++ entry o nothing ∷ [])
                                   ; active  = joinTxn (opId o) (active s) }
 apply (undone i by)  s = record s { history = map (markId i by) (history s) }
 apply (begun t)      s = record s { active = beginTxn t (active s) }
@@ -202,7 +212,7 @@ rollbackHistory-ids (just (txn t os)) h =
   ids-map (markIn os t) (λ e → markWhen-id (opId (op e) ∈? os) t e) h
 
 apply-ids : ∀ e s → Incremental e → ids (history s) ⊑ ids (history (apply e s))
-apply-ids (recorded o)  s _ =
+apply-ids (recorded zero o) s _ =
   opId o ∷ [] , sym (map-++ (λ e → opId (op e)) (history s) (entry o nothing ∷ []))
 apply-ids (undone i by) s _ =
   ⊑-reflexive (sym (ids-map (markId i by)
@@ -213,7 +223,7 @@ apply-ids rolledBack    s _ =
   ⊑-reflexive (sym (rollbackHistory-ids (active s) (history s)))
 apply-ids (auxSet a)    s _ = ⊑-refl
 
--- Events other than a snapshot only ever extend the sequence of operation
+-- Incremental events only ever extend the sequence of operation
 -- ids: replaying a longer log yields a history that the shorter log's
 -- history is a prefix of.
 run-ids : ∀ s fs → All Incremental fs → ids (history s) ⊑ ids (history (run s fs))
@@ -224,9 +234,9 @@ run-ids s (e ∷ fs) (inc ∷ incs) =
 ------------------------------------------------------------------------
 -- Transactions
 
-recorded-joins : ∀ o s t os → active s ≡ just (txn t os) →
-  ∃ λ os′ → active (apply (recorded o) s) ≡ just (txn t os′) × opId o ∈ os′
-recorded-joins o s t os eq rewrite eq = opId o ∷ os , refl , here refl
+recorded-joins : ∀ n o s t os → active s ≡ just (txn t os) →
+  ∃ λ os′ → active (apply (recorded n o) s) ≡ just (txn t os′) × opId o ∈ os′
+recorded-joins n o s t os eq rewrite eq = opId o ∷ os , refl , here refl
 
 rollback-closes : ∀ s → active (apply rolledBack s) ≡ nothing
 rollback-closes s = refl

@@ -164,7 +164,7 @@ whole-put ca a =
         (cong whole (get-put ca a []))
 
 enc : Event → List ℕ
-enc (recorded o)   = 0 ∷ o ∷ []
+enc (recorded n o) = 0 ∷ n ∷ o ∷ []
 enc (undone i by)  = 1 ∷ i ∷ by ∷ []
 enc (begun t)      = 2 ∷ t ∷ []
 enc committed      = 3 ∷ []
@@ -173,7 +173,7 @@ enc (auxSet a)     = 5 ∷ put (maybeC natC) a
 enc (snapshot s)   = 6 ∷ put stateC s
 
 dec : List ℕ → Maybe Event
-dec (0 ∷ o ∷ [])      = just (recorded o)
+dec (0 ∷ n ∷ o ∷ [])  = just (recorded n o)
 dec (1 ∷ i ∷ by ∷ []) = just (undone i by)
 dec (2 ∷ t ∷ [])      = just (begun t)
 dec (3 ∷ [])          = just committed
@@ -183,7 +183,7 @@ dec (6 ∷ r)           = Maybe.map snapshot (whole (get stateC r))
 dec _                 = nothing
 
 dec-enc : ∀ e → dec (enc e) ≡ just e
-dec-enc (recorded o)  = refl
+dec-enc (recorded n o) = refl
 dec-enc (undone i by) = refl
 dec-enc (begun t)     = refl
 dec-enc committed     = refl
@@ -235,7 +235,7 @@ bad-sum = refl
 -- Rollback marks the operations it reverses and closes the transaction, so
 -- nothing is left for a later `undo` to select.
 session : List Event
-session = begun 1 ∷ recorded 7 ∷ recorded 8 ∷ rolledBack ∷ []
+session = begun 1 ∷ recorded 0 7 ∷ recorded 0 8 ∷ rolledBack ∷ []
 
 rollback-example :
   replay session ≡ state (entry 7 (just 1) ∷ entry 8 (just 1) ∷ []) nothing [] nothing
@@ -243,24 +243,30 @@ rollback-example = refl
 
 -- Commit leaves the operations live and records the transaction.
 commit-example :
-  replay (begun 1 ∷ recorded 7 ∷ committed ∷ [])
+  replay (begun 1 ∷ recorded 0 7 ∷ committed ∷ [])
   ≡ state (entry 7 nothing ∷ []) nothing (1 ∷ []) nothing
 commit-example = refl
 
 -- An undo mark, then a redo recorded as a new operation.
 undo-redo-example :
-  replay (recorded 7 ∷ undone 7 8 ∷ recorded 9 ∷ [])
+  replay (recorded 0 7 ∷ undone 7 8 ∷ recorded 0 9 ∷ [])
   ≡ state (entry 7 (just 8) ∷ entry 9 nothing ∷ []) nothing [] nothing
 undo-redo-example = refl
+
+-- A record at the history cap drops the oldest entry in the same event.
+trim-example :
+  replay (recorded 0 7 ∷ recorded 0 8 ∷ recorded 1 9 ∷ [])
+  ≡ state (entry 8 nothing ∷ entry 9 nothing ∷ []) nothing [] nothing
+trim-example = refl
 
 ------------------------------------------------------------------------
 -- Crashes: worked cases and applied theorems
 
 synced : List Event
-synced = begun 1 ∷ recorded 7 ∷ []
+synced = begun 1 ∷ recorded 0 7 ∷ []
 
 -- The synced part of the file.
-synced-bytes : M.log synced ≡ 2 ∷ 2 ∷ 1 ∷ 3 ∷ 2 ∷ 0 ∷ 7 ∷ 7 ∷ []
+synced-bytes : M.log synced ≡ 2 ∷ 2 ∷ 1 ∷ 3 ∷ 3 ∷ 0 ∷ 0 ∷ 7 ∷ 7 ∷ []
 synced-bytes = refl
 
 -- `rolledBack` is appended but not yet synced; its frame is 1 ∷ 4 ∷ 4 ∷ [].

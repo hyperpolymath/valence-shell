@@ -51,8 +51,8 @@ What they state, and for what:
   at any point is rejected (`step-torn`); what the decoder accepts is byte
   for byte a run of well-formed records at the front of the input
   (`decode-sound`). Neither needs any property of the checksum.
-* `JournalReplay`: events other than a snapshot never remove or reorder
-  history (`run-ids`); after a rollback no operation of that transaction is
+* `JournalReplay`: events other than a snapshot or a trim at the history cap
+  never remove or reorder history (`run-ids`); after a rollback no operation of that transaction is
   live (`rollback-no-live`).
 * `JournalModel`: if a crash keeps the synced bytes and a prefix of the
   unsynced bytes, loading yields the synced events followed by a prefix of
