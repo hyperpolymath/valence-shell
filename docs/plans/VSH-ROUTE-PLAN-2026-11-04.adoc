@@ -225,6 +225,61 @@ a file since the operation. `b` stays in `KNOWN_OPEN` on valence-shell#232, and
 Phase B closes without it.
 |===
 
+Given by selector later the same day, on four questions that review of
+valence-shell#230, #232 and #233 had left open (section 14.5):
+
+[cols="1,4,5",options="header"]
+|===
+|# |Ruling |Effect
+
+|*OD-46* |*Hole (p) is closed in one design, with the store for old contents
+(C4)* (the elegant arm, E 9 / D 6). A record is to identify its file in two
+ways together: by the names the history gives the file over time, and by the
+device and inode read when the content is saved. Not taken: the history's names
+now and the identity at C4 (E 8 / D 8, the recommendation, which reaches the
+same end sooner for the case that was reproduced); refusing to obliterate while
+the history holds content it cannot place (E 4 / D 9); and paths marked so that
+their content is never kept (E 7 / D 8).
+|Recorded once, as for OD-45: until C4, `obliterate` leaves in the saved
+history any content that was saved while the file had another name
+(`mv a b; obliterate b`), or through a link that has been removed since. `p`
+joins `b` in `KNOWN_OPEN` on valence-shell#232, and Phase B closes without it.
+Closing hole p is added to the gate of C4.
+
+|*OD-47* |*The parser hands every command its words with their kind* (option,
+operand, operand after `--`, quoted or not): the elegant arm, E 9 / D 8. It is
+the answer to `name=-p; mkdir -- "$name"`, which the baseline refuses because
+the parser does not pass on where `--` stood. Not taken: carrying `--` alone
+through to the built-ins, as a follow-up (E 7 / D 8, the recommendation) or on
+the baseline branch first (E 7 / D 8).
+|This takes up, for the built-ins' arguments, parser work that OD-42 parked.
+It also gives what word splitting of an unquoted `$var` needs. Proposed, not
+ruled: an experiment first (a prototype for three built-ins, and how many
+battery cases change). Which branch it lands on, and when in the order of
+OD-44, is not ruled yet. Until it lands the refusal stays: it changes nothing on disk, and
+its message says how to name the file (`./-p`).
+
+|*OD-48* |*A journal that ends in zero bytes stays damage, and the recovery
+command deals with it* (section 14.5, second option: E 7 / D 9). Not taken:
+reading the zero bytes as an interrupted write, with the crash model widened
+(E 8 / D 8, the recommendation), and reading every unreadable tail as the end
+of the journal (E 4 / D 5).
+|OD-40 stands as it is and the crash model is not widened: the shell guesses
+nothing. C5 (`vsh --recover`) gains this case: it shows the zero bytes, sets
+them aside and keeps the records before them, on the user's choice. C5 is built
+before the first release of the engine. Until it exists, such a file has to be
+repaired by hand.
+
+|*OD-49* |*A command whose record cannot be saved returns an error now, and the
+record is written first once the change-set engine exists* (the
+recommendation: section 14.5, second option now, E 7 / D 8, and first option
+with Phase E, E 9 / D 9).
+|Every command that changes something returns an error when its record cannot
+be written. The message says that the change was made and is not recorded. The
+saved state can still be one operation behind after a crash between a change
+and its record; the write-ahead record of Phase E closes that.
+|===
+
 '''''
 
 == 0. Bottom line
@@ -983,6 +1038,17 @@ Not re-run: a, b, d, i, l, n.
 `begin t; touch f; rollback; undo` ends with "Undo touch failed: No such file or
 directory". It joins the list as hole *o*.
 
+*A second new hole, found on 2026-11-17 while review of the scrub on
+valence-shell#232 was answered (Measured on that branch).* `obliterate` finds
+the earlier contents of a file in the saved history by path. Content that was
+saved while the file had another name is not found:
+`echo secret > a; echo x > a; mv a b; obliterate b` leaves `secret` in the
+state file, under the name `a`. The same holds for content saved through a
+symbolic link that has been removed since, in a history written before
+redirections recorded the file they changed. On `main` nothing is scrubbed at
+all (hole d), so the same check would fail there too (Inferred; not run on
+`main`). It joins the list as hole *p*, and OD-46 rules when it closes.
+
 *`ShellState::new` discards a failed load* (`state.load().ok()`), on `main` too.
 E1d says a corrupt load must fail loudly.
 
@@ -1047,8 +1113,8 @@ and ends at a machine-checked gate.
 |C1 |Journal model in Agda (OD-30): record framing, event replay, a file and crash model |Checks under the estate invocation, in `All.agda` |Done (section 14.4)
 |C2 |One file of length-prefixed, checksummed records behind a small storage interface (append, sync, atomic replace, read), with a real implementation and a simulated one that loses exactly what the model's crash may lose. Compaction writes one snapshot record to a new file, syncs it, renames it over the old one and syncs the directory. A failed load is an error that stops the shell from writing; the files are kept. Rollback writes a record that marks each reversed operation undone. Old `.vsh_state.json` files still load (fixture test) |No failing crash class; the harness also runs against the simulated storage |Done (section 14.4a)
 |C3 |State moves out of the command root to an owner-only directory keyed by session root (OD-12a), opened with `O_NOFOLLOW`, checked through the descriptor, and held under an exclusive lock for the life of the shell |The shell's own (built-in) commands cannot delete or edit state, because it lies outside the root they are confined to: a test runs `rm`, `>` and `obliterate` against the state path and finds it unchanged. A second shell on the same root is refused; a two-instance test passes. Not covered: an external command runs as the user and can reach the state by its absolute path, like any other file of theirs. Keeping external commands out needs process isolation, which is not part of this step |Open
-|C4 |Deleted-file contents go to a content-addressed blob store, not into the history |Removing 100 MB no longer writes about 300 MB of JSON |Open
-|C5 |`vsh --recover` (OD-40): for a saved state the shell refuses to load, show how many records are readable and what stops the rest, then keep the readable part or move the file aside, on the user's choice. Nothing is deleted |A damaged journal can be brought back to a state the shell starts on, with the damaged bytes kept |Open
+|C4 |Deleted-file contents go to a content-addressed blob store, not into the history. A record identifies its file by the names the history gives it over time and by the device and inode read when the content is saved (OD-46) |Removing 100 MB no longer writes about 300 MB of JSON. Hole p is closed: after `mv a b; obliterate b`, nothing that was saved under `a` is left |Open
+|C5 |`vsh --recover` (OD-40): for a saved state the shell refuses to load, show how many records are readable and what stops the rest, then keep the readable part or move the file aside, on the user's choice. Nothing is deleted. A journal that ends in zero bytes is one such state (OD-48): the zero bytes are shown and set aside, and the records before them are kept |A damaged journal can be brought back to a state the shell starts on, with the damaged bytes kept |Open
 |===
 
 By OD-41, C3, C4 and C5 run after Phase B.
@@ -1059,7 +1125,7 @@ By OD-41, C3, C4 and C5 run after Phase B.
 |===
 |Step |What |Gate
 
-|B0 = E0 |`tests/regressions_parsed_path.rs`: one fail-first test per hole a to o, through the parsed `vsh -c` path. Rewrite `security_no_privilege_escalation` with real assertions |Each test fails on `main` for the documented reason
+|B0 = E0 |`tests/regressions_parsed_path.rs`: one fail-first test per hole a to p, through the parsed `vsh -c` path. Rewrite `security_no_privilege_escalation` with real assertions |Each test fails on `main` for the documented reason
 |B1 |Experiment, one day: port `touch`, `mkdir` and `>` redirection to a root directory handle from the `cap-std` crate; run tests j, k, l |GO or NO-GO written down; decides the containment mechanism (section 14.5)
 |B2 = E1b |Session root fixed at start and separate from the working directory; `cd` confined (OD-26a); history paths relative to the session root; content operations refuse symlink escapes and files with more than one hard link; obliterate refuses a symlink |Tests f, g, j, k, l, m, n pass; outside files byte-identical
 |B3 = E1c |Obliterate: intent record written and synced before the overwrite; refused inside a transaction (OD-3a); earlier payloads of the target scrubbed |Tests c, d, i pass
@@ -1279,8 +1345,8 @@ loss. Today that is damage, and the shell refuses to start (OD-40).
 |Treat every unreadable tail as the end of the journal |4 / 5 |Always starts. Gives up the difference between a crash and damage, which OD-40 ruled against. SQLite's log is read this way: a frame is valid only if its running checksum matches, so the first bad frame ends the log (https://www.sqlite.org/fileformat2.html#walformat[file format], section 4.1, read 2026-11-17)
 |===
 
-The recommendation is the first, with C5 still built. It is not taken without
-a ruling, because it changes what OD-40 refuses.
+The recommendation was the first, with C5 still built. *Ruled 2026-11-17
+(OD-48): the second.* The zero bytes stay damage, and C5 handles them.
 
 *A record that cannot be saved* (raised by review of the rollback, section
 14.4c). The shell does an operation and then writes its record. If the write
@@ -1296,9 +1362,9 @@ every command except rollback prints a warning and reports success.
 |Keep the warning |3 / 3 |A script does not see it. This is today's behaviour
 |===
 
-The recommendation is the second now, as part of the first engine release, and
-the first with the change-set engine. Neither is taken without a ruling: both
-change what every command returns.
+The recommendation was the second now, as part of the first engine release,
+and the first with the change-set engine. *Ruled 2026-11-17 (OD-49): as
+recommended.*
 
 === 14.6 Stop rules added
 
