@@ -430,16 +430,28 @@ fn apply_cp(state: &ShellState, src: &str, dst: &str) -> Result<Operation> {
         anyhow::bail!("Parent of destination does not exist (ENOENT)");
     }
 
-    // Execute operation
-    if let Err(e) = fs::copy(&src_path, &dst_path) {
-        // No node existed at the destination before (`verify_copy_file`
-        // checks with `lstat`, so not even a dangling symbolic link), so
-        // whatever part of the copy landed is ours to remove; left behind, it
-        // would block a retry.
+    // Execute operation. The destination is created exclusively, so this call
+    // owns it: a file that appeared since the checks above is never written
+    // over, and the clean-up below can only remove what was created here.
+    let mut source = fs::File::open(&src_path).context("cp failed")?;
+    let permissions = source.metadata().context("cp failed")?.permissions();
+    let mut create = fs::OpenOptions::new();
+    create.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        // Never wider than the source, even while the copy is in progress.
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        create.mode(permissions.mode() & 0o7777);
+    }
+    let mut destination = create.open(&dst_path).context("cp failed")?;
+    let copied = std::io::copy(&mut source, &mut destination)
+        .and_then(|_| destination.set_permissions(permissions));
+    if let Err(e) = copied {
+        // Whatever part of the copy landed would block a retry.
+        drop(destination);
         let error = anyhow::Error::new(e).context("cp failed");
         return Err(match fs::remove_file(&dst_path) {
             Ok(()) => error,
-            Err(cleanup_error) if cleanup_error.kind() == std::io::ErrorKind::NotFound => error,
             Err(cleanup_error) => error.context(format!(
                 "the partial copy {} could not be removed: {}",
                 dst, cleanup_error
@@ -1440,9 +1452,13 @@ fn reapply(state: &mut ShellState, op: &Operation) -> Result<Operation> {
                 return Err(missing());
             };
             let new_op = state.apply_set_variable(op.path.clone(), value.clone());
-            // Undo of an assignment also drops the export; put it back.
+            // Put the export state back as undo found it, whichever way that
+            // was: undo of an assignment drops the export, and something
+            // outside the history may have set it since.
             if *exported {
                 state.export_variable(op.path.clone());
+            } else {
+                state.exported_vars.remove(&op.path);
             }
             Ok(new_op)
         }

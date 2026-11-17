@@ -551,6 +551,54 @@ fn redo_refuses_a_file_whose_content_was_not_captured() {
     assert_eq!(state.get_redo_stack().len(), 1, "the entry is kept");
 }
 
+/// `cp` gives the copy the source's mode, for the command and for its redo,
+/// and the copy is never created with a wider mode than the source.
+#[cfg(unix)]
+#[test]
+fn cp_and_its_redo_keep_the_source_mode() {
+    let (temp, mut state) = setup();
+    let src = temp.path().join("secret");
+    let dst = temp.path().join("copy");
+    fs::write(&src, BINARY).unwrap();
+    set_mode(&src, 0o600);
+
+    commands::cp(&mut state, "secret", "copy", false).unwrap();
+    assert_eq!(mode_of(&dst), 0o600);
+    assert_eq!(read(&dst), BINARY);
+
+    undo(&mut state);
+    redo(&mut state);
+    assert_eq!(mode_of(&dst), 0o600);
+    assert_eq!(read(&dst), BINARY);
+}
+
+/// Redo of an assignment restores the export state undo found, in both
+/// directions: here the variable was not exported, and something outside the
+/// history exported it between undo and redo.
+#[test]
+fn assignment_redo_restores_not_exported() {
+    use vsh::executable::ExecutableCommand;
+    use vsh::parser::parse_command;
+
+    let (_temp, mut state) = setup();
+    parse_command("X=1").unwrap().execute(&mut state).unwrap();
+    assert!(!state.is_exported("X"));
+
+    undo(&mut state);
+    assert_eq!(state.get_variable("X"), None);
+
+    // Outside the history: these calls record nothing.
+    state.set_variable("X", "other");
+    state.export_variable("X");
+
+    redo(&mut state);
+    assert_eq!(state.get_variable("X"), Some("1"));
+    assert!(
+        !state.is_exported("X"),
+        "redo restores the unexported state"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Mixed sequence
 // ---------------------------------------------------------------------------
