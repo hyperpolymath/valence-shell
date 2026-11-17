@@ -774,11 +774,15 @@ impl ShellState {
     /// Get operations in current transaction
     pub fn current_transaction_ops(&self) -> Vec<&Operation> {
         match &self.active_transaction {
-            Some(txn) => self
-                .history
-                .iter()
-                .filter(|op| txn.operations.contains(&op.id))
-                .collect(),
+            Some(txn) => {
+                // Indexed once: looking each operation up in the list took
+                // time that grew with the square of the transaction.
+                let members: HashSet<Uuid> = txn.operations.iter().copied().collect();
+                self.history
+                    .iter()
+                    .filter(|op| members.contains(&op.id))
+                    .collect()
+            }
             None => Vec::new(),
         }
     }

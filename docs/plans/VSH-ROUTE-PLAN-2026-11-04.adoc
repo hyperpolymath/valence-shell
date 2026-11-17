@@ -1217,6 +1217,15 @@ Still open in Phase C, and now after Phase B (OD-41): the journal lives in the
 session root (C3), deleted file contents are still inside the history records
 (C4), and there is no recovery command (C5).
 
+One more for C4, from review: the journal is read whole into memory when the
+shell starts, before any limit is checked, so a very large journal in a
+directory someone else prepared can exhaust memory. No useful limit can be set
+while the journal holds the contents of deleted files, since the shell's own
+journal can then be gigabytes, and reading it in pieces would not lower the
+memory needed, because replay keeps every record. Once C4 has moved the
+contents out, the journal is small and a limit can be enforced. The review
+thread is left open for the owner.
+
 Design choices the model fixes for C2:
 
 * The history is append-only. Undo and rollback mark entries; redo records a new

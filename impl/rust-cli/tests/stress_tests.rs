@@ -620,3 +620,82 @@ fn stress_many_small_files() {
 
     println!("✓ Cleaned up 10,000 files in {:?}", cleanup_time);
 }
+
+/// Storage that keeps nothing, for a test that times the shell's own work.
+struct NoStorage;
+
+impl vsh::journal::Storage for NoStorage {
+    fn read(&mut self) -> std::io::Result<Option<Vec<u8>>> {
+        Ok(None)
+    }
+    fn append(&mut self, _bytes: &[u8]) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn sync(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn replace(&mut self, _bytes: &[u8]) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn set_aside(&mut self, _bytes: &[u8]) -> std::io::Result<String> {
+        Ok("nowhere".to_string())
+    }
+}
+
+/// How long it takes to roll back a transaction of `operations` tracked
+/// variable assignments, with nothing stored.
+fn time_to_roll_back(operations: usize) -> std::time::Duration {
+    let temp = TempDir::new().unwrap();
+    let mut state =
+        ShellState::with_storage(temp.path().to_str().unwrap(), Box::new(NoStorage)).unwrap();
+    state.max_history_size = Some(1_000);
+
+    vsh::commands::begin_transaction(&mut state, "long").unwrap();
+    for i in 0..operations {
+        state.set_variable_tracked("counter", i.to_string());
+    }
+    assert_eq!(
+        state.history.len(),
+        operations,
+        "an open transaction keeps its operations past the history limit"
+    );
+
+    let start = Instant::now();
+    vsh::commands::rollback_transaction(&mut state).unwrap();
+    let taken = start.elapsed();
+
+    assert!(state.active_transaction.is_none());
+    assert_eq!(state.get_variable("counter"), None);
+    taken
+}
+
+/// Rolling back a long transaction takes time in proportion to its length.
+///
+/// The check that every operation of the transaction is still in the
+/// history, and the list of its operations, each looked one operation up by
+/// scanning the other list, so the time grew with the square of the
+/// transaction. An open transaction keeps all of its operations, however
+/// many, so nothing bounded that.
+///
+/// The test compares two lengths, so it does not depend on how fast the
+/// machine is. Twice the operations should take about twice the time; with
+/// the scans it took three times as long (measured 2026-11-17, 30,000 and
+/// 60,000 operations: a ratio of 3.06 with the scans and 1.73 without).
+#[test]
+#[ignore]
+fn stress_rollback_of_a_long_transaction() {
+    const SHORT: usize = 30_000;
+    let short = time_to_roll_back(SHORT);
+    let long = time_to_roll_back(2 * SHORT);
+    let ratio = long.as_secs_f64() / short.as_secs_f64();
+
+    println!(
+        "✓ Rollback of {SHORT} operations: {short:?}; of {}: {long:?}; ratio {ratio:.2}",
+        2 * SHORT
+    );
+    assert!(
+        ratio < 2.7,
+        "rollback time should grow in proportion to the transaction: twice the operations \
+         took {ratio:.2} times as long ({short:?} and {long:?})"
+    );
+}

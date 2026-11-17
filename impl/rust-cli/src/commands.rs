@@ -1445,10 +1445,16 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
     // reversing only what is left and then closing the transaction would
     // leave the missing ones in place behind a transaction recorded as
     // rolled back.
+    //
+    // The history is indexed once. Looking each operation up by a scan of
+    // the history took time that grew with the square of the transaction,
+    // and an open transaction can now be longer than the history limit.
     let dropped = state.active_transaction.as_ref().map_or(0, |txn| {
+        let present: std::collections::HashSet<uuid::Uuid> =
+            state.history.iter().map(|op| op.id).collect();
         txn.operations
             .iter()
-            .filter(|id| !state.history.iter().any(|op| op.id == **id))
+            .filter(|id| !present.contains(id))
             .count()
     });
     if dropped > 0 {
