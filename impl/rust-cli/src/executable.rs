@@ -75,7 +75,7 @@ impl ExecutableCommand for Command {
         match self {
             // Filesystem operations (reversible)
             Command::Mkdir { path, redirects } => {
-                let expanded_path = crate::parser::expand_variables(path, state);
+                let expanded_path = expand_operand("mkdir", path, state)?;
                 if redirects.is_empty() {
                     commands::mkdir(state, &expanded_path, false)?;
                 } else {
@@ -87,7 +87,7 @@ impl ExecutableCommand for Command {
             }
 
             Command::Rmdir { path, redirects } => {
-                let expanded_path = crate::parser::expand_variables(path, state);
+                let expanded_path = expand_operand("rmdir", path, state)?;
                 if redirects.is_empty() {
                     commands::rmdir(state, &expanded_path, false)?;
                 } else {
@@ -99,7 +99,7 @@ impl ExecutableCommand for Command {
             }
 
             Command::Touch { path, redirects } => {
-                let expanded_path = crate::parser::expand_variables(path, state);
+                let expanded_path = expand_operand("touch", path, state)?;
                 if redirects.is_empty() {
                     commands::touch(state, &expanded_path, false)?;
                 } else {
@@ -111,7 +111,7 @@ impl ExecutableCommand for Command {
             }
 
             Command::Rm { path, redirects } => {
-                let expanded_path = crate::parser::expand_variables(path, state);
+                let expanded_path = expand_operand("rm", path, state)?;
                 if redirects.is_empty() {
                     commands::rm(state, &expanded_path, false)?;
                 } else {
@@ -127,7 +127,7 @@ impl ExecutableCommand for Command {
                 force,
                 redirects,
             } => {
-                let expanded_path = crate::parser::expand_variables(path, state);
+                let expanded_path = expand_operand("obliterate", path, state)?;
                 if redirects.is_empty() {
                     commands::secure_deletion::obliterate_path(
                         state,
@@ -148,8 +148,8 @@ impl ExecutableCommand for Command {
                 dst,
                 redirects,
             } => {
-                let expanded_src = crate::parser::expand_variables(src, state);
-                let expanded_dst = crate::parser::expand_variables(dst, state);
+                let expanded_src = expand_operand("cp", src, state)?;
+                let expanded_dst = expand_operand("cp", dst, state)?;
                 if redirects.is_empty() {
                     commands::cp(state, &expanded_src, &expanded_dst, false)?;
                 } else {
@@ -165,8 +165,8 @@ impl ExecutableCommand for Command {
                 dst,
                 redirects,
             } => {
-                let expanded_src = crate::parser::expand_variables(src, state);
-                let expanded_dst = crate::parser::expand_variables(dst, state);
+                let expanded_src = expand_operand("mv", src, state)?;
+                let expanded_dst = expand_operand("mv", dst, state)?;
                 if redirects.is_empty() {
                     commands::mv(state, &expanded_src, &expanded_dst, false)?;
                 } else {
@@ -182,8 +182,8 @@ impl ExecutableCommand for Command {
                 link,
                 redirects,
             } => {
-                let expanded_target = crate::parser::expand_variables(target, state);
-                let expanded_link = crate::parser::expand_variables(link, state);
+                let expanded_target = expand_operand("ln", target, state)?;
+                let expanded_link = expand_operand("ln", link, state)?;
                 if redirects.is_empty() {
                     commands::symlink(state, &expanded_target, &expanded_link, false)?;
                 } else {
@@ -199,8 +199,19 @@ impl ExecutableCommand for Command {
                 path,
                 redirects,
             } => {
+                // The mode may start with `-` (`chmod -x f`); only an option
+                // spelling that an expansion produced is refused.
                 let expanded_mode = crate::parser::expand_variables(mode, state);
-                let expanded_path = crate::parser::expand_variables(path, state);
+                if crate::parser::is_chmod_option(&expanded_mode)
+                    && !crate::parser::is_chmod_option(mode)
+                {
+                    return Err(Refusal(format!(
+                        "chmod: '{mode}' expands to '{expanded_mode}', an option the built-in \
+                         chmod does not handle; nothing was done"
+                    ))
+                    .into());
+                }
+                let expanded_path = expand_operand("chmod", path, state)?;
                 if redirects.is_empty() {
                     commands::chmod(state, &expanded_mode, &expanded_path, false)?;
                 } else {
@@ -217,8 +228,8 @@ impl ExecutableCommand for Command {
                 path,
                 redirects,
             } => {
-                let expanded_owner = crate::parser::expand_variables(owner, state);
-                let expanded_path = crate::parser::expand_variables(path, state);
+                let expanded_owner = expand_operand("chown", owner, state)?;
+                let expanded_path = expand_operand("chown", path, state)?;
                 if redirects.is_empty() {
                     commands::chown(state, &expanded_owner, &expanded_path, false)?;
                 } else {
@@ -284,7 +295,19 @@ impl ExecutableCommand for Command {
             }
 
             // Exit commands
-            Command::Exit { code } => {
+            Command::Exit { code, too_many } => {
+                // More than one operand is an error. A shell that is running
+                // a script stops there with status 1, as bash and dash do. A
+                // shell a person is typing into reports it and stays open.
+                if *too_many {
+                    eprintln!("vsh: exit: too many arguments");
+                    state.last_exit_code = 1;
+                    return Ok(if state.interactive {
+                        ExecutionResult::ExternalCommand { exit_code: 1 }
+                    } else {
+                        ExecutionResult::Exit
+                    });
+                }
                 // `exit` alone keeps the status of the last command. Only the low
                 // eight bits of a given status reach the caller (POSIX).
                 if let Some(code) = code {
@@ -306,7 +329,8 @@ impl ExecutableCommand for Command {
                 // Expand variables in path
                 let expanded_path = path
                     .as_ref()
-                    .map(|p| crate::parser::expand_variables(p, state));
+                    .map(|p| expand_operand("ls", p, state))
+                    .transpose()?;
 
                 if redirects.is_empty() {
                     // Direct output to terminal
@@ -383,7 +407,8 @@ impl ExecutableCommand for Command {
                 // Expand variables in path first
                 let expanded_path = path
                     .as_ref()
-                    .map(|p| crate::parser::expand_variables(p, state));
+                    .map(|p| expand_operand("cd", p, state))
+                    .transpose()?;
 
                 let target = if let Some(ref p) = expanded_path {
                     if p == "-" {
@@ -1475,6 +1500,44 @@ impl ExecutableCommand for Command {
         }
     }
 }
+
+/// Expand a built-in's operand, and refuse it if the expansion made it read
+/// as an option.
+///
+/// The parser has already refused the options a built-in does not handle,
+/// but it sees the words as written. An operand written `$opt` passes it and
+/// can still expand to `-p`. A program given that word would take it for an
+/// option, so the built-in refuses it too, and does nothing, where it used
+/// to make a directory named `-p`.
+///
+/// A word that already read as an option when it was written can only have
+/// come after `--`, which makes it an operand, so it is let through.
+fn expand_operand(name: &str, raw: &str, state: &ShellState) -> Result<String> {
+    let expanded = crate::parser::expand_variables(raw, state);
+    if crate::parser::reads_as_option(&expanded) && !crate::parser::reads_as_option(raw) {
+        return Err(Refusal(format!(
+            "{name}: '{raw}' expands to '{expanded}', which reads as an option the built-in \
+             {name} does not handle; nothing was done (write ./{expanded} to name a file)"
+        ))
+        .into());
+    }
+    Ok(expanded)
+}
+
+/// A built-in refused its operands once they were expanded, and did nothing.
+///
+/// A script treats this like a refusal found while the line was parsed: the
+/// command fails with status 1 and the script goes on.
+#[derive(Debug)]
+pub struct Refusal(pub String);
+
+impl std::fmt::Display for Refusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Refusal {}
 
 /// Execute a shell function call with arguments.
 ///

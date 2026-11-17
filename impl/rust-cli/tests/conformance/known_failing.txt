@@ -69,3 +69,4 @@ fs-10  # mkdir x y; ls | wc -l
 rm-02  # rm nosuch; echo rc=$?
 rm-03  # rm -f nosuch; echo rc=$?
 rm-04  # mkdir d; touch d/x; rm -r d; ls | wc -l
+rm-05  # touch a; touch b; rm a b; ls | wc -l

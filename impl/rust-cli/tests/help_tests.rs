@@ -59,8 +59,54 @@ fn help_for_an_unknown_command_says_so() {
 
 #[test]
 fn help_does_not_promise_things_that_are_not_there() {
-    let (_, stdout, _) = vsh("help");
+    for script in ["help", "help mkdir", "help undo"] {
+        let (_, stdout, _) = vsh(script);
 
-    assert!(!stdout.contains("man vsh-"), "there are no manual pages");
-    assert!(!stdout.contains("help -v"), "there is no -v option");
+        assert!(
+            !stdout.contains("man vsh"),
+            "`{script}`: there are no manual pages"
+        );
+        assert!(
+            !stdout.contains("help -v"),
+            "`{script}`: there is no -v option"
+        );
+    }
+}
+
+/// Help that is captured or piped is written as it is, not handed to a
+/// pager. On a system with `more` and no `less` the pager was started with
+/// options it does not take, and the help text was lost.
+#[cfg(unix)]
+#[test]
+fn help_is_not_paged_when_it_is_not_going_to_a_terminal() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().expect("temporary directory");
+    let bin = tempfile::tempdir().expect("directory for a stand-in pager");
+    // The only pager on the path, and it refuses whatever it is given.
+    let more = bin.path().join("more");
+    std::fs::write(&more, "#!/bin/sh\nexit 1\n").expect("write the stand-in");
+    std::fs::set_permissions(&more, std::fs::Permissions::from_mode(0o755))
+        .expect("make it runnable");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_vsh"))
+        .arg("-r")
+        .arg(dir.path())
+        .arg("-c")
+        .arg("help mkdir")
+        .current_dir(dir.path())
+        .env("PATH", bin.path())
+        .env("NO_COLOR", "1")
+        .env("LINES", "5")
+        .env_remove("RUST_BACKTRACE")
+        .stdin(Stdio::null())
+        .output()
+        .expect("start the built shell");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success());
+    assert!(
+        stdout.contains("mkdir") && stdout.lines().count() > 5,
+        "the help text should be on standard output: {stdout:?}"
+    );
 }

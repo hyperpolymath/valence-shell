@@ -25,10 +25,18 @@
 //! `$CARGO_TARGET_TMPDIR/conformance-report.txt`.
 //!
 //! See `tests/conformance/README.adoc` for how to add a case.
+//!
+//! Linux only. The expectations were recorded on Linux, and several cases
+//! use the GNU forms of `stat`, `wc` and others, which print differently
+//! elsewhere.
+
+#![cfg(target_os = "linux")]
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
+use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 const BATTERY: &str = include_str!("conformance/battery.jsonl");
@@ -36,6 +44,10 @@ const KNOWN_FAILING: &str = include_str!("conformance/known_failing.txt");
 
 /// Longest a single case may run. A case that does not finish counts as failed.
 const TIME_LIMIT: Duration = Duration::from_secs(5);
+
+/// How long the output may stay open after the shell has finished. A command
+/// the shell left running can hold it open.
+const OUTPUT_GRACE: Duration = Duration::from_secs(2);
 
 /// How many cases run at once.
 const WORKERS: usize = 8;
@@ -55,36 +67,53 @@ struct Outcome {
     detail: String,
 }
 
-fn cases() -> Vec<Case> {
-    BATTERY
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .filter_map(|line| {
-            let value: serde_json::Value =
-                serde_json::from_str(line).expect("battery.jsonl: every line is a JSON object");
-            // The first line is a comment object carrying the licence header.
-            let id = value.get("id")?.as_str()?.to_string();
-            let field = |name: &str| {
+/// Reads the battery. The first line is a comment object that carries the
+/// licence header; every other line is a case. A line that is not a whole
+/// case is an error, so that a case cannot drop out of the battery unseen.
+fn parse_battery(text: &str) -> Vec<Case> {
+    let mut lines = text.lines().filter(|line| !line.trim().is_empty());
+    let header: serde_json::Value =
+        serde_json::from_str(lines.next().expect("battery.jsonl: a header line"))
+            .expect("battery.jsonl: the header line is a JSON object");
+    assert!(
+        header.get("_comment").is_some() && header.get("id").is_none(),
+        "battery.jsonl: the first line is the comment object, not a case"
+    );
+    lines
+        .enumerate()
+        .map(|(index, line)| {
+            let number = index + 2;
+            let value: serde_json::Value = serde_json::from_str(line).unwrap_or_else(|error| {
+                panic!("battery.jsonl line {number}: not a JSON object: {error}")
+            });
+            let text_field = |name: &str| {
                 value
                     .get(name)
-                    .unwrap_or_else(|| panic!("battery.jsonl: case {id} has no `{name}`"))
-                    .clone()
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_else(|| {
+                        panic!("battery.jsonl line {number}: `{name}` is missing or not a string")
+                    })
+                    .to_string()
             };
-            Some(Case {
-                rc: i32::try_from(field("rc").as_i64().expect("`rc` is a number"))
-                    .expect("`rc` fits in i32"),
-                out: field("out")
-                    .as_str()
-                    .expect("`out` is a string")
-                    .to_string(),
-                cmd: field("cmd")
-                    .as_str()
-                    .expect("`cmd` is a string")
-                    .to_string(),
-                id,
-            })
+            let rc = value
+                .get("rc")
+                .and_then(serde_json::Value::as_i64)
+                .and_then(|status| i32::try_from(status).ok())
+                .unwrap_or_else(|| {
+                    panic!("battery.jsonl line {number}: `rc` is missing or not a number")
+                });
+            Case {
+                id: text_field("id"),
+                rc,
+                out: text_field("out"),
+                cmd: text_field("cmd"),
+            }
         })
         .collect()
+}
+
+fn cases() -> Vec<Case> {
+    parse_battery(BATTERY)
 }
 
 fn known_failing() -> BTreeSet<String> {
@@ -137,14 +166,33 @@ fn run(case: &Case) -> Outcome {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
+        // Its own process group, so that a case which does not finish can be
+        // stopped together with the commands it started.
+        .process_group(0)
         .spawn()
         .expect("start the built shell");
+
+    // Read the output while the shell runs. A case that writes more than a
+    // pipe holds would otherwise wait for a reader that starts only once the
+    // case has finished, and be counted as not finishing.
+    let stdout = child
+        .stdout
+        .take()
+        .expect("the shell's standard output is a pipe");
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut stdout = stdout;
+        let mut raw = Vec::new();
+        let _ = stdout.read_to_end(&mut raw);
+        let _ = sender.send(raw);
+    });
 
     let started = Instant::now();
     let status = loop {
         match child.try_wait().expect("wait for the shell") {
             Some(status) => break Some(status),
             None if started.elapsed() >= TIME_LIMIT => {
+                stop_group(child.id());
                 let _ = child.kill();
                 let _ = child.wait();
                 break None;
@@ -153,15 +201,18 @@ fn run(case: &Case) -> Outcome {
         }
     };
 
-    let mut raw = Vec::new();
-    if let Some(mut stdout) = child.stdout.take() {
-        let _ = stdout.read_to_end(&mut raw);
-    }
-    let got_out = normalise(&String::from_utf8_lossy(&raw));
+    // The reader ends when every process that holds the pipe has gone. Do
+    // not wait for that without limit.
+    let raw = receiver.recv_timeout(OUTPUT_GRACE).ok();
 
-    let (passed, detail) = match status {
-        None => (false, format!("did not finish within {TIME_LIMIT:?}")),
-        Some(status) => {
+    let (passed, detail) = match (status, raw) {
+        (None, _) => (false, format!("did not finish within {TIME_LIMIT:?}")),
+        (Some(_), None) => (
+            false,
+            format!("its output was still open {OUTPUT_GRACE:?} after it finished"),
+        ),
+        (Some(status), Some(raw)) => {
+            let got_out = normalise(&String::from_utf8_lossy(&raw));
             let got_rc = status.code().unwrap_or(-1);
             if got_out == case.out && got_rc == case.rc {
                 (true, String::new())
@@ -171,7 +222,7 @@ fn run(case: &Case) -> Outcome {
                     format!(
                         "expected exit {} and {:?}; got exit {} and {:?}",
                         case.rc,
-                        case.out,
+                        shorten(&case.out),
                         got_rc,
                         shorten(&got_out)
                     ),
@@ -184,6 +235,17 @@ fn run(case: &Case) -> Outcome {
         passed,
         detail,
     }
+}
+
+/// Stops every process in the group led by `leader`. Best effort: a command
+/// that has moved to a group of its own is not reached.
+fn stop_group(leader: u32) {
+    let _ = Command::new("kill")
+        .args(["-KILL", "--", &format!("-{leader}")])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
 }
 
 fn shorten(text: &str) -> String {
@@ -302,6 +364,63 @@ fn battery_matches_the_reference_except_for_the_known_failures() {
          Regressions (not on the known-failing list, and failing): {regressions:#?}\n\
          Now passing (take these off tests/conformance/known_failing.txt): {now_passing:?}\n"
     );
+}
+
+/// A case line that lacks a field is an error. It used to be dropped, so a
+/// mistyped `id` took its case out of the battery without a word.
+#[test]
+#[should_panic(expected = "line 2: `id` is missing")]
+fn a_case_line_without_an_id_is_an_error() {
+    parse_battery("{\"_comment\": \"x\"}\n{\"rc\": 0, \"out\": \"\", \"cmd\": \"true\"}\n");
+}
+
+#[test]
+#[should_panic(expected = "the first line is the comment object")]
+fn the_first_line_must_be_the_comment_object() {
+    parse_battery("{\"id\": \"a-01\", \"rc\": 0, \"out\": \"\", \"cmd\": \"true\"}\n");
+}
+
+#[test]
+fn every_line_after_the_first_is_a_case() {
+    let lines = BATTERY
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .count();
+    assert_eq!(cases().len(), lines - 1);
+}
+
+/// More output than a pipe holds (64 KiB on Linux) must not turn a case that
+/// finishes into one that is counted as not finishing.
+#[test]
+fn output_larger_than_a_pipe_is_read_while_the_shell_runs() {
+    let out: String = (1..=30_000).map(|n| format!("{n}\n")).collect();
+    assert!(out.len() > 2 * 65_536);
+    let outcome = run(&Case {
+        id: "big-output".to_string(),
+        rc: 0,
+        out,
+        cmd: "seq 1 30000".to_string(),
+    });
+    assert!(outcome.passed, "{}", outcome.detail);
+}
+
+/// A case that does not finish is stopped at the time limit and reported.
+#[test]
+fn a_case_that_does_not_finish_is_reported_within_the_limit() {
+    let started = Instant::now();
+    let outcome = run(&Case {
+        id: "never-ends".to_string(),
+        rc: 0,
+        out: String::new(),
+        cmd: "sleep 600".to_string(),
+    });
+    assert!(!outcome.passed);
+    assert!(
+        outcome.detail.contains("did not finish"),
+        "{}",
+        outcome.detail
+    );
+    assert!(started.elapsed() < TIME_LIMIT + OUTPUT_GRACE + Duration::from_secs(5));
 }
 
 #[test]

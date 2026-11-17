@@ -259,8 +259,12 @@ pub enum Command {
         show_proofs: bool,
     },
     /// `exit [status]`. The status is kept unexpanded until it runs.
+    /// `too_many` is set when more than one operand was given; what follows
+    /// then depends on whether a person is typing, so it is decided when the
+    /// command runs.
     Exit {
         code: Option<String>,
+        too_many: bool,
     },
     Quit,
 
@@ -3282,7 +3286,7 @@ fn builtin_operands(
     for arg in args {
         if !options_ended && arg == "--" {
             options_ended = true;
-        } else if !options_ended && arg.len() > 1 && arg.starts_with('-') {
+        } else if !options_ended && reads_as_option(arg) {
             if !known_options.contains(&arg.as_str()) {
                 return Err(anyhow!(
                     "{name}: option '{arg}' is not supported by the built-in {name}; nothing was done"
@@ -3308,6 +3312,18 @@ fn builtin_operands(
         ));
     }
     Ok((options, operands))
+}
+
+/// Whether `word` reads as an option to a built-in: it starts with `-` and is
+/// not `-` alone, which names standard input or the previous directory.
+pub(crate) fn reads_as_option(word: &str) -> bool {
+    word.len() > 1 && word.starts_with('-')
+}
+
+/// Whether `word`, where `chmod` expects its mode, is an option. A mode may
+/// start with `-` (`chmod -x f`), so only the option spellings count.
+pub(crate) fn is_chmod_option(word: &str) -> bool {
+    matches!(word, "-R" | "-c" | "-f" | "-v") || word.starts_with("--")
 }
 
 /// Parses the count given to `undo` or `redo`: nothing means one.
@@ -3405,7 +3421,7 @@ fn parse_base_command(
             // The first argument is the mode, which may itself start with `-`
             // (`chmod -x f`), so only the option spellings are refused there.
             if let Some(first) = args.first() {
-                if matches!(first.as_str(), "-R" | "-c" | "-f" | "-v") || first.starts_with("--") {
+                if is_chmod_option(first) {
                     return Err(anyhow!(
                         "chmod: option '{first}' is not supported by the built-in chmod; nothing was done"
                     ));
@@ -3529,14 +3545,10 @@ fn parse_base_command(
                 .unwrap_or(10);
             Ok(Command::History { count, show_proofs })
         }
-        "exit" => {
-            if args.len() > 1 {
-                return Err(anyhow!("exit: too many arguments"));
-            }
-            Ok(Command::Exit {
-                code: args.first().cloned(),
-            })
-        }
+        "exit" => Ok(Command::Exit {
+            code: args.first().cloned(),
+            too_many: args.len() > 1,
+        }),
         "quit" => Ok(Command::Quit),
 
         // Transactions

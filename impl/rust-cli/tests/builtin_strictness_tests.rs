@@ -218,6 +218,71 @@ fn a_double_dash_lets_a_name_start_with_a_dash() {
     assert!(dir.path().join("-p").is_dir());
 }
 
+/// The parser sees `$opt`, not what it holds. A word that reads as an option
+/// only once it is expanded is refused as well: `opt=-p; mkdir $opt` used to
+/// make a directory named `-p`.
+#[test]
+fn an_operand_that_expands_to_an_option_is_refused() {
+    refused("opt=-p; mkdir $opt", "expands to '-p'");
+    refused("opt=-rf; rm $opt", "expands to '-rf'");
+    refused("opt=-r; rmdir $opt", "expands to '-r'");
+    refused("opt=-c; touch $opt", "expands to '-c'");
+    refused("opt=-la; ls $opt", "expands to '-la'");
+    refused("opt=-L; cd $opt", "expands to '-L'");
+    refused("opt=-r; cp $opt a", "expands to '-r'");
+    refused("opt=-f; mv a $opt", "expands to '-f'");
+    refused("opt=-f; ln -s a $opt", "expands to '-f'");
+    refused("opt=--force; obliterate $opt", "expands to '--force'");
+    refused("opt=-R; chmod $opt a", "expands to '-R'");
+    refused("opt=-v; chmod 600 $opt", "expands to '-v'");
+}
+
+/// Such a refusal fails its own command and no more, like one found while
+/// the line was parsed.
+#[test]
+fn a_refusal_after_expansion_does_not_end_the_script() {
+    let dir = tempfile::tempdir().expect("temporary directory");
+
+    let run = vsh(dir.path(), "opt=-p; mkdir $opt; echo status=$?");
+
+    assert_eq!(run.stdout, "status=1\n", "stderr: {}", run.stderr);
+    assert!(tree(dir.path()).is_empty());
+}
+
+/// What an expansion may still produce: a mode that starts with a dash, and
+/// the lone dash that means the previous directory.
+#[test]
+fn an_expansion_may_still_give_a_mode_or_a_lone_dash() {
+    let dir = fixture();
+
+    let run = vsh(dir.path(), "m=-w; chmod $m a; cd d; p=-; cd $p");
+
+    assert_eq!(run.code, 0, "stderr: {}", run.stderr);
+    let mode = fs::metadata(dir.path().join("a"))
+        .expect("metadata")
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o222, 0, "write permission was removed");
+}
+
+/// `exit` with more than one operand is an error, and a script stops there
+/// with status 1, as it does under bash and dash. It used to print the error
+/// and carry on with the rest of the script.
+#[test]
+fn exit_with_too_many_operands_stops_the_script() {
+    let dir = tempfile::tempdir().expect("temporary directory");
+
+    let run = vsh(dir.path(), "exit 1 2; touch after");
+
+    assert_eq!(run.code, 1);
+    assert!(
+        run.stderr.contains("too many arguments"),
+        "stderr: {}",
+        run.stderr
+    );
+    assert!(!dir.path().join("after").exists());
+}
+
 #[test]
 fn a_refusal_does_not_end_the_script() {
     let dir = tempfile::tempdir().expect("temporary directory");

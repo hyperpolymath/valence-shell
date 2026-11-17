@@ -61,8 +61,18 @@ Recorded from GNU bash 5.2.21 on 2026-11-17, each case in an empty directory.
 The five `rm-NN` cases were written by hand from the POSIX description of `rm`.
 
 Cases were chosen to give the same result on any Linux system: they create the
-files they use and do not depend on what a system directory holds. Of the 126
+files they use and do not depend on what a system directory holds. Of the 127
 cases, 21 use syntax only bash has; `dash` matches bash on the rest.
+
+The test is built on Linux only. The expectations are from Linux, and several
+cases use the GNU forms of `stat`, `wc` and other programs, which print
+differently on other systems.
+
+One case was corrected after review. `rm-05` set up its two files with
+`touch a b`, which the built-in refuses, so nothing was created, the `rm` had
+nothing to remove, and the case matched for the wrong reason. It now creates
+the files one at a time and fails, as it should: the built-in `rm` takes one
+operand. A case must be able to fail: check that its set-up runs.
 
 == Adding a case
 
@@ -76,4 +86,8 @@ cases, 21 use syntax only bash has; `dash` matches bash on the rest.
 * The battery is small and home-made. A public corpus should become the
   yardstick for any work on the shell language (review, section 11).
 * It runs only the non-interactive path (`vsh -c`).
-* A case that does not finish within five seconds counts as failed.
+* A case that does not finish within five seconds counts as failed, and the
+  shell and the commands in its process group are stopped. A command that has
+  moved to a process group of its own is not reached.
+* A line of `battery.jsonl` that is not a whole case is an error, so a case
+  cannot drop out unseen.

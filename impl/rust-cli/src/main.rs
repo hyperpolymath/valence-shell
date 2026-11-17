@@ -282,7 +282,18 @@ fn execute_script_content(content: &str, state: &mut state::ShellState) -> Resul
 
         match vsh::parser::parse_command(segment) {
             Ok(cmd) => {
-                let result = cmd.execute(state)?;
+                let result = match cmd.execute(state) {
+                    Ok(result) => result,
+                    // A built-in that refused its operands has done nothing.
+                    // Like a refusal found while parsing, it fails that
+                    // command only.
+                    Err(e) if e.is::<vsh::executable::Refusal>() => {
+                        eprintln!("vsh: {e}");
+                        state.last_exit_code = 1;
+                        continue;
+                    }
+                    Err(e) => return Err(e),
+                };
                 match result {
                     // `exit` has already set the status to leave with. Stop
                     // here; the EXIT trap and the exit itself follow the loop.

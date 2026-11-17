@@ -88,7 +88,7 @@ integration), #56/#57/#58 (the three admits surfaced by #55).
 
 [IMPORTANT]
 ====
-*Parked* by owner ruling OD-42 (2026-11-17; recorded in `docs/plans/VSH-ROUTE-PLAN-2026-11-04.adoc` on valence-shell#230). The engine is the product and the shell interpreter is one front end, which comes last. What the interpreter does today is measured by `impl/rust-cli/tests/conformance_battery.rs` (66 of 126 command lines match bash), not by the list below, parts of which are out of date.
+*Parked* by owner ruling OD-42 (2026-11-17; recorded in `docs/plans/VSH-ROUTE-PLAN-2026-11-04.adoc` on valence-shell#230). The engine is the product and the shell interpreter is one front end, which comes last. What the interpreter does today is measured by `impl/rust-cli/tests/conformance_battery.rs` (66 of 127 command lines match bash), not by the list below, parts of which are out of date.
 ====
 
 Most critical missing POSIX features, ranked by impact (per CLAUDE.md

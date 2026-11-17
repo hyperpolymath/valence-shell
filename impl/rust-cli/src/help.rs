@@ -147,12 +147,6 @@ impl HelpEntry {
             output.push('\n');
         }
 
-        // Footer
-        output.push_str(&format!(
-            "Run {} for comprehensive documentation\n",
-            format!("man vsh-{}", self.name).bright_yellow()
-        ));
-
         // Page if output is long
         pager::page(&output)?;
         Ok(())

@@ -23,7 +23,7 @@ Opus audit session that fixed all broken tests, real bugs, and documentation.
 ### What Actually Works (v0.9.0)
 
 **Measured, not claimed (2026-11-17, gate G0).** `impl/rust-cli/tests/conformance_battery.rs`
-starts the built shell on 126 everyday command lines and compares the result with bash:
+starts the built shell on 127 everyday command lines and compares the result with bash:
 **66 match**. The cases that fail are listed in
 `impl/rust-cli/tests/conformance/known_failing.txt`. That list is a ratchet: it may only
 shrink, and a case may not be added to it to make a build pass.

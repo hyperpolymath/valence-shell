@@ -284,6 +284,10 @@ pub struct ShellState {
     /// Last exit code from external command (for $? support)
     pub last_exit_code: i32,
 
+    /// Whether a person is typing into this shell. Set by the interactive
+    /// loops. A script, or `-c`, leaves it unset.
+    pub interactive: bool,
+
     /// Previous directory for cd - support
     pub previous_dir: Option<PathBuf>,
 
@@ -346,6 +350,7 @@ impl ShellState {
             transactions: Vec::new(),
             state_file,
             last_exit_code: 0,
+            interactive: false,
             previous_dir: None,
             variables: HashMap::new(),
             exported_vars: HashSet::new(),
