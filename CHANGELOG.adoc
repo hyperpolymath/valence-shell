@@ -60,9 +60,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   memory with the redo entry. File content over `VSH_REDO_CAPTURE_LIMIT` bytes
   (shell or environment variable; default 10 MiB; `0` = no limit) is not kept,
   and redo of that entry says so.
-- A `redo` that fails changes nothing and stays on the redo stack, including
-  when a file write fails part-way (the partial file is removed, or the
-  previous content put back). `redo` of
+- A `redo` that fails records nothing and stays on the redo stack. It also
+  leaves the filesystem as it found it, including when a file write fails
+  part-way: the partial file is removed, the overwritten bytes are put back,
+  or the partial append is cut off. The one exception is when that clean-up
+  fails too (an I/O error, or no space on a copy-on-write filesystem): the
+  file is then left changed, the error says so, and a retry would record the
+  damaged content as undo data. `redo` of
   `cp`, `mv` and `touch` no longer overwrites a path that reappeared after the
   undo.
 - Undo of a `>`/`>>` redirection failed whenever the sandbox root was not `/`

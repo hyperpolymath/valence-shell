@@ -528,9 +528,14 @@ reverses the operation and kept on the in-memory redo entry
 (`+state::RedoData+`). File content over `+VSH_REDO_CAPTURE_LIMIT+` bytes
 (default 10 MiB, `+0+` for no limit) is not kept; redo of that entry fails
 with the reason.
-* A redo that fails changes nothing and stays on the redo stack. That
-includes a file write that fails part-way: the partial file is removed, or the
-previous content is put back.
+* A redo that fails records nothing and stays on the redo stack. It also
+leaves the filesystem as it found it, including when a file write fails
+part-way: the partial file is removed, the overwritten bytes are put back, or
+the partial append is cut off. The one exception is when that clean-up fails
+too (an I/O error, or no space on a copy-on-write filesystem): the file is
+then left changed, the error says so, and a retry would record the damaged
+content as undo data. That double failure is not tested; it needs fault
+injection below the filesystem calls.
 
 Tests (`tested-only`): `+impl/rust-cli/tests/redo_roundtrip_tests.rs+`
 (every operation type, random sequences, the capture limit) and

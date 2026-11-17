@@ -1155,8 +1155,15 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
 /// # Errors
 /// Returns error if re-applying an operation fails, for example because a
 /// precondition no longer holds (the destination of a `cp` exists again).
-/// Nothing is changed or recorded for that operation, and it stays on the
-/// redo stack. Redoing with nothing to redo is not an error.
+/// Nothing is recorded for that operation, and it stays on the redo stack.
+/// Redoing with nothing to redo is not an error.
+///
+/// A failed redo leaves the filesystem as it found it, with one exception.
+/// If a file write fails part-way, redo removes the partial file, puts the
+/// overwritten bytes back or cuts off the partial append. If that clean-up
+/// fails as well (an I/O error, or no space on a copy-on-write filesystem),
+/// the file is left changed and the error says so. Retrying the redo would
+/// then record the damaged content as undo data, so repair the file first.
 ///
 /// # Examples
 /// ```no_run
@@ -1183,8 +1190,8 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
         let new_op = match reapply(state, &op) {
             Ok(new_op) => new_op,
             Err(e) => {
-                // Nothing was re-applied: keep the entry so redo can be
-                // retried once whatever blocked it is resolved.
+                // The operation was not re-applied: keep the entry so redo
+                // can be retried once whatever blocked it is resolved.
                 state.redo_stack.push_front(op);
                 return Err(e);
             }
