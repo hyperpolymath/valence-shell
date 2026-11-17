@@ -165,75 +165,89 @@ fn run_session() -> Vec<Capture> {
 /// Every disk state a crash between `old` and `new` could leave, tagged with
 /// its kind.
 fn crash_states(old: &Files, new: &Files) -> Vec<(&'static str, Files)> {
-    let mut states = vec![("clean", old.clone()), ("clean", new.clone())];
     let names: BTreeSet<&String> = old.keys().chain(new.keys()).collect();
     let changed: Vec<&String> = names
         .into_iter()
         .filter(|n| old.get(*n) != new.get(*n))
         .collect();
 
-    // Torn append: one file cut between its old and new length, the rest old.
+    let mut states = vec![("clean", old.clone()), ("clean", new.clone())];
     for name in &changed {
-        let (Some(before), Some(after)) = (old.get(*name), new.get(*name)) else {
-            continue;
-        };
-        if after.len() > before.len() && after.starts_with(before) {
-            for len in before.len() + 1..after.len() {
-                let mut files = old.clone();
-                files.insert((*name).clone(), after[..len].to_vec());
-                states.push(("torn-append", files));
-            }
-        }
+        states.extend(torn_states(old, new, name));
+        states.extend(stray_temp_state(old, new, name));
     }
+    states.extend(mixed_file_states(old, new, &changed));
+    states
+}
 
-    // A file created by this mutation, cut at every length. A process crash
-    // leaves this if the file is created by writing in place; if it is
-    // created by rename, only a power loss before the data was synced can.
-    for name in &changed {
-        if let (None, Some(after)) = (old.get(*name), new.get(*name)) {
-            for len in 0..after.len() {
-                let mut files = old.clone();
-                files.insert((*name).clone(), after[..len].to_vec());
-                states.push(("torn-create", files));
-            }
+/// `old` with one file replaced by `bytes`.
+fn with_file(old: &Files, name: &str, bytes: &[u8]) -> Files {
+    let mut files = old.clone();
+    files.insert(name.to_string(), bytes.to_vec());
+    files
+}
+
+/// One file cut short, the rest old.
+///
+/// * *Torn append*: the file grew by appending; cut between its old and new
+///   length.
+/// * *Torn create*: the file did not exist; cut at every length. A process
+///   crash leaves this if the file is created by writing in place; if it is
+///   created by rename, only a power loss before the data was synced can.
+fn torn_states(old: &Files, new: &Files, name: &str) -> Vec<(&'static str, Files)> {
+    let Some(after) = new.get(name) else {
+        return Vec::new();
+    };
+    let (kind, lengths) = match old.get(name) {
+        None => ("torn-create", 0..after.len()),
+        Some(before) if after.len() > before.len() && after.starts_with(before) => {
+            ("torn-append", before.len() + 1..after.len())
         }
-    }
+        Some(_) => return Vec::new(),
+    };
+    lengths
+        .map(|len| (kind, with_file(old, name, &after[..len])))
+        .collect()
+}
 
-    // Mixed files: each changed file independently old or new.
-    if changed.len() > 1 {
-        for mask in 1..(1u32 << changed.len()) - 1 {
+/// Each changed file independently old or new: what a crash between two
+/// writes, or a power loss without `fsync` ordering, can leave.
+fn mixed_file_states(old: &Files, new: &Files, changed: &[&String]) -> Vec<(&'static str, Files)> {
+    if changed.len() < 2 {
+        return Vec::new();
+    }
+    (1..(1u32 << changed.len()) - 1)
+        .map(|mask| {
             let mut files = old.clone();
             for (bit, name) in changed.iter().enumerate() {
-                if mask & (1 << bit) != 0 {
-                    match new.get(*name) {
-                        Some(bytes) => files.insert((*name).clone(), bytes.clone()),
-                        None => files.remove(*name),
-                    };
+                if mask & (1 << bit) == 0 {
+                    continue;
                 }
+                match new.get(*name) {
+                    Some(bytes) => files.insert((*name).clone(), bytes.clone()),
+                    None => files.remove(*name),
+                };
             }
-            states.push(("mixed-files", files));
-        }
-    }
+            ("mixed-files", files)
+        })
+        .collect()
+}
 
-    // Stray temp: a rewritten (not appended) file half-copied beside the old
-    // state, as a crash during write-then-rename leaves it.
-    for name in &changed {
-        let Some(after) = new.get(*name) else {
-            continue;
-        };
-        let appended = old
-            .get(*name)
-            .is_some_and(|before| after.starts_with(before));
-        if !appended && !after.is_empty() {
-            let mut files = old.clone();
-            files.insert(
-                format!("{name}.0123456789abcdef.tmp"),
-                after[..after.len() / 2].to_vec(),
-            );
-            states.push(("stray-temp", files));
-        }
+/// A rewritten (not appended) file half-copied beside the old state, as a
+/// crash during write-then-rename leaves it.
+fn stray_temp_state(old: &Files, new: &Files, name: &str) -> Option<(&'static str, Files)> {
+    let after = new.get(name)?;
+    let appended = old
+        .get(name)
+        .is_some_and(|before| after.starts_with(before));
+    if appended || after.is_empty() {
+        return None;
     }
-    states
+    let temp = format!("{name}.0123456789abcdef.tmp");
+    Some((
+        "stray-temp",
+        with_file(old, &temp, &after[..after.len() / 2]),
+    ))
 }
 
 /// Check the three properties for one crash state. Returns the property that
