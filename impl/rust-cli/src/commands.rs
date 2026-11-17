@@ -269,8 +269,14 @@ fn apply_create_file(state: &ShellState, path: &str, content: &[u8]) -> Result<O
         // A partial file must not outlive the failure: it was not there
         // before, and it would block a retry.
         drop(file);
-        let _ = fs::remove_file(&full_path);
-        return Err(anyhow::Error::new(e).context("touch failed"));
+        let error = anyhow::Error::new(e).context("touch failed");
+        return Err(match fs::remove_file(&full_path) {
+            Ok(()) => error,
+            Err(cleanup_error) => error.context(format!(
+                "the partial file {} could not be removed: {}",
+                path, cleanup_error
+            )),
+        });
     }
 
     Ok(Operation::new(
@@ -1439,25 +1445,32 @@ fn apply_replace_content(
 
     let original = crate::fs_pure::read_to_end(&full_path)
         .with_context(|| format!("Failed to read {} before redo", path))?;
-    // Open without `create`, so the write lands in the file that was read.
+    // Open without `create`, so the write lands in the file that was read,
+    // and without `truncate`: the new content is written over the old and the
+    // file is cut to length afterwards. The old bytes are then still in place
+    // if the write fails, and putting them back never grows the file, so it
+    // does not need the space or quota the failed write ran out of.
+    use std::io::{Seek, SeekFrom};
     let mut file = fs::OpenOptions::new()
         .write(true)
-        .truncate(true)
         .open(&full_path)
         .with_context(|| format!("Redo {} failed", op_type))?;
-    if let Err(e) = file.write_all(content) {
-        // Put back what was there, so a failed redo leaves the file as it
-        // found it and a retry captures the right undo data.
-        use std::io::{Seek, SeekFrom};
-        let restored = file
-            .set_len(0)
-            .and_then(|()| file.seek(SeekFrom::Start(0)))
-            .and_then(|_| file.write_all(&original));
+    let written = file
+        .write_all(content)
+        .and_then(|()| file.set_len(content.len() as u64));
+    if let Err(e) = written {
+        // Only the bytes before the current position can have changed.
+        let restored = file.stream_position().and_then(|position| {
+            let changed = original.len().min(position as usize);
+            file.seek(SeekFrom::Start(0))?;
+            file.write_all(&original[..changed])?;
+            file.set_len(original.len() as u64)
+        });
         let error = anyhow::Error::new(e).context(format!("Redo {} failed", op_type));
         return Err(match restored {
             Ok(()) => error,
             Err(restore_error) => error.context(format!(
-                "{} could not be restored after a failed redo: {}",
+                "{} could not be restored after a failed redo and may be damaged: {}",
                 path, restore_error
             )),
         });
@@ -1484,8 +1497,14 @@ fn apply_append(state: &ShellState, path: &str, appended: &[u8]) -> Result<Opera
         .context("Redo append failed")?;
     if let Err(e) = file.write_all(appended) {
         // Cut off whatever part of the append landed.
-        let _ = file.set_len(original_size);
-        return Err(anyhow::Error::new(e).context("Redo append failed"));
+        let error = anyhow::Error::new(e).context("Redo append failed");
+        return Err(match file.set_len(original_size) {
+            Ok(()) => error,
+            Err(cleanup_error) => error.context(format!(
+                "the partial append to {} could not be cut off: {}",
+                path, cleanup_error
+            )),
+        });
     }
 
     Ok(

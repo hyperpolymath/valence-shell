@@ -131,6 +131,36 @@ fn redo_that_fails_part_way_through_a_write_changes_nothing() {
     );
     commands::redo(&mut state, 1, false).expect("redo");
 
+    // -- a replaced file whose previous content is itself over the limit ----
+    // Putting the previous content back must not depend on being able to
+    // write that much again: only the overwritten part is rewritten.
+    let large = root.join("large");
+    let large_before = bytes(0xa1, 3 * LIMIT as usize);
+    fs::write(&large, &large_before).expect("write");
+    run(
+        &mut state,
+        &format!("/bin/cat {} > large", big_src.display()),
+    );
+    assert_eq!(fs::read(&large).expect("read"), big);
+    commands::undo(&mut state, 1, false).expect("undo");
+    assert_eq!(fs::read(&large).expect("read"), large_before);
+
+    let message = redo_under_limit_then_freely(&mut state, unlimited);
+    assert!(
+        fs::read(&large).expect("read") == large_before,
+        "the previous content is put back even though it is over the limit: {message}"
+    );
+    assert!(
+        !message.contains("could not be restored"),
+        "restoring did not fail: {message}"
+    );
+
+    commands::redo(&mut state, 1, false).expect("redo once the limit is lifted");
+    assert_eq!(fs::read(&large).expect("read"), big);
+    commands::undo(&mut state, 1, false).expect("undo after the retried redo");
+    assert!(fs::read(&large).expect("read") == large_before);
+    commands::redo(&mut state, 1, false).expect("redo");
+
     // -- a file a redirection appended to -----------------------------------
     let appended = root.join("appended");
     fs::write(&appended, &before).expect("write");
