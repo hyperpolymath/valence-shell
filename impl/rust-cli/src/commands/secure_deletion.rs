@@ -168,6 +168,13 @@ fn open_for_obliteration(dir: &Dir, contained: &Path) -> Result<(cap_std::fs::Fi
     if !opened.is_file() || opened.dev() != named.dev() || opened.ino() != named.ino() {
         bail!("Path changed while it was being opened; nothing was overwritten");
     }
+    refuse_other_names(&opened)?;
+    Ok((file, opened.len()))
+}
+
+/// Refuse a file that has more than one name. `opened` is the metadata of
+/// the open file.
+fn refuse_other_names(opened: &cap_std::fs::Metadata) -> Result<()> {
     if opened.nlink() > 1 {
         bail!(
             "File has {} hard links. Obliterating it would destroy the data under its \
@@ -175,18 +182,13 @@ fn open_for_obliteration(dir: &Dir, contained: &Path) -> Result<(cap_std::fs::Fi
             opened.nlink()
         );
     }
-    Ok((file, opened.len()))
+    Ok(())
 }
 
 /// Overwrite the open `file` three times, remove its name, and make the
 /// removal durable in its directory.
-fn overwrite_and_unlink(
-    dir: &Dir,
-    contained: &Path,
-    file: cap_std::fs::File,
-    file_size: u64,
-) -> Result<()> {
-    overwrite_and_remove_name(dir, contained, file, file_size)?;
+fn overwrite_and_unlink(dir: &Dir, contained: &Path, file: cap_std::fs::File) -> Result<()> {
+    overwrite_and_remove_name(dir, contained, file)?;
     sync_directory(dir, contained.parent())
 }
 
@@ -195,15 +197,41 @@ fn overwrite_and_unlink(
 /// The name is removed only if it still refers to the file that was
 /// overwritten. The removal is not yet durable: the caller syncs the
 /// directory.
-fn overwrite_and_remove_name(
+fn overwrite_and_remove_name(dir: &Dir, contained: &Path, file: cap_std::fs::File) -> Result<()> {
+    overwrite_and_remove_name_with(dir, contained, file, overwrite_3pass)
+}
+
+/// [`overwrite_and_remove_name`], with the overwrite passed in as
+/// `overwrite` (given the file and its length), so that a test can add to
+/// the file while it is being overwritten.
+///
+/// The length is read here, from the open file, at the moment the
+/// overwrite starts. A length read earlier (when the file was opened,
+/// before the wait for a confirmation) misses what another program
+/// appended in between: those bytes were left as they were, and the name
+/// was removed all the same. If the file is longer after the overwrite
+/// than the length that was overwritten, it grew during the overwrite;
+/// that is an error, and the name is left in place.
+fn overwrite_and_remove_name_with(
     dir: &Dir,
     contained: &Path,
     file: cap_std::fs::File,
-    file_size: u64,
+    overwrite: impl FnOnce(&mut std::fs::File, u64) -> Result<()>,
 ) -> Result<()> {
     let identity = file.metadata().context("Failed to stat opened file")?;
+    let file_size = identity.len();
     let mut file = file.into_std();
-    overwrite_3pass(&mut file, file_size)?;
+    overwrite(&mut file, file_size)?;
+    let length_now = file
+        .metadata()
+        .context("Failed to stat the file after the overwrite")?
+        .len();
+    if length_now > file_size {
+        bail!(
+            "The file grew from {file_size} to {length_now} bytes while it was being \
+             overwritten. The added bytes were not overwritten, and the name was left in place."
+        );
+    }
     drop(file);
 
     let named = dir
@@ -376,9 +404,9 @@ pub fn secure_delete(path: &Path) -> Result<()> {
         .with_context(|| format!("Path has no file name: {}", path.display()))?;
     let dir = Dir::open_ambient_dir(parent, cap_std::ambient_authority())
         .with_context(|| format!("Failed to open directory {}", parent.display()))?;
-    let (file, file_size) = open_for_obliteration(&dir, Path::new(name))
+    let (file, _) = open_for_obliteration(&dir, Path::new(name))
         .with_context(|| format!("Cannot securely delete {}", path.display()))?;
-    overwrite_and_unlink(&dir, Path::new(name), file, file_size)
+    overwrite_and_unlink(&dir, Path::new(name), file)
 }
 
 /// Obliterate a file using best-effort overwrite and unlink
@@ -415,15 +443,11 @@ pub fn secure_delete(path: &Path) -> Result<()> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool) -> Result<()> {
-    refuse_inside_transaction(state)?;
-    let full_path = state.resolve_path(path);
-    let contained = state.contained(path)?;
-
-    // Precondition checks, on the file itself rather than on its name.
-    let (file, file_size) = open_for_obliteration(state.root_dir(), &contained)?;
-
-    // CRITICAL: Require confirmation for irreversible operation
-    if !force {
+    obliterate_confirmed_by(state, path, verbose, |full_path, file_size| {
+        // CRITICAL: Require confirmation for irreversible operation
+        if force {
+            return Ok(true);
+        }
         eprintln!();
         eprintln!(
             "{}",
@@ -443,11 +467,37 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
         eprintln!("{}", "This operation CANNOT be undone.".bright_red().bold());
         eprintln!();
 
-        if !ask_confirmation("Are you sure you want to obliterate this file?")? {
-            println!("{}", "Operation cancelled.".bright_yellow());
-            return Ok(());
-        }
+        ask_confirmation("Are you sure you want to obliterate this file?")
+    })
+}
+
+/// [`obliterate`], with the step that asks for confirmation passed in as
+/// `confirm` (given the file's path and its size), so that a test can
+/// change the file while the answer is awaited.
+fn obliterate_confirmed_by(
+    state: &mut ShellState,
+    path: &str,
+    verbose: bool,
+    confirm: impl FnOnce(&Path, u64) -> Result<bool>,
+) -> Result<()> {
+    refuse_inside_transaction(state)?;
+    let full_path = state.resolve_path(path);
+    let contained = state.contained(path)?;
+
+    // Precondition checks, on the file itself rather than on its name.
+    let (file, file_size) = open_for_obliteration(state.root_dir(), &contained)?;
+
+    if !confirm(&full_path, file_size)? {
+        println!("{}", "Operation cancelled.".bright_yellow());
+        return Ok(());
     }
+
+    // The answer can be a long time coming, and the file can be given
+    // another name meanwhile. The overwrite would then destroy the data
+    // under that name too, so the link count is read again from the open
+    // file, before anything is recorded or destroyed. (The length is read
+    // again where the overwrite starts.)
+    refuse_other_names(&file.metadata().context("Failed to stat opened file")?)?;
 
     // Steps 1 and 2: the audit entry, then the history. Nothing is
     // destroyed before both are done. The operation names the path as the
@@ -462,7 +512,7 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
     if verbose {
         println!("🔥 3-pass overwrite (random / zeros / 0xFF) + unlink...");
     }
-    if let Err(e) = overwrite_and_unlink(state.root_dir(), &contained, file, file_size) {
+    if let Err(e) = overwrite_and_unlink(state.root_dir(), &contained, file) {
         record_failed_obliteration(state, op, "obliterate-failed", &e);
         return Err(e);
     }
@@ -555,8 +605,8 @@ fn destroy_planned_with(
     durable: impl Fn(&Dir, Option<&Path>) -> Result<()>,
 ) -> Result<()> {
     for file_path in &plan.files {
-        let (file, file_size) = open_for_obliteration(root, file_path)?;
-        overwrite_and_remove_name(root, file_path, file, file_size)?;
+        let (file, _) = open_for_obliteration(root, file_path)?;
+        overwrite_and_remove_name(root, file_path, file)?;
         // Counted as soon as the name is gone. Making the removal durable
         // can still fail, and the audit entry must then not report one
         // file fewer than were destroyed.
@@ -818,6 +868,89 @@ mod tests {
         let left = fs::read_dir(temp_dir.path().join("d")).unwrap().count();
         assert_eq!(left, 1, "one file was destroyed before the sync failed");
         assert_eq!(destroyed, 1, "the destroyed file must be counted");
+    }
+
+    /// What another program appends to the file while the confirmation is
+    /// awaited is overwritten too. The length was read before the wait, so
+    /// the added bytes were left as they were and the name was removed.
+    #[cfg(unix)]
+    #[test]
+    fn test_bytes_appended_during_the_confirmation_are_overwritten() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut state = ShellState::new(temp_dir.path().to_str().unwrap()).unwrap();
+        let path = temp_dir.path().join("f");
+        fs::write(&path, b"first").unwrap();
+        // A descriptor of the test's own, which outlives the name.
+        let mut kept = fs::File::open(&path).unwrap();
+
+        obliterate_confirmed_by(&mut state, "f", false, |_, _| {
+            fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .unwrap()
+                .write_all(b"SECRET")
+                .unwrap();
+            Ok(true)
+        })
+        .unwrap();
+
+        assert!(!path.exists());
+        let mut left = Vec::new();
+        kept.read_to_end(&mut left).unwrap();
+        assert_eq!(left.len(), b"firstSECRET".len());
+        assert!(
+            left.iter().all(|byte| *byte == 0xFF),
+            "bytes were left as they were: {left:?}"
+        );
+    }
+
+    /// A hard link made while the confirmation is awaited is seen, and the
+    /// file is refused before anything is recorded or overwritten. The
+    /// link count was read only before the wait.
+    #[cfg(unix)]
+    #[test]
+    fn test_a_hard_link_made_during_the_confirmation_is_refused() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path().join("root");
+        fs::create_dir(&root).unwrap();
+        let mut state = ShellState::new(root.to_str().unwrap()).unwrap();
+        let path = root.join("f");
+        let other_name = temp_dir.path().join("other-name");
+        fs::write(&path, b"first").unwrap();
+
+        let refused = obliterate_confirmed_by(&mut state, "f", false, |_, _| {
+            fs::hard_link(&path, &other_name).unwrap();
+            Ok(true)
+        })
+        .unwrap_err();
+
+        assert!(format!("{refused:#}").contains("hard links"), "{refused:#}");
+        assert_eq!(fs::read(&other_name).unwrap(), b"first");
+        assert_eq!(fs::read(&path).unwrap(), b"first");
+        let audit = fs::read_to_string(root.join(".vsh-audit.log")).unwrap_or_default();
+        assert!(!audit.contains("obliterate"), "{audit}");
+    }
+
+    /// A file that grows while it is being overwritten is not removed, and
+    /// that is an error: the added bytes were not overwritten.
+    #[test]
+    fn test_a_file_that_grows_during_the_overwrite_keeps_its_name() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("f"), b"first").unwrap();
+        let root = Dir::open_ambient_dir(temp_dir.path(), cap_std::ambient_authority()).unwrap();
+        let (file, _) = open_for_obliteration(&root, Path::new("f")).unwrap();
+
+        let refused =
+            overwrite_and_remove_name_with(&root, Path::new("f"), file, |file, length| {
+                overwrite_3pass(file, length)?;
+                file.seek(SeekFrom::End(0))?;
+                file.write_all(b"added meanwhile")?;
+                Ok(())
+            })
+            .unwrap_err();
+
+        assert!(format!("{refused:#}").contains("grew"), "{refused:#}");
+        assert!(temp_dir.path().join("f").exists());
     }
 
     #[test]

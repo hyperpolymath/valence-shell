@@ -74,10 +74,15 @@ built-in and the external-command paths).
 |===
 
 Hole g (`cd ..; touch escaped`) also stopped reproducing for the four ported
-commands. That was too narrow a test: `cd ..; rm bystander` still removes a
-file outside the root, because `rm` is not ported and `cd` still moves the
-root. The test for g now covers `touch`, `mkdir`, `>` and `rm`, and g stays on
-the open list.
+commands. That was too narrow a test: `cd ..; rm bystander` still removed a
+file outside the root, because `rm` was not ported and `cd` still moved the
+root. The test for g now covers `touch`, `mkdir`, `>` and `rm`, and at this
+point of the experiment g stayed on the open list.
+
+NOTE: This part and the next describe the shell as it was when the experiment
+ended. Later work on the same day changed some of it: `rm` is ported, `cd`
+moves a separate working directory, and hole g is closed. <<now>> gives the
+state at the end of the day.
 
 == What it does not do
 
@@ -88,9 +93,9 @@ the open list.
   still use `std::fs` with a lexically resolved path. Containment holds only
   where the handle is used. A lint that bans `std::fs` outside one module is
   needed to keep it that way.
-* *`cd`.* The working directory is still stored by overwriting the root.
-  Fixing f and g needs a session root that never moves and a separate working
-  directory.
+* *`cd`.* The working directory was still stored by overwriting the root.
+  Fixing f and g needed a session root that never moves and a separate
+  working directory. (Done later the same day: see <<now>>.)
 * *External commands.* A program the shell runs is not confined by the
   handle; it runs as the user.
 * *Other platforms.* Not run on macOS or Windows. On systems without
@@ -189,17 +194,85 @@ needs a decision on how a record identifies its file: by the names the
 history gives the file over time, by the device and inode read when the
 content is saved, or both. The decision is open.
 
+== Follow-up the same day: what a failed command leaves behind
+
+Review found four more faults, and checking them found others of the same
+kind.
+
+* *A `>` target was emptied before the command was known to start.* Each
+  target was emptied as it was set up. If a later redirection of the same
+  command was then refused (`echo hi > out 2> dangling`), `out` was already
+  empty and the record of what it had held was dropped. The same happened
+  when the command itself failed after the set-up: a built-in that returned
+  an error, a command that was not found, a command that was interrupted,
+  and every background command. In each case the file was emptied and
+  nothing was recorded, so undo could not restore it. Now no target is
+  emptied until every redirection is set up, and what the set-up changed is
+  recorded whatever becomes of the command. One function does the set-up,
+  runs the command and makes the record, so a caller cannot leave the record
+  out.
+* *The shell did not start in its session root.* Started with `-r` from
+  another directory, the process stayed in that directory until the first
+  `cd`. Built-ins worked in the session root, but the commands the shell
+  started, and `$PWD`, used the other directory, outside the root. The shell
+  now enters the session root when it starts.
+* *Undo wrote to whatever had the recorded name.* Undo of `rm` wrote over a
+  file that another program had made under the name since. Undo of a
+  truncation opened the name with truncation, unchecked, so a name that had
+  become a hard link to a file outside the root was emptied and written.
+  Undo of `rm` now creates the file only if nothing has the name. Undo of a
+  truncation opens the existing file without truncating it and makes the
+  checks a redirection makes (a regular file with no other name) before it
+  writes. It no longer creates a file that has been removed since.
+* *`obliterate` used what it had read before the confirmation.* The length
+  and the link count were read when the file was opened, before the wait
+  for the answer. Bytes that another program appended during the wait were
+  not overwritten, and a hard link made during the wait was not seen. The
+  link count is now read again after the answer, before anything is
+  recorded. The length is read where the overwrite starts, and a file that
+  is longer after the overwrite than the length overwritten is an error:
+  the name is left in place.
+
+Not changed: a file that an earlier redirection created stays, empty, when a
+later one is refused (as in bash), and it is not recorded. The checks are
+made on the open file, but another program can still change the file
+between a check and the write that follows it; the gap is short, not
+closed.
+
+[[now]]
+== Where this stands at the end of the day
+
+Through the handle on the session root: `touch`, `mkdir`, `mv`, `rm`,
+`obliterate`, output redirection (the set-up, and the writes of built-ins
+and of commands), redo of a removal and of a truncation, and undo of a
+removal and of a truncation.
+
+Still by an ordinary path: `cp`, `rmdir`, `ln -s`, `chmod`, `chown`, input
+redirection, `ls`, the test built-in, undo and redo of the other operations,
+and rollback of them.
+
+The session root is fixed. `cd` moves a separate working directory, within
+the root, and the process starts in the root. History paths are relative to
+the session root.
+
+Holes open in `impl/rust-cli/tests/regressions_parsed_path.rs`: b, o and p.
+Holes a, c to n are closed.
+
 == Decision and next steps
 
-Capability handles are adopted for containment (route plan step B2):
+Capability handles are adopted for containment (route plan step B2). The
+steps decided at the end of the experiment, with their state at the end of
+the day:
 
-. Port the remaining commands, `rm` first (`obliterate` is done).
+. Port the remaining commands, `rm` first. `rm` and `obliterate` are done;
+  the commands listed in <<now>> are not.
 . Give the shell a fixed session root and a separate working directory;
-  record history paths relative to the session root.
+  record history paths relative to the session root. Done.
 . Refuse content operations on files with more than one hard link, and
-  refuse `obliterate` on a symlink.
+  refuse `obliterate` on a symlink. Done for `>`, `>>`, `obliterate`, redo
+  and undo of a truncation.
 . Add the lint, so that a new `std::fs` call outside the filesystem module
-  fails the build.
+  fails the build. Not done.
 
 The same handle answers the question of where the shell's own state lives: a
 second handle on a state directory outside the session root, which no

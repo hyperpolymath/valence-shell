@@ -11,6 +11,7 @@ use std::fs;
 use std::os::unix::fs::{symlink, PermissionsExt};
 use std::time::{Duration, UNIX_EPOCH};
 use vsh::commands;
+use vsh::redirection::{RedirectSetup, Redirection};
 use vsh::state::{Operation, OperationType, ShellState};
 
 #[test]
@@ -224,4 +225,69 @@ fn a_removal_is_not_redone_on_something_that_is_not_a_regular_file() {
         fs::read(sandbox.outside.join("victim")).unwrap(),
         b"OUTSIDE"
     );
+}
+
+/// Undo of a removal puts the file back only if nothing has the name.
+/// Whatever has taken it since is left as it is: undo used to write over
+/// it, which replaced a file that another program had made.
+#[test]
+fn undo_of_rm_leaves_a_file_that_has_taken_the_name() {
+    let (sandbox, mut state) = sandbox();
+    let path = sandbox.root.join("f");
+    fs::write(&path, "removed by the shell").unwrap();
+    commands::rm(&mut state, "f", false).unwrap();
+    fs::write(&path, "made by another program").unwrap();
+
+    let refused = commands::undo(&mut state, 1, false).unwrap_err();
+
+    assert!(
+        format!("{refused:#}").contains("has the name"),
+        "{refused:#}"
+    );
+    assert_eq!(fs::read(&path).unwrap(), b"made by another program");
+
+    // With the name free again, the same undo goes through.
+    fs::remove_file(&path).unwrap();
+    commands::undo(&mut state, 1, false).unwrap();
+    assert_eq!(fs::read(&path).unwrap(), b"removed by the shell");
+}
+
+/// Empty `f` as `command > f` does, and record it.
+fn truncate_by_redirection(state: &mut ShellState, name: &str) {
+    let redirects = vec![Redirection::Output {
+        file: name.to_string(),
+    }];
+    RedirectSetup::run(&redirects, state, |_, _| Ok(())).unwrap();
+}
+
+/// Undo of a truncation checks the file it writes to, as the redirection
+/// did. A file that has gained a name outside the session root since is
+/// not written: undo used to open the name with truncation, unchecked.
+#[test]
+fn undo_of_a_truncation_refuses_a_file_with_another_name() {
+    let (sandbox, mut state) = sandbox();
+    let path = sandbox.root.join("f");
+    let other_name = sandbox.outside.join("other-name");
+    fs::write(&path, "ORIGINAL").unwrap();
+    truncate_by_redirection(&mut state, "f");
+    fs::hard_link(&path, &other_name).unwrap();
+
+    let refused = commands::undo(&mut state, 1, false).unwrap_err();
+
+    assert!(format!("{refused:#}").contains("hard links"), "{refused:#}");
+    assert_eq!(fs::read(&other_name).unwrap(), b"");
+}
+
+/// Undo of a truncation does not make a file. If the file has been removed
+/// since, there is nothing to put the content back into.
+#[test]
+fn undo_of_a_truncation_needs_the_file_to_be_there() {
+    let (sandbox, mut state) = sandbox();
+    let path = sandbox.root.join("f");
+    fs::write(&path, "ORIGINAL").unwrap();
+    truncate_by_redirection(&mut state, "f");
+    fs::remove_file(&path).unwrap();
+
+    assert!(commands::undo(&mut state, 1, false).is_err());
+    assert!(!path.exists());
 }

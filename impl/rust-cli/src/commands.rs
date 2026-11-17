@@ -302,14 +302,17 @@ fn file_meta(_meta: &cap_std::fs::Metadata) -> Option<crate::state::FileMeta> {
     None
 }
 
-/// Put a file back: its content, and what it was if `meta` is known.
+/// Put back a file that was removed: its content, and what it was if
+/// `meta` is known.
 ///
 /// `recorded` is a path from the history, relative to the session root. The
-/// file is written beneath the session root. A file that has to be created
-/// is created readable by its owner only, and gets its recorded permissions
-/// once the content is in place, so its content is never exposed under
-/// looser permissions than it had.
-fn restore_file(
+/// file is created beneath the session root, and only if nothing has the
+/// name. Whatever has taken the name since the removal is left as it is:
+/// writing over it replaced a file that another program had made. The file
+/// is created readable by its owner only, and gets its recorded
+/// permissions once the content is in place, so its content is never
+/// exposed under looser permissions than it had.
+fn restore_removed_file(
     state: &ShellState,
     recorded: &str,
     content: &[u8],
@@ -319,13 +322,20 @@ fn restore_file(
 
     let contained = state.contained_abs(&state.resolve_op_path(recorded))?;
     let mut options = cap_std::fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
+    options.write(true).create_new(true);
     #[cfg(unix)]
     {
         use cap_std::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = state.root_dir().open_with(&contained, &options)?.into_std();
+    let mut file = match state.root_dir().open_with(&contained, &options) {
+        Ok(file) => file.into_std(),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => anyhow::bail!(
+            "something else has the name {recorded} now, and it was left as it is; \
+             move it away to restore the removed file"
+        ),
+        Err(e) => return Err(e.into()),
+    };
     file.write_all(content)?;
 
     #[cfg(unix)]
@@ -342,6 +352,26 @@ fn restore_file(
     #[cfg(not(unix))]
     let _ = meta;
 
+    Ok(())
+}
+
+/// Put back the content of a file that a redirection emptied.
+///
+/// `recorded` is a path from the history, relative to the session root. The
+/// file must still be there. It is opened beneath the session root without
+/// truncating it and checked while open, as a redirection's target is: a
+/// regular file with no other name. Only then is it emptied and written.
+/// Opening it with truncation emptied whatever had the name by then, a
+/// hard link to a file outside the session root included.
+fn restore_content(state: &ShellState, recorded: &str, content: &[u8]) -> Result<()> {
+    use std::io::Write;
+
+    let path = state.resolve_op_path(recorded);
+    let contained = state.contained_abs(&path)?;
+    let mut file =
+        crate::redirection::open_checked_target(state.root_dir(), &contained, &path)?.into_std();
+    file.set_len(0)?;
+    file.write_all(content)?;
     Ok(())
 }
 
@@ -370,6 +400,11 @@ fn remove_keeping(
     named: &cap_std::fs::Metadata,
     command: &str,
 ) -> Result<(Vec<u8>, Option<crate::state::FileMeta>)> {
+    // Only a regular file is read. Opening a FIFO would wait for a writer,
+    // and a device can be read without end.
+    if !named.is_file() {
+        anyhow::bail!("{command} refused: not a regular file");
+    }
     let content = state.root_dir().read(contained).with_context(|| {
         format!("{command} refused: the file cannot be read, so it could not be restored by undo")
     })?;
@@ -1030,7 +1065,7 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                     .undo_data
                     .as_deref()
                     .context("Undo rm failed: the record holds no content")?;
-                restore_file(state, &op.path, content, op.undo_meta.as_ref())
+                restore_removed_file(state, &op.path, content, op.undo_meta.as_ref())
                     .context("Undo rm failed")?;
             }
             OperationType::WriteFile => {
@@ -1038,7 +1073,7 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                     .undo_data
                     .as_deref()
                     .context("Undo write failed: the record holds no content")?;
-                restore_file(state, &op.path, content, None).context("Undo write failed")?;
+                restore_content(state, &op.path, content).context("Undo write failed")?;
             }
             OperationType::FileAppended => {
                 // Undo append: truncate file to original size
@@ -1247,9 +1282,6 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                     .root_dir()
                     .symlink_metadata(&contained)
                     .context("Redo rm failed")?;
-                if !named.is_file() {
-                    anyhow::bail!("Redo rm failed: {} is not a regular file now", op.path);
-                }
                 kept = Some(remove_keeping(state, &contained, &named, "Redo rm")?);
             }
             OperationType::WriteFile => {
@@ -1578,7 +1610,7 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                     .as_deref()
                     .context("Failed to restore file: the record holds no content")
                     .and_then(|content| {
-                        restore_file(state, &op.path, content, op.undo_meta.as_ref())
+                        restore_removed_file(state, &op.path, content, op.undo_meta.as_ref())
                             .context("Failed to restore file")
                     }),
                 OperationType::WriteFile => op
@@ -1586,7 +1618,7 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                     .as_deref()
                     .context("Failed to restore file content: the record holds no content")
                     .and_then(|content| {
-                        restore_file(state, &op.path, content, None)
+                        restore_content(state, &op.path, content)
                             .context("Failed to restore file content")
                     }),
                 OperationType::FileAppended => {

@@ -110,6 +110,24 @@ impl Sandbox {
             .expect("vsh should start")
     }
 
+    /// Run a command line through the parsed path, with the shell started
+    /// in the directory `started_in`.
+    fn vsh_from(&self, started_in: &Path, commands: &str) -> Output {
+        Command::new(env!("CARGO_BIN_EXE_vsh"))
+            .current_dir(started_in)
+            .arg("-r")
+            .arg(&self.root)
+            .arg("-c")
+            .arg(commands)
+            .env("XDG_STATE_HOME", self.temp.path().join("xdg-state"))
+            .env("XDG_CACHE_HOME", self.temp.path().join("xdg-cache"))
+            .env("XDG_DATA_HOME", self.temp.path().join("xdg-data"))
+            .env("NO_COLOR", "1")
+            .env("RUST_BACKTRACE", "0")
+            .output()
+            .expect("vsh should start")
+    }
+
     /// Run a command line that is only set-up: it must succeed.
     fn vsh_ok(&self, commands: &str) {
         let output = self.vsh(commands);
@@ -523,4 +541,61 @@ fn hole_p_obliterate_scrubs_contents_saved_under_an_earlier_name() {
             ))
         }
     });
+}
+
+// The tests below are not holes of the route plan. They were found in
+// review of this branch and are fixed, so they are plain regression tests.
+
+/// The shell starts in its session root. Started with `-r` from another
+/// directory, it used to leave the process where it was started: the
+/// commands it ran worked there, outside the session root, and `$PWD`
+/// named that directory.
+#[test]
+fn the_shell_starts_in_its_session_root() {
+    let sandbox = Sandbox::new();
+    let root = fs::canonicalize(&sandbox.root).unwrap();
+
+    let output = sandbox.vsh_from(
+        &sandbox.outside,
+        "/bin/pwd; echo $PWD; /usr/bin/touch made-by-a-command",
+    );
+
+    assert!(output.status.success(), "{}", text(&output));
+    let lines: Vec<String> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let root_text = root.to_string_lossy().into_owned();
+    assert_eq!(lines, [root_text.clone(), root_text], "{}", text(&output));
+    assert!(sandbox.root.join("made-by-a-command").exists());
+    assert_eq!(names(&sandbox.outside), Vec::<String>::new());
+}
+
+/// A built-in that fails after its `>` target was emptied leaves the
+/// truncation on record, so undo restores the file. It was recorded only
+/// when the built-in succeeded.
+#[test]
+fn a_failing_built_in_leaves_its_redirect_undoable() {
+    let sandbox = Sandbox::new();
+    fs::write(sandbox.root.join("out"), "KEEP\n").unwrap();
+
+    let failed = sandbox.vsh("ls no-such-directory > out");
+    assert!(!failed.status.success(), "{}", text(&failed));
+    sandbox.vsh_ok("undo");
+
+    assert_eq!(read(&sandbox.root.join("out")), "KEEP\n");
+}
+
+/// A `>` target keeps its content when a later redirection of the same
+/// command is refused.
+#[test]
+fn a_refused_redirection_leaves_the_other_targets_alone() {
+    let sandbox = Sandbox::new();
+    fs::write(sandbox.root.join("out"), "KEEP\n").unwrap();
+    symlink("nowhere", sandbox.root.join("dangling")).unwrap();
+
+    let refused = sandbox.vsh("echo hi > out 2> dangling");
+
+    assert!(!refused.status.success(), "{}", text(&refused));
+    assert_eq!(read(&sandbox.root.join("out")), "KEEP\n");
 }
