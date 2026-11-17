@@ -17,13 +17,15 @@ extraction.
 | `filesystem_model.v`
 | Core `Filesystem = Path -> option FSNode` model + structural lemmas.
   Note: this finite-domain model is the source of the
-  `is_empty_dir_dec` axiom (justified per `STATE.a2ml
-  [coq-proof-status] axiom-detail`).
+  `is_empty_dir_dec` axiom (justified per `[coq-proof-status]
+  axiom-detail` in the archived
+  `../../archive/a2ml-v1/6a2-STATE.a2ml.txt`).
 
 | `filesystem_composition.v`
 | Composition theorems. Carries one declared `admit.` at line ~199
   (`single_op_reversible` OpRmdir branch — pre-existing model gap;
-  see `STATE.a2ml [coq-proof-status] admitted-detail`).
+  see `[coq-proof-status] admitted-detail` in the archived
+  `../../archive/a2ml-v1/6a2-STATE.a2ml.txt`).
 
 | `filesystem_equivalence.v`
 | State-equivalence relations.
@@ -72,8 +74,10 @@ make all                      # via auto-emitted Makefile
   decidability; migration path: switch to `FMaps.t FSNode`).
 * All other proofs constructively closed.
 
-Authoritative status in `../../.machine_readable/6a2/STATE.a2ml`
-under `[coq-proof-status]`.
+Authoritative status in `../../docs/PROOF_HOLES_AUDIT.adoc` and the
+Proof Ledger of `../../EXPLAINME.adoc`. The former `[coq-proof-status]`
+block of `STATE.a2ml` is archived at
+`../../archive/a2ml-v1/6a2-STATE.a2ml.txt`.
 
 == See also
 

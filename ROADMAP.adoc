@@ -5,8 +5,8 @@
 
 == Current Status
 
-v0.9.0 (advanced research prototype, ~74% complete per
-`.machine_readable/6a2/STATE.a2ml`).
+v0.9.0 (advanced research prototype, ~74% complete per the retired
+`STATE.a2ml`, archived at `archive/a2ml-v1/6a2-STATE.a2ml.txt`).
 
 The Rust CLI in `impl/rust-cli/` is a functional interactive shell with
 reversible filesystem operations, transaction grouping, and

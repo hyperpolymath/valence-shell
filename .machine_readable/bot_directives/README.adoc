@@ -32,7 +32,8 @@ Methodology-aware configuration for AI agents. Read by any AI agent
 
 == Relationship to Other Files
 
-* `AGENTIC.a2ml` says WHAT agents can do (permissions, gating)
+* The `(agentic …)` clause of `valence-shell_chora.deed` (formerly
+  `AGENTIC.a2ml`) says WHAT agents can do (permissions, gating)
 * `bot_directives/` says HOW agents should work (methodology)
 * `bot_directives/` says what the gitbot-fleet does (fleet-specific)
 * `CLAUDE.md` says how Claude specifically should work (Claude-specific)
