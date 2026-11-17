@@ -406,23 +406,11 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
         }
     }
 
-    // Step 1: Record the intent. Nothing is destroyed unless the audit log
-    // has been told first.
+    // Steps 1 and 2: the audit entry, then the history. Nothing is
+    // destroyed before both are done.
     let op = Operation::new(OperationType::Obliterate, path.to_string(), None);
     let op_id = op.id;
-    append_rmo_residue(state, &op, "obliterate-intent")
-        .context("Nothing was obliterated, because the audit entry could not be written")?;
-
-    // Step 2: Forget what the history holds about this file, and save
-    // that, before anything is destroyed. Earlier operations may hold the
-    // file's content as undo data. If the history could not be saved
-    // without it, that content would outlive the file in the saved state,
-    // so nothing is obliterated.
-    state.scrub_obliterated(&state.rooted(path), op_id);
-    state.save_history().context(
-        "Nothing was obliterated, because the history could not be saved without the \
-         file's earlier contents",
-    )?;
+    prepare_obliteration(state, &op, path, "obliterate-intent")?;
 
     // Step 3: Secure overwrite, then delete the name.
     if verbose {
@@ -461,6 +449,29 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
     }
 
     Ok(())
+}
+
+/// What must be done before an obliteration destroys anything.
+///
+/// First the audit log is told what is about to happen. Then the history
+/// forgets what it holds about `path` (and about anything beneath it, if it
+/// is a directory), and that is saved. Earlier operations may hold the
+/// content as undo data; if the history could not be saved without it, the
+/// content would outlive the file in the saved state. If either step fails,
+/// nothing is obliterated.
+fn prepare_obliteration(
+    state: &mut ShellState,
+    op: &Operation,
+    path: &str,
+    intent: &str,
+) -> Result<()> {
+    append_rmo_residue(state, op, intent)
+        .context("Nothing was obliterated, because the audit entry could not be written")?;
+    state.scrub_obliterated(&state.rooted(path), op.id);
+    state.save_history().context(
+        "Nothing was obliterated, because the history could not be saved without the \
+         earlier contents of what was to be obliterated",
+    )
 }
 
 /// Obliterate a directory and its contents (recursive)
@@ -545,19 +556,10 @@ pub fn obliterate_dir(
         }
     }
 
-    // Record the intent before destroying anything.
+    // The audit entry, then the history, before anything is destroyed.
     let op = Operation::new(OperationType::Obliterate, path.to_string(), None);
     let op_id = op.id;
-    append_rmo_residue(state, &op, "obliterate-dir-intent")
-        .context("Nothing was obliterated, because the audit entry could not be written")?;
-
-    // Forget what the history holds about anything in this directory, and
-    // save that, before anything is destroyed (as for a single file).
-    state.scrub_obliterated(&state.rooted(path), op_id);
-    state.save_history().context(
-        "Nothing was obliterated, because the history could not be saved without the \
-         earlier contents of the files in this directory",
-    )?;
+    prepare_obliteration(state, &op, path, "obliterate-dir-intent")?;
 
     // Obliterate the files, remove the links, then the directories, deepest
     // first.

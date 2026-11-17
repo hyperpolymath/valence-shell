@@ -10,38 +10,12 @@
 
 mod fixtures;
 
-use fixtures::tempfile::TempDir;
+use fixtures::sandbox;
 use std::fs;
 use std::os::unix::fs::symlink;
-use std::path::PathBuf;
 use vsh::parser::parse_command;
 use vsh::state::ShellState;
 use vsh::ExecutableCommand;
-
-struct Sandbox {
-    _temp: TempDir,
-    root: PathBuf,
-    outside: PathBuf,
-}
-
-fn sandbox() -> (Sandbox, ShellState) {
-    let temp = TempDir::new().unwrap();
-    let root = temp.path().join("root");
-    let outside = temp.path().join("outside");
-    fs::create_dir(&root).unwrap();
-    fs::create_dir(&outside).unwrap();
-    let root = fs::canonicalize(root).unwrap();
-    let outside = fs::canonicalize(outside).unwrap();
-    let state = ShellState::new(root.to_str().unwrap()).unwrap();
-    (
-        Sandbox {
-            _temp: temp,
-            root,
-            outside,
-        },
-        state,
-    )
-}
 
 fn run(state: &mut ShellState, command: &str) -> anyhow::Result<()> {
     parse_command(command)?.execute(state).map(|_| ())

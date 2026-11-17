@@ -6,36 +6,12 @@
 
 mod fixtures;
 
-use fixtures::tempfile::TempDir;
+use fixtures::sandbox;
 use std::fs;
 use std::os::unix::fs::{symlink, PermissionsExt};
-use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
 use vsh::commands;
 use vsh::state::{OperationType, ShellState};
-
-struct Sandbox {
-    _temp: TempDir,
-    root: PathBuf,
-    outside: PathBuf,
-}
-
-fn sandbox() -> (Sandbox, ShellState) {
-    let temp = TempDir::new().unwrap();
-    let root = temp.path().join("root");
-    let outside = temp.path().join("outside");
-    fs::create_dir(&root).unwrap();
-    fs::create_dir(&outside).unwrap();
-    let state = ShellState::new(root.to_str().unwrap()).unwrap();
-    (
-        Sandbox {
-            _temp: temp,
-            root,
-            outside,
-        },
-        state,
-    )
-}
 
 #[test]
 fn undo_of_rm_restores_content_mode_and_modification_time() {

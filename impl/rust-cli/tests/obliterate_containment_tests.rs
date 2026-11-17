@@ -9,36 +9,11 @@
 
 mod fixtures;
 
-use fixtures::tempfile::TempDir;
+use fixtures::{sandbox, Sandbox};
 use std::fs;
 use std::os::unix::fs::symlink;
-use std::path::PathBuf;
 use vsh::commands::secure_deletion::{obliterate_path, secure_delete};
 use vsh::state::ShellState;
-
-/// A session root and a sibling directory that must never change.
-struct Sandbox {
-    _temp: TempDir,
-    root: PathBuf,
-    outside: PathBuf,
-}
-
-fn sandbox() -> (Sandbox, ShellState) {
-    let temp = TempDir::new().unwrap();
-    let root = temp.path().join("root");
-    let outside = temp.path().join("outside");
-    fs::create_dir(&root).unwrap();
-    fs::create_dir(&outside).unwrap();
-    let state = ShellState::new(root.to_str().unwrap()).unwrap();
-    (
-        Sandbox {
-            _temp: temp,
-            root,
-            outside,
-        },
-        state,
-    )
-}
 
 fn audit_log(sandbox: &Sandbox) -> String {
     fs::read_to_string(sandbox.root.join(".vsh-audit.log")).unwrap_or_default()

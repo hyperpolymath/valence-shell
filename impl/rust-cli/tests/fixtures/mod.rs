@@ -57,3 +57,35 @@ pub fn test_sandbox_path(test_name: &str) -> (TempDir, PathBuf) {
     let path = temp.path().to_path_buf();
     (temp, path)
 }
+
+/// A session root for a shell, and a directory beside it that a test can
+/// check was never touched.
+#[allow(dead_code)]
+pub struct Sandbox {
+    _temp: TempDir,
+    pub root: PathBuf,
+    pub outside: PathBuf,
+}
+
+/// A fresh [`Sandbox`] and a shell state rooted in it. Both paths are in
+/// canonical form, so they compare equal to what the shell reports.
+#[allow(dead_code)]
+pub fn sandbox() -> (Sandbox, vsh::state::ShellState) {
+    let temp = TempDir::new().expect("temporary directory");
+    let root = temp.path().join("root");
+    let outside = temp.path().join("outside");
+    fs::create_dir(&root).expect("create the session root");
+    fs::create_dir(&outside).expect("create the directory outside it");
+    let root = fs::canonicalize(root).expect("canonical session root");
+    let outside = fs::canonicalize(outside).expect("canonical outside directory");
+    let state = vsh::state::ShellState::new(root.to_str().expect("a UTF-8 path"))
+        .expect("open the shell state");
+    (
+        Sandbox {
+            _temp: temp,
+            root,
+            outside,
+        },
+        state,
+    )
+}
