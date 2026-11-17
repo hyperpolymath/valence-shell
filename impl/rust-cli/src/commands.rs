@@ -1285,6 +1285,26 @@ fn redo_capture_limit(state: &ShellState) -> Option<u64> {
     parse_redo_capture_limit(setting.as_deref())
 }
 
+/// Read `reader` to its end, or return `None` once it has given more than
+/// `limit` bytes. At most `limit + 1` bytes are held, however long the stream
+/// turns out to be; with no limit, everything is read.
+fn read_within_limit(
+    reader: impl std::io::Read,
+    limit: Option<u64>,
+) -> std::io::Result<Option<Vec<u8>>> {
+    use std::io::Read;
+    let mut content = Vec::new();
+    let Some(limit) = limit else {
+        let mut reader = reader;
+        reader.read_to_end(&mut content)?;
+        return Ok(Some(content));
+    };
+    reader
+        .take(limit.saturating_add(1))
+        .read_to_end(&mut content)?;
+    Ok((content.len() as u64 <= limit).then_some(content))
+}
+
 /// Read the state an undo of `op` is about to replace.
 ///
 /// `undo_data` holds the state before an operation; redo needs the state after
@@ -1297,40 +1317,48 @@ fn redo_capture_limit(state: &ShellState) -> Option<u64> {
 /// larger than the capture limit is not kept; redo of that entry then says so.
 fn capture_redo_data(state: &ShellState, op: &Operation) -> Option<RedoData> {
     let path = state.resolve_path(&op.path);
-    let over_limit = |size: u64| {
-        redo_capture_limit(state)
-            .filter(|limit| size > *limit)
-            .map(|limit| RedoData::OverLimit { size, limit })
+    let limit = redo_capture_limit(state);
+    // Read what is left of `file`, or say that it is over the limit. `skip` is
+    // how many bytes at the start of the file are not part of the capture.
+    let read = |mut file: fs::File, skip: u64| -> std::io::Result<RedoData> {
+        // The size is only a way to skip the read: the file can grow after
+        // this, and some files report no size, so the read is bounded too.
+        let size = file.metadata()?.len().saturating_sub(skip);
+        match limit {
+            Some(limit) if size > limit => Ok(RedoData::OverLimit { size, limit }),
+            _ => match read_within_limit(&mut file, limit)? {
+                Some(content) => Ok(RedoData::Content(content)),
+                None => {
+                    let limit = limit.unwrap_or(u64::MAX);
+                    let now = file.metadata()?.len().saturating_sub(skip);
+                    Ok(RedoData::OverLimit {
+                        size: now.max(limit.saturating_add(1)),
+                        limit,
+                    })
+                }
+            },
+        }
     };
     match op.op_type {
         OperationType::CreateFile | OperationType::FileTruncated | OperationType::WriteFile => {
             // A file that cannot be read is recorded as such, never as empty:
             // redo must refuse it, not recreate the file without its content.
-            let read = || -> std::io::Result<RedoData> {
-                let size = fs::metadata(&path)?.len();
-                if let Some(skipped) = over_limit(size) {
-                    return Ok(skipped);
-                }
-                crate::fs_pure::read_to_end(&path).map(RedoData::Content)
-            };
-            Some(read().unwrap_or_else(|e| RedoData::NotCaptured(e.to_string())))
+            let capture = || read(crate::fs_pure::open_pure(&path)?, 0);
+            Some(capture().unwrap_or_else(|e| RedoData::NotCaptured(e.to_string())))
         }
         OperationType::FileAppended => {
-            use std::io::{Read, Seek, SeekFrom};
+            use std::io::{Seek, SeekFrom};
             let original_size =
                 u64::from_le_bytes(op.undo_data.as_ref()?.get(..8)?.try_into().ok()?);
-            let read = || -> std::io::Result<RedoData> {
-                let size = fs::metadata(&path)?.len();
-                if let Some(skipped) = over_limit(size.saturating_sub(original_size)) {
-                    return Ok(skipped);
-                }
+            let capture = || -> std::io::Result<RedoData> {
                 let mut file = crate::fs_pure::open_pure(&path)?;
                 file.seek(SeekFrom::Start(original_size))?;
-                let mut appended = Vec::new();
-                file.read_to_end(&mut appended)?;
-                Ok(RedoData::Appended(appended))
+                Ok(match read(file, original_size)? {
+                    RedoData::Content(appended) => RedoData::Appended(appended),
+                    other => other,
+                })
             };
-            Some(read().unwrap_or_else(|e| RedoData::NotCaptured(e.to_string())))
+            Some(capture().unwrap_or_else(|e| RedoData::NotCaptured(e.to_string())))
         }
         OperationType::Chmod => {
             #[cfg(unix)]
@@ -3128,6 +3156,48 @@ mod tests {
             capture_redo_data(&state, &appended),
             Some(RedoData::NotCaptured(_))
         ));
+    }
+
+    #[test]
+    fn test_read_within_limit() {
+        let read = |bytes: &[u8], limit| read_within_limit(bytes, limit).unwrap();
+        assert_eq!(read(b"abcd", Some(4)), Some(b"abcd".to_vec()));
+        assert_eq!(read(b"abcde", Some(4)), None);
+        assert_eq!(read(b"", Some(4)), Some(Vec::new()));
+        assert_eq!(read(b"abcde", None), Some(b"abcde".to_vec()));
+        assert_eq!(read(b"a", Some(u64::MAX)), Some(b"a".to_vec()));
+        // A stream with no end stops at the limit instead of filling memory.
+        assert_eq!(
+            read_within_limit(std::io::repeat(0), Some(16)).unwrap(),
+            None
+        );
+    }
+
+    /// The limit holds when the size reported before the read is too small:
+    /// `/dev/zero` reports no size and never ends, which is the worst case of
+    /// a file that another process grows between the size check and the read.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_capture_redo_data_limit_holds_when_the_size_is_wrong() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
+        state.set_variable(REDO_CAPTURE_LIMIT_VAR, "64");
+        std::os::unix::fs::symlink("/dev/zero", temp.path().join("f")).unwrap();
+
+        let created = Operation::new(OperationType::CreateFile, "f".to_string(), None);
+        let appended = Operation::new(OperationType::FileAppended, "f".to_string(), None)
+            .with_undo_data(8u64.to_le_bytes().to_vec());
+        for op in [created, appended] {
+            assert_eq!(
+                capture_redo_data(&state, &op),
+                Some(RedoData::OverLimit {
+                    size: 65,
+                    limit: 64
+                }),
+                "{}",
+                op.op_type
+            );
+        }
     }
 
     #[test]

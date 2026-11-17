@@ -59,7 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   value). `undo` reads that state just before reversing it and keeps it in
   memory with the redo entry. File content over `VSH_REDO_CAPTURE_LIMIT` bytes
   (shell or environment variable; default 10 MiB; `0` = no limit) is not kept,
-  and redo of that entry says so.
+  and redo of that entry says so. The limit is enforced while reading, so a
+  file that grows during the undo cannot take more memory than the limit.
 - A `redo` that fails records nothing and stays on the redo stack. It also
   leaves the filesystem as it found it, including when a file write fails
   part-way: the partial file is removed, the overwritten bytes are put back,
