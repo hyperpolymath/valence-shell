@@ -69,6 +69,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   damaged content as undo data. `redo` of
   `cp`, `mv` and `touch` no longer overwrites a path that reappeared after the
   undo.
+- `rm` (and redo of `rm`) no longer deletes a file whose content it cannot
+  read. It used to delete it and record empty undo data, so undo brought the
+  file back empty. It now fails, leaves the file in place and points to
+  `obliterate` for irreversible deletion.
 - `redo` refuses to recreate a file whose content undo could not read
   (recorded as not captured, with the reason), where it used to recreate it
   empty. A `cp` whose copy fails part-way removes the partial destination, for

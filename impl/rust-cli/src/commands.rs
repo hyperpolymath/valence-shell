@@ -348,8 +348,16 @@ fn apply_rm(state: &ShellState, path: &str) -> Result<Operation> {
     }
 
     // Store content for undo (pure read of the soon-to-be-deleted file;
-    // routed through fs_pure to honour the noatime discipline).
-    let content = crate::fs_pure::read_to_end(&full_path).unwrap_or_default();
+    // routed through fs_pure to honour the noatime discipline). If it cannot
+    // be read it cannot be restored, so nothing is deleted: recording empty
+    // undo data would make a later undo bring the file back empty.
+    let content = crate::fs_pure::read_to_end(&full_path).with_context(|| {
+        format!(
+            "rm: cannot read '{}' to keep it for undo, so it was not deleted \
+             (use obliterate to delete it irreversibly)",
+            path
+        )
+    })?;
 
     fs::remove_file(&full_path).context("rm failed")?;
 
