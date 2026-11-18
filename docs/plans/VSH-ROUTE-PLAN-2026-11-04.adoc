@@ -252,12 +252,13 @@ the answer to `name=-p; mkdir -- "$name"`, which the baseline refuses because
 the parser does not pass on where `--` stood. Not taken: carrying `--` alone
 through to the built-ins, as a follow-up (E 7 / D 8, the recommendation) or on
 the baseline branch first (E 7 / D 8).
-|This takes up, for the built-ins' arguments, parser work that OD-42 parked.
-It also gives what word splitting of an unquoted `$var` needs. Proposed, not
-ruled: an experiment first (a prototype for three built-ins, and how many
-battery cases change). Which branch it lands on, and when in the order of
-OD-44, is not ruled yet. Until it lands the refusal stays: it changes nothing on disk, and
-its message says how to name the file (`./-p`).
+|It also gives what word splitting of an unquoted `$var` needs. Ruled the
+same evening, on where and when: it is built with the interpreter front end,
+after the first release of the engine, on its own branch and with an experiment
+first (a prototype for three built-ins, and how many battery cases change). So
+OD-42 and OD-41 stand: the engine and the holes come first. Until it lands the
+refusal stays: it changes nothing on disk, and its message says how to name the
+file (`./-p`). The baseline (valence-shell#233) merges as it is.
 
 |*OD-48* |*A journal that ends in zero bytes stays damage, and the recovery
 command deals with it* (section 14.5, second option: E 7 / D 9). Not taken:
@@ -278,6 +279,17 @@ with Phase E, E 9 / D 9).
 be written. The message says that the change was made and is not recorded. The
 saved state can still be one operation behind after a crash between a change
 and its record; the write-ahead record of Phase E closes that.
+
+|*OD-50* |*The behaviour changes of the containment and baseline branches are
+confirmed.* The owner went through them by selector, in six groups: the
+seventeen listed on valence-shell#232 and the eight listed on #233. All are
+confirmed as described there.
+|Two of them settle points this plan had left open. `cd` is confined to the
+session root (OD-26, option a, was a provisional default). Arithmetic at the
+edge of 64-bit integers wraps, as in bash; this plan said "checked", meaning an
+error, and step B4 is read accordingly. With the item on the wording of the
+`proofs` command the owner noted that the Zig work is in development in the
+`atoma` repository (section 14.8).
 |===
 
 '''''
@@ -1411,6 +1423,14 @@ The stop rules of section 9 stand. Added:
 * *Journal model reuse:* `JournalFraming` is independent of this shell. Any
   estate project with an append-only log could reuse it; echo-types or a shared
   library would be the place if a second user appears.
+* *atoma:* the owner's note of 2026-11-17 (OD-50): the Zig work is in
+  development in the `atoma` repository. This shell's own Zig FFI layer
+  (`impl/zig/`) builds and is not connected to the shell, and the `proofs`
+  command now says so. How the two relate has not been read from `atoma`; it is
+  to be checked there before anything here is changed or claimed.
+* *Obliterate and file identity:* hole p (OD-46) is a case of a general
+  question, how a saved record identifies its file across renames and links.
+  januskey's `reversible-core` has the same question for its own store.
 
 === 14.9 What was not verified
 
