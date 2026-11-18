@@ -177,6 +177,12 @@ or literal result (#191, 2026-11-18)
 |Brace expansion `+{a,b,c}+` |Done |Nested braces supported
 
 |Sorted results |Done |POSIX requirement
+
+|Where globs expand |Partial |Arguments of external commands (with or
+without redirections), every pipeline stage, `+echo+` and function calls,
+through `+word::expand_words+` (2026-11-18; before, only external commands
+with a redirection). Not yet: builtin operands (`+ls+`, `+rm+`, `+cp+`, ...),
+`+for+` word lists, redirection targets
 |===
 
 ==== Milestone 6: Quote Processing — COMPLETE
@@ -194,6 +200,12 @@ quotes
 |Unclosed quote detection |Done |
 
 |Line continuation |Done |
+
+|Quote removal |Partial |Done for the arguments that go through
+`+word::expand_words+` (see Milestone 5), which keeps the quoting of each
+piece of a word. Builtin operands, redirection targets, assignment values,
+`+case+` patterns and `+test+` arguments still receive quoted `+*?[{~+` with
+a backslash in front (`+touch '*q'+` creates `+\*q+`)
 |===
 
 ==== Milestone 7: Command Substitution — COMPLETE

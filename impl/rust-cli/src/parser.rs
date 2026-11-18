@@ -9,6 +9,7 @@
 use anyhow::{anyhow, Context, Result};
 
 use crate::redirection::Redirection;
+use crate::word::{Quote, Word};
 
 /// Quote type for a word or word part
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,6 +83,8 @@ struct ParameterExpansion {
 struct QuotedWord {
     parts: Vec<WordPart>,
     quote_type: QuoteType,
+    /// The same word with the quoting of each piece kept (see `crate::word`).
+    typed: Word,
 }
 
 impl QuotedWord {
@@ -89,6 +92,7 @@ impl QuotedWord {
         Self {
             parts: Vec::new(),
             quote_type: QuoteType::None,
+            typed: Word::new(),
         }
     }
 
@@ -102,19 +106,23 @@ impl QuotedWord {
         }
     }
 
-    fn push_variable(&mut self, name: String) {
+    fn push_variable(&mut self, name: String, quote: Quote) {
+        self.typed.push_parameter(name.clone(), false, quote);
         self.parts.push(WordPart::Variable(name));
     }
 
-    fn push_braced_variable(&mut self, name: String) {
+    fn push_braced_variable(&mut self, name: String, quote: Quote) {
+        self.typed.push_parameter(name.clone(), true, quote);
         self.parts.push(WordPart::BracedVariable(name));
     }
 
-    fn push_command_sub(&mut self, cmd: String) {
+    fn push_command_sub(&mut self, cmd: String, quote: Quote) {
+        self.typed.push_command_sub(cmd.clone(), quote);
         self.parts.push(WordPart::CommandSub(cmd));
     }
 
     fn push_process_sub(&mut self, sub_type: ProcessSubType, cmd: String) {
+        self.typed.push_process_sub(sub_type, cmd.clone());
         self.parts.push(WordPart::ProcessSub(sub_type, cmd));
     }
 }
@@ -285,7 +293,8 @@ pub enum Command {
     // Shell builtins
     /// Echo: write arguments to stdout
     Echo {
-        args: Vec<String>,
+        /// Arguments after the options, with their quoting.
+        args: Vec<Word>,
         no_newline: bool,
         interpret_escapes: bool,
         redirects: Vec<Redirection>,
@@ -335,7 +344,8 @@ pub enum Command {
     // External command
     External {
         program: String,
-        args: Vec<String>,
+        /// Arguments with their quoting; expanded by [`crate::word::expand_words`].
+        args: Vec<Word>,
         redirects: Vec<Redirection>,
         background: bool,
     },
@@ -345,7 +355,7 @@ pub enum Command {
     /// Each stage is a (program, args) pair. Intermediate stages use piped stdio.
     /// Final redirections apply to the last stage only.
     Pipeline {
-        stages: Vec<(String, Vec<String>)>,
+        stages: Vec<(String, Vec<Word>)>,
         redirects: Vec<Redirection>,
         background: bool,
     },
@@ -599,6 +609,7 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                     current_literal.push('\\');
                 }
                 current_literal.push(ch);
+                current_word.typed.push_char(ch, Quote::Backslash);
                 quote_state = QuoteState::None;
             }
 
@@ -609,6 +620,7 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                     quote_state = QuoteState::None;
                 } else {
                     current_literal.push(ch);
+                    current_word.typed.push_char(ch, Quote::Single);
                 }
             }
 
@@ -631,27 +643,31 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                                     current_literal.push('\\');
                                 }
                                 current_literal.push(next_ch);
+                                current_word.typed.push_char(next_ch, Quote::Double);
                             } else {
                                 // Not a special char, keep backslash
                                 current_literal.push('\\');
+                                current_word.typed.push_char('\\', Quote::Double);
                             }
                         } else {
                             current_literal.push('\\');
+                            current_word.typed.push_char('\\', Quote::Double);
                         }
                     }
                     '$' => {
                         // Variable expansion in double quotes
                         push_literal!();
-                        parse_variable(&mut chars, &mut current_word)?;
+                        parse_variable(&mut chars, &mut current_word, Quote::Double)?;
                     }
                     '`' => {
                         // Backtick command substitution in double quotes
                         push_literal!();
                         let cmd = parse_command_sub_backtick(&mut chars)?;
-                        current_word.push_command_sub(cmd);
+                        current_word.push_command_sub(cmd, Quote::Double);
                     }
                     _ => {
                         current_literal.push(ch);
+                        current_word.typed.push_char(ch, Quote::Double);
                     }
                 }
             }
@@ -678,14 +694,14 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                     // Variable expansion
                     '$' => {
                         push_literal!();
-                        parse_variable(&mut chars, &mut current_word)?;
+                        parse_variable(&mut chars, &mut current_word, Quote::None)?;
                     }
 
                     // Backtick command substitution
                     '`' => {
                         push_literal!();
                         let cmd = parse_command_sub_backtick(&mut chars)?;
-                        current_word.push_command_sub(cmd);
+                        current_word.push_command_sub(cmd, Quote::None);
                     }
 
                     // Whitespace: end current word
@@ -766,6 +782,7 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                                     } else {
                                         // Invalid: 2>&[not 1]
                                         current_literal.push_str("2>&");
+                                        current_word.typed.push_str("2>&", Quote::None);
                                     }
                                 }
                                 _ => {
@@ -775,6 +792,7 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                         } else {
                             // Regular '2' character, part of word
                             current_literal.push(ch);
+                            current_word.typed.push_char(ch, Quote::None);
                         }
                     }
 
@@ -816,6 +834,7 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                         } else {
                             // Regular '[' character, part of word
                             current_literal.push(ch);
+                            current_word.typed.push_char(ch, Quote::None);
                         }
                     }
 
@@ -828,12 +847,14 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
                         } else {
                             // Regular ']' character, part of word
                             current_literal.push(ch);
+                            current_word.typed.push_char(ch, Quote::None);
                         }
                     }
 
                     // Regular character
                     _ => {
                         current_literal.push(ch);
+                        current_word.typed.push_char(ch, Quote::None);
                     }
                 }
             }
@@ -861,12 +882,13 @@ fn tokenize(input: &str) -> Result<Vec<Token>> {
 fn parse_variable(
     chars: &mut std::iter::Peekable<std::str::Chars>,
     word: &mut QuotedWord,
+    quote: Quote,
 ) -> Result<()> {
     if chars.peek() == Some(&'(') {
         // Command substitution: $(cmd)
         chars.next(); // consume '('
         let cmd = parse_command_sub_dollar(chars)?;
-        word.push_command_sub(cmd);
+        word.push_command_sub(cmd, quote);
     } else if chars.peek() == Some(&'{') {
         // Braced form: ${VAR}
         chars.next(); // consume '{'
@@ -888,7 +910,7 @@ fn parse_variable(
             }
         }
 
-        word.push_braced_variable(var_name);
+        word.push_braced_variable(var_name, quote);
     } else if let Some(&next_ch) = chars.peek() {
         // Simple form: $VAR or special variables. The peek above already
         // bound next_ch by value; chars.next() is called purely to advance
@@ -897,11 +919,11 @@ fn parse_variable(
         if next_ch == '?' || next_ch == '$' || next_ch == '#' {
             // Single-character special variable
             chars.next();
-            word.push_variable(next_ch.to_string());
+            word.push_variable(next_ch.to_string(), quote);
         } else if next_ch.is_ascii_digit() {
             // Positional parameter: $0, $1, $2, etc.
             chars.next();
-            word.push_variable(next_ch.to_string());
+            word.push_variable(next_ch.to_string(), quote);
         } else if next_ch.is_alphabetic() || next_ch == '_' {
             // Variable name
             let mut var_name = String::new();
@@ -915,18 +937,20 @@ fn parse_variable(
                 }
             }
 
-            word.push_variable(var_name);
+            word.push_variable(var_name, quote);
         } else if next_ch == '@' || next_ch == '*' {
             // Special positional parameters: $@ or $*
             chars.next();
-            word.push_variable(next_ch.to_string());
+            word.push_variable(next_ch.to_string(), quote);
         } else {
             // $ not followed by variable, treat as literal
             word.push_literal("$".to_string());
+            word.typed.push_char('$', quote);
         }
     } else {
         // $ at end of string
         word.push_literal("$".to_string());
+        word.typed.push_char('$', quote);
     }
 
     Ok(())
@@ -935,15 +959,14 @@ fn parse_variable(
 /// Parse command substitution in $(cmd) form
 fn parse_command_sub_dollar(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<String> {
     let mut cmd = String::new();
-    let mut depth = 1; // Track nesting depth for nested $()
+    let mut depth = 1; // Parenthesis depth: nested $(), $((expr)) and (...)
 
     for ch in chars.by_ref() {
         match ch {
             '(' => {
-                // Check if it's $( to track nested command substitution
-                if cmd.ends_with('$') {
-                    depth += 1;
-                }
+                // Every `(` nests, so the `)` that closes `$((1+2))` or
+                // `$(echo $(pwd))` belongs to the substitution.
+                depth += 1;
                 cmd.push(ch);
             }
             ')' => {
@@ -1228,28 +1251,28 @@ fn parse_pipeline(tokens: &[Token]) -> Result<Command> {
     stages[last_stage_idx] = last_command_tokens;
 
     // Parse each stage as (program, args)
-    let mut parsed_stages: Vec<(String, Vec<String>)> = Vec::new();
+    let mut parsed_stages: Vec<(String, Vec<Word>)> = Vec::new();
 
     for stage_tokens in stages {
         if stage_tokens.is_empty() {
             return Err(anyhow!("Empty pipeline stage"));
         }
 
-        let words: Vec<String> = stage_tokens
+        let words: Vec<&QuotedWord> = stage_tokens
             .iter()
             .filter_map(|t| match t {
-                Token::Word(w) => Some(quoted_word_to_string(w)),
+                Token::Word(w) => Some(w),
                 _ => None,
             })
             .collect();
 
-        if words.is_empty() {
+        let Some((program, args)) = words.split_first() else {
             return Err(anyhow!("Pipeline stage has no command"));
-        }
-
-        let program = words[0].clone();
-        let args = words[1..].to_vec();
-        parsed_stages.push((program, args));
+        };
+        parsed_stages.push((
+            quoted_word_to_string(program),
+            args.iter().map(|w| w.typed.clone()).collect(),
+        ));
     }
 
     Ok(Command::Pipeline {
@@ -1719,6 +1742,7 @@ pub fn parse_command(input: &str) -> Result<Command> {
 
     // Separate command tokens from redirections
     let mut command_tokens: Vec<String> = Vec::new();
+    let mut command_words: Vec<Word> = Vec::new();
     let mut redirects = Vec::new();
     let mut background = false;
 
@@ -1727,6 +1751,7 @@ pub fn parse_command(input: &str) -> Result<Command> {
         match &tokens[i] {
             Token::Word(w) => {
                 command_tokens.push(quoted_word_to_string(w));
+                command_words.push(w.typed.clone());
                 i += 1;
             }
 
@@ -1852,9 +1877,10 @@ pub fn parse_command(input: &str) -> Result<Command> {
     // Parse command from tokens
     let cmd = &command_tokens[0];
     let args: Vec<String> = command_tokens[1..].to_vec();
+    let words: Vec<Word> = command_words[1..].to_vec();
 
     // Parse base command with redirections
-    parse_base_command(cmd, args, redirects, background)
+    parse_base_command(cmd, args, words, redirects, background)
 }
 
 /// Check if a string is a valid variable name
@@ -2369,7 +2395,7 @@ fn apply_substring(value: &str, offset: i32, length: Option<usize>) -> String {
 ///
 /// `~user` is not yet supported (requires getpwnam). An escaped `\~`
 /// (produced by `quoted_word_to_string` for quoted `~`) stays literal.
-fn expand_tilde(input: &str) -> String {
+pub(crate) fn expand_tilde(input: &str) -> String {
     // An escaped tilde `\~` means the tilde was inside quotes — leave it.
     if let Some(stripped) = input.strip_prefix("\\~") {
         let mut s = String::with_capacity(input.len());
@@ -2628,14 +2654,12 @@ pub fn expand_command_substitution(
             process_cmd.stdout(Stdio::piped());
             process_cmd.stderr(Stdio::null());
 
-            // Expand variables and command substitutions in args before execution
-            let expanded_args: Result<Vec<String>> = args
-                .iter()
-                .map(|arg| expand_with_command_sub(arg, state))
-                .collect();
-            let expanded_args = expanded_args?;
+            // Expand the arguments (variables, command substitution, globs)
+            // before execution.
+            let expansion =
+                crate::word::expand_words(args, state, crate::word::ProcessSubs::Refuse)?;
 
-            process_cmd.args(&expanded_args);
+            process_cmd.args(&expansion.fields);
 
             let output_result = process_cmd
                 .output()
@@ -2649,6 +2673,22 @@ pub fn expand_command_substitution(
                     output_result.status.code()
                 ));
             }
+        }
+
+        Command::Echo {
+            args,
+            no_newline,
+            interpret_escapes: false,
+            redirects,
+        } if redirects.is_empty() => {
+            // echo builtin: its output is the joined, expanded arguments.
+            let expansion =
+                crate::word::expand_words(args, state, crate::word::ProcessSubs::Refuse)?;
+            let mut out = expansion.fields.join(" ");
+            if !no_newline {
+                out.push('\n');
+            }
+            out
         }
 
         Command::Pwd { .. } => {
@@ -3253,9 +3293,13 @@ pub fn is_incomplete_control_structure(input: &str) -> bool {
     block_depth > 0
 }
 
+/// `args` are the arguments in the older string encoding, which the builtins
+/// still read; `words` are the same arguments with their quoting, used by
+/// `echo` and external commands. The two lists have the same length.
 fn parse_base_command(
     cmd: &str,
     args: Vec<String>,
+    words: Vec<Word>,
     redirects: Vec<Redirection>,
     background: bool,
 ) -> Result<Command> {
@@ -3382,7 +3426,8 @@ fn parse_base_command(
             // Re-parse the inner command: first arg is the command name, rest are its args
             let inner_cmd = &args[0];
             let inner_args = args[1..].to_vec();
-            let inner = parse_base_command(inner_cmd, inner_args, vec![], false)?;
+            let inner_words = words[1..].to_vec();
+            let inner = parse_base_command(inner_cmd, inner_args, inner_words, vec![], false)?;
             Ok(Command::Explain {
                 inner: Box::new(inner),
             })
@@ -3541,7 +3586,7 @@ fn parse_base_command(
             let mut echo_args = Vec::new();
             let mut skip_flags = true;
 
-            for arg in &args {
+            for (arg, word) in args.iter().zip(&words) {
                 if skip_flags && arg.starts_with('-') {
                     for ch in arg[1..].chars() {
                         match ch {
@@ -3551,14 +3596,14 @@ fn parse_base_command(
                             _ => {
                                 // Unknown flag — treat as regular argument
                                 skip_flags = false;
-                                echo_args.push(arg.clone());
+                                echo_args.push(word.clone());
                                 break;
                             }
                         }
                     }
                 } else {
                     skip_flags = false;
-                    echo_args.push(arg.clone());
+                    echo_args.push(word.clone());
                 }
             }
 
@@ -3729,7 +3774,7 @@ fn parse_base_command(
         // Everything else: external command
         _ => Ok(Command::External {
             program: cmd.to_string(),
-            args,
+            args: words,
             redirects,
             background,
         }),
@@ -4246,7 +4291,7 @@ mod tests {
         match cmd {
             Command::External { program, args, .. } => {
                 assert_eq!(program, "touch");
-                let expanded = expand_variables(&args[0], &state);
+                let expanded = expand_variables(&args[0].to_string(), &state);
                 assert_eq!(expanded, "file_Alice");
             }
             Command::Touch { path, .. } => {
@@ -5311,5 +5356,80 @@ mod semicolon_tests {
     fn test_semicolon_only() {
         let parts = split_on_semicolons(";");
         assert_eq!(parts, vec!["", ""]);
+    }
+}
+
+#[cfg(test)]
+mod typed_word_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn typed_words(input: &str) -> Vec<Word> {
+        tokenize(input)
+            .unwrap()
+            .into_iter()
+            .filter_map(|t| match t {
+                Token::Word(w) => Some(w.typed),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn word(parts: &[(&str, Quote)]) -> Word {
+        let mut w = Word::new();
+        for (text, quote) in parts {
+            w.push_str(text, *quote);
+        }
+        w
+    }
+
+    #[test]
+    fn the_tokenizer_records_the_quoting_of_each_piece() {
+        assert_eq!(
+            typed_words("echo '*'x\\?\"a $V\"*"),
+            vec![Word::literal("echo"), {
+                let mut w = word(&[("*", Quote::Single), ("x", Quote::None)]);
+                w.push_char('?', Quote::Backslash);
+                w.push_str("a ", Quote::Double);
+                w.push_parameter("V".into(), false, Quote::Double);
+                w.push_char('*', Quote::None);
+                w
+            }]
+        );
+    }
+
+    #[test]
+    fn arithmetic_expansion_is_one_command_substitution_piece() {
+        let mut expected = Word::new();
+        expected.push_command_sub("(1+(2*3))".into(), Quote::None);
+        expected.push_char('x', Quote::None);
+        assert_eq!(typed_words("$((1+(2*3)))x"), vec![expected]);
+    }
+
+    /// One literal piece: (text, quoting). Characters are limited to those
+    /// the tokenizer reads literally in each quoting.
+    fn piece() -> impl Strategy<Value = (String, Quote)> {
+        prop_oneof![
+            "[a-z0-9._/*?-]{1,4}".prop_map(|s| (s, Quote::None)),
+            "[a-z *?$\"\\\\]{1,4}".prop_map(|s| (s, Quote::Single)),
+            "[a-z '*?$\"\\\\]{1,4}".prop_map(|s| (s, Quote::Double)),
+            "[a-z*?$'\"\\\\ ]".prop_map(|s| (s, Quote::Backslash)),
+        ]
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(256))]
+
+        /// `Display` writes a word as source that tokenizes back to the
+        /// same word, so the quoting survives a round trip.
+        #[test]
+        fn display_then_tokenize_gives_the_same_word(pieces in prop::collection::vec(piece(), 1..6)) {
+            let mut w = Word::new();
+            for (text, quote) in &pieces {
+                w.push_str(text, *quote);
+            }
+            let source = w.to_string();
+            prop_assert_eq!(typed_words(&source), vec![w], "source: {}", source);
+        }
     }
 }

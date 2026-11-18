@@ -2856,7 +2856,7 @@ mod tests {
         let state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
         let cmd = crate::parser::Command::External {
             program: "git".to_string(),
-            args: vec!["status".to_string()],
+            args: vec!["status".into()],
             redirects: vec![],
             background: false,
         };

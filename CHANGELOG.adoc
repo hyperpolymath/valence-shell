@@ -11,6 +11,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 == [Unreleased]
 
+=== Fixed — 2026-11-18 (arguments: globs, quote removal)
+
+- Glob expansion now applies to the arguments of every external command,
+  every pipeline stage, `echo` and function calls. Before, only an external
+  command that also had a redirection expanded its arguments: `wc -c *.txt`
+  passed `*.txt` to `wc`, `ls *.txt | wc -l` and `echo *.txt` did not expand.
+- Quoted arguments no longer reach the program with a backslash in front of
+  `*`, `?`, `[` or `{`: `echo '*.txt'` printed `\*.txt` and now prints
+  `*.txt`. A partly quoted word globs only its unquoted part (`'*'x.*`).
+- `echo` performs command substitution and arithmetic expansion
+  (`echo $((2+3))` printed `$((2+3))`), and `$(echo ...)` works.
+- `$((1+(2*3)))` and other substitutions containing `(` are read to their
+  matching `)`.
+- An expansion error (such as a glob limit from #191) fails the command with
+  exit status 1 and does not run it. With a redirection the status was 127.
+
+=== Changed — 2026-11-18 (typed words)
+
+- New module `src/word.rs`: a `Word` keeps the quoting of each of its pieces
+  (unquoted, single, double, backslash), and `word::expand_words` performs
+  tilde, parameter, command, arithmetic and process substitution, brace
+  expansion, glob expansion and quote removal on it. `Command::External`,
+  `Command::Pipeline` and `Command::Echo` now carry `Vec<Word>` arguments.
+  Other commands still use the older string encoding; see
+  `docs/POSIX_COMPLIANCE.adoc` (Milestones 5 and 6) for what is not migrated.
+- Removed `external::expand_glob_args`; its rules (no match or invalid
+  pattern keeps the word, a limit is an error) moved to `word.rs` with their
+  tests.
+
 === Fixed — 2026-11-18 (glob expansion out of memory, #191)
 
 - `**` no longer follows symbolic links to directories, so a link back to a
