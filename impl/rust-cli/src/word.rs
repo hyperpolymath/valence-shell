@@ -175,33 +175,32 @@ impl From<&str> for Word {
     }
 }
 
+/// Write one literal piece back as source with its quoting.
+fn fmt_literal(f: &mut fmt::Formatter<'_>, text: &str, quote: Quote) -> fmt::Result {
+    match quote {
+        Quote::None => f.write_str(text),
+        Quote::Backslash => text.chars().try_for_each(|ch| write!(f, "\\{ch}")),
+        // `'` cannot appear inside single quotes.
+        Quote::Single => write!(f, "'{}'", text.replace('\'', "'\\''")),
+        Quote::Double => {
+            let mut escaped = String::with_capacity(text.len() + 2);
+            for ch in text.chars() {
+                if matches!(ch, '"' | '$' | '`' | '\\') {
+                    escaped.push('\\');
+                }
+                escaped.push(ch);
+            }
+            write!(f, "\"{escaped}\"")
+        }
+    }
+}
+
 /// Writes the word back as shell source that parses to the same word.
 impl fmt::Display for Word {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for segment in &self.segments {
             match segment {
-                Segment::Literal { text, quote } => match quote {
-                    Quote::None => f.write_str(text)?,
-                    Quote::Backslash => {
-                        for ch in text.chars() {
-                            write!(f, "\\{ch}")?;
-                        }
-                    }
-                    Quote::Single => {
-                        // `'` cannot appear inside single quotes.
-                        write!(f, "'{}'", text.replace('\'', "'\\''"))?
-                    }
-                    Quote::Double => {
-                        f.write_str("\"")?;
-                        for ch in text.chars() {
-                            if matches!(ch, '"' | '$' | '`' | '\\') {
-                                f.write_str("\\")?;
-                            }
-                            write!(f, "{ch}")?;
-                        }
-                        f.write_str("\"")?;
-                    }
-                },
+                Segment::Literal { text, quote } => fmt_literal(f, text, *quote)?,
                 Segment::Parameter {
                     expr,
                     braced,
