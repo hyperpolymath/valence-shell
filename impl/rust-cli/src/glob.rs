@@ -728,7 +728,8 @@ fn expand_braces_limited(pattern: &str, remaining: usize) -> Vec<String> {
     }
 
     // Find first unescaped {
-    let chars = pattern.chars().enumerate().peekable();
+    // Byte offsets, not character counts: the slices below index bytes.
+    let chars = pattern.char_indices();
     let mut brace_start = None;
     let mut brace_depth = 0;
     let mut escaped = false;

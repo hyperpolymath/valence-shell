@@ -124,3 +124,79 @@ fn function_arguments_get_the_matches() {
         "2:a.txt:b.txt\n"
     );
 }
+
+// Regressions from the review of #242. Each of these once panicked, hung or
+// gave the wrong arguments.
+
+#[test]
+fn non_ascii_text_does_not_hang_or_panic() {
+    let dir = fixture();
+    // The statement splitter looped for ever on an unquoted non-ASCII letter.
+    assert_eq!(stdout(dir.path(), "echo é"), "é\n");
+    assert_eq!(stdout(dir.path(), "if true; then echo ünï; fi"), "ünï\n");
+    // Brace expansion sliced the word at a character count.
+    assert_eq!(stdout(dir.path(), "echo 'é'{a,b}"), "éa éb\n");
+    // So did `${...}`.
+    assert_eq!(
+        stdout(dir.path(), "é=1; echo ${é} ${é:-f} ${u:-é} ${#é}"),
+        "1 1 é 1\n"
+    );
+}
+
+#[test]
+fn a_quoted_parenthesis_does_not_end_a_command_substitution() {
+    let dir = fixture();
+    assert_eq!(stdout(dir.path(), "echo $(echo ')')"), ")\n");
+    assert_eq!(
+        stdout(dir.path(), "echo $(echo \"(\") $(echo \\))"),
+        "( )\n"
+    );
+    assert_eq!(
+        stdout(dir.path(), "echo $(echo $(echo a)) $((1+(2*3)))"),
+        "a 7\n"
+    );
+}
+
+#[test]
+fn a_quoted_hyphen_in_a_bracket_is_not_a_range() {
+    let dir = fixture();
+    for name in ["-.txt", "m.txt", "z.txt"] {
+        std::fs::write(dir.path().join(name), b"").unwrap();
+    }
+    assert_eq!(
+        stdout(dir.path(), "echo [a'-'z]*.txt"),
+        "-.txt a.txt z.txt\n"
+    );
+    assert_eq!(
+        stdout(dir.path(), "echo [a-z]*.txt"),
+        "a.txt b.txt m.txt z.txt\n"
+    );
+}
+
+#[test]
+fn a_tilde_with_a_quoted_prefix_is_not_expanded() {
+    let dir = fixture();
+    assert_eq!(stdout(dir.path(), "echo ~'local'/x"), "~local/x\n");
+}
+
+#[test]
+fn a_parameter_before_a_quoted_literal_keeps_its_name_in_a_list() {
+    let dir = fixture();
+    assert_eq!(
+        stdout(dir.path(), "A=x; echo $A''suffix '$A' \"$A\"b && true"),
+        "xsuffix $A xb\n"
+    );
+    assert_eq!(stdout(dir.path(), "A=x; echo $A''suffix"), "xsuffix\n");
+}
+
+#[test]
+fn a_substring_length_past_the_end_gives_the_rest() {
+    let dir = fixture();
+    assert_eq!(
+        stdout(
+            dir.path(),
+            "X=abcdef; echo ${X:2:18446744073709551615} ${X:1:2}"
+        ),
+        "cdef bc\n"
+    );
+}

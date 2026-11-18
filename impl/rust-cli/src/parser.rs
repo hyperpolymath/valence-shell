@@ -960,9 +960,31 @@ fn parse_variable(
 fn parse_command_sub_dollar(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<String> {
     let mut cmd = String::new();
     let mut depth = 1; // Parenthesis depth: nested $(), $((expr)) and (...)
+                       // A parenthesis that is quoted or escaped is text, not nesting.
+    let mut single = false;
+    let mut double = false;
+    let mut escaped = false;
 
     for ch in chars.by_ref() {
+        if escaped {
+            escaped = false;
+            cmd.push(ch);
+            continue;
+        }
         match ch {
+            '\\' if !single => {
+                escaped = true;
+                cmd.push(ch);
+            }
+            '\'' if !double => {
+                single = !single;
+                cmd.push(ch);
+            }
+            '"' if !single => {
+                double = !double;
+                cmd.push(ch);
+            }
+            _ if single || double => cmd.push(ch),
             '(' => {
                 // Every `(` nests, so the `)` that closes `$((1+2))` or
                 // `$(echo $(pwd))` belongs to the substitution.
@@ -1556,7 +1578,7 @@ fn split_on_top_level(input: &str, split_on_newline: bool) -> Vec<&str> {
             }
             _ if !in_single_quote && !in_double_quote && paren_depth == 0
                 // Check for keyword at word boundary
-                && (ch.is_alphabetic() || ch == '_') =>
+                && (ch.is_ascii_alphabetic() || ch == '_') =>
             {
                 let word_start = i;
                 while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
@@ -2139,12 +2161,12 @@ fn parse_parameter_expansion(content: &str) -> Result<ParameterExpansion, String
         return Err("Empty parameter expansion".to_string());
     }
 
-    let chars: Vec<char> = content.chars().collect();
-    #[allow(unused_assignments)]
-    let mut pos = 0;
+    // Offsets are bytes. Every operator is one ASCII byte, so a `+ 1` step
+    // stays on a character boundary whatever the name contains.
+    let bytes = content.as_bytes();
 
     // Check for length operator: ${#VAR}
-    if chars[0] == '#' {
+    if bytes[0] == b'#' {
         let var_name = content[1..].to_string();
         return Ok(ParameterExpansion {
             var_name,
@@ -2153,28 +2175,27 @@ fn parse_parameter_expansion(content: &str) -> Result<ParameterExpansion, String
     }
 
     // Extract variable name (until operator or end)
-    let var_name_end = chars
-        .iter()
-        .position(|&c| matches!(c, ':' | '-' | '=' | '+' | '?'))
-        .unwrap_or(chars.len());
+    let var_name_end = content
+        .find([':', '-', '=', '+', '?'])
+        .unwrap_or(content.len());
 
     let var_name = content[..var_name_end].to_string();
 
     // If no operator, simple expansion
-    if var_name_end == chars.len() {
+    if var_name_end == content.len() {
         return Ok(ParameterExpansion {
             var_name,
             operation: ExpansionOp::Simple,
         });
     }
 
-    pos = var_name_end;
-    let check_null = chars[pos] == ':';
+    let mut pos = var_name_end;
+    let check_null = bytes[pos] == b':';
     if check_null {
         pos += 1; // Skip ':'
     }
 
-    if pos >= chars.len() {
+    if pos >= content.len() {
         // ${VAR:} with nothing after - try substring with offset 0
         return Ok(ParameterExpansion {
             var_name,
@@ -2185,8 +2206,10 @@ fn parse_parameter_expansion(content: &str) -> Result<ParameterExpansion, String
         });
     }
 
-    let op_char = chars[pos];
-    let rest = &content[pos + 1..];
+    let Some(op_char) = content[pos..].chars().next() else {
+        return Err("Empty parameter expansion".to_string());
+    };
+    let rest = &content[pos + op_char.len_utf8()..];
 
     // Disambiguate operators from substring syntax
     // - ${VAR-X}, ${VAR:-X} → Default operator (dash immediately after var or colon)
@@ -2378,7 +2401,7 @@ fn apply_substring(value: &str, offset: i32, length: Option<usize>) -> String {
 
     match length {
         Some(n) => {
-            let end = (start + n).min(chars.len());
+            let end = start.saturating_add(n).min(chars.len());
             chars[start..end].iter().collect()
         }
         None => chars[start..].iter().collect(),
@@ -2574,31 +2597,13 @@ fn quoted_word_to_string(word: &QuotedWord) -> String {
                     result.push_str(s);
                 }
             }
-            WordPart::Variable(name) => {
-                // This shouldn't happen in single quotes (tokenizer prevents it)
-                // but handle it anyway
-                if word.quote_type != QuoteType::Single {
-                    result.push('$');
-                    result.push_str(name);
-                } else {
-                    // In single quotes, escape the $
-                    result.push('\\');
-                    result.push('$');
-                    result.push_str(name);
-                }
-            }
-            WordPart::BracedVariable(name) => {
-                // This shouldn't happen in single quotes
-                if word.quote_type != QuoteType::Single {
-                    result.push_str("${");
-                    result.push_str(name);
-                    result.push('}');
-                } else {
-                    // In single quotes, escape the $
-                    result.push_str("\\${");
-                    result.push_str(name);
-                    result.push('}');
-                }
+            // The tokenizer makes a variable part only outside single quotes,
+            // so it is always an expansion, whatever quotes follow in the word.
+            // Braces keep a following literal out of the name (`$A''b`).
+            WordPart::Variable(name) | WordPart::BracedVariable(name) => {
+                result.push_str("${");
+                result.push_str(name);
+                result.push('}');
             }
             WordPart::CommandSub(cmd) => {
                 // Command substitution - keep as-is for now
@@ -2856,7 +2861,10 @@ fn split_control_keywords<'a>(input: &'a str, keywords: &[&str]) -> Vec<(&'a str
                 in_double_quote = !in_double_quote;
                 i += 1;
             }
-            _ if !in_single_quote && !in_double_quote && (ch.is_alphabetic() || ch == '_') => {
+            _ if !in_single_quote
+                && !in_double_quote
+                && (ch.is_ascii_alphabetic() || ch == '_') =>
+            {
                 let word_start = i;
                 while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
                     i += 1;
@@ -3260,7 +3268,10 @@ pub fn is_incomplete_control_structure(input: &str) -> bool {
                 in_double_quote = !in_double_quote;
                 i += 1;
             }
-            _ if !in_single_quote && !in_double_quote && (ch.is_alphabetic() || ch == '_') => {
+            _ if !in_single_quote
+                && !in_double_quote
+                && (ch.is_ascii_alphabetic() || ch == '_') =>
+            {
                 let word_start = i;
                 while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
                     i += 1;

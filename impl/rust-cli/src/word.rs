@@ -198,7 +198,7 @@ fn fmt_literal(f: &mut fmt::Formatter<'_>, text: &str, quote: Quote) -> fmt::Res
 /// Writes the word back as shell source that parses to the same word.
 impl fmt::Display for Word {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for segment in &self.segments {
+        for (index, segment) in self.segments.iter().enumerate() {
             match segment {
                 Segment::Literal { text, quote } => fmt_literal(f, text, *quote)?,
                 Segment::Parameter {
@@ -207,7 +207,13 @@ impl fmt::Display for Word {
                     quote,
                 } => {
                     let open = if quote.is_quoted() { "\"" } else { "" };
-                    if *braced {
+                    // `$A''b` must not come back as `$Ab`: brace the name when
+                    // the text after it could continue it.
+                    let runs_on = self.segments.get(index + 1).is_some_and(|next| {
+                        matches!(next, Segment::Literal { text, quote: Quote::None }
+                            if text.starts_with(|c: char| c.is_alphanumeric() || c == '_'))
+                    }) && expr.starts_with(|c: char| c.is_alphabetic() || c == '_');
+                    if *braced || runs_on {
                         write!(f, "{open}${{{expr}}}{open}")?;
                     } else {
                         write!(f, "{open}${expr}{open}")?;
@@ -339,7 +345,14 @@ fn expand_segments(
         match segment {
             Segment::Literal { text, quote } => {
                 if !quote.is_quoted() {
-                    if index == 0 && text.starts_with('~') {
+                    // The tilde prefix runs to the first unquoted `/`. It ends in this
+                    // segment only if the segment has a `/` or is the whole word;
+                    // otherwise a quoted piece or an expansion is part of the
+                    // prefix, and the tilde stays literal (`~'local'/x`).
+                    if index == 0
+                        && text.starts_with('~')
+                        && (text.contains('/') || word.segments.len() == 1)
+                    {
                         let (prefix, rest) = text.split_at(text.find('/').unwrap_or(text.len()));
                         let expanded = crate::parser::expand_tilde(prefix);
                         if expanded != prefix {
@@ -463,16 +476,46 @@ fn glob_fields(
 fn glob_pattern(encoded: &str) -> Option<String> {
     let mut pattern = String::with_capacity(encoded.len());
     let mut active = false;
+    // Inside an unquoted `[...]`: how many members so far, and whether a
+    // quoted `-` waits to be written last, where it cannot form a range.
+    let mut class: Option<usize> = None;
+    let mut hyphen = false;
     let mut chars = encoded.chars();
     while let Some(ch) = chars.next() {
         if ch == '\\' {
-            if let Some(next) = chars.next() {
-                pattern.push_str(&::glob::Pattern::escape(&next.to_string()));
+            let Some(next) = chars.next() else { continue };
+            match (class.as_mut(), next) {
+                (Some(_), '-') => hyphen = true,
+                // `*`, `?` and `[` are already literal inside a class.
+                (Some(members), '*' | '?' | '[') => {
+                    *members += 1;
+                    pattern.push(next);
+                }
+                (members, _) => {
+                    if let Some(members) = members {
+                        *members += 1;
+                    }
+                    pattern.push_str(&::glob::Pattern::escape(&next.to_string()));
+                }
             }
-        } else {
-            active |= matches!(ch, '*' | '?' | '[');
-            pattern.push(ch);
+            continue;
         }
+        active |= matches!(ch, '*' | '?' | '[');
+        match class.as_mut() {
+            None if ch == '[' => class = Some(0),
+            None => {}
+            // `]` first in a class (after `!` or `^`) is a member, not the end.
+            Some(members) if ch == ']' && *members > 0 => {
+                if std::mem::take(&mut hyphen) {
+                    pattern.push('-');
+                }
+                class = None;
+            }
+            Some(members) if *members == 0 && matches!(ch, '!' | '^') && pattern.ends_with('[') => {
+            }
+            Some(members) => *members += 1,
+        }
+        pattern.push(ch);
     }
     active.then_some(pattern)
 }
@@ -700,6 +743,70 @@ mod tests {
         ]);
         assert_eq!(w.to_string(), "'a b'\\*\"x\\\"\\$\"y");
         assert_eq!(Word::literal("plain"), "plain");
+    }
+
+    #[test]
+    fn display_keeps_a_literal_out_of_an_unbraced_name() {
+        let mut w = Word::new();
+        w.push_parameter("A".to_string(), false, Quote::None);
+        w.push_str("suffix", Quote::None);
+        assert_eq!(w.to_string(), "${A}suffix");
+
+        std::env::remove_var("Asuffix");
+        let dir = fixture(&[]);
+        let mut state = ShellState::new(dir.path().to_str().unwrap()).unwrap();
+        state.set_variable("A", "x");
+        let out = expand_words_in(
+            &[w],
+            &mut state,
+            ProcessSubs::Refuse,
+            dir.path(),
+            &GlobLimits::DEFAULT,
+        )
+        .unwrap();
+        assert_eq!(out.fields, ["xsuffix"]);
+    }
+
+    #[test]
+    fn a_quoted_hyphen_in_a_bracket_is_not_a_range() {
+        // [a'-'z]*.txt
+        assert_eq!(glob_pattern("[a\\-z]*.txt"), Some("[az-]*.txt".to_string()));
+        let dir = fixture(&["-.txt", "a.txt", "m.txt", "z.txt"]);
+        let w = word(&[
+            ("[a", Quote::None),
+            ("-", Quote::Single),
+            ("z]*.txt", Quote::None),
+        ]);
+        assert_eq!(expand_in(dir.path(), &[w]), ["-.txt", "a.txt", "z.txt"]);
+    }
+
+    #[test]
+    fn a_tilde_with_a_quoted_prefix_is_not_expanded() {
+        let dir = fixture(&[]);
+        let quoted = word(&[
+            ("~", Quote::None),
+            ("local", Quote::Single),
+            ("/x", Quote::None),
+        ]);
+        assert_eq!(expand_in(dir.path(), &[quoted]), ["~local/x"]);
+        // An unquoted slash ends the prefix, so this one still expands.
+        let slash = word(&[
+            ("~/", Quote::None),
+            ("local", Quote::Single),
+            ("/x", Quote::None),
+        ]);
+        let got = expand_in(dir.path(), &[slash]);
+        assert!(
+            got[0].ends_with("/local/x") && !got[0].starts_with('~'),
+            "{got:?}"
+        );
+    }
+
+    #[test]
+    fn a_non_ascii_character_before_a_brace_does_not_panic() {
+        let dir = fixture(&[]);
+        let w = word(&[("é", Quote::Single), ("{a,b}", Quote::None)]);
+        assert_eq!(expand_in(dir.path(), &[w]), ["éa", "éb"]);
     }
 
     #[test]

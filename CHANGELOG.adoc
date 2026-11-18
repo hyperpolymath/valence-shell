@@ -27,6 +27,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An expansion error (such as a glob limit from #191) fails the command with
   exit status 1 and does not run it. With a redirection the status was 127.
 
+=== Fixed — 2026-11-18 (review of #242)
+
+- An unquoted non-ASCII letter no longer hangs the shell: `echo é` did not
+  return, because the statement splitter did not advance past it.
+- `'é'{a,b}` and `${é:-x}` no longer panic or misread the word: brace and
+  parameter expansion used character counts as byte offsets.
+- `${X:2:N}` with a very large `N` gives the rest of the value; it panicked
+  on overflow.
+- A quoted or escaped parenthesis no longer ends a command substitution:
+  `$(echo ')')`.
+- A quoted hyphen in a bracket expression is a member, not a range:
+  `[a'-'z]*.txt` no longer matches `m.txt`.
+- `~'local'/x` keeps its tilde: a quoted piece in the tilde prefix stops
+  the expansion.
+- `$A''suffix && true` expands `A`: in an AND-OR list the word was read
+  back as `$Asuffix`.
+
 === Changed — 2026-11-18 (typed words)
 
 - New module `src/word.rs`: a `Word` keeps the quoting of each of its pieces
