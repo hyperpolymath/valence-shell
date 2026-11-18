@@ -40,6 +40,7 @@ pub mod state;
 pub mod test_command;
 
 pub mod verification;
+pub mod word;
 
 /// Echidna property-based verification integration (optional feature)
 #[cfg(feature = "echidna")]
