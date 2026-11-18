@@ -351,6 +351,44 @@ pub struct ShellState {
     pub aliases: AliasTable,
 }
 
+/// A change was made, and its record could not be saved.
+///
+/// The change itself went through, and this session's history holds its
+/// record. The saved history does not. The next record that can be
+/// written saves the whole history again, which puts that right; if the
+/// shell stops before then, the saved history will not know of the change.
+///
+/// Every command that changes something returns this error (owner ruling
+/// OD-49). Before, the shell printed a warning and reported success, so a
+/// script or an agent could not see that the saved history had fallen
+/// behind the disk.
+#[derive(Debug)]
+pub struct NotRecorded {
+    /// Why the record could not be written.
+    pub cause: String,
+}
+
+impl NotRecorded {
+    fn new(cause: anyhow::Error) -> Self {
+        Self {
+            cause: format!("{cause:#}"),
+        }
+    }
+}
+
+impl std::fmt::Display for NotRecorded {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the change was made, but its record could not be saved ({}). \
+             The next record that can be written will save it",
+            self.cause
+        )
+    }
+}
+
+impl std::error::Error for NotRecorded {}
+
 impl ShellState {
     /// Create new shell state with given root.
     ///
@@ -429,8 +467,13 @@ impl ShellState {
         Ok(state)
     }
 
-    /// Record an operation
-    pub fn record_operation(&mut self, mut op: Operation) {
+    /// Record an operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NotRecorded`] if the record could not be saved. The
+    /// operation is in this session's history all the same.
+    pub fn record_operation(&mut self, mut op: Operation) -> Result<(), NotRecorded> {
         // Associate with active transaction if any
         if let Some(ref mut txn) = self.active_transaction {
             op.transaction_id = Some(txn.id);
@@ -445,18 +488,19 @@ impl ShellState {
         // Clear redo stack when new operation is performed
         self.redo_stack.clear();
 
-        // Persist state - warn on failure but don't abort
-        if let Err(e) = self.persist(Mutation::Recorded { trim: trimmed }) {
-            eprintln!("{} Failed to save state: {}", "Warning:".bright_yellow(), e);
-            eprintln!("Operation succeeded but may not persist across restarts");
-        }
+        self.persist(Mutation::Recorded { trim: trimmed })
+            .map_err(NotRecorded::new)
     }
 
     /// Record an operation from a redo without clearing the redo stack.
     ///
     /// Unlike [`Self::record_operation`], this preserves remaining redo entries
     /// so that multiple sequential redos work correctly.
-    pub fn record_redo_operation(&mut self, mut op: Operation) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NotRecorded`] if the record could not be saved.
+    pub fn record_redo_operation(&mut self, mut op: Operation) -> Result<(), NotRecorded> {
         if let Some(ref mut txn) = self.active_transaction {
             op.transaction_id = Some(txn.id);
             txn.operations.push(op.id);
@@ -465,11 +509,8 @@ impl ShellState {
         self.history.push(op);
         let trimmed = self.enforce_history_limit();
 
-        // Persist state - warn on failure but don't abort
-        if let Err(e) = self.persist(Mutation::Recorded { trim: trimmed }) {
-            eprintln!("{} Failed to save state: {}", "Warning:".bright_yellow(), e);
-            eprintln!("Redo succeeded but may not persist across restarts");
-        }
+        self.persist(Mutation::Recorded { trim: trimmed })
+            .map_err(NotRecorded::new)
     }
 
     /// Enforce history size limit by removing oldest operations
@@ -640,8 +681,13 @@ impl ShellState {
         self.undone_run = start..end;
     }
 
-    /// Mark an operation as undone
-    pub fn mark_undone(&mut self, op_id: Uuid, undone_by: Uuid) {
+    /// Mark an operation as undone.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NotRecorded`] if the mark could not be saved. The
+    /// operation is marked in this session's history all the same.
+    pub fn mark_undone(&mut self, op_id: Uuid, undone_by: Uuid) -> Result<(), NotRecorded> {
         // Undo targets the newest operations that are not yet undone, so look
         // there first; fall back to a full scan for any other id.
         let index = self
@@ -664,22 +710,14 @@ impl ShellState {
             _ => false,
         };
 
-        // Persist state - warn on failure
-        let persisted = if found {
-            self.persist(Mutation::Undone {
-                id: op_id,
-                undone_by,
-            })
-        } else {
-            Ok(())
-        };
-        if let Err(e) = persisted {
-            eprintln!(
-                "{} Failed to save undo state: {}",
-                "Warning:".bright_yellow(),
-                e
-            );
+        if !found {
+            return Ok(());
         }
+        self.persist(Mutation::Undone {
+            id: op_id,
+            undone_by,
+        })
+        .map_err(NotRecorded::new)
     }
 
     /// Begin a new transaction
@@ -699,14 +737,9 @@ impl ShellState {
         let id = txn.id;
         self.active_transaction = Some(txn);
 
-        // Persist state - warn on failure
-        if let Err(e) = self.persist(Mutation::Begun) {
-            eprintln!(
-                "{} Failed to save transaction start: {}",
-                "Warning:".bright_yellow(),
-                e
-            );
-        }
+        // The transaction is open in this session whether or not that
+        // could be saved.
+        self.persist(Mutation::Begun).map_err(NotRecorded::new)?;
 
         Ok(id)
     }
@@ -722,20 +755,19 @@ impl ShellState {
         committed.committed = true;
         self.transactions.push(committed);
 
-        // Persist state - warn on failure
-        if let Err(e) = self.persist(Mutation::Committed) {
-            eprintln!(
-                "{} Failed to save transaction commit: {}",
-                "Warning:".bright_yellow(),
-                e
-            );
-        }
+        // The transaction is closed in this session whether or not that
+        // could be saved.
+        self.persist(Mutation::Committed)
+            .map_err(NotRecorded::new)?;
 
         Ok(())
     }
 
     /// Set the directory `cd -` returns to, and journal it so it survives a
     /// restart without waiting for the next snapshot.
+    ///
+    /// A failure to save it is only a warning: `cd` changes no file, and a
+    /// shell on a root it cannot write to must still be able to move about.
     pub fn set_previous_dir(&mut self, dir: PathBuf) {
         self.previous_dir = Some(dir);
         if let Err(e) = self.persist(Mutation::PreviousDir) {
@@ -1120,7 +1152,17 @@ impl ShellState {
 
         // Record operation
         let op = Operation::new(OperationType::SetVariable, name, None).with_undo_data(undo_data);
-        self.record_operation(op);
+        self.record_variable_operation(op);
+    }
+
+    /// Record an operation on a variable. If the record cannot be saved
+    /// that is only a warning: an assignment changes no file, and a script
+    /// on a root the shell cannot write to must still be able to set its
+    /// variables.
+    fn record_variable_operation(&mut self, op: Operation) {
+        if let Err(e) = self.record_operation(op) {
+            eprintln!("{} {}", "Warning:".bright_yellow(), e);
+        }
     }
 
     /// Unset a shell variable with undo tracking.
@@ -1140,7 +1182,7 @@ impl ShellState {
         // Record operation
         let op = Operation::new(OperationType::UnsetVariable, name.to_string(), None)
             .with_undo_data(undo_data);
-        self.record_operation(op);
+        self.record_variable_operation(op);
     }
 
     /// Get a shell variable value (scalar only)
@@ -1948,10 +1990,13 @@ mod tests {
         )
     }
 
+    /// Record an operation on `path`. Some tests make the storage refuse
+    /// the write and then check what the next write does, so a record that
+    /// cannot be saved is not a failure here.
     fn record(state: &mut ShellState, path: &str) -> Uuid {
         let op = Operation::new(OperationType::CreateFile, path.to_string(), None);
         let id = op.id;
-        state.record_operation(op);
+        let _ = state.record_operation(op);
         id
     }
 
@@ -1970,7 +2015,7 @@ mod tests {
         record(&mut state, "a");
         let b = record(&mut state, "b");
         record(&mut state, "c");
-        state.mark_undone(b, Uuid::new_v4());
+        state.mark_undone(b, Uuid::new_v4()).unwrap();
 
         // One record per mutation, and no other state file.
         assert_eq!(journal_records(&root).len(), 4);
@@ -2145,7 +2190,7 @@ mod tests {
         let a = record(&mut state, "a");
         let b = record(&mut state, "b");
         let undo = Uuid::new_v4();
-        state.mark_undone(b, undo);
+        state.mark_undone(b, undo).unwrap();
         state.abort_transaction();
 
         assert!(state.active_transaction.is_none());
@@ -2458,7 +2503,7 @@ mod tests {
         record(&mut state, "a");
 
         storage.fail_append(true);
-        record(&mut state, "b"); // warns; the journal lacks "b"
+        record(&mut state, "b"); // an error; the journal lacks "b"
         assert!(state.rewrite_pending);
         storage.fail_append(false);
 
@@ -2502,7 +2547,9 @@ mod tests {
         assert!(state.rewrite_pending);
         storage.fail_sync(false);
 
-        state.mark_undone(state.history[0].id, Uuid::new_v4());
+        state
+            .mark_undone(state.history[0].id, Uuid::new_v4())
+            .unwrap();
         assert!(!state.rewrite_pending);
         let point = storage.point();
         assert!(point.pending.is_empty());
@@ -2547,7 +2594,7 @@ mod tests {
 
     fn undo_one(state: &mut ShellState) {
         let id = state.last_n_undoable(1)[0].id;
-        state.mark_undone(id, Uuid::new_v4());
+        state.mark_undone(id, Uuid::new_v4()).unwrap();
     }
 
     #[test]
@@ -2573,7 +2620,7 @@ mod tests {
         }
         // Out-of-order mark of an older operation.
         let oldest_live = state.last_n_undoable(usize::MAX).last().unwrap().id;
-        state.mark_undone(oldest_live, Uuid::new_v4());
+        state.mark_undone(oldest_live, Uuid::new_v4()).unwrap();
         assert_undoable_matches_scan(&state);
         // Trims from the front shift the block.
         for i in 0..8 {

@@ -113,7 +113,7 @@ fn materialise(files: &Files) -> TempDir {
 fn record(state: &mut ShellState, path: &str) -> Uuid {
     let op = Operation::new(OperationType::CreateFile, path.to_string(), None);
     let id = op.id;
-    state.record_operation(op);
+    state.record_operation(op).unwrap();
     id
 }
 
@@ -128,7 +128,7 @@ fn run_session(state: &mut ShellState, mut after: impl FnMut(&'static str, &Shel
     after("record a", state);
     let b = record(state, "b-with-non-ascii-é");
     after("record b", state);
-    state.mark_undone(b, Uuid::new_v4());
+    state.mark_undone(b, Uuid::new_v4()).unwrap();
     after("undo b", state);
     state.begin_transaction("t1").unwrap();
     after("begin t1", state);

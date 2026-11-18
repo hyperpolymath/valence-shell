@@ -278,7 +278,8 @@ with Phase E, E 9 / D 9).
 |Every command that changes something returns an error when its record cannot
 be written. The message says that the change was made and is not recorded. The
 saved state can still be one operation behind after a crash between a change
-and its record; the write-ahead record of Phase E closes that.
+and its record; the write-ahead record of Phase E closes that. Done on the
+journal branch (section 14.4d).
 
 |*OD-50* |*The behaviour changes of the containment and baseline branches are
 confirmed.* The owner went through them by selector, in six groups: the
@@ -1270,9 +1271,9 @@ carried on, and reported success, so the saved state could fall behind the
 disk by the whole transaction. Rollback now stops at the first reversal it
 cannot save and returns an error, with the transaction left open; the next
 write that succeeds saves the whole state. The saved state is then at most
-one operation behind the disk. Every other command still only warns when its
-record cannot be saved; what they should do is an open decision (section
-14.5). `cargo test`: 896 passed, 0 failed, 15 ignored (898 after the redo fix that followed).
+one operation behind the disk. Every other command still only warned when its
+record could not be saved; what they should do was an open decision (section
+14.5), since ruled (OD-49) and done (14.4d). `cargo test`: 896 passed, 0 failed, 15 ignored (898 after the redo fix that followed).
 
 Not proved: the model's `rollback-no-live` speaks of the operations that are
 in the history. That an open transaction's operations all stay there is a
@@ -1316,6 +1317,26 @@ Design choices the model fixes for C2:
 * A record that does not parse is an error, never a skipped line.
 * A record and the history trim it causes at the size cap are one event, so a
   crash cannot keep one without the other.
+
+*14.4d A record that cannot be saved is an error (OD-49; Measured 2026-11-18,
+local).* The shell does an operation and then writes its record. When the
+write failed, every command except rollback printed a warning and reported
+success. The functions that write a record (`record_operation`,
+`record_redo_operation`, `mark_undone`, and the opening and closing of a
+transaction) now return an error, `NotRecorded`, and the commands pass it on:
+the file commands, `undo`, `redo`, `begin`, `commit`, `obliterate` and a
+redirection. The message says that the change was made and that its record
+could not be saved. The record is in the session's history all the same, and
+the next record that can be written saves the whole history again, so nothing
+is lost unless the shell stops before then.
+
+Two things stay a warning, because they change no file and a shell on a root
+it cannot write to must still work: assigning a variable, and the directory
+that `cd -` returns to. The saved state can still be one operation behind the
+disk after a crash between a change and its record; the write-ahead record of
+Phase E closes that. `cargo test`: 902 passed, 0 failed, 16 ignored, with
+`OLDPWD` and `PWD` set and unset. Five single changes, each making one of the
+five functions swallow the failure again, each fail a test.
 
 === 14.5 Decisions still open
 

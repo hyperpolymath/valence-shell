@@ -90,11 +90,13 @@ fn rollback_is_refused_whole_when_an_operation_has_no_inverse() {
     commands::begin_transaction(&mut state, "t").unwrap();
     commands::touch(&mut state, "a", false).unwrap();
     // An irreversible operation inside the transaction.
-    state.record_operation(Operation::new(
-        OperationType::Obliterate,
-        "gone".to_string(),
-        None,
-    ));
+    state
+        .record_operation(Operation::new(
+            OperationType::Obliterate,
+            "gone".to_string(),
+            None,
+        ))
+        .unwrap();
     commands::touch(&mut state, "b", false).unwrap();
     let before = live(&state);
 
@@ -121,9 +123,11 @@ fn rollback_is_refused_when_undo_data_is_missing() {
     commands::touch(&mut state, "a", false).unwrap();
     // A chmod record without the previous mode cannot be reversed. Before
     // the check, this record made rollback panic on a short slice.
-    state.record_operation(
-        Operation::new(OperationType::Chmod, "a".to_string(), None).with_undo_data(vec![1, 2]),
-    );
+    state
+        .record_operation(
+            Operation::new(OperationType::Chmod, "a".to_string(), None).with_undo_data(vec![1, 2]),
+        )
+        .unwrap();
 
     assert!(commands::rollback_transaction(&mut state).is_err());
     assert!(root.path().join("a").exists());
@@ -338,7 +342,7 @@ fn an_entry_that_can_never_be_redone_does_not_block_the_redo_stack() {
     commands::touch(&mut state, "a", false).unwrap();
     let mut appended = Operation::new(OperationType::FileAppended, "a".to_string(), None);
     appended.undo_data = Some(0u64.to_le_bytes().to_vec());
-    state.record_operation(appended);
+    state.record_operation(appended).unwrap();
     commands::undo(&mut state, 2, false).unwrap();
     assert_eq!(state.get_redo_stack().len(), 2);
 
@@ -461,7 +465,7 @@ fn redoing_a_truncation_does_not_change_the_access_time() {
     let mut op = Operation::new(OperationType::FileTruncated, "log".to_string(), None);
     op.undo_data = Some(b"old contents\n".to_vec());
     fs::write(&file, "").unwrap();
-    state.record_operation(op);
+    state.record_operation(op).unwrap();
     commands::undo(&mut state, 1, false).unwrap();
     assert_eq!(fs::read_to_string(&file).unwrap(), "old contents\n");
 
@@ -491,7 +495,7 @@ fn rollback_checks_every_kind_of_undo_data_first() {
         commands::touch(&mut state, "kept", false).unwrap();
         let mut op = Operation::new(kind, "x".to_string(), None);
         op.undo_data = undo_data.clone();
-        state.record_operation(op);
+        state.record_operation(op).unwrap();
 
         let refused = commands::rollback_transaction(&mut state).unwrap_err();
         assert!(

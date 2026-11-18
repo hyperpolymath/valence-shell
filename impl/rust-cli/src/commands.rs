@@ -97,7 +97,7 @@ pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     // Record in history
     let op = Operation::new(OperationType::Mkdir, path.to_string(), None);
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     // Output
     println!(
@@ -165,7 +165,7 @@ pub fn rmdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     // Record
     let op = Operation::new(OperationType::Rmdir, path.to_string(), None);
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {}",
@@ -225,7 +225,7 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 
     let op = Operation::new(OperationType::CreateFile, path.to_string(), None);
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {}",
@@ -291,7 +291,7 @@ pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let op =
         Operation::new(OperationType::DeleteFile, path.to_string(), None).with_undo_data(content);
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {}",
@@ -366,7 +366,7 @@ pub fn cp(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
     let op = Operation::new(OperationType::CopyFile, dst.to_string(), None)
         .with_undo_data(src.as_bytes().to_vec());
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {} → {}",
@@ -447,7 +447,7 @@ pub fn mv(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
     let combined_path = format!("{}\0{}", src, dst);
     let op = Operation::new(OperationType::Move, combined_path, None);
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {} → {}",
@@ -518,7 +518,7 @@ pub fn symlink(state: &mut ShellState, target: &str, link: &str, verbose: bool) 
     let op = Operation::new(OperationType::Symlink, link.to_string(), None)
         .with_undo_data(target.as_bytes().to_vec());
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {} → {}",
@@ -580,7 +580,7 @@ pub fn chmod(state: &mut ShellState, mode_str: &str, path: &str, verbose: bool) 
     let op = Operation::new(OperationType::Chmod, path.to_string(), None)
         .with_undo_data(old_mode.to_le_bytes().to_vec());
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {:o} {}",
@@ -725,7 +725,7 @@ pub fn chown(state: &mut ShellState, owner_str: &str, path: &str, verbose: bool)
     let op = Operation::new(OperationType::Chown, path.to_string(), None)
         .with_undo_data(undo_str.into_bytes());
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {} {}",
@@ -992,7 +992,7 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
         let undo_id = undo_op.id;
         let orig_id = op.id;
 
-        state.mark_undone(orig_id, undo_id);
+        state.mark_undone(orig_id, undo_id)?;
 
         println!(
             "{} {} {} {} {}",
@@ -1199,7 +1199,7 @@ fn redo_one(state: &mut ShellState, op: &Operation, verbose: bool) -> Result<()>
     let mut new_op = Operation::new(op.op_type, op.path.clone(), None);
     new_op.undo_data = undo_data;
     let new_id = new_op.id;
-    state.record_redo_operation(new_op);
+    state.record_redo_operation(new_op)?;
 
     println!(
         "{} {} {}",
@@ -1682,9 +1682,8 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
             // shows a reversed operation as live.
             match result {
                 Ok(()) => {
-                    state.mark_undone(op.id, txn_id);
+                    unsaved = state.mark_undone(op.id, txn_id).is_err();
                     reversed += 1;
-                    unsaved = !state.is_saved();
                 }
                 Err(e) => failed_rollbacks.push((op.path.clone(), e.to_string())),
             }
@@ -2280,7 +2279,7 @@ pub fn hardware_erase(state: &mut ShellState, device: &str, method: Option<&str>
         None, // Not part of a transaction
     );
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {} (method: {}, type: {:?})",

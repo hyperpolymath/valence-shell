@@ -441,7 +441,7 @@ impl RedirectSetup {
                 op = op.with_undo_data(data);
             }
 
-            state.record_operation(op);
+            state.record_operation(op)?;
         }
 
         Ok(())
