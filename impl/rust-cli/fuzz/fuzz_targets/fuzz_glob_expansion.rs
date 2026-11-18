@@ -70,7 +70,12 @@ fn fixture() -> &'static Path {
     FIXTURE
         .get_or_init(|| match build_fixture() {
             Ok(fixture) => fixture,
-            Err(e) => panic!("fuzz_glob_expansion: cannot build the fixture tree: {e}"),
+            Err(e) => {
+                // Exit rather than panic: libFuzzer reports an exiting target
+                // as an error ("fuzz target exited"), so the run still fails.
+                eprintln!("fuzz_glob_expansion: cannot build the fixture tree: {e}");
+                std::process::exit(1);
+            }
         })
         .path()
 }
