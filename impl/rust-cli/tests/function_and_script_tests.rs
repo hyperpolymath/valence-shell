@@ -158,8 +158,8 @@ fn test_function_local_variables() -> Result<()> {
     Ok(())
 }
 
-/// A command in the body returns an error. The error goes on to the caller,
-/// and the frame is popped all the same.
+/// A command in the body fails. The function goes on to its end, and both
+/// frames are popped.
 ///
 /// This test calls the library, so it runs on every platform. The tests that
 /// run the built shell are in `function_frame_tests.rs` (Linux only).
@@ -178,10 +178,13 @@ fn test_function_that_fails_pops_its_frame() -> Result<()> {
     outer_cmd.execute(&mut state)?;
 
     let invoke_cmd = parse_command("outer outer_arg_1 outer_arg_2")?;
-    let result = invoke_cmd.execute(&mut state);
+    let result = invoke_cmd.execute(&mut state)?;
 
-    // The error still reaches the caller
-    assert!(result.is_err(), "the failed mkdir should be an error");
+    // The failed mkdir is the last command, so the call fails with status 1
+    assert!(
+        matches!(result, ExecutionResult::ExternalCommand { exit_code: 1 }),
+        "{result:?}"
+    );
 
     // Both frames are gone, and the caller has its own values back
     assert_eq!(state.functions.call_depth(), 0);
@@ -220,11 +223,13 @@ fn test_return_outside_function_fails() -> Result<()> {
     let mut state = ShellState::new(temp.path().to_str().unwrap())?;
 
     let cmd = parse_command("return 0")?;
-    let result = cmd.execute(&mut state);
+    let result = cmd.execute(&mut state)?;
 
-    assert!(result.is_err());
-    let err = result.unwrap_err();
-    assert!(err.to_string().contains("can only return from a function"));
+    // A failed command with status 2, as in bash; not a return
+    assert!(
+        matches!(result, ExecutionResult::ExternalCommand { exit_code: 2 }),
+        "{result:?}"
+    );
 
     Ok(())
 }
@@ -235,11 +240,14 @@ fn test_local_outside_function_fails() -> Result<()> {
     let mut state = ShellState::new(temp.path().to_str().unwrap())?;
 
     let cmd = parse_command("local X=5")?;
-    let result = cmd.execute(&mut state);
+    let result = cmd.execute(&mut state)?;
 
-    assert!(result.is_err());
-    let err = result.unwrap_err();
-    assert!(err.to_string().contains("can only be used in a function"));
+    // A failed command with status 1, as in bash, and nothing was set
+    assert!(
+        matches!(result, ExecutionResult::ExternalCommand { exit_code: 1 }),
+        "{result:?}"
+    );
+    assert_eq!(state.get_variable("X"), None);
 
     Ok(())
 }
@@ -385,9 +393,12 @@ fn test_source_nonexistent_file_fails() -> Result<()> {
     let mut state = ShellState::new(temp.path().to_str().unwrap())?;
 
     let cmd = parse_command("source /nonexistent/file.sh")?;
-    let result = cmd.execute(&mut state);
+    let result = cmd.execute(&mut state)?;
 
-    assert!(result.is_err());
+    assert!(
+        matches!(result, ExecutionResult::ExternalCommand { exit_code: 1 }),
+        "{result:?}"
+    );
 
     Ok(())
 }

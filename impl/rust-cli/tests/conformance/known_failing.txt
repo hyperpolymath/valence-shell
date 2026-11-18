@@ -50,7 +50,6 @@ sub-01  # mkdir zzdir; (cd zzdir; pwd | grep -c zzdir); pwd | grep -c zzdir
 sub-03  # { echo a; echo b; } | wc -l
 sub-04  # echo a & wait; echo done
 builtin-03  # read a b <<< "one two"; echo $b
-builtin-05  # set -e; false; echo notreached
 builtin-06  # x=1; unset x; echo "[${x}]"
 builtin-07  # type echo | head -1 | grep -c echo
 builtin-12  # mkdir zzdir; pushd zzdir >/dev/null; pwd | grep -c zzdir; popd >/dev/null
@@ -66,7 +65,6 @@ loop-10  # for i in a b; do for j in 1 2; do echo $i$j; done; done
 subst-05  # x=$(echo hi); echo $x
 fs-09  # touch a b c; ls | wc -l
 fs-10  # mkdir x y; ls | wc -l
-rm-02  # rm nosuch; echo rc=$?
 rm-03  # rm -f nosuch; echo rc=$?
 rm-04  # mkdir d; touch d/x; rm -r d; ls | wc -l
 rm-05  # touch a; touch b; rm a b; ls | wc -l

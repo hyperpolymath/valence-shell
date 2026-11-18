@@ -499,6 +499,8 @@ fn an_exit_trap_reports_a_statement_that_fails() {
         "stdout: {}",
         run.stdout
     );
-    assert!(run.stderr.contains("vsh: trap: "), "stderr: {}", run.stderr);
+    // A statement that cannot be read says `vsh: trap:`. One that runs and
+    // fails is reported like any failed command, `vsh: ` and the reason.
+    assert!(run.stderr.contains("vsh: "), "stderr: {}", run.stderr);
     assert!(run.stderr.contains("exists"), "stderr: {}", run.stderr);
 }

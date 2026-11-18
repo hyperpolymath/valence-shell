@@ -266,9 +266,9 @@ fn a_function_that_fails_leaves_the_callers_variable_as_it_was() {
         "the terminal showed:\n{}",
         plain(&seen)
     );
-    // The frame is popped; the error still reaches the prompt.
+    // The frame is popped; the failure is still reported.
     assert_eq!(
-        printed(&seen, "Error:").len(),
+        printed(&seen, "vsh: Parent directory does not exist").len(),
         1,
         "the failed mkdir should be reported once; the terminal showed:\n{}",
         plain(&seen)
@@ -338,7 +338,7 @@ fn after_a_function_failed_the_shell_is_no_longer_inside_it() {
         &["source ./defs.sh", "f", "local y=1", "return 0"],
     );
 
-    for refused in ["Error: local:", "Error: return:"] {
+    for refused in ["vsh: local:", "vsh: return:"] {
         assert_eq!(
             printed(&seen, refused).len(),
             1,
