@@ -54,7 +54,7 @@ const KNOWN_FAILING: &str = include_str!("conformance/known_failing.txt");
 /// What this does not catch: one case taken off the list and another put
 /// on in the same change. Only a comparison with the base branch catches
 /// that.
-const KNOWN_FAILING_COUNT: usize = 61;
+const KNOWN_FAILING_COUNT: usize = 59;
 
 /// Longest a single case may run. A case that does not finish counts as failed.
 const TIME_LIMIT: Duration = Duration::from_secs(5);

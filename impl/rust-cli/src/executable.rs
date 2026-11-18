@@ -70,8 +70,10 @@ pub enum ExecutionResult {
     Return { exit_code: i32 },
 }
 
-impl ExecutableCommand for Command {
-    fn execute(&self, state: &mut ShellState) -> Result<ExecutionResult> {
+impl Command {
+    /// Run the command itself. A failure can come back as an error here;
+    /// [`ExecutableCommand::execute`] turns it into a failed status.
+    fn run(&self, state: &mut ShellState) -> Result<ExecutionResult> {
         match self {
             // Filesystem operations (reversible)
             Command::Mkdir { path, redirects } => {
@@ -949,16 +951,13 @@ impl ExecutableCommand for Command {
                     let params: Vec<String> = args[1..].to_vec();
                     state.set_positional_params(params);
                 } else if args[0].starts_with('-') || args[0].starts_with('+') {
-                    // Shell options (stub: just acknowledge)
-                    // -e: exit on error, -x: trace, -u: error on unset, etc.
+                    // Shell options. `-e` is honoured; `-x` and `-u` are only
+                    // recorded.
                     for arg in args {
                         let enable = arg.starts_with('-');
                         for ch in arg[1..].chars() {
                             match ch {
-                                'e' => state.set_variable(
-                                    "SHOPT_E".to_string(),
-                                    if enable { "1" } else { "0" }.to_string(),
-                                ),
+                                'e' => state.errexit = enable,
                                 'x' => state.set_variable(
                                     "SHOPT_X".to_string(),
                                     if enable { "1" } else { "0" }.to_string(),
@@ -1000,8 +999,15 @@ impl ExecutableCommand for Command {
                     .map(|a| crate::parser::expand_variables(a, state))
                     .collect();
                 let combined = expanded_args.join(" ");
-                let cmd = crate::parser::parse_command(&combined)?;
-                cmd.execute(state)
+                match crate::parser::parse_command(&combined) {
+                    Ok(cmd) => cmd.execute(state),
+                    // A line that cannot be read is status 2, as in bash
+                    // and dash.
+                    Err(e) => {
+                        eprintln!("vsh: eval: {e}");
+                        Ok(ExecutionResult::ExternalCommand { exit_code: 2 })
+                    }
+                }
             }
 
             // Control structures
@@ -1011,8 +1017,9 @@ impl ExecutableCommand for Command {
                 elif_parts,
                 else_body,
             } => {
-                // Execute condition and get exit code
-                let cond_result = condition.execute(state)?;
+                // Execute condition and get exit code. `set -e` does not
+                // apply to it.
+                let cond_result = as_condition(state, |s| condition.execute(s))?;
                 let cond_exit = match cond_result {
                     ExecutionResult::Success => 0,
                     ExecutionResult::Exit => return Ok(ExecutionResult::Exit),
@@ -1029,7 +1036,7 @@ impl ExecutableCommand for Command {
 
                 // Try elif parts
                 for (elif_cond, elif_body) in elif_parts {
-                    let elif_result = elif_cond.execute(state)?;
+                    let elif_result = as_condition(state, |s| elif_cond.execute(s))?;
                     let elif_exit = match elif_result {
                         ExecutionResult::Success => 0,
                         ExecutionResult::Exit => return Ok(ExecutionResult::Exit),
@@ -1048,8 +1055,9 @@ impl ExecutableCommand for Command {
                     return execute_block(else_cmds, state);
                 }
 
-                // No branch matched — return last condition's exit code
-                Ok(ExecutionResult::ExternalCommand { exit_code: 1 })
+                // No branch ran: the status is 0 (POSIX 2.9.4.4). It was 1,
+                // which `set -e` would take for a failure.
+                Ok(ExecutionResult::ExternalCommand { exit_code: 0 })
             }
 
             Command::WhileLoop { condition, body } => {
@@ -1125,8 +1133,9 @@ impl ExecutableCommand for Command {
             } => {
                 use crate::parser::LogicalOperator;
 
-                // Execute left command
-                let left_result = left.execute(state)?;
+                // Execute left command. `set -e` does not apply to it, only
+                // to the command that ends the list.
+                let left_result = as_condition(state, |s| left.execute(s))?;
 
                 // Get exit code from left command
                 let left_exit_code = match left_result {
@@ -1214,7 +1223,9 @@ impl ExecutableCommand for Command {
             // Return from function
             Command::Return { code } => {
                 if state.functions.call_depth() == 0 {
-                    anyhow::bail!("return: can only return from a function");
+                    // Status 2, as bash gives.
+                    eprintln!("vsh: return: can only return from a function");
+                    return Ok(ExecutionResult::ExternalCommand { exit_code: 2 });
                 }
                 let exit_code = code.unwrap_or(state.last_exit_code);
                 state.last_exit_code = exit_code;
@@ -1294,6 +1305,58 @@ impl ExecutableCommand for Command {
                 Ok(ExecutionResult::Success)
             }
         }
+    }
+
+    /// The commands that hold other commands. Their status is that of a
+    /// command inside them, which `set -e` has already seen, or of a
+    /// condition, which `set -e` does not apply to.
+    fn is_compound(&self) -> bool {
+        matches!(
+            self,
+            Command::If { .. }
+                | Command::WhileLoop { .. }
+                | Command::UntilLoop { .. }
+                | Command::ForLoop { .. }
+                | Command::CaseStatement { .. }
+                | Command::LogicalOp { .. }
+                | Command::Source { .. }
+                | Command::Eval { .. }
+        )
+    }
+}
+
+impl ExecutableCommand for Command {
+    /// Every command is a boundary. A command that fails prints what went
+    /// wrong and fails with status 1; whatever ran it goes on, as in a POSIX
+    /// shell: the next line of a script or a function, the next turn of a
+    /// loop, the other side of `||`. It used to be an error that unwound
+    /// through every enclosing command, so `mkdir x || echo no` never ran
+    /// `echo no`, and a script ended at the first built-in that failed.
+    ///
+    /// With `set -e`, a simple command that fails ends the shell, outside
+    /// the contexts listed at [`ShellState::errexit_suppressed`].
+    ///
+    /// This never returns `Err`. The type stays a `Result` for the callers.
+    fn execute(&self, state: &mut ShellState) -> Result<ExecutionResult> {
+        let result = match self.run(state) {
+            Ok(result) => result,
+            Err(e) => {
+                eprintln!("vsh: {e}");
+                state.last_exit_code = 1;
+                ExecutionResult::ExternalCommand { exit_code: 1 }
+            }
+        };
+        if let ExecutionResult::ExternalCommand { exit_code } = result {
+            if exit_code != 0
+                && state.errexit
+                && state.errexit_suppressed == 0
+                && !self.is_compound()
+            {
+                state.last_exit_code = exit_code;
+                return Ok(ExecutionResult::Exit);
+            }
+        }
+        Ok(result)
     }
 
     fn is_reversible(&self) -> bool {
@@ -1608,11 +1671,12 @@ fn expand_operand(name: &str, raw: &str, state: &ShellState) -> Option<String> {
 /// 1. Save current positional parameters
 /// 2. Set new positional parameters from function arguments
 /// 3. Push a function frame for local variable scoping
-/// 4. Parse the raw function body, splitting on semicolons/newlines with
-///    control-structure awareness (so `if/fi`, `for/done`, `while/done`,
-///    and `case/esac` work inside a function body)
-/// 5. Execute each segment; stop early on `return` / `exit`
-/// 6. Restore positional parameters and local variables
+/// 4. Run the body ([`run_function_body`])
+/// 5. Pop the frame: restore positional parameters and local variables
+///
+/// Step 5 runs however the body ended: at its last command, at `return` or
+/// `exit`, or at a command that returned an error. The error still goes to
+/// the caller; the frame does not go with it.
 fn execute_function_call(
     func_def: &crate::functions::FunctionDef,
     args: &[String],
@@ -1627,6 +1691,47 @@ fn execute_function_call(
     // Push a function frame
     state.functions.push_frame(saved_params.clone());
 
+    // Run the body. There is no `?` on this call, and there must not be one:
+    // the frame is popped before the result goes back, whichever it is. An
+    // error that left with the frame still pushed would leave the caller
+    // with the function's local variables and positional parameters, and
+    // with a call depth that lets `local` and `return` run outside any
+    // function.
+    let result = run_function_body(func_def, state);
+
+    // Pop function frame and restore local variables
+    if let Some(frame) = state.functions.pop_frame() {
+        // Restore positional parameters
+        state.set_positional_params(frame.saved_params);
+
+        // Restore local variables to their previous values
+        for (var_name, prev_value) in &frame.saved_vars {
+            match prev_value {
+                Some(val) => state.set_variable(var_name.clone(), val.clone()),
+                None => {
+                    state.unset_variable(var_name);
+                }
+            }
+        }
+    }
+
+    result
+}
+
+/// Run the body of a shell function, inside the frame that
+/// [`execute_function_call`] pushed and will pop.
+///
+/// 1. Parse the raw function body, splitting on semicolons/newlines with
+///    control-structure awareness (so `if/fi`, `for/done`, `while/done`,
+///    and `case/esac` work inside a function body)
+/// 2. Execute each segment; stop early on `return` / `exit`
+///
+/// This is a function of its own so that every way out of the body, the `?`
+/// below included, comes back to one place in the caller.
+fn run_function_body(
+    func_def: &crate::functions::FunctionDef,
+    state: &mut ShellState,
+) -> Result<ExecutionResult> {
     // Execute function body. We prefer the raw body string (which preserves
     // control-structure integrity) and fall back to the pre-split segments
     // for older in-memory definitions.
@@ -1688,23 +1793,20 @@ fn execute_function_call(
         }
     }
 
-    // Pop function frame and restore local variables
-    if let Some(frame) = state.functions.pop_frame() {
-        // Restore positional parameters
-        state.set_positional_params(frame.saved_params);
-
-        // Restore local variables to their previous values
-        for (var_name, prev_value) in &frame.saved_vars {
-            match prev_value {
-                Some(val) => state.set_variable(var_name.clone(), val.clone()),
-                None => {
-                    state.unset_variable(var_name);
-                }
-            }
-        }
-    }
-
     Ok(last_result)
+}
+
+/// Run `f` where `set -e` does not apply: a condition, or a command of an
+/// `&&` or `||` list that is not the last. The context closes on every way
+/// out of `f`.
+fn as_condition(
+    state: &mut ShellState,
+    f: impl FnOnce(&mut ShellState) -> Result<ExecutionResult>,
+) -> Result<ExecutionResult> {
+    state.errexit_suppressed += 1;
+    let result = f(state);
+    state.errexit_suppressed -= 1;
+    result
 }
 
 /// Execute a block of commands in sequence, returning the result of the last command.
@@ -1764,7 +1866,7 @@ fn execute_loop(
         }
         iterations += 1;
 
-        let cond_result = condition.execute(state)?;
+        let cond_result = as_condition(state, |s| condition.execute(s))?;
         let cond_exit = match cond_result {
             ExecutionResult::Success => 0,
             ExecutionResult::Exit => return Ok(ExecutionResult::Exit),

@@ -24,7 +24,7 @@ Opus audit session that fixed all broken tests, real bugs, and documentation.
 
 **Measured, not claimed (2026-11-17, gate G0).** `impl/rust-cli/tests/conformance_battery.rs`
 starts the built shell on 128 everyday command lines and compares the result with bash:
-**67 match**. The cases that fail are listed in
+**69 match**. The cases that fail are listed in
 `impl/rust-cli/tests/conformance/known_failing.txt`. That list is a ratchet: it may only
 shrink, and a case may not be added to it to make a build pass.
 
@@ -40,7 +40,9 @@ Works through the built shell (passing battery cases, or checked by hand interac
 - `test`, `[ ... ]`, and `[[ ... ]]` on its own; `if/elif/else`, `while`, a single `for`, `case`
 - Functions, `local`, `return`; `$VAR`, `${VAR}`, `${VAR:-default}`, `${#VAR}`, `${VAR:o:n}`
 - `$((expr))`, and `$(cmd)` of another program, as the whole value of an assignment
-- `echo`, `printf`, `eval`, `set --`, `alias`, `trap ... EXIT`, `exit N`
+- `echo`, `printf`, `eval`, `set --`, `set -e`, `alias`, `trap ... EXIT`, `exit N`
+- A command that fails fails only itself, with a status: the next command of a script,
+  a function or a loop runs, and `||` runs its right side
 - Reversible variable assignment (undo/redo)
 - Transaction grouping (`begin`/`commit`/`rollback`)
 - `explain`, `checkpoint`/`restore`, `diff`, `replay`, `history --proofs`
@@ -53,14 +55,11 @@ In the source and unit-tested, but NOT working through the built shell (battery 
 - `$((expr))` and `$(cmd)` inside an argument (`echo $((1+2))` prints the text); backquotes
 - A quoted `*`, `?`, `[`, `{` or `~` reaches other programs with a backslash added
 - `${VAR#pat}`, `${VAR%pat}`, `${VAR^^}` (give an empty string); `$$`
-- Nested `for` loops (silently wrong), `break`, `continue`, `! cmd`, `set -e`
+- Nested `for` loops (silently wrong), `break`, `continue`, `! cmd`
 - Subshells, brace groups in pipelines, arrays, `(( ))`, the C-style `for`
 - `export` and `VAR=value cmd` do not reach the program being run
 - Here documents passed with `-c`; redirections on built-in commands outside the session root
   (`ls nosuch 2>/dev/null`)
-- A built-in that fails with an error (`mkdir` on a directory that exists, say) ends a `-c`
-  script, and the rest of an `&&` or `||` list with it. A refused built-in and `false` do
-  not: they fail with status 1 and the script goes on
 - Ctrl-Z does not suspend a running program
 
 Not exercised by the battery: process substitution, command correction, the pager.
