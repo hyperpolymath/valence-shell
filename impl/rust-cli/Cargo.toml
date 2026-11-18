@@ -84,6 +84,11 @@ which = "7.0"
 proptest = "1.10"
 tempfile = "3.26"
 
+# Pseudo-terminal for the tests that run the built shell at its prompt
+# (tests/function_frame_tests.rs). Same crate and version as above; the `term`
+# feature is turned on for test builds only.
+nix = { version = "0.31", default-features = false, features = ["fs", "term"] }
+
 # Benchmarking
 criterion = "0.5"
 

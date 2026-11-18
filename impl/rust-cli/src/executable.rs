@@ -1608,11 +1608,12 @@ fn expand_operand(name: &str, raw: &str, state: &ShellState) -> Option<String> {
 /// 1. Save current positional parameters
 /// 2. Set new positional parameters from function arguments
 /// 3. Push a function frame for local variable scoping
-/// 4. Parse the raw function body, splitting on semicolons/newlines with
-///    control-structure awareness (so `if/fi`, `for/done`, `while/done`,
-///    and `case/esac` work inside a function body)
-/// 5. Execute each segment; stop early on `return` / `exit`
-/// 6. Restore positional parameters and local variables
+/// 4. Run the body ([`run_function_body`])
+/// 5. Pop the frame: restore positional parameters and local variables
+///
+/// Step 5 runs however the body ended: at its last command, at `return` or
+/// `exit`, or at a command that returned an error. The error still goes to
+/// the caller; the frame does not go with it.
 fn execute_function_call(
     func_def: &crate::functions::FunctionDef,
     args: &[String],
@@ -1627,6 +1628,47 @@ fn execute_function_call(
     // Push a function frame
     state.functions.push_frame(saved_params.clone());
 
+    // Run the body. There is no `?` on this call, and there must not be one:
+    // the frame is popped before the result goes back, whichever it is. An
+    // error that left with the frame still pushed would leave the caller
+    // with the function's local variables and positional parameters, and
+    // with a call depth that lets `local` and `return` run outside any
+    // function.
+    let result = run_function_body(func_def, state);
+
+    // Pop function frame and restore local variables
+    if let Some(frame) = state.functions.pop_frame() {
+        // Restore positional parameters
+        state.set_positional_params(frame.saved_params);
+
+        // Restore local variables to their previous values
+        for (var_name, prev_value) in &frame.saved_vars {
+            match prev_value {
+                Some(val) => state.set_variable(var_name.clone(), val.clone()),
+                None => {
+                    state.unset_variable(var_name);
+                }
+            }
+        }
+    }
+
+    result
+}
+
+/// Run the body of a shell function, inside the frame that
+/// [`execute_function_call`] pushed and will pop.
+///
+/// 1. Parse the raw function body, splitting on semicolons/newlines with
+///    control-structure awareness (so `if/fi`, `for/done`, `while/done`,
+///    and `case/esac` work inside a function body)
+/// 2. Execute each segment; stop early on `return` / `exit`
+///
+/// This is a function of its own so that every way out of the body, the `?`
+/// below included, comes back to one place in the caller.
+fn run_function_body(
+    func_def: &crate::functions::FunctionDef,
+    state: &mut ShellState,
+) -> Result<ExecutionResult> {
     // Execute function body. We prefer the raw body string (which preserves
     // control-structure integrity) and fall back to the pre-split segments
     // for older in-memory definitions.
@@ -1684,22 +1726,6 @@ fn execute_function_call(
                 // could not be read returned the result of the line before
                 // it, so the call counted as a success.
                 last_result = ExecutionResult::ExternalCommand { exit_code: 1 };
-            }
-        }
-    }
-
-    // Pop function frame and restore local variables
-    if let Some(frame) = state.functions.pop_frame() {
-        // Restore positional parameters
-        state.set_positional_params(frame.saved_params);
-
-        // Restore local variables to their previous values
-        for (var_name, prev_value) in &frame.saved_vars {
-            match prev_value {
-                Some(val) => state.set_variable(var_name.clone(), val.clone()),
-                None => {
-                    state.unset_variable(var_name);
-                }
             }
         }
     }

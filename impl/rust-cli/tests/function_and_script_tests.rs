@@ -158,6 +158,39 @@ fn test_function_local_variables() -> Result<()> {
     Ok(())
 }
 
+/// A command in the body returns an error. The error goes on to the caller,
+/// and the frame is popped all the same.
+///
+/// This test calls the library, so it runs on every platform. The tests that
+/// run the built shell are in `function_frame_tests.rs` (Linux only).
+#[test]
+fn test_function_that_fails_pops_its_frame() -> Result<()> {
+    let temp = tempdir()?;
+    let mut state = ShellState::new(temp.path().to_str().unwrap())?;
+
+    state.set_variable("X", "global");
+    state.set_positional_params(vec!["outer_arg".to_string()]);
+
+    // `inner` fails: the parent of the directory does not exist
+    let inner_cmd = parse_command("inner() { local X=inner_val; mkdir no/such/parent/dir; }")?;
+    inner_cmd.execute(&mut state)?;
+    let outer_cmd = parse_command("outer() { local X=outer_val; inner inner_arg; }")?;
+    outer_cmd.execute(&mut state)?;
+
+    let invoke_cmd = parse_command("outer outer_arg_1 outer_arg_2")?;
+    let result = invoke_cmd.execute(&mut state);
+
+    // The error still reaches the caller
+    assert!(result.is_err(), "the failed mkdir should be an error");
+
+    // Both frames are gone, and the caller has its own values back
+    assert_eq!(state.functions.call_depth(), 0);
+    assert_eq!(state.get_variable("X"), Some("global"));
+    assert_eq!(state.positional_params, vec!["outer_arg".to_string()]);
+
+    Ok(())
+}
+
 #[test]
 fn test_function_return_value() -> Result<()> {
     let temp = tempdir()?;
