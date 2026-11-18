@@ -34,28 +34,41 @@ const LIMITS: GlobLimits = GlobLimits {
     max_match_bytes: 256 * 1024,
 };
 
-fn fixture() -> &'static Path {
-    static FIXTURE: OnceLock<TempDir> = OnceLock::new();
+/// Build the fixture tree. Errors are returned, not unwrapped: if the temp
+/// directory cannot be set up, the target skips its inputs instead of panicking.
+fn build_fixture() -> std::io::Result<TempDir> {
+    let t = TempDir::new()?;
+    let root = t.path();
+    for dir in ["d/sub", ".hd/x", "e"] {
+        fs::create_dir_all(root.join(dir))?;
+    }
+    for file in [
+        "a.txt",
+        "b.txt",
+        "c.log",
+        ".hidden",
+        "d/f.rs",
+        "d/sub/g.rs",
+        ".hd/x/y",
+        "e/z",
+    ] {
+        fs::write(root.join(file), b"")?;
+    }
+    // Some file systems refuse names that are not UTF-8; the rest still works.
+    let _ = fs::write(root.join(std::ffi::OsStr::from_bytes(b"bad\xff.txt")), b"");
+    symlink("..", root.join("d/up"))?; // loop back to the root
+    symlink(".", root.join("self"))?; // loop to itself
+    symlink("d", root.join("link"))?;
+    symlink("missing", root.join("dangling"))?;
+    Ok(t)
+}
+
+fn fixture() -> Option<&'static Path> {
+    static FIXTURE: OnceLock<Option<TempDir>> = OnceLock::new();
     FIXTURE
-        .get_or_init(|| {
-            let t = TempDir::new().expect("create fixture");
-            let root = t.path();
-            for dir in ["d/sub", ".hd/x", "e"] {
-                fs::create_dir_all(root.join(dir)).unwrap();
-            }
-            for file in [
-                "a.txt", "b.txt", "c.log", ".hidden", "d/f.rs", "d/sub/g.rs", ".hd/x/y", "e/z",
-            ] {
-                fs::write(root.join(file), b"").unwrap();
-            }
-            let _ = fs::write(root.join(std::ffi::OsStr::from_bytes(b"bad\xff.txt")), b"");
-            symlink("..", root.join("d/up")).unwrap(); // loop back to the root
-            symlink(".", root.join("self")).unwrap(); // loop to itself
-            symlink("d", root.join("link")).unwrap();
-            symlink("missing", root.join("dangling")).unwrap();
-            t
-        })
-        .path()
+        .get_or_init(|| build_fixture().ok())
+        .as_ref()
+        .map(TempDir::path)
 }
 
 fuzz_target!(|data: &[u8]| {
@@ -66,7 +79,9 @@ fuzz_target!(|data: &[u8]| {
         return;
     }
 
-    let base = fixture();
+    let Some(base) = fixture() else {
+        return;
+    };
     let pattern = if input.starts_with('/') {
         format!("{}{}", base.display(), input)
     } else {
