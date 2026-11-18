@@ -1,18 +1,21 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-//! Valence Shell (vsh) - A Formally Verified Reversible Shell
+//! Valence Shell (vsh) - a reversible shell, a research prototype
 //!
 //! This is the user-facing CLI for Valence Shell. It provides:
 //! - Interactive shell with command history
-//! - Undo/redo for all filesystem operations
+//! - Undo, and redo where it is implemented, for the shell's own
+//!   filesystem operations (`obliterate` cannot be undone)
 //! - Transaction grouping
 //! - Proof references for each operation
 //! - Shell script execution (`vsh script.sh`, `vsh -c "cmd"`)
 //!
 //! Architecture:
-//! - This Rust binary handles UI and fast-path operations
-//! - Complex operations delegate to BEAM daemon
-//! - Zig FFI provides the verified POSIX interface
+//! - This Rust binary does everything the shell does today
+//! - The proofs are about a model; the link from the model to this code is
+//!   tested, not proved (see the `proofs` command)
+//! - The BEAM daemon is planned and not built, and the Zig FFI layer is not
+//!   connected to this shell
 //!
 //! Author: Jonathan D.A. Jewell
 
