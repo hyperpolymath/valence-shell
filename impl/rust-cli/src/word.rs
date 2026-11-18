@@ -47,7 +47,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::glob::{self, GlobLimitExceeded, GlobLimits};
+use crate::glob::{self, GlobLimitExceeded, GlobLimits, GlobUsage};
 use crate::parser::ProcessSubType;
 use crate::process_sub::ProcessSubstitution;
 use crate::state::ShellState;
@@ -300,11 +300,14 @@ pub fn expand_words_in(
         fields: Vec::new(),
         process_subs: Vec::new(),
     };
+    // One glob budget for the whole command: every word and every brace
+    // alternative draws on the same limits.
+    let mut spent = GlobUsage::default();
     for word in words {
         // On error the substitutions started so far are dropped, and Drop
         // stops them and removes their FIFOs.
         let chars = expand_segments(word, state, process_subs, &mut expansion.process_subs)?;
-        glob_fields(&chars, cwd, limits, &mut expansion.fields)?;
+        glob_fields(&chars, cwd, limits, &mut spent, &mut expansion.fields)?;
     }
     Ok(expansion)
 }
@@ -421,19 +424,28 @@ fn glob_fields(
     chars: &[(char, Role)],
     cwd: &Path,
     limits: &GlobLimits,
+    spent: &mut GlobUsage,
     fields: &mut Vec<String>,
 ) -> Result<()> {
     let encoded = encode(chars);
     for candidate in glob::expand_braces(&encoded) {
         match glob_pattern(&candidate) {
             None => fields.push(remove_quotes(&candidate)),
-            Some(pattern) => match glob::expand_glob_with_limits(&pattern, cwd, limits) {
-                Ok(found) if !found.paths.is_empty() => fields.extend(
-                    found
-                        .paths
-                        .iter()
-                        .map(|path| path.to_string_lossy().into_owned()),
-                ),
+            Some(pattern) => match glob::expand_glob_continuing(&pattern, cwd, limits, *spent) {
+                Ok(found) if !found.paths.is_empty() => {
+                    *spent = found.usage;
+                    fields.extend(
+                        found
+                            .paths
+                            .iter()
+                            .map(|path| path.to_string_lossy().into_owned()),
+                    );
+                }
+                // No match still spent reads.
+                Ok(found) => {
+                    *spent = found.usage;
+                    fields.push(remove_quotes(&candidate));
+                }
                 // A limit is not "no match": substituting the literal word
                 // would run the command on the wrong arguments.
                 Err(e) if e.is::<GlobLimitExceeded>() => return Err(e),
@@ -626,6 +638,38 @@ mod tests {
             .expect("the limit error must reach the caller");
         assert_eq!(stopped.exceeded.axis, "matches held");
         assert!(err.to_string().contains("over the limit of 4"), "{err}");
+    }
+
+    /// The brace alternatives of one word, and the words of one command, share
+    /// one glob budget: five patterns of one match each pass a limit of four.
+    #[test]
+    fn brace_alternatives_and_words_share_one_glob_budget() {
+        let dir = fixture(&["f0.txt", "f1.txt", "f2.txt", "f3.txt", "f4.txt"]);
+        let mut state = ShellState::new(dir.path().to_str().unwrap()).unwrap();
+        let limits = GlobLimits {
+            max_matches: 4,
+            ..GlobLimits::DEFAULT
+        };
+        let braces = [Word::literal("{f0,f1,f2,f3,f4}*")];
+        let words: Vec<Word> = (0..5).map(|i| Word::literal(&format!("f{i}*"))).collect();
+        for case in [&braces[..], &words[..]] {
+            let err = expand_words_in(case, &mut state, ProcessSubs::Refuse, dir.path(), &limits)
+                .err()
+                .expect("the shared budget must be exceeded");
+            let stopped = err.downcast_ref::<GlobLimitExceeded>().unwrap();
+            assert_eq!((stopped.exceeded.limit, stopped.exceeded.level), (4, 5));
+        }
+        // Within the budget the same words expand normally.
+        let out = expand_words_in(
+            &words[..4],
+            &mut state,
+            ProcessSubs::Refuse,
+            dir.path(),
+            &limits,
+        )
+        .unwrap()
+        .fields;
+        assert_eq!(out, ["f0.txt", "f1.txt", "f2.txt", "f3.txt"]);
     }
 
     #[test]

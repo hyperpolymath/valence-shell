@@ -243,12 +243,21 @@ impl<G: Grade> Meter<G> {
         }
     }
 
-    /// Record the use of `amount` more units, or refuse if that passes the limit.
+    /// A meter for `axis` that starts from work already measured as `spent`,
+    /// so that several pieces of work can share one limit.
+    pub const fn starting_at(axis: &'static str, limit: u64, spent: G) -> Self {
+        Meter {
+            axis,
+            limit,
+            grade: spent,
+        }
+    }
+
+    /// Whether [`Meter::charge`] would accept `amount`, without recording it.
     ///
     /// # Errors
-    /// Returns [`Exceeded`] and records nothing when the charge would take the
-    /// level over the limit.
-    pub fn charge(&mut self, amount: u64) -> Result<(), Exceeded> {
+    /// Returns the [`Exceeded`] that the charge would return.
+    pub fn check(&self, amount: u64) -> Result<(), Exceeded> {
         let next = self.grade.then(G::of(amount));
         if next.level() > self.limit {
             return Err(Exceeded {
@@ -257,7 +266,17 @@ impl<G: Grade> Meter<G> {
                 level: next.level(),
             });
         }
-        self.grade = next;
+        Ok(())
+    }
+
+    /// Record the use of `amount` more units, or refuse if that passes the limit.
+    ///
+    /// # Errors
+    /// Returns [`Exceeded`] and records nothing when the charge would take the
+    /// level over the limit.
+    pub fn charge(&mut self, amount: u64) -> Result<(), Exceeded> {
+        self.check(amount)?;
+        self.grade = self.grade.then(G::of(amount));
         Ok(())
     }
 
@@ -368,6 +387,18 @@ mod tests {
         assert!(meter.charge(4).is_ok(), "released room can be used again");
         assert!(meter.charge(1).is_err());
         assert_eq!(meter.grade().peak(), 10);
+    }
+
+    #[test]
+    fn a_meter_can_start_from_work_already_spent() {
+        let mut meter: Meter<Cost> = Meter::starting_at("steps", 10, Cost::of(8));
+        assert!(meter.check(2).is_ok());
+        assert_eq!(meter.charge(3).unwrap_err().level, 11);
+        assert_eq!(
+            meter.level(),
+            8,
+            "check and a refused charge record nothing"
+        );
     }
 
     #[test]

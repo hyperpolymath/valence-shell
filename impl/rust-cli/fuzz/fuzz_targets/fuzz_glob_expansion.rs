@@ -34,8 +34,7 @@ const LIMITS: GlobLimits = GlobLimits {
     max_match_bytes: 256 * 1024,
 };
 
-/// Build the fixture tree. Errors are returned, not unwrapped: if the temp
-/// directory cannot be set up, the target skips its inputs instead of panicking.
+/// Build the fixture tree.
 fn build_fixture() -> std::io::Result<TempDir> {
     let t = TempDir::new()?;
     let root = t.path();
@@ -63,12 +62,17 @@ fn build_fixture() -> std::io::Result<TempDir> {
     Ok(t)
 }
 
-fn fixture() -> Option<&'static Path> {
-    static FIXTURE: OnceLock<Option<TempDir>> = OnceLock::new();
+/// The fixture, built once. A fixture that cannot be built stops the run
+/// with a clear message: skipping every input would report a green run that
+/// tested nothing.
+fn fixture() -> &'static Path {
+    static FIXTURE: OnceLock<TempDir> = OnceLock::new();
     FIXTURE
-        .get_or_init(|| build_fixture().ok())
-        .as_ref()
-        .map(TempDir::path)
+        .get_or_init(|| match build_fixture() {
+            Ok(fixture) => fixture,
+            Err(e) => panic!("fuzz_glob_expansion: cannot build the fixture tree: {e}"),
+        })
+        .path()
 }
 
 fuzz_target!(|data: &[u8]| {
@@ -79,9 +83,7 @@ fuzz_target!(|data: &[u8]| {
         return;
     }
 
-    let Some(base) = fixture() else {
-        return;
-    };
+    let base = fixture();
     let pattern = if input.starts_with('/') {
         format!("{}{}", base.display(), input)
     } else {

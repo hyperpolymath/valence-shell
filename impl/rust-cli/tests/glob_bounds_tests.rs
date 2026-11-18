@@ -181,6 +181,8 @@ fn the_byte_limit_counts_path_length_plus_one() {
         2,
         "the refused match is not counted"
     );
+    assert_eq!(s.usage.matches.peak(), 2, "nor does it raise the peak");
+    assert_eq!(s.usage.match_bytes.peak(), 10);
 
     let limits = GlobLimits {
         max_match_bytes: 15,

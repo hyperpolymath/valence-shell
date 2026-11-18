@@ -218,7 +218,8 @@ fn count_files_in_tree(path: &str) -> Result<usize> {
     let mut count = 0;
 
     fn visit_dirs(path: &std::path::Path, count: &mut usize) -> Result<()> {
-        if path.is_dir() {
+        // symlink_metadata: a link given as the root is one entry, not its target.
+        if std::fs::symlink_metadata(path)?.is_dir() {
             for entry in std::fs::read_dir(path)? {
                 let entry = entry?;
                 if entry.file_type()?.is_dir() {
@@ -363,5 +364,8 @@ mod tests {
         let root = t.path().to_str().unwrap();
         // d/f, d/up and self: the two links are counted, not followed.
         assert_eq!(count_files_in_tree(root).unwrap(), 3);
+        // A link given as the root is one entry too.
+        let link = t.path().join("self");
+        assert_eq!(count_files_in_tree(link.to_str().unwrap()).unwrap(), 1);
     }
 }

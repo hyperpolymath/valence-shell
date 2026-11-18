@@ -279,9 +279,27 @@ pub fn expand_glob_with_limits(
     base_dir: &Path,
     limits: &GlobLimits,
 ) -> Result<Expansion> {
+    expand_glob_continuing(pattern, base_dir, limits, GlobUsage::default())
+}
+
+/// Expand a glob pattern under limits that it shares with earlier expansions.
+///
+/// The meters start from `spent`, the usage an earlier expansion reported, so
+/// several patterns (the brace alternatives of one word, or the words of one
+/// command) together stay within one set of [`GlobLimits`]. The returned usage
+/// includes `spent`, and the matches of earlier expansions count as still held.
+///
+/// # Errors
+/// As for [`expand_glob`].
+pub fn expand_glob_continuing(
+    pattern: &str,
+    base_dir: &Path,
+    limits: &GlobLimits,
+    spent: GlobUsage,
+) -> Result<Expansion> {
     let compiled =
         Compiled::new(pattern).with_context(|| format!("Invalid glob pattern: {}", pattern))?;
-    let mut walker = Walker::new(pattern, base_dir, &compiled, limits);
+    let mut walker = Walker::new(pattern, base_dir, &compiled, limits, spent);
     walker.run().map_err(anyhow::Error::new)?;
     Ok(Expansion {
         usage: walker.usage(),
@@ -351,14 +369,24 @@ struct Walker<'a> {
 }
 
 impl<'a> Walker<'a> {
-    fn new(pattern: &'a str, base: &'a Path, compiled: &'a Compiled, limits: &GlobLimits) -> Self {
+    fn new(
+        pattern: &'a str,
+        base: &'a Path,
+        compiled: &'a Compiled,
+        limits: &GlobLimits,
+        spent: GlobUsage,
+    ) -> Self {
         Walker {
             pattern,
             base,
             compiled,
-            reads: Meter::new("file-system reads", limits.max_reads),
-            matches: Meter::new("matches held", limits.max_matches),
-            match_bytes: Meter::new("bytes of matches held", limits.max_match_bytes),
+            reads: Meter::starting_at("file-system reads", limits.max_reads, spent.reads),
+            matches: Meter::starting_at("matches held", limits.max_matches, spent.matches),
+            match_bytes: Meter::starting_at(
+                "bytes of matches held",
+                limits.max_match_bytes,
+                spent.match_bytes,
+            ),
             found: BTreeSet::new(),
         }
     }
@@ -410,11 +438,16 @@ impl<'a> Walker<'a> {
             return Ok(());
         }
         let bytes = path.as_os_str().len() as u64 + 1;
+        // Check both limits before recording either, so a refused match leaves
+        // no trace in the reported usage.
+        self.matches.check(1).map_err(|e| self.stopped(e, at))?;
+        self.match_bytes
+            .check(bytes)
+            .map_err(|e| self.stopped(e, at))?;
         self.matches.charge(1).map_err(|e| self.stopped(e, at))?;
-        if let Err(e) = self.match_bytes.charge(bytes) {
-            self.matches.release(1);
-            return Err(self.stopped(e, at));
-        }
+        self.match_bytes
+            .charge(bytes)
+            .map_err(|e| self.stopped(e, at))?;
         self.found.insert(path);
         Ok(())
     }
@@ -609,7 +642,8 @@ mod walk_tests {
             case_sensitive: true,
             require_literal_separator: false,
         };
-        glob::glob_with(&base.join(pattern).to_string_lossy(), options)
+        let base_pattern = glob::Pattern::escape(&base.to_string_lossy());
+        glob::glob_with(&format!("{base_pattern}/{pattern}"), options)
             .unwrap()
             .filter_map(|p| p.ok())
             .map(|p| p.strip_prefix(base).unwrap().to_path_buf())
