@@ -2524,6 +2524,102 @@ pub fn diff_state(state: &ShellState, target_op: usize) -> Result<()> {
     Ok(())
 }
 
+/// What a replay says at the end about the theorems it showed.
+///
+/// It used to say that each operation has a reversal theorem. That is not
+/// so for an obliteration or a hardware erase, whose theorem says that the
+/// operation is not injective, nor for a redirection, which is shown under
+/// the theorem for a write of a whole file, nor for a change to a variable,
+/// for which no proof file states a theorem.
+fn replay_summary(claims: &[crate::proof_refs::Claim]) -> String {
+    use crate::proof_refs::Claim;
+
+    let count = |wanted: Claim| claims.iter().filter(|claim| **claim == wanted).count();
+    let link = "the link from the model to this code is tested, not proved.";
+    let reversal = count(Claim::Reversal);
+    if reversal == claims.len() {
+        return format!("Each has a reversal theorem about the model; {link}");
+    }
+    let mut parts = vec![format!(
+        "With a reversal theorem about the model: {reversal}."
+    )];
+    let others = [
+        (
+            Claim::ReversalOfAWrite,
+            "Redirections, shown under the theorem for a write of a whole file \
+             (none is stated for a redirection)",
+        ),
+        (
+            Claim::ReversalNotStated,
+            "Reversed from the shell's own record, with no theorem stated",
+        ),
+        (
+            Claim::Irreversible,
+            "Not reversible, with a theorem that the operation is not injective in the model",
+        ),
+        (
+            Claim::IrreversibleNotStated,
+            "Not reversible, with no theorem stated",
+        ),
+    ];
+    for (claim, text) in others {
+        let n = count(claim);
+        if n > 0 {
+            parts.push(format!("{text}: {n}."));
+        }
+    }
+    parts.push(format!("Where a theorem is shown, {link}"));
+    parts.join(" ")
+}
+
+/// What a replay adds after the theorem it shows for one step.
+fn replay_note(claim: crate::proof_refs::Claim) -> &'static str {
+    use crate::proof_refs::Claim;
+
+    match claim {
+        Claim::Reversal => "",
+        Claim::ReversalOfAWrite => " (stated for a write of a whole file, not for a redirection)",
+        Claim::ReversalNotStated => " (the shell reverses this from its own record)",
+        Claim::Irreversible => " (not injective in the model: this operation cannot be reversed)",
+        Claim::IrreversibleNotStated => " (this operation cannot be reversed)",
+    }
+}
+
+/// What a replay adds after the composition theorem. That theorem is about
+/// a sequence of operations that each have a reversal theorem, so it does
+/// not cover a replay that holds any other kind.
+fn replay_composition_note(claims: &[crate::proof_refs::Claim]) -> String {
+    use crate::proof_refs::Claim;
+
+    let covered = claims
+        .iter()
+        .filter(|claim| **claim == Claim::Reversal)
+        .count();
+    if covered == claims.len() {
+        return String::new();
+    }
+    format!(
+        " (about operations that each have a reversal theorem: {covered} of the {} here)",
+        claims.len()
+    )
+}
+
+/// The last line of the undo path of a replay. The path ends at the first
+/// state only if every operation in it can be reversed.
+fn replay_path_end(claims: &[crate::proof_refs::Claim]) -> String {
+    use crate::proof_refs::Claim;
+
+    let irreversible = claims
+        .iter()
+        .filter(|claim| matches!(claim, Claim::Irreversible | Claim::IrreversibleNotStated))
+        .count();
+    if irreversible == 0 {
+        "  → fs₀".to_string()
+    } else {
+        format!("  → not fs₀: {irreversible} of these cannot be reversed")
+    }
+}
+
 /// Replay: animated replay of operation history with proof narration.
 pub fn replay(state: &ShellState, start: usize, end: usize) -> Result<()> {
     let end = end.min(state.history.len());
@@ -2565,7 +2661,12 @@ pub fn replay(state: &ShellState, start: usize, end: usize) -> Result<()> {
             format!("_{}", idx)
         };
         println!("    State: fs{} ──▶ fs_{}", from_state, idx + 1);
-        println!("    Theorem (model): {}", proof.theorem.bright_cyan());
+        let note = replay_note(crate::proof_refs::ProofReference::claim_for(op.op_type));
+        println!(
+            "    Theorem (model): {}{}",
+            proof.theorem.bright_cyan(),
+            note
+        );
         println!("    [{}] {}%", bar.bright_green(), (step * 100) / total);
         println!();
 
@@ -2578,20 +2679,22 @@ pub fn replay(state: &ShellState, start: usize, end: usize) -> Result<()> {
         "Total".bright_white().bold(),
         total
     );
-    println!(
-        "Each has a reversal theorem about the model; the link from the model to this code is tested, not proved."
-    );
+    let claims: Vec<crate::proof_refs::Claim> = (start..end)
+        .map(|idx| crate::proof_refs::ProofReference::claim_for(state.history[idx].op_type))
+        .collect();
+    println!("{}", replay_summary(&claims));
 
     let composition = crate::proof_refs::COMPOSITION_REVERSIBLE;
     println!(
-        "Composition theorem (model): {}",
-        composition.theorem.bright_cyan()
+        "Composition theorem (model): {}{}",
+        composition.theorem.bright_cyan(),
+        replay_composition_note(&claims)
     );
 
-    // Show full undo path
+    // Show the undo path
     if total > 0 {
         println!();
-        println!("{}", "Full undo path:".bright_yellow());
+        println!("{}", "Undo path:".bright_yellow());
         for idx in (start..end).rev() {
             let op = &state.history[idx];
             let inv = op
@@ -2604,7 +2707,7 @@ pub fn replay(state: &ShellState, start: usize, end: usize) -> Result<()> {
             }
             println!();
         }
-        println!("  → fs₀");
+        println!("{}", replay_path_end(&claims));
     }
 
     Ok(())
@@ -2613,6 +2716,118 @@ pub fn replay(state: &ShellState, start: usize, end: usize) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A replay that holds an operation with no inverse does not say that
+    /// its undo path ends at the first state, nor that the composition
+    /// theorem covers it. It said both.
+    #[test]
+    fn test_replay_does_not_claim_a_way_back_past_an_irreversible_step() {
+        use crate::proof_refs::Claim;
+
+        let reversible = [Claim::Reversal, Claim::Reversal];
+        assert_eq!(replay_path_end(&reversible), "  → fs₀");
+        assert_eq!(replay_composition_note(&reversible), "");
+
+        let with_obliteration = [Claim::Reversal, Claim::Irreversible];
+        let end = replay_path_end(&with_obliteration);
+        assert!(end.contains("not fs₀"), "{end}");
+        assert!(end.contains("1 of these cannot be reversed"), "{end}");
+        let note = replay_composition_note(&with_obliteration);
+        assert!(note.contains("1 of the 2 here"), "{note}");
+
+        // A change to a variable can be undone, so the path still ends at
+        // the first state. The composition theorem is not about it.
+        let with_variable = [Claim::Reversal, Claim::ReversalNotStated];
+        assert_eq!(replay_path_end(&with_variable), "  → fs₀");
+        let note = replay_composition_note(&with_variable);
+        assert!(note.contains("1 of the 2 here"), "{note}");
+
+        let unstated = [Claim::IrreversibleNotStated];
+        assert!(replay_path_end(&unstated).contains("not fs₀"));
+    }
+
+    /// The closing line of a replay says what the theorems it showed claim.
+    /// It claimed a reversal theorem for every operation, an obliteration
+    /// included.
+    #[test]
+    fn test_replay_summary_says_what_each_theorem_claims() {
+        use crate::proof_refs::Claim;
+
+        let all_reversible = replay_summary(&[Claim::Reversal, Claim::Reversal]);
+        assert!(
+            all_reversible.starts_with("Each has a reversal theorem"),
+            "{all_reversible}"
+        );
+
+        let mixed = replay_summary(&[
+            Claim::Reversal,
+            Claim::ReversalOfAWrite,
+            Claim::Irreversible,
+        ]);
+        assert!(!mixed.contains("Each has"), "{mixed}");
+        assert!(
+            mixed.contains("With a reversal theorem about the model: 1."),
+            "{mixed}"
+        );
+        assert!(
+            mixed.contains("(none is stated for a redirection): 1."),
+            "{mixed}"
+        );
+        assert!(
+            mixed.contains(
+                "Not reversible, with a theorem that the operation is not injective in the model: 1."
+            ),
+            "{mixed}"
+        );
+        assert!(!mixed.contains("no theorem stated"), "{mixed}");
+        assert!(mixed.ends_with("Where a theorem is shown, the link from the model to this code is tested, not proved."), "{mixed}");
+
+        // A change to a variable has no theorem, and the replay says so
+        // rather than count it among the reversal theorems.
+        let with_variables = replay_summary(&[
+            Claim::Reversal,
+            Claim::ReversalNotStated,
+            Claim::ReversalNotStated,
+            Claim::IrreversibleNotStated,
+        ]);
+        assert!(!with_variables.contains("Each has"), "{with_variables}");
+        assert!(
+            with_variables.contains("With a reversal theorem about the model: 1."),
+            "{with_variables}"
+        );
+        assert!(
+            with_variables
+                .contains("Reversed from the shell's own record, with no theorem stated: 2."),
+            "{with_variables}"
+        );
+        assert!(
+            with_variables.contains("Not reversible, with no theorem stated: 1."),
+            "{with_variables}"
+        );
+
+        // A replay of changes to variables alone claims no theorem at all.
+        let only_variables = replay_summary(&[Claim::ReversalNotStated]);
+        assert!(
+            only_variables.starts_with("With a reversal theorem about the model: 0."),
+            "{only_variables}"
+        );
+    }
+
+    /// The note beside the theorem of one step says what the theorem is
+    /// about, and says nothing where the theorem is a reversal theorem for
+    /// the operation itself.
+    #[test]
+    fn test_replay_note_for_each_claim() {
+        use crate::proof_refs::Claim;
+
+        assert_eq!(replay_note(Claim::Reversal), "");
+        assert!(replay_note(Claim::ReversalOfAWrite).contains("not for a redirection"));
+        assert!(replay_note(Claim::ReversalNotStated).contains("its own record"));
+        assert!(replay_note(Claim::Irreversible).contains("not injective in the model"));
+        assert!(replay_note(Claim::Irreversible).contains("cannot be reversed"));
+        assert!(replay_note(Claim::IrreversibleNotStated).contains("cannot be reversed"));
+        assert!(!replay_note(Claim::IrreversibleNotStated).contains("injective"));
+    }
 
     #[test]
     fn test_parse_chmod_octal_755() {

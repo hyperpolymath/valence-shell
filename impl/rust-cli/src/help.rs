@@ -319,7 +319,7 @@ fn display_command_list() -> Result<()> {
         "help <command>".bright_cyan()
     );
     println!(
-        "The built-in file commands take one operand each (two for cp, mv and ln -s) and no options."
+        "The built-in file commands take one operand each; cp, mv and ln -s take two, and chmod and chown take a mode or an owner and then one file. None takes an option, apart from the -s of ln -s."
     );
 
     Ok(())

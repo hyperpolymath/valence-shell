@@ -3372,14 +3372,16 @@ fn step_count(name: &str, args: &[String]) -> Result<usize> {
         [] => Ok(1),
         [count] => match count.parse::<usize>() {
             Ok(n) if n > 0 => Ok(n),
-            _ => Err(anyhow!(
+            _ => Err(Refusal(format!(
                 "{name}: '{count}' is not a count of operations; nothing was done"
-            )),
+            ))
+            .into()),
         },
-        _ => Err(anyhow!(
+        _ => Err(Refusal(format!(
             "{name}: takes one count, but {} arguments were given; nothing was done",
             args.len()
-        )),
+        ))
+        .into()),
     }
 }
 

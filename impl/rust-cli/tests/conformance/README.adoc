@@ -17,7 +17,8 @@ end can do equals what this battery shows it does.
   is a comment object.
 
 | `known_failing.txt`
-| The ids of the cases that do not match today. A ratchet: it may only shrink.
+| The ids of the cases that do not match today. A ratchet: a case that has
+  matched never goes onto it (see "The ratchet" and "Adding a case").
 
 | `../conformance_battery.rs`
 | The test. It starts the built `vsh` on each case in a fresh directory and
@@ -85,9 +86,14 @@ operand. A case must be able to fail: check that its set-up runs.
 
 . Append a line to `battery.jsonl` with a new id of the form `group-NN`.
 . Take `out` and `rc` from a reference shell run in an empty directory.
-. Run the test. If the case fails, the shell has a gap: add the id to
-  `known_failing.txt` and raise `KNOWN_FAILING_COUNT` in the same change, and
-  say so.
+. Run the test. If the case fails, the shell has a gap. Fix the shell before
+  the case is merged. If the fix does not belong to the work in hand, keep the
+  case out of `battery.jsonl` for now, and record its command line and the
+  reference result with the work that will close the gap.
+
+A new case does not go onto `known_failing.txt`, and `KNOWN_FAILING_COUNT` is
+not raised for one. The list is the set of failures measured when the battery
+was added, and it only shrinks.
 
 == Limits
 

@@ -236,22 +236,44 @@ fn main() -> Result<()> {
         }
     }
 
-    // Run EXIT trap if registered
-    if let Some(exit_cmd) = state
-        .traps
-        .get(vsh::posix_builtins::TrapSignal::Exit)
-        .map(|s| s.to_string())
-    {
-        if let Ok(cmd) = vsh::parser::parse_command(&exit_cmd) {
-            let _ = cmd.execute(&mut state);
-        }
-    }
+    run_exit_trap(&mut state);
 
     if interactive {
         std::process::exit(state.last_exit_code);
     }
 
     Ok(())
+}
+
+/// Run the EXIT trap, if one is set.
+///
+/// The text of a trap is a list of commands, as a script is:
+/// `trap 'echo a; echo b' EXIT` runs both. It used to be read as one
+/// command, so `echo` was given `a; echo b` as its words. A statement that
+/// cannot be read is reported and the rest still run; `exit` in the trap
+/// ends it.
+fn run_exit_trap(state: &mut state::ShellState) {
+    let Some(body) = state
+        .traps
+        .get(vsh::posix_builtins::TrapSignal::Exit)
+        .map(|s| s.to_string())
+    else {
+        return;
+    };
+    for statement in vsh::parser::split_on_statement_separators(&body) {
+        let statement = statement.trim();
+        if statement.is_empty() {
+            continue;
+        }
+        match vsh::parser::parse_command(statement) {
+            Ok(cmd) => {
+                if matches!(cmd.execute(state), Ok(ExecutionResult::Exit)) {
+                    break;
+                }
+            }
+            Err(e) => eprintln!("vsh: trap: {e}"),
+        }
+    }
 }
 
 /// Execute script content (string of commands, one per line or semicolon-separated)
@@ -306,16 +328,7 @@ fn execute_script_content(content: &str, state: &mut state::ShellState) -> Resul
         }
     }
 
-    // Run EXIT trap if registered
-    if let Some(exit_cmd) = state
-        .traps
-        .get(vsh::posix_builtins::TrapSignal::Exit)
-        .map(|s| s.to_string())
-    {
-        if let Ok(cmd) = vsh::parser::parse_command(&exit_cmd) {
-            let _ = cmd.execute(state);
-        }
-    }
+    run_exit_trap(state);
 
     std::process::exit(state.last_exit_code);
 }

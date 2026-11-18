@@ -425,3 +425,60 @@ fn a_malformed_line_is_still_a_parse_error() {
         Ok(Parsed::Refused { .. })
     ));
 }
+
+/// What follows a command sees its status as `$?`: the right side of `||`
+/// and `&&`, and the branches of an `if`. They used to see the status of
+/// whatever had run before the whole list, so `false || echo $?` printed 0.
+#[test]
+fn what_follows_a_command_sees_its_status() {
+    let dir = tempfile::tempdir().expect("temporary directory");
+
+    let run = vsh(
+        dir.path(),
+        "false || echo \"left $?\"; true && echo \"left $?\"; \
+         if false; then echo yes; else echo \"condition $?\"; fi; \
+         mkdir -p x || echo \"refused $?\"",
+    );
+
+    assert_eq!(
+        run.stdout, "left 1\nleft 0\ncondition 1\nrefused 1\n",
+        "stderr: {}",
+        run.stderr
+    );
+
+    // The condition of an `elif` and of a loop is published in the same way.
+    let run = vsh(
+        dir.path(),
+        "if false; then echo a; elif true; then echo \"elif $?\"; fi; \
+         until false; do echo \"loop $?\"; exit 0; done",
+    );
+
+    assert_eq!(run.stdout, "elif 0\nloop 1\n", "stderr: {}", run.stderr);
+}
+
+/// A count that `undo` or `redo` cannot read is a refusal like the others:
+/// the command fails and the line goes on. It used to end the line.
+#[test]
+fn a_count_that_cannot_be_read_fails_only_its_own_command() {
+    let dir = tempfile::tempdir().expect("temporary directory");
+
+    let run = vsh(
+        dir.path(),
+        "undo many || echo first; redo 1 2 || echo second",
+    );
+
+    assert_eq!(run.stdout, "first\nsecond\n", "stderr: {}", run.stderr);
+    assert_eq!(run.code, 0);
+}
+
+/// The text of an EXIT trap is a list of commands, and each of them runs.
+/// It used to be read as one command: `echo` was given `first; echo second`.
+#[test]
+fn an_exit_trap_runs_every_statement_of_its_text() {
+    let dir = tempfile::tempdir().expect("temporary directory");
+
+    let run = vsh(dir.path(), "trap 'echo first; echo second' EXIT; exit 3");
+
+    assert_eq!(run.stdout, "first\nsecond\n", "stderr: {}", run.stderr);
+    assert_eq!(run.code, 3);
+}

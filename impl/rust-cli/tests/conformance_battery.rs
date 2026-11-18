@@ -175,6 +175,9 @@ fn run(case: &Case) -> Outcome {
         .arg("-c")
         .arg(&case.cmd)
         .current_dir(dir.path())
+        // A home of the test's own, so that a case that reads `$HOME` or
+        // `~` gives the same answer on every machine.
+        .env("HOME", dir.path())
         .env("NO_COLOR", "1")
         .env_remove("RUST_BACKTRACE")
         .stdin(Stdio::null())

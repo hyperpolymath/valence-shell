@@ -31,8 +31,10 @@ shrink, and a case may not be added to it to make a build pass.
 Works through the built shell (passing battery cases, or checked by hand interactively):
 
 - Built-in file operations with undo/redo (`mkdir`, `rmdir`, `touch`, `rm`, `cp`, `mv`,
-  `ln -s`, `chmod`, `chown`) in their plain forms only: one operand each (two for `cp`,
-  `mv`, `ln -s`) and no options. An option or an extra operand is refused, and nothing is done
+  `ln -s`, `chmod`, `chown`) in their plain forms only: one operand each, two for `cp`,
+  `mv` and `ln -s`, and a mode or an owner followed by one file for `chmod` and `chown`. None
+  takes an option (the `-s` of `ln -s` apart). An option or an extra operand is refused, and
+  nothing is done
 - External command execution via PATH lookup; pipelines of external programs
 - `>`, `>>`, `<` and here strings (`<<<word`); `&&` and `||`
 - `test`, `[ ... ]`, and `[[ ... ]]` on its own; `if/elif/else`, `while`, a single `for`, `case`
@@ -56,7 +58,9 @@ In the source and unit-tested, but NOT working through the built shell (battery 
 - `export` and `VAR=value cmd` do not reach the program being run
 - Here documents passed with `-c`; redirections on built-in commands outside the session root
   (`ls nosuch 2>/dev/null`)
-- A failing built-in ends a `-c` script
+- A built-in that fails with an error (`mkdir` on a directory that exists, say) ends a `-c`
+  script, and the rest of an `&&` or `||` list with it. A refused built-in and `false` do
+  not: they fail with status 1 and the script goes on
 - Ctrl-Z does not suspend a running program
 
 Not exercised by the battery: process substitution, command correction, the pager.

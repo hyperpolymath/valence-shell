@@ -1019,6 +1019,8 @@ impl ExecutableCommand for Command {
                     ExecutionResult::Return { .. } => return Ok(cond_result),
                     ExecutionResult::ExternalCommand { exit_code } => exit_code,
                 };
+                // What follows the condition sees its status as `$?`.
+                state.last_exit_code = cond_exit;
 
                 if cond_exit == 0 {
                     // Condition succeeded — execute then body
@@ -1034,6 +1036,7 @@ impl ExecutableCommand for Command {
                         ExecutionResult::Return { .. } => return Ok(elif_result),
                         ExecutionResult::ExternalCommand { exit_code } => exit_code,
                     };
+                    state.last_exit_code = elif_exit;
 
                     if elif_exit == 0 {
                         return execute_block(elif_body, state);
@@ -1132,6 +1135,10 @@ impl ExecutableCommand for Command {
                     ExecutionResult::Return { .. } => return Ok(left_result),
                     ExecutionResult::ExternalCommand { exit_code } => exit_code,
                 };
+                // The right side sees the status of the left as `$?`:
+                // `false || echo $?` prints 1. It printed the status of
+                // whatever had run before the list.
+                state.last_exit_code = left_exit_code;
 
                 // Short-circuit evaluation based on operator
                 match operator {
@@ -1673,6 +1680,10 @@ fn execute_function_call(
             Err(e) => {
                 eprintln!("{}: {}", func_def.name, e);
                 state.last_exit_code = 1;
+                // The function's own status too: a body whose last line
+                // could not be read returned the result of the line before
+                // it, so the call counted as a success.
+                last_result = ExecutionResult::ExternalCommand { exit_code: 1 };
             }
         }
     }
@@ -1762,6 +1773,7 @@ fn execute_loop(
             }
             ExecutionResult::ExternalCommand { exit_code } => exit_code,
         };
+        state.last_exit_code = cond_exit;
         let should_continue = match kind {
             LoopKind::While => cond_exit == 0,
             LoopKind::Until => cond_exit != 0,

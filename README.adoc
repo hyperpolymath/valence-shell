@@ -56,7 +56,7 @@ Valence Shell is a formally verified shell with proven reversibility guarantees.
 *Measured, not claimed.* `impl/rust-cli/tests/conformance_battery.rs` starts the built shell on 128 everyday command lines and compares the result with bash. On 2026-11-17, 67 match. The cases that fail are listed in `impl/rust-cli/tests/conformance/known_failing.txt`, which may only shrink. Below, `[x]` means it works through the built shell, `[~]` means in part, and the limit is stated.
 ====
 
-* [~] Built-in file commands with undo: `mkdir`, `rmdir`, `touch`, `rm`, `cp`, `mv`, `ln -s`, `chmod`, `chown`, in their plain forms only (one operand each, two for `cp`, `mv` and `ln -s`; no options). An option or an extra operand is refused and nothing is done
+* [~] Built-in file commands with undo: `mkdir`, `rmdir`, `touch`, `rm`, `cp`, `mv`, `ln -s`, `chmod`, `chown`, in their plain forms only (one operand each; two for `cp`, `mv` and `ln -s`; a mode or an owner and then one file for `chmod` and `chown`; no options, the `-s` of `ln -s` apart). An option or an extra operand is refused and nothing is done
 * [ ] Wildcard, brace and tilde expansion: applied only when the command also has a redirection
 * [ ] Quoting: a quoted `*`, `?`, `[`, `{` or `~` reaches other programs with a backslash added
 * [x] Unix Pipelines: Multi-stage pipelines of external programs (`cmd1 | cmd2 | cmd3`)
