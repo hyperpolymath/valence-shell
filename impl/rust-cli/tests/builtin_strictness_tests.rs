@@ -482,3 +482,23 @@ fn an_exit_trap_runs_every_statement_of_its_text() {
     assert_eq!(run.stdout, "first\nsecond\n", "stderr: {}", run.stderr);
     assert_eq!(run.code, 3);
 }
+
+/// A statement of an EXIT trap that fails is reported, and the statements
+/// after it still run. Its error was dropped without a word.
+#[test]
+fn an_exit_trap_reports_a_statement_that_fails() {
+    let dir = tempfile::tempdir().expect("temporary directory");
+
+    let run = vsh(
+        dir.path(),
+        "mkdir d\ntrap 'mkdir d; echo second' EXIT\necho body",
+    );
+
+    assert!(
+        run.stdout.ends_with("body\nsecond\n"),
+        "stdout: {}",
+        run.stdout
+    );
+    assert!(run.stderr.contains("vsh: trap: "), "stderr: {}", run.stderr);
+    assert!(run.stderr.contains("exists"), "stderr: {}", run.stderr);
+}

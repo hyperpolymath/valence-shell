@@ -250,8 +250,8 @@ fn main() -> Result<()> {
 /// The text of a trap is a list of commands, as a script is:
 /// `trap 'echo a; echo b' EXIT` runs both. It used to be read as one
 /// command, so `echo` was given `a; echo b` as its words. A statement that
-/// cannot be read is reported and the rest still run; `exit` in the trap
-/// ends it.
+/// cannot be read, or that fails with an error, is reported and the rest
+/// still run; `exit` in the trap ends it.
 fn run_exit_trap(state: &mut state::ShellState) {
     let Some(body) = state
         .traps
@@ -265,12 +265,10 @@ fn run_exit_trap(state: &mut state::ShellState) {
         if statement.is_empty() {
             continue;
         }
-        match vsh::parser::parse_command(statement) {
-            Ok(cmd) => {
-                if matches!(cmd.execute(state), Ok(ExecutionResult::Exit)) {
-                    break;
-                }
-            }
+        let ran = vsh::parser::parse_command(statement).and_then(|cmd| cmd.execute(state));
+        match ran {
+            Ok(ExecutionResult::Exit) => break,
+            Ok(_) => {}
             Err(e) => eprintln!("vsh: trap: {e}"),
         }
     }
