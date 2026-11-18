@@ -479,8 +479,11 @@ fn stdin_from_bytes(content: &[u8], what: &str) -> Result<Stdio> {
 ///
 /// For each argument:
 /// - If it contains glob metacharacters (*, ?, [, {), expand it
-/// - If expansion succeeds, use matching paths
-/// - If expansion fails or returns empty, use literal pattern (POSIX behavior)
+/// - If expansion finds matches, use them
+/// - If expansion finds nothing, or the word is not a valid pattern, use the
+///   word literally (POSIX behavior)
+/// - If expansion stops at a limit, fail: the command is not run with a
+///   literal or partial argument list in place of the real expansion
 /// - If no metacharacters, use argument as-is
 ///
 /// # POSIX Behavior
@@ -495,10 +498,22 @@ fn stdin_from_bytes(content: &[u8], what: &str) -> Result<Stdio> {
 /// expand_glob_args(&["rm", "*.xyz"], state)    // -> ["rm", "*.xyz"] (no .xyz files)
 /// ```
 fn expand_glob_args(args: &[String], _state: &ShellState) -> Result<Vec<String>> {
-    let mut expanded: Vec<String> = Vec::new();
-
     // Get current working directory for glob expansion
     let cwd = std::env::current_dir().context("Failed to get current working directory")?;
+    expand_glob_args_in(args, &cwd, &glob::GlobLimits::DEFAULT)
+}
+
+/// [`expand_glob_args`] with an explicit directory and limits.
+///
+/// # Errors
+/// Returns the [`glob::GlobLimitExceeded`] error of the first argument whose
+/// expansion reaches a limit.
+fn expand_glob_args_in(
+    args: &[String],
+    cwd: &std::path::Path,
+    limits: &glob::GlobLimits,
+) -> Result<Vec<String>> {
+    let mut expanded: Vec<String> = Vec::new();
 
     for arg in args {
         // Check if argument contains glob metacharacters
@@ -507,25 +522,24 @@ fn expand_glob_args(args: &[String], _state: &ShellState) -> Result<Vec<String>>
             let brace_expanded = glob::expand_braces(arg);
 
             // Then expand each brace result for glob patterns
-            let mut glob_matches: Vec<String> = Vec::new();
             for pattern in &brace_expanded {
                 // Expand glob pattern relative to current directory
-                match glob::expand_glob(pattern, &cwd) {
-                    Ok(matches) if !matches.is_empty() => {
-                        // Found matches - add them as strings
-                        for path in matches {
-                            glob_matches.push(path.to_string_lossy().to_string());
-                        }
+                match glob::expand_glob_with_limits(pattern, cwd, limits) {
+                    Ok(expansion) if !expansion.paths.is_empty() => {
+                        expanded.extend(
+                            expansion
+                                .paths
+                                .iter()
+                                .map(|path| path.to_string_lossy().to_string()),
+                        );
                     }
-                    _ => {
-                        // No matches or error - use literal pattern (POSIX behavior)
-                        glob_matches.push(pattern.clone());
-                    }
+                    // A limit is not "no match": substituting the literal word
+                    // would run the command on the wrong arguments.
+                    Err(e) if e.is::<glob::GlobLimitExceeded>() => return Err(e),
+                    // No matches or not a valid pattern - use literal (POSIX behavior)
+                    _ => expanded.push(pattern.clone()),
                 }
             }
-
-            // Add all matches (or literal if no matches)
-            expanded.extend(glob_matches);
         } else {
             // No glob pattern - use argument as-is
             expanded.push(arg.clone());
@@ -812,5 +826,32 @@ mod tests {
         let stages = vec![("true".to_string(), vec![])];
         let exit_code = execute_pipeline(&stages, &[], &mut state).unwrap();
         assert_eq!(exit_code, 0, "Single-stage pipeline should work");
+    }
+    #[test]
+    fn glob_args_use_the_literal_word_when_nothing_matches() {
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(dir.path().join("a.txt"), b"").unwrap();
+        let args = vec!["*.txt".to_string(), "*.none".to_string(), "[z-".to_string()];
+        let out = expand_glob_args_in(&args, dir.path(), &glob::GlobLimits::DEFAULT).unwrap();
+        assert_eq!(out, ["a.txt", "*.none", "[z-"]);
+    }
+
+    #[test]
+    fn glob_args_fail_instead_of_substituting_the_literal_at_a_limit() {
+        let dir = tempfile::TempDir::new().unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("f{i}.txt")), b"").unwrap();
+        }
+        let limits = glob::GlobLimits {
+            max_matches: 4,
+            ..glob::GlobLimits::DEFAULT
+        };
+        let args = vec!["-l".to_string(), "*.txt".to_string()];
+        let err = expand_glob_args_in(&args, dir.path(), &limits).unwrap_err();
+        let stopped = err
+            .downcast_ref::<glob::GlobLimitExceeded>()
+            .expect("the limit error must reach the caller");
+        assert_eq!(stopped.exceeded.axis, "matches held");
+        assert!(err.to_string().contains("over the limit of 4"), "{err}");
     }
 }

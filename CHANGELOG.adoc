@@ -11,6 +11,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 == [Unreleased]
 
+=== Fixed — 2026-11-18 (glob expansion out of memory, #191)
+
+- `**` no longer follows symbolic links to directories, so a link back to a
+  parent directory can no longer make an expansion grow without end. On the old
+  code `**/*` over a 7-entry tree with two such links passed 2.5 GB in 15 s,
+  and `**/no-such-name` over it never returned. ClusterFuzzLite hit the same
+  fault with `/**/*` (libFuzzer out-of-memory at 2560 MB, PR #230, check run
+  134118693669). The rule now matches bash 5.2 with `globstar` for patterns
+  that start with `**`.
+- Glob expansion is metered while it runs: at most 10,000,000 file-system
+  reads, 100,000 matches and 6 MiB of matches per pattern. Reaching a limit is
+  a `GlobLimitExceeded` error that names the limit, the usage so far and the
+  directory being read; the command is not run. Before, the match limit was
+  checked only after every path had been collected, and an external command
+  then received the literal pattern instead of an error.
+- `.*` and `.h*` find hidden files, as bash does.
+- A file name that is not valid UTF-8 no longer panics the expansion.
+- The `fuzz_glob_expansion` target expands over a small fixed tree instead of
+  the runner's file system, and checks the limits on every input.
+- `impl/rust-cli/fuzz/Cargo.lock` regenerated; it was missing `hmac` and
+  `subtle`.
+
+=== Added — 2026-11-18
+
+- `src/grade.rs`: resource grades. A cost adds up in sequence; an occupancy
+  keeps a high-water mark. A `Meter` refuses the charge that would pass its
+  limit. Glob expansion is the first user; operation-history retention (#190)
+  is the intended second. The grade laws are property-tested, not proved.
+
 === Changed — 2026-11-01 (assurance-boundary re-audit)
 
 - Corrected prose that had drifted across the assurance boundary. The audit

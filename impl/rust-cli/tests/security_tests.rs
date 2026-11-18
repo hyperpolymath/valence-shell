@@ -430,12 +430,29 @@ fn security_recursive_glob_bounded() {
     }
 
     // Total directories: 3^1 + 3^2 + ... + 3^5 = 363
-    // Glob should have depth limit or timeout for larger structures
+    let all = vsh::glob::expand_glob("**/*", temp.path()).unwrap();
+    assert_eq!(all.len(), 363);
 
-    // This would be a recursive glob like: **/*
-    // Should either limit depth or timeout gracefully
+    // Under a smaller limit the same walk stops with a typed error that names
+    // the limit, instead of returning a truncated list (issue #191).
+    let limits = vsh::glob::GlobLimits {
+        max_matches: 100,
+        ..vsh::glob::GlobLimits::DEFAULT
+    };
+    let err = vsh::glob::expand_glob_with_limits("**/*", temp.path(), &limits).unwrap_err();
+    let stopped = err
+        .downcast_ref::<vsh::glob::GlobLimitExceeded>()
+        .expect("a limit error");
+    assert_eq!(stopped.exceeded.axis, "matches held");
+    assert_eq!(stopped.exceeded.limit, 100);
 
-    // A production glob-depth limit remains tracked by #191.
+    // Walk budget: a pattern that matches nothing is still bounded.
+    let limits = vsh::glob::GlobLimits {
+        max_reads: 50,
+        ..vsh::glob::GlobLimits::DEFAULT
+    };
+    let err = vsh::glob::expand_glob_with_limits("**/none", temp.path(), &limits).unwrap_err();
+    assert!(err.is::<vsh::glob::GlobLimitExceeded>());
 }
 
 // ============================================================

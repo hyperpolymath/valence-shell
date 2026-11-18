@@ -21,6 +21,7 @@ pub mod friendly_errors;
 pub mod fs_pure;
 pub mod functions;
 pub mod glob;
+pub mod grade;
 pub mod help;
 pub mod highlighter;
 pub mod history;

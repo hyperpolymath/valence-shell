@@ -152,7 +152,8 @@ creating empty exported var
 [width="100%",cols="29%,25%,46%",options="header",]
 |===
 |Feature |Status |Implementation
-|`+*+` (match any) |Done |`+glob+` crate
+|`+*+` (match any) |Done |`+glob+` crate `+Pattern+` per component;
+directory walk in `+glob.rs+` (2026-11-18)
 
 |`+?+` (single char) |Done |
 
@@ -161,7 +162,17 @@ creating empty exported var
 |`+[!...]+` negation |Done |
 
 |Hidden file exclusion |Done |`+require_literal_leading_dot: true+`
-(fixed 2026-02-12)
+(fixed 2026-02-12); `+.*+` and `+.h*+` now find hidden files (fixed
+2026-11-18; they previously gave only `+.+`/`+..+` or nothing)
+
+|Recursive `+**+` (bash globstar) |Done |Does not descend through symbolic
+links or into hidden directories. One known difference from bash 5.2: bash
+enters a symlinked directory for one more component when `+**+` is not the
+first component (2026-11-18)
+
+|Expansion limits |Done |10,000,000 file-system reads, 100,000 matches,
+6 MiB of matches; exceeding one is an error that names it, never a truncated
+or literal result (#191, 2026-11-18)
 
 |Brace expansion `+{a,b,c}+` |Done |Nested braces supported
 

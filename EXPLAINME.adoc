@@ -212,7 +212,8 @@ All share: *Multiple proof systems for cross-validation, honest status reporting
 
 | `impl/rust-cli/src/redirection.rs` | I/O redirection: > (write), >> (append), < (read), 2> (stderr), 2>> (append stderr), &> (both), 2>&1 (combine)
 
-| `impl/rust-cli/src/glob.rs` | POSIX-compliant glob expansion: *, ?, [...], {...}. Hidden file handling (requires explicit leading dot).
+| `impl/rust-cli/src/glob.rs` | Glob expansion: *, ?, [...], `**` (bash globstar rules), {...}. Hidden file handling (requires explicit leading dot). Bounded walk: limits on reads, matches and match bytes, with a typed error (#191).
+| `impl/rust-cli/src/grade.rs` | Resource grades: cumulative cost and high-water-mark occupancy, and a meter that refuses the charge over a limit. Laws are property-tested, not proved.
 
 | `impl/rust-cli/src/job_control.rs` | Job control: bg, fg, jobs, kill commands. Signal handling for Ctrl+Z (SIGTSTP), Ctrl+C (SIGINT).
 

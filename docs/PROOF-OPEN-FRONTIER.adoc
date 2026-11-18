@@ -119,6 +119,7 @@ Pure induction on list length.
 | File | `impl/rust-cli/src/glob.rs` — no proof today.
 | Why | Glob expansion is a frequent attack surface for DoS in shells. A complexity bound is a real security property.
 | Lift | Property test (`proptest`) for termination + complexity, then a formal bound in Lean 4.
+| Progress (2026-11-18) | `tested-only`. The walk now processes each (directory, pattern component) pair at most once and meters reads, matches and match bytes (`src/grade.rs`). `tests/glob_bounds_tests.rs` checks the reported read count against counts made directly from fixtures, and that a 12-component pattern over a 31-entry chain stays within 2 x 12 x 31 reads. Still `open` as a proof: no Lean bound and no Rust contract.
 |===
 
 [[A-7]]
