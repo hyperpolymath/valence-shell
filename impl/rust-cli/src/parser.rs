@@ -4299,20 +4299,26 @@ mod tests {
         let mut state = ShellState::new("/tmp/vsh_test").unwrap();
         state.set_variable("NAME", "Alice");
 
-        // Test external command with variable expansion
-        let cmd = parse_command("touch \"file_$NAME\"").unwrap();
-        match cmd {
-            Command::External { program, args, .. } => {
-                assert_eq!(program, "touch");
-                let expanded = expand_variables(&args[0].to_string(), &state);
-                assert_eq!(expanded, "file_Alice");
-            }
+        // An external command: its argument is a typed word, expanded by
+        // `word::expand_words`. `touch` is a builtin and would not take this
+        // path, so the old form of this test never ran its external arm.
+        let cmd = parse_command("wc \"file_$NAME\" \"a  $NAME\"x").unwrap();
+        let Command::External { program, args, .. } = cmd else {
+            panic!("Expected an external command");
+        };
+        assert_eq!(program, "wc");
+        let expansion =
+            crate::word::expand_words(&args, &mut state, crate::word::ProcessSubs::Refuse).unwrap();
+        // The parameter is expanded, the quotes are removed, and the spaces
+        // inside the quotes stay in one argument.
+        assert_eq!(expansion.lossy_fields(), ["file_Alice", "a  Alicex"]);
+
+        // The builtin still takes the older string form.
+        match parse_command("touch \"file_$NAME\"").unwrap() {
             Command::Touch { path, .. } => {
-                // Could also be parsed as Touch command
-                let expanded = expand_variables(&path, &state);
-                assert!(expanded.contains("file_"));
+                assert_eq!(expand_variables(&path, &state), "file_Alice");
             }
-            _ => panic!("Expected External or Touch command"),
+            other => panic!("Expected Touch, got {other:?}"),
         }
     }
 
