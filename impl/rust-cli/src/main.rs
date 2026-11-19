@@ -149,6 +149,13 @@ fn main() -> Result<()> {
 
     let mut state = state::ShellState::new(&root)?;
 
+    // Reap background jobs when SIGCHLD says a child has ended. If the
+    // handler cannot be installed, the shell polls at every safe point.
+    #[cfg(unix)]
+    if let Err(e) = vsh::job::install_sigchld_handler() {
+        eprintln!("vsh: warning: could not install SIGCHLD handler ({e})");
+    }
+
     // Mode 1: Execute inline command string (-c "command")
     if let Some(ref cmd_string) = cli.command_string {
         // Set positional parameters: $0 = "vsh", $1.. = script_args
@@ -304,6 +311,9 @@ fn execute_script_content(content: &str, state: &mut state::ShellState) -> Resul
         }
     }
 
+    // process::exit runs no destructors: drop the job table first, so the
+    // substitutions of ended jobs are released and running jobs keep theirs.
+    drop(std::mem::take(&mut state.jobs));
     std::process::exit(state.last_exit_code);
 }
 

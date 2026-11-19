@@ -171,3 +171,54 @@ fn a_job_that_ends_is_not_listed_again() {
         run.stdout
     );
 }
+
+#[test]
+fn a_read_still_gets_its_input_when_a_job_ends_during_it() {
+    // The background job ends while `read` waits on stdin, so SIGCHLD
+    // arrives during the read. The read must restart and get the line.
+    use std::io::Write;
+    let dir = TempDir::new().unwrap();
+    let out_path = dir.path().join(".stdout.txt");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_vsh"))
+        .arg("-c")
+        .arg("sleep 0.1 &\nread x\necho \"got:$x\"")
+        .current_dir(dir.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::from(std::fs::File::create(&out_path).unwrap()))
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("vsh runs");
+    let _guard = Cleanup(child.id());
+    std::thread::sleep(Duration::from_millis(600));
+    let mut stdin = child.stdin.take().unwrap();
+    stdin.write_all(b"hello\n").unwrap();
+    drop(stdin);
+    let started = Instant::now();
+    while child.try_wait().unwrap().is_none() {
+        if started.elapsed() > Duration::from_secs(10) {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("vsh did not finish");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let stdout = std::fs::read_to_string(&out_path).unwrap();
+    assert!(stdout.contains("got:hello"), "stdout: {stdout:?}");
+}
+
+#[test]
+fn a_job_that_ended_before_the_shell_exits_is_cleaned_at_exit() {
+    // The job ends during the last command, so no later command reaps it:
+    // the exit must release its substitution and remove the FIFO.
+    let dir = TempDir::new().unwrap();
+    let run = vsh(
+        dir.path(),
+        "sh -c 'sleep 0.3; cat \"$1\"' sh <(pwd) > late.out &\nsleep 0.8",
+        10,
+    );
+    assert!(run.success);
+    assert!(!std::fs::read_to_string(dir.path().join("late.out"))
+        .unwrap()
+        .is_empty());
+    assert_eq!(fifos_of(run.pid), Vec::<String>::new());
+}

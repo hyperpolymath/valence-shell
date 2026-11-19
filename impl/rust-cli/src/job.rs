@@ -12,6 +12,8 @@
 //! - Current and previous job markers
 
 use crate::process_sub::ProcessSubstitution;
+#[cfg(unix)]
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Job state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -238,6 +240,14 @@ impl JobTable {
     /// until [`JobTable::remove_job`]. The caller releases the substitutions.
     #[cfg(unix)]
     pub fn reap_finished(&mut self) -> Vec<FinishedJob> {
+        // With the handler installed, a clear flag means that no child has
+        // changed state since the last poll, so there is nothing to collect.
+        // The flag is cleared before the poll: a SIGCHLD that arrives during
+        // the poll sets it again for the next safe point. Without the
+        // handler, poll every time.
+        if SIGCHLD_HANDLER.load(Ordering::SeqCst) && !take_sigchld() {
+            return Vec::new();
+        }
         let mut finished = Vec::new();
         for job in &mut self.jobs {
             if job.state != JobState::Running {
@@ -313,6 +323,55 @@ impl Drop for JobTable {
             }
         }
     }
+}
+
+/// Set by the SIGCHLD handler: a child process has changed state since the
+/// reaper last looked. It starts set, so the first safe point polls.
+#[cfg(unix)]
+static SIGCHLD_SEEN: AtomicBool = AtomicBool::new(true);
+
+/// True once the SIGCHLD handler is installed. Until then the reaper polls at
+/// every safe point.
+#[cfg(unix)]
+static SIGCHLD_HANDLER: AtomicBool = AtomicBool::new(false);
+
+/// The SIGCHLD handler. It only stores to a lock-free atomic, which is
+/// async-signal-safe: no allocation, no lock, no I/O and no change to errno.
+#[cfg(unix)]
+extern "C" fn on_sigchld(_signal: libc::c_int) {
+    SIGCHLD_SEEN.store(true, Ordering::SeqCst);
+}
+
+/// Install the SIGCHLD handler, so that the reaper polls only after a child
+/// has changed state. `SA_RESTART` makes the kernel restart a read that the
+/// signal interrupts. Without the handler the reaper still polls at every safe
+/// point, so a failure here costs only the saved polls.
+#[cfg(unix)]
+pub fn install_sigchld_handler() -> std::io::Result<()> {
+    let handler: extern "C" fn(libc::c_int) = on_sigchld;
+    // SAFETY: an all-zero `sigaction` is a valid value (empty mask, no
+    // flags); the fields set below make it a plain handler. sigemptyset and
+    // sigaction get pointers to this live, exclusively borrowed value, and
+    // the old action is not requested (null). The handler is
+    // async-signal-safe (see `on_sigchld`).
+    let result = unsafe {
+        let mut action: libc::sigaction = std::mem::zeroed();
+        action.sa_sigaction = handler as libc::sighandler_t;
+        action.sa_flags = libc::SA_RESTART;
+        libc::sigemptyset(&mut action.sa_mask);
+        libc::sigaction(libc::SIGCHLD, &action, std::ptr::null_mut())
+    };
+    if result != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    SIGCHLD_HANDLER.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+/// Take the SIGCHLD flag: true if a child changed state since the last take.
+#[cfg(unix)]
+fn take_sigchld() -> bool {
+    SIGCHLD_SEEN.swap(false, Ordering::SeqCst)
 }
 
 #[cfg(test)]
@@ -474,5 +533,63 @@ mod tests {
         assert!(lines[0].contains("[1]"));
         assert!(lines[1].contains("[2]"));
         assert!(lines[1].contains("+")); // Current job marker
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_sigchld_handler_sets_the_flag() {
+        install_sigchld_handler().unwrap();
+        take_sigchld();
+        // SAFETY: getpid and kill take plain integers; the signal goes to
+        // this process, whose SIGCHLD handler only stores to an atomic.
+        unsafe {
+            libc::kill(libc::getpid(), libc::SIGCHLD);
+        }
+        let started = Instant::now();
+        while !take_sigchld() {
+            assert!(started.elapsed() < Duration::from_secs(5), "flag not set");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_read_interrupted_by_sigchld_is_restarted() {
+        // A raw read(2) is not retried by std: without SA_RESTART it returns
+        // EINTR when SIGCHLD arrives during it.
+        install_sigchld_handler().unwrap();
+        let mut fds = [0; 2];
+        // SAFETY: `fds` is a live array of two c_ints for pipe(2) to fill.
+        assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+        let (read_fd, write_fd) = (fds[0], fds[1]);
+        let (tx, rx) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            // SAFETY: pthread_self takes no arguments.
+            tx.send(unsafe { libc::pthread_self() }).unwrap();
+            let mut byte = 0u8;
+            // SAFETY: `byte` is a live, exclusively borrowed u8 and the length
+            // is 1; read_fd is the open read end of the pipe.
+            let n = unsafe { libc::read(read_fd, (&mut byte as *mut u8).cast(), 1) };
+            let errno = std::io::Error::last_os_error();
+            (n, byte, errno)
+        });
+        let thread = rx.recv().unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+        // SAFETY: `thread` is the live reader thread, blocked in read(2).
+        assert_eq!(unsafe { libc::pthread_kill(thread, libc::SIGCHLD) }, 0);
+        std::thread::sleep(Duration::from_millis(100));
+        // SAFETY: write_fd is the open write end; one byte from a live u8.
+        assert_eq!(
+            unsafe { libc::write(write_fd, (&b'x' as *const u8).cast(), 1) },
+            1
+        );
+        let (n, byte, errno) = reader.join().unwrap();
+        assert_eq!(n, 1, "read was interrupted: {errno}");
+        assert_eq!(byte, b'x');
+        // SAFETY: both descriptors are open and owned by this test.
+        unsafe {
+            libc::close(read_fd);
+            libc::close(write_fd);
+        }
     }
 }
