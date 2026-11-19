@@ -492,7 +492,10 @@ fn glob_pattern(encoded: &str) -> Option<String> {
         if ch == '\\' {
             let Some(next) = chars.next() else { continue };
             match (class.as_mut(), next) {
-                (Some(_), '-') => hyphen = true,
+                (Some(members), '-') => {
+                    *members += 1;
+                    hyphen = true;
+                }
                 // `*`, `?` and `[` are already literal inside a class.
                 (Some(members), '*' | '?' | '[') => {
                     *members += 1;
@@ -785,6 +788,18 @@ mod tests {
             ("z]*.txt", Quote::None),
         ]);
         assert_eq!(expand_in(dir.path(), &[w]), ["-.txt", "a.txt", "z.txt"]);
+    }
+
+    #[test]
+    fn a_sole_quoted_hyphen_closes_a_bracket_class() {
+        // ['-']*.txt
+        let dir = fixture(&["-.txt", "a.txt"]);
+        let w = word(&[
+            ("[", Quote::None),
+            ("-", Quote::Single),
+            ("]*.txt", Quote::None),
+        ]);
+        assert_eq!(expand_in(dir.path(), &[w]), ["-.txt"]);
     }
 
     #[test]

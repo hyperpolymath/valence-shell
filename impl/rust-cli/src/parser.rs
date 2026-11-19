@@ -965,7 +965,9 @@ fn parse_command_sub_dollar(chars: &mut std::iter::Peekable<std::str::Chars>) ->
     let mut double = false;
     let mut escaped = false;
 
-    for ch in chars.by_ref() {
+    // A nested $() has its own quotes, even inside outer double quotes.
+    let mut contexts = Vec::new();
+    while let Some(ch) = chars.next() {
         if escaped {
             escaped = false;
             cmd.push(ch);
@@ -984,6 +986,12 @@ fn parse_command_sub_dollar(chars: &mut std::iter::Peekable<std::str::Chars>) ->
                 double = !double;
                 cmd.push(ch);
             }
+            '$' if !single && chars.peek() == Some(&'(') => {
+                chars.next();
+                cmd.push_str("$(");
+                contexts.push((depth, single, double));
+                (depth, single, double) = (1, false, false);
+            }
             _ if single || double => cmd.push(ch),
             '(' => {
                 // Every `(` nests, so the `)` that closes `$((1+2))` or
@@ -994,7 +1002,11 @@ fn parse_command_sub_dollar(chars: &mut std::iter::Peekable<std::str::Chars>) ->
             ')' => {
                 depth -= 1;
                 if depth == 0 {
-                    return Ok(cmd);
+                    if let Some(context) = contexts.pop() {
+                        (depth, single, double) = context;
+                    } else {
+                        return Ok(cmd);
+                    }
                 }
                 cmd.push(ch);
             }
@@ -2603,9 +2615,14 @@ fn quoted_word_to_string(word: &QuotedWord) -> String {
             // so it is always an expansion, whatever quotes follow in the word.
             // Braces keep a following literal out of the name (`$A''b`).
             WordPart::Variable(name) | WordPart::BracedVariable(name) => {
-                result.push_str("${");
-                result.push_str(name);
-                result.push('}');
+                if matches!(name.as_str(), "?" | "$" | "#" | "@" | "*") {
+                    result.push('$');
+                    result.push_str(name);
+                } else {
+                    result.push_str("${");
+                    result.push_str(name);
+                    result.push('}');
+                }
             }
             WordPart::CommandSub(cmd) => {
                 // Command substitution - keep as-is for now
@@ -4274,6 +4291,42 @@ mod tests {
     // =========================================================================
     // Quote Parsing Tests (Phase 6 M5)
     // =========================================================================
+
+    #[test]
+    fn command_substitution_quotes_have_separate_nested_contexts() {
+        for source in [
+            r#"echo "$(echo ")")" tail"#,
+            r#"echo "$(echo '"')" tail"#,
+            r#"echo "$(echo "$(echo ')')")" tail"#,
+            r#"echo ')' "(" \) (echo nested) tail"#,
+            r#"echo $(echo "(") tail"#,
+        ] {
+            let input = format!("{source})suffix");
+            let mut chars = input.chars().peekable();
+            assert_eq!(parse_command_sub_dollar(&mut chars).unwrap(), source);
+            assert_eq!(chars.collect::<String>(), "suffix");
+        }
+        let mut chars = r#"echo "$(echo ")")""#.chars().peekable();
+        assert!(parse_command_sub_dollar(&mut chars).is_err());
+    }
+
+    #[test]
+    fn special_parameters_render_unbraced_and_names_keep_their_boundary() {
+        for name in ["?", "$", "#", "@", "*"] {
+            for source in [format!("${name}"), format!("${{{name}}}")] {
+                let tokens = tokenize(&source).unwrap();
+                let Token::Word(w) = &tokens[0] else {
+                    panic!("Expected word")
+                };
+                assert_eq!(quoted_word_to_string(w), format!("${name}"));
+            }
+        }
+        let tokens = tokenize("$A''suffix").unwrap();
+        let Token::Word(w) = &tokens[0] else {
+            panic!("Expected word")
+        };
+        assert_eq!(quoted_word_to_string(w), "${A}suffix");
+    }
 
     #[test]
     fn test_single_quotes_no_expansion() {
