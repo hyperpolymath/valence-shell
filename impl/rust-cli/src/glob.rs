@@ -308,7 +308,8 @@ pub fn expand_glob_continuing(
 ) -> Result<Expansion> {
     let compiled =
         Compiled::new(pattern).with_context(|| format!("Invalid glob pattern: {}", pattern))?;
-    let mut walker = Walker::new(pattern, base_dir, &compiled, limits, spent)?;
+    let mut walker = Walker::new(pattern, base_dir, &compiled, limits, spent)
+        .map_err(|stopped| anyhow::Error::new(*stopped))?;
     walker
         .run()
         .map_err(|stopped| anyhow::Error::new(*stopped))?;
@@ -427,20 +428,33 @@ impl<'a> Walker<'a> {
         compiled: &'a Compiled,
         limits: &GlobLimits,
         spent: GlobUsage,
-    ) -> Result<Self, crate::grade::Exceeded> {
+    ) -> Walk<Self> {
         // A usage already over a limit (a hand-built `GlobUsage`, for example)
-        // is refused here, so every meter starts within its limit.
+        // is refused here, before any read, so every meter starts within its
+        // limit. The refusal is the same structured error as a limit met on
+        // the walk, stopped at the base directory with the usage given.
+        let refuse = |exceeded| {
+            Box::new(GlobLimitExceeded {
+                pattern: pattern.to_string(),
+                exceeded,
+                usage: spent,
+                at: PathBuf::from("."),
+            })
+        };
         Ok(Walker {
             pattern,
             base,
             compiled,
-            reads: Meter::starting_at("file-system reads", limits.max_reads, spent.reads)?,
-            matches: Meter::starting_at("matches held", limits.max_matches, spent.matches)?,
+            reads: Meter::starting_at("file-system reads", limits.max_reads, spent.reads)
+                .map_err(refuse)?,
+            matches: Meter::starting_at("matches held", limits.max_matches, spent.matches)
+                .map_err(refuse)?,
             match_bytes: Meter::starting_at(
                 "bytes of matches held",
                 limits.max_match_bytes,
                 spent.match_bytes,
-            )?,
+            )
+            .map_err(refuse)?,
             max_listing_bytes: limits.max_listing_bytes,
             found: BTreeSet::new(),
         })
@@ -700,8 +714,21 @@ mod walk_tests {
             ..GlobUsage::default()
         };
         let err = expand_glob_continuing("*", t.path(), &limits, spent).unwrap_err();
-        let refused = err.downcast_ref::<Exceeded>().expect("an Exceeded refusal");
-        assert_eq!((refused.limit, refused.level), (2, 5));
+        // The structured glob error, so a caller that passes on only
+        // `GlobLimitExceeded` does not take the refusal for "no match".
+        let stopped = err
+            .downcast_ref::<GlobLimitExceeded>()
+            .expect("a GlobLimitExceeded refusal");
+        assert_eq!(
+            stopped.exceeded,
+            Exceeded {
+                axis: "file-system reads",
+                limit: 2,
+                level: 5
+            }
+        );
+        assert_eq!(stopped.usage, spent);
+        assert_eq!(stopped.at, PathBuf::from("."));
     }
 
     #[test]

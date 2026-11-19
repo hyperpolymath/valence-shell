@@ -119,14 +119,26 @@ impl ProcessSubstitution {
     /// its reader leave, and a `>(cmd)` reader sees end of file. A connected
     /// child is not cut short: the shell keeps waiting until it exits, so a
     /// `>(cmd)` reader still finishes the work it was given.
-    pub fn cleanup(mut self) -> Result<()> {
-        // Wait for background process to finish
+    pub fn cleanup(self) -> Result<()> {
+        self.finish(true)
+    }
+
+    /// Wait for the substitution to end, then remove its FIFO, without
+    /// releasing the child. For a background job, which may open the FIFO at
+    /// any later time: a release could end the child or remove the FIFO first.
+    pub fn cleanup_when_consumed(self) -> Result<()> {
+        self.finish(false)
+    }
+
+    fn finish(mut self, release: bool) -> Result<()> {
         if let Some(mut child) = self.child_process.take() {
             let status = loop {
                 if let Some(status) = child.try_wait()? {
                     break status;
                 }
-                self.release_waiting_child();
+                if release {
+                    self.release_waiting_child();
+                }
                 std::thread::sleep(std::time::Duration::from_millis(10));
             };
             // A `<(cmd)` writer whose reader has gone ends on SIGPIPE. That is
@@ -173,11 +185,12 @@ impl ProcessSubstitution {
     fn release_waiting_child(&self) {}
 }
 
-/// True when the process ended on SIGPIPE.
+/// True when the process ended on SIGPIPE, either itself or (through `sh`)
+/// as exit code 128 + SIGPIPE.
 #[cfg(unix)]
 fn ended_by_sigpipe(status: &std::process::ExitStatus) -> bool {
     use std::os::unix::process::ExitStatusExt;
-    status.signal() == Some(libc::SIGPIPE)
+    status.signal() == Some(libc::SIGPIPE) || status.code() == Some(128 + libc::SIGPIPE)
 }
 
 #[cfg(not(unix))]
@@ -424,6 +437,37 @@ mod tests {
         let text = std::fs::read_to_string(&sub.fifo_path).unwrap();
         assert_eq!(text, "hi\n");
         assert!(finishes_within(10, move || sub.cleanup().unwrap()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_sigpipe_end_counts_as_normal_also_through_sh() {
+        // The substitution runs through `sh`, which reports a child killed by
+        // SIGPIPE as exit code 128 + SIGPIPE, not as a signal.
+        use std::os::unix::process::ExitStatusExt;
+        use std::process::ExitStatus;
+        assert!(ended_by_sigpipe(&ExitStatus::from_raw(libc::SIGPIPE)));
+        assert!(ended_by_sigpipe(&ExitStatus::from_raw(
+            (128 + libc::SIGPIPE) << 8
+        )));
+        assert!(!ended_by_sigpipe(&ExitStatus::from_raw(1 << 8)));
+    }
+
+    #[test]
+    fn a_handed_off_input_substitution_waits_for_a_late_reader() {
+        // `cat <(cat FILE) &`: the shell hands the substitution off before the
+        // background job opens the FIFO. The writer must not be released and
+        // the FIFO must still exist when the job opens it.
+        let src = TempDir::new().unwrap();
+        let file = src.path().join("in.txt");
+        std::fs::write(&file, "hi\n").unwrap();
+        let (_dir, sub) = started(ProcessSubType::Input, &format!("cat {}", file.display()));
+        let path = sub.fifo_path.clone();
+        let handed_off = std::thread::spawn(move || sub.cleanup_when_consumed().unwrap());
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "hi\n");
+        assert!(finishes_within(10, move || handed_off.join().unwrap()));
+        assert!(!path.exists());
     }
 
     #[test]

@@ -285,6 +285,27 @@ impl Expansion {
             }
         }
     }
+
+    /// Hand the process substitutions of a background job to a detached
+    /// thread, which waits for each one to end and then removes its FIFO.
+    /// The job may open a FIFO at any later time, so nothing is released and
+    /// the shell does not wait.
+    // snip: a substitution that the job never opens stays blocked until the
+    // shell exits, and a FIFO is left in the temp directory when the shell
+    // exits first (`vsh -c 'cmd <(x) &'`). Release and remove them once the
+    // job table reaps background jobs.
+    pub fn cleanup_when_consumed(self) {
+        if self.process_subs.is_empty() {
+            return;
+        }
+        std::thread::spawn(move || {
+            for proc_sub in self.process_subs {
+                if let Err(e) = proc_sub.cleanup_when_consumed() {
+                    eprintln!("Warning: Failed to cleanup process substitution: {}", e);
+                }
+            }
+        });
+    }
 }
 
 /// Expand words relative to the current directory under the default limits.

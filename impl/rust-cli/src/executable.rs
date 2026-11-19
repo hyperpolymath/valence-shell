@@ -515,18 +515,21 @@ impl ExecutableCommand for Command {
                 // Execute main command
                 if *background {
                     // Background execution
-                    let _job_id = external::execute_external_background(
+                    match external::execute_external_background(
                         &expanded_program,
                         expanded_args,
                         redirects,
                         state,
-                    )
-                    .unwrap_or_else(|e| {
-                        eprintln!("{}: {}", expanded_program, e);
-                        0 // No job created
-                    });
-
-                    expansion.cleanup();
+                    ) {
+                        // The job may open a FIFO later: do not release or
+                        // remove one that it has not read yet.
+                        Ok(_job_id) => expansion.cleanup_when_consumed(),
+                        // No job: nothing will open the FIFOs.
+                        Err(e) => {
+                            eprintln!("{}: {}", expanded_program, e);
+                            expansion.cleanup();
+                        }
+                    }
 
                     Ok(ExecutionResult::Success)
                 } else {
