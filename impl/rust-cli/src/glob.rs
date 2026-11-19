@@ -572,9 +572,11 @@ impl<'a> Walker<'a> {
 
             match &compiled.components[index] {
                 Component::Literal(name) => {
-                    self.charge_read(&dir)?;
                     let child = dir.join(name);
                     if last {
+                        // One lookup. An intermediate component is charged by
+                        // `is_dir` below, so it is not charged here as well.
+                        self.charge_read(&dir)?;
                         let exists = fs::symlink_metadata(self.real(&child)).is_ok();
                         if exists && (!compiled.dirs_only || self.is_dir(&child, None, &dir)?) {
                             self.emit(child, &dir)?;
@@ -656,6 +658,29 @@ mod walk_tests {
         );
         assert_eq!(expand("src/**/c.rs", t.path()), ["src/sub/c.rs"]);
         assert!(expand("*.none", t.path()).is_empty());
+    }
+
+    #[test]
+    fn intermediate_literal_is_charged_once() {
+        // `real/file` needs two lookups: `real`, then `file`. A budget of two
+        // reads must be enough, and a budget of one must stop at the second.
+        let t = TempDir::new().unwrap();
+        fs::create_dir(t.path().join("real")).unwrap();
+        fs::write(t.path().join("real/file"), b"").unwrap();
+
+        let two = GlobLimits {
+            max_reads: 2,
+            ..GlobLimits::DEFAULT
+        };
+        let found = expand_glob_with_limits("real/file", t.path(), &two).unwrap();
+        assert_eq!(found.paths, [PathBuf::from("real/file")]);
+
+        let one = GlobLimits {
+            max_reads: 1,
+            ..GlobLimits::DEFAULT
+        };
+        let err = expand_glob_with_limits("real/file", t.path(), &one).unwrap_err();
+        assert!(err.downcast_ref::<GlobLimitExceeded>().is_some());
     }
 
     #[test]
