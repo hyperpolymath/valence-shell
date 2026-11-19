@@ -33,6 +33,9 @@ pub struct ProcessSubstitution {
     pub sub_type: ProcessSubType,
     /// Background process handle
     pub child_process: Option<Child>,
+    /// False once the substitution is left to a job that still runs: drop
+    /// then neither ends the child nor removes the FIFO.
+    owned: bool,
 }
 
 impl ProcessSubstitution {
@@ -85,6 +88,7 @@ impl ProcessSubstitution {
             command: cmd,
             sub_type,
             child_process: None,
+            owned: true,
         })
     }
 
@@ -153,6 +157,14 @@ impl ProcessSubstitution {
 }
 
 impl ProcessSubstitution {
+    /// Leave the substitution to a job that still runs when the shell exits.
+    /// The child keeps running and the FIFO stays, so the job can still open
+    /// it. Dropping a `Child` handle neither kills nor waits for the process.
+    pub fn leave_running(mut self) {
+        self.child_process = None;
+        self.owned = false;
+    }
+
     /// Open the end of the FIFO that the child waits for, without blocking,
     /// and close it again at once. An error only means that the child has not
     /// reached its own `open` yet (no reader for a `>(cmd)` FIFO); the caller
@@ -190,6 +202,9 @@ fn ended_by_sigpipe(_status: &std::process::ExitStatus) -> bool {
 /// Safety net: remove FIFO on drop if cleanup() was never called
 impl Drop for ProcessSubstitution {
     fn drop(&mut self) {
+        if !self.owned {
+            return;
+        }
         // Kill lingering child process
         if let Some(ref mut child) = self.child_process {
             let _ = child.kill();
@@ -440,6 +455,21 @@ mod tests {
             (128 + libc::SIGPIPE) << 8
         )));
         assert!(!ended_by_sigpipe(&ExitStatus::from_raw(1 << 8)));
+    }
+
+    #[test]
+    fn a_substitution_left_running_keeps_its_fifo_and_its_child() {
+        // At shell exit a job that still runs may open the FIFO later.
+        let src = TempDir::new().unwrap();
+        let file = src.path().join("in.txt");
+        std::fs::write(&file, "hi\n").unwrap();
+        let (_dir, sub) = started(ProcessSubType::Input, &format!("cat {}", file.display()));
+        let path = sub.fifo_path.clone();
+        sub.leave_running();
+        assert!(path.exists());
+        // The child was not killed: a late reader still gets its output.
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "hi\n");
+        std::fs::remove_file(&path).unwrap();
     }
 
     #[test]

@@ -309,7 +309,7 @@ impl Drop for JobTable {
         }
         for (_, subs) in self.process_subs.drain() {
             for sub in subs {
-                std::mem::forget(sub);
+                sub.leave_running();
             }
         }
     }
