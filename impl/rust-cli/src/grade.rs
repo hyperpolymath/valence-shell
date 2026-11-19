@@ -258,12 +258,25 @@ impl<G: Grade> Meter<G> {
 
     /// A meter for `axis` that starts from work already measured as `spent`,
     /// so that several pieces of work can share one limit.
-    pub const fn starting_at(axis: &'static str, limit: u64, spent: G) -> Self {
-        Meter {
+    ///
+    /// # Errors
+    /// Returns [`Exceeded`] when `spent` is already over `limit`. Such a meter
+    /// would break the invariant `level() <= limit()` before any charge, so it
+    /// is refused rather than stored.
+    pub fn starting_at(axis: &'static str, limit: u64, spent: G) -> Result<Self, Exceeded> {
+        let level = spent.level();
+        if level > limit {
+            return Err(Exceeded {
+                axis,
+                limit,
+                level: u128::from(level),
+            });
+        }
+        Ok(Meter {
             axis,
             limit,
             grade: spent,
-        }
+        })
     }
 
     /// Whether [`Meter::charge`] would accept `amount`, without recording it.
@@ -406,8 +419,28 @@ mod tests {
     }
 
     #[test]
+    fn a_meter_cannot_start_above_its_limit() {
+        // The invariant level() <= limit() holds from the start: a resumed
+        // grade over the limit is refused, not stored.
+        let refused = Meter::<Cost>::starting_at("steps", 1, Cost::of(2)).unwrap_err();
+        assert_eq!(
+            refused,
+            Exceeded {
+                axis: "steps",
+                limit: 1,
+                level: 2
+            }
+        );
+        let held = Occupancy::ZERO.then(Occupancy::of(5)).released(5);
+        assert!(Meter::<Occupancy>::starting_at("held", 4, held).is_err());
+        // Exactly at the limit is a valid start.
+        let at = Meter::<Cost>::starting_at("steps", 2, Cost::of(2)).unwrap();
+        assert_eq!(at.level(), 2);
+    }
+
+    #[test]
     fn a_meter_can_start_from_work_already_spent() {
-        let mut meter: Meter<Cost> = Meter::starting_at("steps", 10, Cost::of(8));
+        let mut meter: Meter<Cost> = Meter::starting_at("steps", 10, Cost::of(8)).unwrap();
         assert!(meter.check(2).is_ok());
         assert_eq!(meter.charge(3).unwrap_err().level, 11);
         assert_eq!(

@@ -308,7 +308,7 @@ pub fn expand_glob_continuing(
 ) -> Result<Expansion> {
     let compiled =
         Compiled::new(pattern).with_context(|| format!("Invalid glob pattern: {}", pattern))?;
-    let mut walker = Walker::new(pattern, base_dir, &compiled, limits, spent);
+    let mut walker = Walker::new(pattern, base_dir, &compiled, limits, spent)?;
     walker
         .run()
         .map_err(|stopped| anyhow::Error::new(*stopped))?;
@@ -427,21 +427,23 @@ impl<'a> Walker<'a> {
         compiled: &'a Compiled,
         limits: &GlobLimits,
         spent: GlobUsage,
-    ) -> Self {
-        Walker {
+    ) -> Result<Self, crate::grade::Exceeded> {
+        // A usage already over a limit (a hand-built `GlobUsage`, for example)
+        // is refused here, so every meter starts within its limit.
+        Ok(Walker {
             pattern,
             base,
             compiled,
-            reads: Meter::starting_at("file-system reads", limits.max_reads, spent.reads),
-            matches: Meter::starting_at("matches held", limits.max_matches, spent.matches),
+            reads: Meter::starting_at("file-system reads", limits.max_reads, spent.reads)?,
+            matches: Meter::starting_at("matches held", limits.max_matches, spent.matches)?,
             match_bytes: Meter::starting_at(
                 "bytes of matches held",
                 limits.max_match_bytes,
                 spent.match_bytes,
-            ),
+            )?,
             max_listing_bytes: limits.max_listing_bytes,
             found: BTreeSet::new(),
-        }
+        })
     }
 
     fn usage(&self) -> GlobUsage {
@@ -681,6 +683,25 @@ mod walk_tests {
         };
         let err = expand_glob_with_limits("real/file", t.path(), &one).unwrap_err();
         assert!(err.downcast_ref::<GlobLimitExceeded>().is_some());
+    }
+
+    #[test]
+    fn a_resumed_usage_over_a_limit_is_refused_before_any_read() {
+        // A hand-built usage that is already over a limit cannot start a walk:
+        // every meter must begin within its limit.
+        use crate::grade::{Cost, Exceeded, Grade};
+        let t = TempDir::new().unwrap();
+        let limits = GlobLimits {
+            max_reads: 2,
+            ..GlobLimits::DEFAULT
+        };
+        let spent = GlobUsage {
+            reads: Cost::of(5),
+            ..GlobUsage::default()
+        };
+        let err = expand_glob_continuing("*", t.path(), &limits, spent).unwrap_err();
+        let refused = err.downcast_ref::<Exceeded>().expect("an Exceeded refusal");
+        assert_eq!((refused.limit, refused.level), (2, 5));
     }
 
     #[test]
