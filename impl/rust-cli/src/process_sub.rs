@@ -15,6 +15,7 @@
 //! ```
 
 use anyhow::{anyhow, Result};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command as ProcessCommand};
 
@@ -154,30 +155,24 @@ fn start_command_with_output_redirect(
     // For FIFOs, we use shell redirection (sh -c "cmd > fifo") to avoid blocking
     // The shell handles the FIFO opening in the background properly
 
-    let cmd_string = match cmd {
+    // The arguments stay OsString values and reach the shell as positional
+    // parameters, forwarded with "$@". Quoting them into the script text would
+    // need UTF-8 and would lose the bytes of a name that is not UTF-8.
+    let (cmd_string, args): (String, Vec<OsString>) = match cmd {
         Command::External { program, args, .. } => {
             let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
-            let expanded_args =
-                crate::word::expand_words(args, state, crate::word::ProcessSubs::Refuse)?
-                    .lossy_fields();
-
-            // Build command string: prog arg1 arg2 > fifo
-            let mut cmd = expanded_program;
-            for arg in expanded_args {
-                cmd.push(' ');
-                // Simple shell escaping (single quotes)
-                cmd.push_str(&format!("'{}'", arg.replace('\'', "'\\''")));
-            }
-            cmd
+            let expansion =
+                crate::word::expand_words(args, state, crate::word::ProcessSubs::Refuse)?;
+            (format!("{expanded_program} \"$@\""), expansion.fields)
         }
-        Command::Pwd { .. } => "pwd".to_string(),
+        Command::Pwd { .. } => ("pwd".to_string(), Vec::new()),
         Command::Ls { path, .. } => {
             let mut cmd = "ls".to_string();
             if let Some(p) = path {
                 let expanded = crate::parser::expand_with_command_sub(p, state)?;
                 cmd.push_str(&format!(" '{}'", expanded.replace('\'', "'\\''")));
             }
-            cmd
+            (cmd, Vec::new())
         }
         _ => {
             return Err(anyhow!(
@@ -188,13 +183,7 @@ fn start_command_with_output_redirect(
 
     // Use sh -c to run: cmd > fifo_path
     let shell_cmd = format!("{} > {}", cmd_string, output_path.display());
-
-    let child = ProcessCommand::new("sh")
-        .arg("-c")
-        .arg(&shell_cmd)
-        .spawn()?;
-
-    Ok(child)
+    spawn_sh(&shell_cmd, &args)
 }
 
 /// Start command with stdin redirected from file (for >(cmd))
@@ -205,20 +194,13 @@ fn start_command_with_input_redirect(
 ) -> Result<Child> {
     // For FIFOs, use shell redirection: sh -c "cmd < fifo"
 
-    let cmd_string = match cmd {
+    // As above: OsString positional parameters forwarded with "$@".
+    let (cmd_string, args): (String, Vec<OsString>) = match cmd {
         Command::External { program, args, .. } => {
             let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
-            let expanded_args =
-                crate::word::expand_words(args, state, crate::word::ProcessSubs::Refuse)?
-                    .lossy_fields();
-
-            // Build command string
-            let mut cmd = expanded_program;
-            for arg in expanded_args {
-                cmd.push(' ');
-                cmd.push_str(&format!("'{}'", arg.replace('\'', "'\\''")));
-            }
-            cmd
+            let expansion =
+                crate::word::expand_words(args, state, crate::word::ProcessSubs::Refuse)?;
+            (format!("{expanded_program} \"$@\""), expansion.fields)
         }
         _ => {
             return Err(anyhow!(
@@ -229,13 +211,18 @@ fn start_command_with_input_redirect(
 
     // Use sh -c to run: cmd < fifo_path
     let shell_cmd = format!("{} < {}", cmd_string, input_path.display());
+    spawn_sh(&shell_cmd, &args)
+}
 
-    let child = ProcessCommand::new("sh")
+/// Run `sh -c script sh args...`. The arguments become `$1`, `$2`, ... and are
+/// passed as raw OS strings, so their bytes and their boundaries survive.
+fn spawn_sh(script: &str, args: &[OsString]) -> Result<Child> {
+    Ok(ProcessCommand::new("sh")
         .arg("-c")
-        .arg(&shell_cmd)
-        .spawn()?;
-
-    Ok(child)
+        .arg(script)
+        .arg("sh")
+        .args(args)
+        .spawn()?)
 }
 
 #[cfg(test)]
@@ -288,5 +275,45 @@ mod tests {
         // Cleanup
         proc_sub1.cleanup().unwrap();
         proc_sub2.cleanup().unwrap();
+    }
+
+    /// A file named `bad\xff.bin` (not UTF-8) and a pattern that matches it.
+    #[cfg(unix)]
+    fn non_utf8_fixture(dir: &Path) -> String {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+        let name = OsStr::from_bytes(b"bad\xff.bin");
+        std::fs::write(dir.join(name), "12345").unwrap();
+        format!("{}/bad*.bin", crate::glob::escape(&dir.to_string_lossy()))
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn output_redirect_keeps_non_utf8_filename_bytes() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut state = ShellState::new(temp_dir.path().to_str().unwrap()).unwrap();
+        let pattern = non_utf8_fixture(temp_dir.path());
+        let cmd = parse_command(&format!("cat {pattern}")).unwrap();
+        let out = temp_dir.path().join("out.txt");
+
+        let mut child = start_command_with_output_redirect(&cmd, &mut state, &out).unwrap();
+        assert!(child.wait().unwrap().success());
+        assert_eq!(std::fs::read_to_string(&out).unwrap(), "12345");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn input_redirect_keeps_non_utf8_filename_bytes() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut state = ShellState::new(temp_dir.path().to_str().unwrap()).unwrap();
+        let pattern = non_utf8_fixture(temp_dir.path());
+        let copy = temp_dir.path().join("copy.txt");
+        let cmd = parse_command(&format!("sort -o {} {pattern}", copy.display())).unwrap();
+        let input = temp_dir.path().join("in.txt");
+        std::fs::write(&input, "").unwrap();
+
+        let mut child = start_command_with_input_redirect(&cmd, &mut state, &input).unwrap();
+        assert!(child.wait().unwrap().success());
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), "12345\n");
     }
 }
