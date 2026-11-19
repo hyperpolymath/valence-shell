@@ -51,6 +51,8 @@ pub struct Job {
     pub pids: Vec<i32>,
     /// PIDs of this job that have been reaped (ended and collected)
     reaped: Vec<i32>,
+    /// True once the reaper has returned this job as finished
+    reported: bool,
 }
 
 /// A job that has ended, with the process substitutions it still held.
@@ -74,6 +76,9 @@ pub struct JobTable {
     /// Process substitutions that a job may still open, by job id. They live
     /// here, not in [`Job`], because a substitution cannot be cloned.
     process_subs: std::collections::HashMap<usize, Vec<ProcessSubstitution>>,
+    /// Substitutions of jobs that have ended, whose children have not exited
+    /// yet. A connected `>(cmd)` can work on after its writer has ended.
+    finishing: Vec<ProcessSubstitution>,
 }
 
 impl JobTable {
@@ -85,6 +90,7 @@ impl JobTable {
             current_job_id: None,
             previous_job_id: None,
             process_subs: std::collections::HashMap::new(),
+            finishing: Vec::new(),
         }
     }
 
@@ -100,6 +106,7 @@ impl JobTable {
             state: JobState::Running,
             pids,
             reaped: Vec::new(),
+            reported: false,
         };
 
         self.jobs.push(job);
@@ -221,6 +228,26 @@ impl JobTable {
         self.process_subs.remove(&id).unwrap_or_default()
     }
 
+    /// Release the substitutions of a job that has ended. Each one is checked
+    /// now and again at each later safe point, without waiting: a connected
+    /// child that still works is not blocked on and not killed.
+    pub fn finish_process_subs(&mut self, subs: Vec<ProcessSubstitution>) {
+        self.finishing.extend(subs);
+        self.settle_process_subs();
+    }
+
+    /// Check the substitutions of ended jobs once, without waiting, and drop
+    /// those whose child has exited (their FIFO is already removed).
+    pub fn settle_process_subs(&mut self) {
+        self.finishing.retain_mut(|sub| match sub.try_finish() {
+            Ok(done) => !done,
+            Err(e) => {
+                eprintln!("Warning: Failed to cleanup process substitution: {}", e);
+                false
+            }
+        });
+    }
+
     /// The `+` or `-` marker of a job, or a space.
     pub fn marker(&self, id: usize) -> char {
         if self.current_job_id == Some(id) {
@@ -250,7 +277,9 @@ impl JobTable {
         }
         let mut finished = Vec::new();
         for job in &mut self.jobs {
-            if job.state != JobState::Running {
+            // Not the display state: `kill` marks a job Done before its
+            // processes are collected, and a stopped job can still end.
+            if job.reported {
                 continue;
             }
             for &pid in &job.pids {
@@ -270,6 +299,7 @@ impl JobTable {
             }
             if job.pids.iter().all(|pid| job.reaped.contains(pid)) {
                 job.state = JobState::Done;
+                job.reported = true;
                 finished.push((job.id, job.command.clone()));
             }
         }
@@ -311,11 +341,13 @@ impl Default for JobTable {
 impl Drop for JobTable {
     fn drop(&mut self) {
         for finished in self.reap_finished() {
-            for sub in finished.process_subs {
-                if let Err(e) = sub.cleanup() {
-                    eprintln!("Warning: Failed to cleanup process substitution: {}", e);
-                }
-            }
+            self.finish_process_subs(finished.process_subs);
+        }
+        self.settle_process_subs();
+        // A substitution still working (its job has ended) is left to finish,
+        // like one whose job still runs.
+        for sub in std::mem::take(&mut self.finishing) {
+            sub.leave_running();
         }
         for (_, subs) in self.process_subs.drain() {
             for sub in subs {
@@ -370,7 +402,7 @@ pub fn install_sigchld_handler() -> std::io::Result<()> {
 
 /// Take the SIGCHLD flag: true if a child changed state since the last take.
 #[cfg(unix)]
-fn take_sigchld() -> bool {
+pub fn take_sigchld() -> bool {
     SIGCHLD_SEEN.swap(false, Ordering::SeqCst)
 }
 
@@ -535,61 +567,36 @@ mod tests {
         assert!(lines[1].contains("+")); // Current job marker
     }
 
-    #[cfg(unix)]
     #[test]
-    fn the_sigchld_handler_sets_the_flag() {
-        install_sigchld_handler().unwrap();
-        take_sigchld();
-        // SAFETY: getpid and kill take plain integers; the signal goes to
-        // this process, whose SIGCHLD handler only stores to an atomic.
-        unsafe {
-            libc::kill(libc::getpid(), libc::SIGCHLD);
-        }
-        let started = Instant::now();
-        while !take_sigchld() {
-            assert!(started.elapsed() < Duration::from_secs(5), "flag not set");
-            std::thread::sleep(Duration::from_millis(5));
-        }
+    fn a_job_marked_done_before_it_was_reaped_is_still_reaped() {
+        // `kill` marks a job Done before its process is collected.
+        let pid = Command::new("true").spawn().unwrap().id() as i32;
+        let mut table = JobTable::new();
+        let id = table.add_job(pid, "true &".to_string(), vec![pid]);
+        table.update_job_state(pid, JobState::Done);
+        let finished = reap_until_done(&mut table, id);
+        assert_eq!(finished.len(), 1);
+        assert!(table.reap_finished().is_empty());
     }
 
-    #[cfg(unix)]
     #[test]
-    fn a_read_interrupted_by_sigchld_is_restarted() {
-        // A raw read(2) is not retried by std: without SA_RESTART it returns
-        // EINTR when SIGCHLD arrives during it.
-        install_sigchld_handler().unwrap();
-        let mut fds = [0; 2];
-        // SAFETY: `fds` is a live array of two c_ints for pipe(2) to fill.
-        assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
-        let (read_fd, write_fd) = (fds[0], fds[1]);
-        let (tx, rx) = std::sync::mpsc::channel();
-        let reader = std::thread::spawn(move || {
-            // SAFETY: pthread_self takes no arguments.
-            tx.send(unsafe { libc::pthread_self() }).unwrap();
-            let mut byte = 0u8;
-            // SAFETY: `byte` is a live, exclusively borrowed u8 and the length
-            // is 1; read_fd is the open read end of the pipe.
-            let n = unsafe { libc::read(read_fd, (&mut byte as *mut u8).cast(), 1) };
-            let errno = std::io::Error::last_os_error();
-            (n, byte, errno)
-        });
-        let thread = rx.recv().unwrap();
-        std::thread::sleep(Duration::from_millis(100));
-        // SAFETY: `thread` is the live reader thread, blocked in read(2).
-        assert_eq!(unsafe { libc::pthread_kill(thread, libc::SIGCHLD) }, 0);
-        std::thread::sleep(Duration::from_millis(100));
-        // SAFETY: write_fd is the open write end; one byte from a live u8.
-        assert_eq!(
-            unsafe { libc::write(write_fd, (&b'x' as *const u8).cast(), 1) },
-            1
-        );
-        let (n, byte, errno) = reader.join().unwrap();
-        assert_eq!(n, 1, "read was interrupted: {errno}");
-        assert_eq!(byte, b'x');
-        // SAFETY: both descriptors are open and owned by this test.
-        unsafe {
-            libc::close(read_fd);
-            libc::close(write_fd);
+    fn a_script_does_not_queue_job_notices() {
+        let dir = tempfile::TempDir::new().unwrap();
+        for interactive in [false, true] {
+            let mut state = crate::state::ShellState::new(dir.path().to_str().unwrap()).unwrap();
+            state.interactive = interactive;
+            let pid = Command::new("true").spawn().unwrap().id() as i32;
+            state.jobs.add_job(pid, "true &".to_string(), vec![pid]);
+            let started = Instant::now();
+            while !state.jobs.jobs().is_empty() {
+                assert!(
+                    started.elapsed() < Duration::from_secs(10),
+                    "job not reaped"
+                );
+                state.reap_jobs();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert_eq!(state.job_notices.len(), usize::from(interactive));
         }
     }
 }

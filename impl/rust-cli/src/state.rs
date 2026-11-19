@@ -315,6 +315,10 @@ pub struct ShellState {
     /// printed by the interactive shell before its next prompt.
     pub job_notices: Vec<String>,
 
+    /// True in an interactive shell, which prints job notices. A script or
+    /// `-c` run has no reader for them, so none are queued.
+    pub interactive: bool,
+
     /// Named checkpoints mapping name → history index at checkpoint time
     pub checkpoints: HashMap<String, (usize, DateTime<Utc>)>,
 
@@ -335,20 +339,20 @@ impl ShellState {
     /// running process. Called at the safe points between commands.
     pub fn reap_jobs(&mut self) {
         for job in self.jobs.reap_finished() {
-            for sub in job.process_subs {
-                if let Err(e) = sub.cleanup() {
-                    eprintln!("Warning: Failed to cleanup process substitution: {}", e);
-                }
+            self.jobs.finish_process_subs(job.process_subs);
+            if self.interactive {
+                self.job_notices.push(format!(
+                    "[{}]{}  {:<20} {}",
+                    job.id,
+                    self.jobs.marker(job.id),
+                    "Done",
+                    job.command.trim_end_matches(" &")
+                ));
             }
-            self.job_notices.push(format!(
-                "[{}]{}  {:<20} {}",
-                job.id,
-                self.jobs.marker(job.id),
-                "Done",
-                job.command.trim_end_matches(" &")
-            ));
             self.jobs.remove_job(job.id);
         }
+        // Not gated by SIGCHLD: one cheap try_wait per substitution.
+        self.jobs.settle_process_subs();
     }
 
     /// Create new shell state with given root
@@ -381,6 +385,7 @@ impl ShellState {
             fifo_counter: std::sync::atomic::AtomicUsize::new(0),
             jobs: crate::job::JobTable::new(),
             job_notices: Vec::new(),
+            interactive: false,
             checkpoints: HashMap::new(),
             functions: FunctionTable::new(),
             traps: TrapTable::new(),

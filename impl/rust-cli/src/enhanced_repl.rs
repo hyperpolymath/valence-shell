@@ -241,6 +241,9 @@ impl Prompt for VshPrompt {
 
 /// Run enhanced REPL
 pub fn run(state: &mut ShellState) -> Result<()> {
+    // Job notices have a reader here: they print before each prompt.
+    state.interactive = true;
+
     // Set up history file
     let history_file = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))

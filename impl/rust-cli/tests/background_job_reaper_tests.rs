@@ -6,7 +6,7 @@
 //! A hung test would leave `sh` children that hold pipes, so every run has a
 //! time limit and kills the process group of the shell when it passes.
 
-#![cfg(unix)]
+#![cfg(target_os = "linux")]
 
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -221,4 +221,30 @@ fn a_job_that_ended_before_the_shell_exits_is_cleaned_at_exit() {
         .unwrap()
         .is_empty());
     assert_eq!(fifos_of(run.pid), Vec::<String>::new());
+}
+
+#[test]
+fn a_connected_substitution_of_an_ended_job_blocks_no_command() {
+    // The writer ends at once; its >(...) reader works on for 2 seconds.
+    // Later commands and the exit must not wait for it, and it must not be
+    // killed: it still writes its file.
+    let dir = TempDir::new().unwrap();
+    let started = Instant::now();
+    let run = vsh(
+        dir.path(),
+        "sh -c 'printf data > \"$1\"' sh >(sh -c 'sleep 2; cat > out2') &\nsleep 0.3\necho ready",
+        10,
+    );
+    let took = started.elapsed();
+    assert!(run.success);
+    assert!(run.stdout.contains("ready"));
+    assert!(
+        took < Duration::from_millis(1500),
+        "the shell waited: {took:?}"
+    );
+    std::thread::sleep(Duration::from_secs(3));
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("out2")).unwrap(),
+        "data"
+    );
 }

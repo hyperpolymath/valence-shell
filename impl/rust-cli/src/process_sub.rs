@@ -126,14 +126,23 @@ impl ProcessSubstitution {
     /// is not cut short: the shell keeps waiting until it exits, so a
     /// `>(cmd)` reader still finishes the work it was given.
     pub fn cleanup(mut self) -> Result<()> {
-        if let Some(mut child) = self.child_process.take() {
-            let status = loop {
-                if let Some(status) = child.try_wait()? {
-                    break status;
-                }
+        while !self.try_finish()? {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        Ok(())
+    }
+
+    /// One non-blocking step of [`ProcessSubstitution::cleanup`]: release a
+    /// child that waits for a partner, then check whether it has exited. True
+    /// when it has, and the FIFO is removed. A connected child that still
+    /// works is left to work; the caller asks again later.
+    pub fn try_finish(&mut self) -> Result<bool> {
+        if let Some(child) = self.child_process.as_mut() {
+            let Some(status) = child.try_wait()? else {
                 self.release_waiting_child();
-                std::thread::sleep(std::time::Duration::from_millis(10));
+                return Ok(false);
             };
+            self.child_process = None;
             // A `<(cmd)` writer whose reader has gone ends on SIGPIPE. That is
             // the normal end of an unread substitution, not a failure.
             if !status.success() && !ended_by_sigpipe(&status) {
@@ -152,7 +161,7 @@ impl ProcessSubstitution {
             Err(e) => return Err(e.into()),
         }
 
-        Ok(())
+        Ok(true)
     }
 }
 
