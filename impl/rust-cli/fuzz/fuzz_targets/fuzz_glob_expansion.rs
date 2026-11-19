@@ -26,12 +26,13 @@ use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tempfile::TempDir;
-use vsh::glob::{expand_glob_with_limits, GlobLimitExceeded, GlobLimits};
+use vsh::glob::{escape, expand_glob_with_limits, GlobLimitExceeded, GlobLimits};
 
 const LIMITS: GlobLimits = GlobLimits {
     max_reads: 20_000,
     max_matches: 2_000,
     max_match_bytes: 256 * 1024,
+    max_listing_bytes: 64 * 1024,
 };
 
 /// Build the fixture tree.
@@ -62,14 +63,40 @@ fn build_fixture() -> std::io::Result<TempDir> {
     Ok(t)
 }
 
+static FIXTURE: OnceLock<PathBuf> = OnceLock::new();
+
+/// Remove the fixture when the process exits. A static is never dropped, so
+/// without this every fuzz worker left its tree in the temporary directory.
+/// A crash ends the process without running this; that tree stays, with the
+/// crashing input, for the person who looks at it.
+extern "C" fn remove_fixture() {
+    if let Some(root) = FIXTURE.get() {
+        let _ = fs::remove_dir_all(root);
+    }
+}
+
 /// The fixture, built once. A fixture that cannot be built stops the run
 /// with a clear message: skipping every input would report a green run that
 /// tested nothing.
 fn fixture() -> &'static Path {
-    static FIXTURE: OnceLock<TempDir> = OnceLock::new();
     FIXTURE
         .get_or_init(|| match build_fixture() {
-            Ok(fixture) => fixture,
+            Ok(fixture) => {
+                let root = fixture.keep();
+                // The pattern for an absolute input is built from this path;
+                // it is escaped below, and it must stay valid UTF-8 for that.
+                if root.to_str().is_none() {
+                    eprintln!("fuzz_glob_expansion: the fixture path is not UTF-8");
+                    let _ = fs::remove_dir_all(&root);
+                    std::process::exit(1);
+                }
+                // SAFETY: `remove_fixture` is a plain `extern "C"` function
+                // that takes no arguments and does not unwind.
+                unsafe {
+                    libc::atexit(remove_fixture);
+                }
+                root
+            }
             Err(e) => {
                 // Exit rather than panic: libFuzzer reports an exiting target
                 // as an error ("fuzz target exited"), so the run still fails.
@@ -77,7 +104,7 @@ fn fixture() -> &'static Path {
                 std::process::exit(1);
             }
         })
-        .path()
+        .as_path()
 }
 
 fuzz_target!(|data: &[u8]| {
@@ -90,7 +117,9 @@ fuzz_target!(|data: &[u8]| {
 
     let base = fixture();
     let pattern = if input.starts_with('/') {
-        format!("{}{}", base.display(), input)
+        // The fixture root is a path, not a pattern: escape it, so a `[` or
+        // `*` in the temporary directory name is taken literally.
+        format!("{}{}", escape(&base.to_string_lossy()), input)
     } else {
         input.to_string()
     };
@@ -110,6 +139,15 @@ fuzz_target!(|data: &[u8]| {
                 .sum();
             assert_eq!(bytes, usage.match_bytes.held());
 
+            // The input that found the out-of-memory fault must reach the
+            // fixture, not pass with nothing matched.
+            if input == "/**/*" {
+                assert!(
+                    expansion.paths.contains(&base.join("d/sub/g.rs")),
+                    "/**/* did not reach the fixture"
+                );
+            }
+
             // Sorted, each path once, and every path exists.
             assert!(expansion.paths.windows(2).all(|w| w[0] < w[1]));
             for path in &expansion.paths {
@@ -127,7 +165,7 @@ fuzz_target!(|data: &[u8]| {
         }
         Err(err) => {
             if let Some(stopped) = err.downcast_ref::<GlobLimitExceeded>() {
-                assert!(stopped.exceeded.level > stopped.exceeded.limit);
+                assert!(stopped.exceeded.level > u128::from(stopped.exceeded.limit));
                 assert!(stopped.usage.reads.total() <= LIMITS.max_reads);
                 assert!(stopped.usage.matches.peak() <= LIMITS.max_matches);
                 assert!(stopped.usage.match_bytes.peak() <= LIMITS.max_match_bytes);

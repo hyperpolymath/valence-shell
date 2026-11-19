@@ -214,6 +214,12 @@ fn prompt_yes_no(prompt: &str) -> Result<bool> {
 /// Symbolic links are counted as entries and never followed, as `rm -r` does:
 /// following them would count files outside the tree and, with a link back to
 /// a parent directory, never finish.
+///
+/// This holds for a tree that does not change during the count. Each child
+/// directory is opened again by its path, so a directory that another process
+/// replaces with a link between the type check and the open is followed. The
+/// count is only shown in the confirmation prompt; the removal does its own
+/// checks.
 fn count_files_in_tree(path: &str) -> Result<usize> {
     let mut count = 0;
 

@@ -158,7 +158,8 @@ fn start_command_with_output_redirect(
         Command::External { program, args, .. } => {
             let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
             let expanded_args =
-                crate::word::expand_words(args, state, crate::word::ProcessSubs::Refuse)?.fields;
+                crate::word::expand_words(args, state, crate::word::ProcessSubs::Refuse)?
+                    .lossy_fields();
 
             // Build command string: prog arg1 arg2 > fifo
             let mut cmd = expanded_program;
@@ -208,7 +209,8 @@ fn start_command_with_input_redirect(
         Command::External { program, args, .. } => {
             let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
             let expanded_args =
-                crate::word::expand_words(args, state, crate::word::ProcessSubs::Refuse)?.fields;
+                crate::word::expand_words(args, state, crate::word::ProcessSubs::Refuse)?
+                    .lossy_fields();
 
             // Build command string
             let mut cmd = expanded_program;

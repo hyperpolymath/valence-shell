@@ -38,11 +38,12 @@
 //!
 //! # Limits
 //!
-//! One expansion is metered on three axes ([`GlobLimits`]):
+//! One expansion is metered on these axes ([`GlobLimits`]):
 //!
 //! | Axis | Kind | Default |
 //! |------|------|---------|
-//! | file-system reads (directories opened, entries listed, names looked up) | cost: adds up | 10,000,000 |
+//! | walker read units (one for each directory opened, entry listed, name looked up and symbolic link resolved; an entry type that the listing gave is not charged) | cost: adds up | 10,000,000 |
+//! | bytes of one directory listing held (name length + 1 for each entry) | occupancy, per listing | 64 MiB |
 //! | matches held | occupancy: high-water mark | 100,000 |
 //! | bytes of matches held (path length + 1 for each match) | occupancy | 6 MiB |
 //!
@@ -96,6 +97,10 @@ pub const MAX_GLOB_RESULTS: u64 = 100_000;
 /// most Linux `execve` accepts for argument strings.
 pub const MAX_GLOB_MATCH_BYTES: u64 = 6 * 1024 * 1024;
 
+/// Default limit on the bytes of names held while one directory is listed
+/// (name length + 1 for each entry): 64 MiB.
+pub const MAX_GLOB_LISTING_BYTES: u64 = 64 * 1024 * 1024;
+
 /// The limits one glob expansion runs under.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GlobLimits {
@@ -105,6 +110,9 @@ pub struct GlobLimits {
     pub max_matches: u64,
     /// Most bytes of matches held at once (path length + 1 per match).
     pub max_match_bytes: u64,
+    /// Most bytes of names held while one directory is listed (name length + 1
+    /// per entry). The listing is sorted before use, so it is held whole.
+    pub max_listing_bytes: u64,
 }
 
 impl GlobLimits {
@@ -113,6 +121,7 @@ impl GlobLimits {
         max_reads: MAX_GLOB_READS,
         max_matches: MAX_GLOB_RESULTS,
         max_match_bytes: MAX_GLOB_MATCH_BYTES,
+        max_listing_bytes: MAX_GLOB_LISTING_BYTES,
     };
 }
 
@@ -300,7 +309,9 @@ pub fn expand_glob_continuing(
     let compiled =
         Compiled::new(pattern).with_context(|| format!("Invalid glob pattern: {}", pattern))?;
     let mut walker = Walker::new(pattern, base_dir, &compiled, limits, spent);
-    walker.run().map_err(anyhow::Error::new)?;
+    walker
+        .run()
+        .map_err(|stopped| anyhow::Error::new(*stopped))?;
     Ok(Expansion {
         usage: walker.usage(),
         paths: walker.found.into_iter().collect(),
@@ -350,11 +361,51 @@ impl Compiled {
     }
 }
 
+/// The text a name is matched as.
+///
+/// The `glob` crate matches `str` only. A byte that is not valid UTF-8 becomes
+/// one character from U+F780..U+F7FF (private use), so `?` and `*` still
+/// match it, and it does not look like a literal U+FFFD in the name or the
+/// pattern, as a lossy conversion would make it.
+// snip: a pattern that contains one of those 128 private-use characters
+// matches the invalid byte too; an exact matcher needs a byte-level `Pattern`.
+fn match_text(name: &std::ffi::OsStr) -> std::borrow::Cow<'_, str> {
+    if let Some(text) = name.to_str() {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let mut out = String::new();
+    for chunk in name.as_encoded_bytes().utf8_chunks() {
+        out.push_str(chunk.valid());
+        for &byte in chunk.invalid() {
+            // Invalid bytes are 0x80..=0xFF, so this stays in U+F780..U+F7FF.
+            out.push(
+                char::from_u32(0xF700 + u32::from(byte)).unwrap_or(char::REPLACEMENT_CHARACTER),
+            );
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
+
+/// `text` as a pattern that matches exactly `text`: `*`, `?` and `[` in it
+/// are taken literally. Use it for a directory prefix that is not a pattern.
+///
+/// # Examples
+/// ```
+/// assert_eq!(vsh::glob::escape("/tmp/a*b"), "/tmp/a[*]b");
+/// ```
+pub fn escape(text: &str) -> String {
+    glob::Pattern::escape(text)
+}
+
 const MATCH_OPTIONS: glob::MatchOptions = glob::MatchOptions {
     case_sensitive: true,
     require_literal_separator: true,
     require_literal_leading_dot: true,
 };
+
+/// The result of a step of the walk. The error is boxed: it is built once, on
+/// the path that stops the walk, and is larger than the values the steps return.
+type Walk<T> = std::result::Result<T, Box<GlobLimitExceeded>>;
 
 /// The walk: a depth-first search over states (directory, component index),
 /// each processed at most once.
@@ -365,6 +416,7 @@ struct Walker<'a> {
     reads: Meter<Cost>,
     matches: Meter<Occupancy>,
     match_bytes: Meter<Occupancy>,
+    max_listing_bytes: u64,
     found: BTreeSet<PathBuf>,
 }
 
@@ -387,6 +439,7 @@ impl<'a> Walker<'a> {
                 limits.max_match_bytes,
                 spent.match_bytes,
             ),
+            max_listing_bytes: limits.max_listing_bytes,
             found: BTreeSet::new(),
         }
     }
@@ -410,8 +463,8 @@ impl<'a> Walker<'a> {
         }
     }
 
-    fn stopped(&self, exceeded: Exceeded, at: &Path) -> GlobLimitExceeded {
-        GlobLimitExceeded {
+    fn stopped(&self, exceeded: Exceeded, at: &Path) -> Box<GlobLimitExceeded> {
+        Box::new(GlobLimitExceeded {
             pattern: self.pattern.to_string(),
             exceeded,
             usage: self.usage(),
@@ -420,15 +473,15 @@ impl<'a> Walker<'a> {
             } else {
                 at.to_path_buf()
             },
-        }
+        })
     }
 
-    fn charge_read(&mut self, at: &Path) -> std::result::Result<(), GlobLimitExceeded> {
+    fn charge_read(&mut self, at: &Path) -> Walk<()> {
         self.reads.charge(1).map_err(|e| self.stopped(e, at))
     }
 
     /// Record a match, once.
-    fn emit(&mut self, path: PathBuf, at: &Path) -> std::result::Result<(), GlobLimitExceeded> {
+    fn emit(&mut self, path: PathBuf, at: &Path) -> Walk<()> {
         let path = if self.compiled.dirs_only {
             path.join("")
         } else {
@@ -454,18 +507,23 @@ impl<'a> Walker<'a> {
 
     /// List a directory in name order, charging the open and every entry.
     /// An unreadable directory gives no entries.
-    fn list(
-        &mut self,
-        dir: &Path,
-    ) -> std::result::Result<Vec<(OsString, fs::FileType)>, GlobLimitExceeded> {
+    fn list(&mut self, dir: &Path) -> Walk<Vec<(OsString, fs::FileType)>> {
         self.charge_read(dir)?;
         let mut entries = Vec::new();
+        // The listing is held whole to sort it; meter the names it holds.
+        let mut held = Meter::<Occupancy>::new(
+            "bytes of one directory listing held",
+            self.max_listing_bytes,
+        );
         if let Ok(read) = fs::read_dir(self.real(dir)) {
             for entry in read {
                 self.charge_read(dir)?;
                 if let Ok(entry) = entry {
                     if let Ok(kind) = entry.file_type() {
-                        entries.push((entry.file_name(), kind));
+                        let name = entry.file_name();
+                        held.charge(name.len() as u64 + 1)
+                            .map_err(|e| self.stopped(e, dir))?;
+                        entries.push((name, kind));
                     }
                 }
             }
@@ -475,15 +533,22 @@ impl<'a> Walker<'a> {
     }
 
     /// Whether `path` is a directory, going through a symbolic link.
-    fn is_dir(&self, path: &Path, kind: Option<fs::FileType>) -> bool {
+    ///
+    /// A type that the directory listing already gave costs nothing. Looking
+    /// the path up (no type known, or a symbolic link to resolve) is one read,
+    /// charged before the lookup.
+    fn is_dir(&mut self, path: &Path, kind: Option<fs::FileType>, at: &Path) -> Walk<bool> {
         match kind {
-            Some(kind) if kind.is_dir() => true,
-            Some(kind) if !kind.is_symlink() => false,
-            _ => fs::metadata(self.real(path)).is_ok_and(|m| m.is_dir()),
+            Some(kind) if kind.is_dir() => Ok(true),
+            Some(kind) if !kind.is_symlink() => Ok(false),
+            _ => {
+                self.charge_read(at)?;
+                Ok(fs::metadata(self.real(path)).is_ok_and(|m| m.is_dir()))
+            }
         }
     }
 
-    fn run(&mut self) -> std::result::Result<(), GlobLimitExceeded> {
+    fn run(&mut self) -> Walk<()> {
         let count = self.compiled.components.len();
         if count == 0 {
             return Ok(());
@@ -511,24 +576,24 @@ impl<'a> Walker<'a> {
                     let child = dir.join(name);
                     if last {
                         let exists = fs::symlink_metadata(self.real(&child)).is_ok();
-                        if exists && (!compiled.dirs_only || self.is_dir(&child, None)) {
+                        if exists && (!compiled.dirs_only || self.is_dir(&child, None, &dir)?) {
                             self.emit(child, &dir)?;
                         }
-                    } else if self.is_dir(&child, None) {
+                    } else if self.is_dir(&child, None, &dir)? {
                         next.push((child, index + 1));
                     }
                 }
                 Component::Wild(pattern) => {
                     for (name, kind) in self.list(&dir)? {
-                        if !pattern.matches_with(&name.to_string_lossy(), MATCH_OPTIONS) {
+                        if !pattern.matches_with(&match_text(&name), MATCH_OPTIONS) {
                             continue;
                         }
                         let child = dir.join(&name);
                         if last {
-                            if !compiled.dirs_only || self.is_dir(&child, Some(kind)) {
+                            if !compiled.dirs_only || self.is_dir(&child, Some(kind), &dir)? {
                                 self.emit(child, &dir)?;
                             }
-                        } else if self.is_dir(&child, Some(kind)) {
+                        } else if self.is_dir(&child, Some(kind), &dir)? {
                             next.push((child, index + 1));
                         }
                     }
@@ -546,7 +611,7 @@ impl<'a> Walker<'a> {
                             continue;
                         }
                         let child = dir.join(&name);
-                        if last && (!compiled.dirs_only || self.is_dir(&child, Some(kind))) {
+                        if last && (!compiled.dirs_only || self.is_dir(&child, Some(kind), &dir)?) {
                             self.emit(child.clone(), &dir)?;
                         }
                         if kind.is_dir() {
@@ -597,7 +662,7 @@ mod walk_tests {
     fn absolute_patterns_give_absolute_paths() {
         let t = TempDir::new().unwrap();
         fs::write(t.path().join("x.txt"), b"").unwrap();
-        let pattern = format!("{}/*.txt", t.path().display());
+        let pattern = format!("{}/*.txt", escape(&t.path().to_string_lossy()));
         assert_eq!(
             expand_glob(&pattern, Path::new("/nonexistent")).unwrap(),
             [t.path().join("x.txt")]

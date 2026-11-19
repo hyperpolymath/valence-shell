@@ -126,6 +126,18 @@ reproduce. Absence of a tool is an open obligation, not a passing leg
 | `proofs/z3/` (`archive/proofs/` for Isabelle and Mizar)
 | §4 exception notes are now recorded in each `.smt2` header. `filesystem_operations` and `symlink_operations` were rewritten on 2026-11-09 to define the operations as array `store`s and negate each goal; the other three still rest on asserted axioms. Isabelle and Mizar were never CI-checked and are archived, unchecked, with a successor map
 
+| Glob expansion stays within its read bound on the test fixtures (frontier A-6)
+| tested-only
+| `cargo test --test glob_bounds_tests`; `proptest` in `src/glob.rs` and `src/grade.rs`
+| `impl/rust-cli/tests/glob_bounds_tests.rs`; `docs/PROOF-OPEN-FRONTIER.adoc` A-6
+| Fixed fixtures only: the reported read count equals a count made from the fixture, and a 12-component pattern over a 31-entry chain stays within 2 x 12 x 31 reads. The grade laws are property-tested, not proved
+
+| Glob expansion terminates within `O(|pattern| x |entries|)` reads (frontier A-6)
+| open
+| -
+| `impl/rust-cli/src/glob.rs` `expand_glob`; `docs/PROOF-OPEN-FRONTIER.adoc` A-6
+| No Creusot or Verus contract on the walker (PROOF-POLICY §1), and no Lean model bound. A Lean bound would be model evidence only
+
 | Sandbox path normalisation never escapes the root
 | proven (model) / tested-only (code)
 | Lean 4 for the model; `proptest` for the code

@@ -1203,7 +1203,9 @@ fn tokens_to_string(tokens: &[Token]) -> Result<String> {
         }
 
         match token {
-            Token::Word(w) => result.push_str(&quoted_word_to_string(w)),
+            // The typed word keeps the quoting of each piece, so `'*'x.*`
+            // comes back with only its unquoted part active.
+            Token::Word(w) => result.push_str(&w.typed.to_string()),
             Token::OutputRedirect => result.push('>'),
             Token::AppendRedirect => result.push_str(">>"),
             Token::InputRedirect => result.push('<'),
@@ -2689,7 +2691,7 @@ pub fn expand_command_substitution(
             // echo builtin: its output is the joined, expanded arguments.
             let expansion =
                 crate::word::expand_words(args, state, crate::word::ProcessSubs::Refuse)?;
-            let mut out = expansion.fields.join(" ");
+            let mut out = expansion.lossy_fields().join(" ");
             if !no_newline {
                 out.push('\n');
             }

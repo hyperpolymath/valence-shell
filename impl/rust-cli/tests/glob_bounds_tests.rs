@@ -221,6 +221,7 @@ fn default_limits_are_the_documented_values() {
             max_reads: 10_000_000,
             max_matches: 100_000,
             max_match_bytes: 6 * 1024 * 1024,
+            max_listing_bytes: 64 * 1024 * 1024,
         }
     );
 }
@@ -394,4 +395,78 @@ fn a_name_that_is_not_utf8_is_matched_without_a_panic() {
     let found = expand_glob("*.txt", t.path()).unwrap();
     assert_eq!(found.len(), 2);
     assert!(found.contains(&PathBuf::from(odd)));
+}
+
+// ---------------------------------------------------------------------------
+// Review of #242: charged lookups, the listing budget, exact name matching
+// ---------------------------------------------------------------------------
+
+#[test]
+fn resolving_a_symbolic_link_is_a_charged_read() {
+    let t = TempDir::new().unwrap();
+    fs::create_dir(t.path().join("real")).unwrap();
+    for i in 0..5 {
+        symlink("real", t.path().join(format!("link{i}"))).unwrap();
+    }
+    // `*/` lists 6 entries (1 open + 6 entries = 7 reads) and then resolves
+    // each of the 5 links to learn whether it is a directory: 12 reads.
+    let all = expand_glob_with_limits("*/", t.path(), &GlobLimits::DEFAULT).unwrap();
+    assert_eq!(all.paths.len(), 6);
+    assert_eq!(all.usage.reads.total(), 12);
+
+    // With room for the listing only, the first lookup is refused. Before,
+    // the lookups were free and the expansion finished.
+    let limits = GlobLimits {
+        max_reads: 7,
+        ..GlobLimits::DEFAULT
+    };
+    let s = stopped(expand_glob_with_limits("*/", t.path(), &limits));
+    assert_eq!(s.exceeded.axis, "file-system reads");
+    assert_eq!((s.exceeded.limit, s.exceeded.level), (7, 8));
+}
+
+#[test]
+fn the_listing_limit_stops_a_directory_that_is_too_large_to_hold() {
+    let t = TempDir::new().unwrap();
+    fs::create_dir(t.path().join("big")).unwrap();
+    for i in 0..10 {
+        fs::write(t.path().join(format!("big/f{i}")), b"").unwrap();
+    }
+    // Each name is 2 bytes + 1, so 10 names need 30 bytes.
+    let limits = GlobLimits {
+        max_listing_bytes: 29,
+        ..GlobLimits::DEFAULT
+    };
+    let s = stopped(expand_glob_with_limits("big/*", t.path(), &limits));
+    assert_eq!(s.exceeded.axis, "bytes of one directory listing held");
+    assert_eq!((s.exceeded.limit, s.exceeded.level), (29, 30));
+    assert_eq!(s.at, PathBuf::from("big"));
+
+    let limits = GlobLimits {
+        max_listing_bytes: 30,
+        ..GlobLimits::DEFAULT
+    };
+    let ok = expand_glob_with_limits("big/*", t.path(), &limits).unwrap();
+    assert_eq!(ok.paths.len(), 10);
+}
+
+#[test]
+fn an_invalid_byte_is_not_matched_as_a_replacement_character() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    let t = TempDir::new().unwrap();
+    let invalid = OsStr::from_bytes(b"bad\xff.txt");
+    if fs::write(t.path().join(invalid), b"").is_err() {
+        return; // this file system refuses names that are not UTF-8
+    }
+    fs::write(t.path().join("bad\u{fffd}.txt"), b"").unwrap();
+
+    // Broad patterns match both names.
+    for pattern in ["*.txt", "bad?.txt"] {
+        let found = expand_glob(pattern, t.path()).unwrap();
+        assert_eq!(found.len(), 2, "{pattern}");
+    }
+    // A literal U+FFFD matches only the name that really contains it.
+    let found = expand_glob("bad\u{fffd}*", t.path()).unwrap();
+    assert_eq!(found, [PathBuf::from("bad\u{fffd}.txt")]);
 }

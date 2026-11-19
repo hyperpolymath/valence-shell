@@ -24,8 +24,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`echo $((2+3))` printed `$((2+3))`), and `$(echo ...)` works.
 - `$((1+(2*3)))` and other substitutions containing `(` are read to their
   matching `)`.
-- An expansion error (such as a glob limit from #191) fails the command with
-  exit status 1 and does not run it. With a redirection the status was 127.
+- An expansion error in an argument (such as a glob limit from #191) fails
+  the command with exit status 1 and does not run it. With a redirection the
+  status was 127. An error while the program name or a pipeline stage name
+  is expanded is not changed: it is returned to the caller, so `||` sees it.
+
+=== Fixed — 2026-11-19 (review of #242, small findings)
+
+- An AND-OR list keeps the quoting of each piece of a word: `echo '*'x.* && true`
+  printed `*x.*` and now expands the unquoted part.
+- A glob match reaches an external command with the exact bytes of its file
+  name. A name that is not UTF-8 was replaced by a lossy copy that did not
+  exist.
+- A name that is not UTF-8 is no longer matched by a literal U+FFFD in the
+  pattern. `*` and `?` still match it.
+- Resolving a symbolic link to learn whether it is a directory is charged as
+  a read unit; it was free.
+- New limit `max_listing_bytes` (64 MiB): the names held while one directory
+  is listed. Exceeding it is a `GlobLimitExceeded` that names the directory.
+- A `Meter` charge that would pass `u64::MAX` is refused and reported
+  exactly; `Exceeded::level` is now `u128`. Before, the level saturated and
+  a limit of `u64::MAX` accepted the charge.
+- `Expansion::fields` in `src/word.rs` is `Vec<OsString>`; the external
+  command functions take `OsString` arguments. `glob::escape` is new.
+- The `fuzz_glob_expansion` target removes its fixture at exit, escapes the
+  fixture root in absolute patterns, and checks that `/**/*` reaches the
+  fixture.
+- Tests: `wc` output is compared without its column padding; a glob in a
+  later pipeline stage is covered.
 
 === Fixed — 2026-11-18 (review of #242)
 
@@ -66,8 +92,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fault with `/**/*` (libFuzzer out-of-memory at 2560 MB, PR #230, check run
   134118693669). The rule now matches bash 5.2 with `globstar` for patterns
   that start with `**`.
-- Glob expansion is metered while it runs: at most 10,000,000 file-system
-  reads, 100,000 matches and 6 MiB of matches per pattern. Reaching a limit is
+- Glob expansion is metered while it runs: at most 10,000,000 walker read
+  units, 100,000 matches and 6 MiB of matches per command. A read unit is
+  charged for each directory opened, each entry listed, each name looked up
+  and each symbolic link resolved. The type of an entry comes with the
+  listing and is not charged again. The limit is on these units; it is not
+  a cap on every file-system operation the shell makes. Reaching a limit is
   a `GlobLimitExceeded` error that names the limit, the usage so far and the
   directory being read; the command is not run. Before, the match limit was
   checked only after every path had been collected, and an external command

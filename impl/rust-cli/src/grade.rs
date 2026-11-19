@@ -80,6 +80,10 @@ pub trait Grade: Copy + Eq + fmt::Debug {
 
     /// The single number a limit is compared against.
     fn level(self) -> u64;
+
+    /// What a further `of(amount)` is added to: everything spent for a cost,
+    /// what is still held for an occupancy.
+    fn base(self) -> u64;
 }
 
 /// A cumulative cost: a resource that is consumed and never given back.
@@ -112,6 +116,10 @@ impl Grade for Cost {
     }
 
     fn level(self) -> u64 {
+        self.0
+    }
+
+    fn base(self) -> u64 {
         self.0
     }
 }
@@ -191,6 +199,10 @@ impl Grade for Occupancy {
     fn level(self) -> u64 {
         self.peak
     }
+
+    fn base(self) -> u64 {
+        self.held
+    }
 }
 
 impl fmt::Display for Occupancy {
@@ -206,8 +218,9 @@ pub struct Exceeded {
     pub axis: &'static str,
     /// The limit that was configured.
     pub limit: u64,
-    /// The level the refused charge would have reached.
-    pub level: u64,
+    /// The level the refused charge would have reached. Wider than a limit,
+    /// so a charge that passes `u64::MAX` is reported exactly, not saturated.
+    pub level: u128,
 }
 
 impl fmt::Display for Exceeded {
@@ -258,12 +271,15 @@ impl<G: Grade> Meter<G> {
     /// # Errors
     /// Returns the [`Exceeded`] that the charge would return.
     pub fn check(&self, amount: u64) -> Result<(), Exceeded> {
-        let next = self.grade.then(G::of(amount));
-        if next.level() > self.limit {
+        // Computed in u128 before the grades are composed: composition
+        // saturates, and a saturated level would pass a limit of `u64::MAX`.
+        let level =
+            u128::from(self.grade.level()).max(u128::from(self.grade.base()) + u128::from(amount));
+        if level > u128::from(self.limit) {
             return Err(Exceeded {
                 axis: self.axis,
                 limit: self.limit,
-                level: next.level(),
+                level,
             });
         }
         Ok(())
@@ -402,6 +418,22 @@ mod tests {
     }
 
     #[test]
+    fn a_charge_past_u64_max_is_refused_and_reported_exactly() {
+        // A saturated level would equal the limit and be accepted.
+        let mut cost = Meter::<Cost>::new("units", u64::MAX);
+        cost.charge(u64::MAX - 1).unwrap();
+        cost.charge(1).unwrap(); // reaches the limit exactly
+        let refused = cost.charge(5).unwrap_err();
+        assert_eq!(refused.level, u128::from(u64::MAX) + 5);
+        assert_eq!(cost.level(), u64::MAX);
+
+        let mut held = Meter::<Occupancy>::new("held", u64::MAX);
+        held.charge(u64::MAX).unwrap();
+        let refused = held.charge(1).unwrap_err();
+        assert_eq!(refused.level, u128::from(u64::MAX) + 1);
+    }
+
+    #[test]
     fn a_meter_with_a_zero_limit_refuses_any_use() {
         let mut meter: Meter<Occupancy> = Meter::new("items held", 0);
         assert!(meter.charge(0).is_ok());
@@ -481,7 +513,7 @@ mod tests {
                     }
                     Err(refused) => {
                         prop_assert!(wanted.level() > limit);
-                        prop_assert_eq!(refused.level, wanted.level());
+                        prop_assert_eq!(refused.level, u128::from(wanted.level()));
                         prop_assert_eq!(refused.limit, limit);
                     }
                 }
@@ -511,7 +543,7 @@ mod tests {
                         }
                         Err(refused) => {
                             prop_assert!(wanted.level() > limit);
-                            prop_assert_eq!(refused.level, wanted.level());
+                            prop_assert_eq!(refused.level, u128::from(wanted.level()));
                         }
                     }
                 }

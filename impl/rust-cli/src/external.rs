@@ -6,6 +6,7 @@
 //! and manages stdio.
 
 use anyhow::{Context, Result};
+use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -25,7 +26,7 @@ use crate::state::ShellState;
 /// - File modification tracking for undo
 pub fn execute_external_with_redirects(
     program: &str,
-    args: &[String],
+    args: &[OsString],
     redirects: &[Redirection],
     state: &mut ShellState,
 ) -> Result<i32> {
@@ -116,15 +117,15 @@ pub fn execute_external_with_redirects(
 /// use vsh::state::ShellState;
 ///
 /// let stages = vec![
-///     ("ls".to_string(), vec!["-la".to_string()]),
-///     ("grep".to_string(), vec!["test".to_string()]),
+///     ("ls".to_string(), vec!["-la".into()]),
+///     ("grep".to_string(), vec!["test".into()]),
 /// ];
 /// let mut state = ShellState::new("/tmp")?;
 /// let exit_code = external::execute_pipeline(&stages, &[], &mut state)?;
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn execute_pipeline(
-    stages: &[(String, Vec<String>)],
+    stages: &[(String, Vec<OsString>)],
     redirects: &[Redirection],
     state: &mut ShellState,
 ) -> Result<i32> {
@@ -283,11 +284,11 @@ pub fn execute_pipeline(
 /// ```no_run
 /// use vsh::external;
 ///
-/// let exit_code = external::execute_external("ls", &["-la".to_string()])?;
+/// let exit_code = external::execute_external("ls", &["-la".into()])?;
 /// assert_eq!(exit_code, 0);
 /// # Ok::<(), anyhow::Error>(())
 /// ```
-pub fn execute_external(program: &str, args: &[String]) -> Result<i32> {
+pub fn execute_external(program: &str, args: &[OsString]) -> Result<i32> {
     // PATH lookup
     let executable = find_in_path(program)?;
 
@@ -551,7 +552,7 @@ fn is_executable(path: &PathBuf) -> bool {
 /// Job ID for the background job
 pub fn execute_external_background(
     program: &str,
-    args: &[String],
+    args: &[OsString],
     redirects: &[Redirection],
     state: &mut ShellState,
 ) -> Result<usize> {
@@ -569,7 +570,14 @@ pub fn execute_external_background(
     let command_str = if args.is_empty() {
         format!("{} &", program)
     } else {
-        format!("{} {} &", program, args.join(" "))
+        format!(
+            "{} {} &",
+            program,
+            args.iter()
+                .map(|arg| arg.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
     };
 
     // Build command with redirected stdio
@@ -658,7 +666,7 @@ mod tests {
     #[test]
     fn test_external_command_with_args() {
         // Test command with arguments
-        let exit_code = execute_external("echo", &["hello".to_string()]).unwrap();
+        let exit_code = execute_external("echo", &["hello".into()]).unwrap();
         assert_eq!(exit_code, 0, "echo should return 0");
     }
 
@@ -694,7 +702,7 @@ mod tests {
         let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
         let stages = vec![
-            ("echo".to_string(), vec!["hello".to_string()]),
+            ("echo".to_string(), vec!["hello".into()]),
             ("cat".to_string(), vec![]),
             ("cat".to_string(), vec![]),
         ];
@@ -711,7 +719,7 @@ mod tests {
         let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
         let stages = vec![
-            ("echo".to_string(), vec!["test".to_string()]),
+            ("echo".to_string(), vec!["test".into()]),
             ("cat".to_string(), vec![]),
         ];
         let redirects = vec![crate::redirection::Redirection::Output {
@@ -735,7 +743,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
-        let stages: Vec<(String, Vec<String>)> = vec![];
+        let stages: Vec<(String, Vec<OsString>)> = vec![];
         let result = execute_pipeline(&stages, &[], &mut state);
         assert!(result.is_err(), "Empty pipeline should return error");
     }

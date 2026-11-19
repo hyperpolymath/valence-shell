@@ -42,8 +42,9 @@
 //! targets, assignments, `case` patterns and `test` arguments still use the
 //! older string encoding.
 
+use std::ffi::OsString;
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
@@ -258,13 +259,24 @@ pub enum ProcessSubs {
 
 /// The result of expanding a list of words.
 pub struct Expansion {
-    /// The arguments, after quote removal.
-    pub fields: Vec<String>,
+    /// The arguments, after quote removal. A glob match keeps the exact bytes
+    /// of its file name, which need not be UTF-8.
+    pub fields: Vec<OsString>,
     /// Process substitutions started for these arguments.
     pub process_subs: Vec<ProcessSubstitution>,
 }
 
 impl Expansion {
+    /// The arguments as text, for a builtin or a function that works on
+    /// strings. Bytes that are not UTF-8 are replaced; external commands get
+    /// [`Expansion::fields`] unchanged.
+    pub fn lossy_fields(&self) -> Vec<String> {
+        self.fields
+            .iter()
+            .map(|field| field.to_string_lossy().into_owned())
+            .collect()
+    }
+
     /// Wait for the process substitutions and remove their FIFOs.
     pub fn cleanup(self) {
         for proc_sub in self.process_subs {
@@ -438,32 +450,27 @@ fn glob_fields(
     cwd: &Path,
     limits: &GlobLimits,
     spent: &mut GlobUsage,
-    fields: &mut Vec<String>,
+    fields: &mut Vec<OsString>,
 ) -> Result<()> {
     let encoded = encode(chars);
     for candidate in glob::expand_braces(&encoded) {
         match glob_pattern(&candidate) {
-            None => fields.push(remove_quotes(&candidate)),
+            None => fields.push(remove_quotes(&candidate).into()),
             Some(pattern) => match glob::expand_glob_continuing(&pattern, cwd, limits, *spent) {
                 Ok(found) if !found.paths.is_empty() => {
                     *spent = found.usage;
-                    fields.extend(
-                        found
-                            .paths
-                            .iter()
-                            .map(|path| path.to_string_lossy().into_owned()),
-                    );
+                    fields.extend(found.paths.into_iter().map(PathBuf::into_os_string));
                 }
                 // No match still spent reads.
                 Ok(found) => {
                     *spent = found.usage;
-                    fields.push(remove_quotes(&candidate));
+                    fields.push(remove_quotes(&candidate).into());
                 }
                 // A limit is not "no match": substituting the literal word
                 // would run the command on the wrong arguments.
                 Err(e) if e.is::<GlobLimitExceeded>() => return Err(e),
                 // No match, or not a valid pattern: keep the word (POSIX).
-                _ => fields.push(remove_quotes(&candidate)),
+                _ => fields.push(remove_quotes(&candidate).into()),
             },
         }
     }
@@ -566,7 +573,7 @@ mod tests {
             &GlobLimits::DEFAULT,
         )
         .unwrap()
-        .fields
+        .lossy_fields()
     }
 
     #[test]
@@ -660,7 +667,7 @@ mod tests {
             &GlobLimits::DEFAULT,
         )
         .unwrap()
-        .fields;
+        .lossy_fields();
         assert_eq!(out, ["a.txt", "b.txt", "*.txt"]);
     }
 
@@ -711,7 +718,7 @@ mod tests {
             &limits,
         )
         .unwrap()
-        .fields;
+        .lossy_fields();
         assert_eq!(out, ["f0.txt", "f1.txt", "f2.txt", "f3.txt"]);
     }
 
@@ -764,7 +771,7 @@ mod tests {
             &GlobLimits::DEFAULT,
         )
         .unwrap();
-        assert_eq!(out.fields, ["xsuffix"]);
+        assert_eq!(out.lossy_fields(), ["xsuffix"]);
     }
 
     #[test]

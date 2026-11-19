@@ -505,7 +505,7 @@ impl ExecutableCommand for Command {
                 // double-lookup plus expect shape could panic and duplicated
                 // the lookup.
                 if let Some(func_def) = state.functions.get(&expanded_program).cloned() {
-                    let result = execute_function_call(&func_def, &expansion.fields, state);
+                    let result = execute_function_call(&func_def, &expansion.lossy_fields(), state);
                     expansion.cleanup();
                     return result;
                 }
@@ -568,7 +568,7 @@ impl ExecutableCommand for Command {
 
                 // Expand every stage before any stage runs, so a failed
                 // expansion runs no part of the pipeline.
-                let mut expanded_stages: Vec<(String, Vec<String>)> = Vec::new();
+                let mut expanded_stages: Vec<(String, Vec<std::ffi::OsString>)> = Vec::new();
                 let mut process_subs = Vec::new();
                 for (program, args) in stages {
                     let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
@@ -692,7 +692,7 @@ impl ExecutableCommand for Command {
                             return Ok(ExecutionResult::ExternalCommand { exit_code: 1 });
                         }
                     };
-                let expanded_args = &expansion.fields;
+                let expanded_args = &expansion.lossy_fields();
 
                 let output = if *interpret_escapes {
                     expanded_args

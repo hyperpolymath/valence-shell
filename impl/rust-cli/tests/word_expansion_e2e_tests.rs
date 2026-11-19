@@ -41,12 +41,20 @@ fn stdout(dir: &Path, script: &str) -> String {
     String::from_utf8(out.stdout).unwrap()
 }
 
+/// The lines of `text` with runs of white space made one space, so the column
+/// padding of `wc` does not matter.
+fn rows(text: &str) -> Vec<String> {
+    text.lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect()
+}
+
 #[test]
 fn external_command_without_redirect_gets_the_matches() {
     let dir = fixture();
     assert_eq!(
-        stdout(dir.path(), "wc -c *.txt"),
-        "0 a.txt\n0 b.txt\n0 total\n"
+        rows(&stdout(dir.path(), "wc -c *.txt")),
+        ["0 a.txt", "0 b.txt", "0 total"]
     );
 }
 
@@ -55,8 +63,8 @@ fn external_command_with_redirect_gets_the_matches() {
     let dir = fixture();
     stdout(dir.path(), "wc -c *.txt > out.wc");
     assert_eq!(
-        std::fs::read_to_string(dir.path().join("out.wc")).unwrap(),
-        "0 a.txt\n0 b.txt\n0 total\n"
+        rows(&std::fs::read_to_string(dir.path().join("out.wc")).unwrap()),
+        ["0 a.txt", "0 b.txt", "0 total"]
     );
 }
 
@@ -199,4 +207,37 @@ fn a_substring_length_past_the_end_gives_the_rest() {
         ),
         "cdef bc\n"
     );
+}
+
+#[test]
+fn a_mixed_quote_word_keeps_its_quoting_in_a_list() {
+    let dir = fixture();
+    std::fs::write(dir.path().join("*x.txt"), b"").unwrap();
+    std::fs::write(dir.path().join("ax.txt"), b"").unwrap();
+    // The operands of && were written back with one quoting for the whole
+    // word, so the unquoted `.*` stopped being a pattern.
+    assert_eq!(stdout(dir.path(), "echo '*'x.* && true"), "*x.txt\n");
+    assert_eq!(stdout(dir.path(), "false || echo *x.*"), "*x.txt ax.txt\n");
+    assert_eq!(stdout(dir.path(), "echo '*.txt' && true"), "*.txt\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn an_external_command_gets_the_exact_bytes_of_a_matched_name() {
+    use std::os::unix::ffi::OsStrExt;
+    let dir = fixture();
+    let name = std::ffi::OsStr::from_bytes(b"bad\xff.bin");
+    if std::fs::write(dir.path().join(name), b"12345").is_err() {
+        return; // this file system refuses names that are not UTF-8
+    }
+    // A lossy name would not exist, and `cat` would fail.
+    assert_eq!(stdout(dir.path(), "cat *.bin"), "12345");
+    assert_eq!(stdout(dir.path(), "cat *.bin | cat"), "12345");
+}
+
+#[test]
+fn a_later_pipeline_stage_gets_the_matches() {
+    let dir = fixture();
+    let out = stdout(dir.path(), "printf '' | wc -c *.txt");
+    assert_eq!(rows(&out), ["0 a.txt", "0 b.txt", "0 total"]);
 }
