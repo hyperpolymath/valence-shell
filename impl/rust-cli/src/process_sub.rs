@@ -108,12 +108,30 @@ impl ProcessSubstitution {
         Ok(())
     }
 
-    /// Wait for background process and cleanup
+    /// Wait for background process and cleanup.
+    ///
+    /// Callers run this after the last command that could open the FIFO has
+    /// finished. A child that no command opened is still blocked in its
+    /// `open(2)` of the FIFO, waiting for a partner, so a plain `wait` would
+    /// never return (`echo <(pwd)` prints the path and opens nothing). While
+    /// the child runs, the shell therefore opens the end that the child waits
+    /// for, without blocking, and closes it at once: a `<(cmd)` writer sees
+    /// its reader leave, and a `>(cmd)` reader sees end of file. A connected
+    /// child is not cut short: the shell keeps waiting until it exits, so a
+    /// `>(cmd)` reader still finishes the work it was given.
     pub fn cleanup(mut self) -> Result<()> {
         // Wait for background process to finish
         if let Some(mut child) = self.child_process.take() {
-            let status = child.wait()?;
-            if !status.success() {
+            let status = loop {
+                if let Some(status) = child.try_wait()? {
+                    break status;
+                }
+                self.release_waiting_child();
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            };
+            // A `<(cmd)` writer whose reader has gone ends on SIGPIPE. That is
+            // the normal end of an unread substitution, not a failure.
+            if !status.success() && !ended_by_sigpipe(&status) {
                 eprintln!(
                     "Process substitution command failed: {} (exit code: {})",
                     self.command,
@@ -131,6 +149,40 @@ impl ProcessSubstitution {
 
         Ok(())
     }
+}
+
+impl ProcessSubstitution {
+    /// Open the end of the FIFO that the child waits for, without blocking,
+    /// and close it again at once. An error only means that the child has not
+    /// reached its own `open` yet (no reader for a `>(cmd)` FIFO); the caller
+    /// tries again on its next turn.
+    #[cfg(unix)]
+    fn release_waiting_child(&self) {
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut options = std::fs::OpenOptions::new();
+        match self.sub_type {
+            // The child writes, so the shell opens the read end.
+            ProcessSubType::Input => options.read(true),
+            // The child reads, so the shell opens the write end.
+            ProcessSubType::Output => options.write(true),
+        };
+        let _ = options.custom_flags(libc::O_NONBLOCK).open(&self.fifo_path);
+    }
+
+    #[cfg(not(unix))]
+    fn release_waiting_child(&self) {}
+}
+
+/// True when the process ended on SIGPIPE.
+#[cfg(unix)]
+fn ended_by_sigpipe(status: &std::process::ExitStatus) -> bool {
+    use std::os::unix::process::ExitStatusExt;
+    status.signal() == Some(libc::SIGPIPE)
+}
+
+#[cfg(not(unix))]
+fn ended_by_sigpipe(_status: &std::process::ExitStatus) -> bool {
+    false
 }
 
 /// Safety net: remove FIFO on drop if cleanup() was never called
@@ -315,5 +367,80 @@ mod tests {
         let mut child = start_command_with_input_redirect(&cmd, &mut state, &input).unwrap();
         assert!(child.wait().unwrap().success());
         assert_eq!(std::fs::read_to_string(&copy).unwrap(), "12345\n");
+    }
+
+    /// Run `f` on another thread. True when it finishes within `secs`.
+    /// A cleanup that waits forever fails the test instead of hanging the suite.
+    fn finishes_within(secs: u64, f: impl FnOnce() + Send + 'static) -> bool {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            f();
+            let _ = tx.send(());
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(secs))
+            .is_ok()
+    }
+
+    fn started(sub_type: ProcessSubType, cmd: &str) -> (TempDir, ProcessSubstitution) {
+        let temp_dir = TempDir::new().unwrap();
+        let mut state = ShellState::new(temp_dir.path().to_str().unwrap()).unwrap();
+        let mut sub = ProcessSubstitution::create(sub_type, cmd.to_string(), &mut state).unwrap();
+        sub.start(&mut state).unwrap();
+        (temp_dir, sub)
+    }
+
+    #[test]
+    fn cleanup_releases_an_input_substitution_that_no_command_opened() {
+        // `echo <(pwd)` prints the path and never opens it.
+        let (_dir, sub) = started(ProcessSubType::Input, "pwd");
+        let path = sub.fifo_path.clone();
+        assert!(
+            finishes_within(10, move || sub.cleanup().unwrap()),
+            "cleanup waited forever for an unopened <(pwd)"
+        );
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn cleanup_releases_an_output_substitution_that_no_command_opened() {
+        // `echo >(cat)` prints the path and never writes to it.
+        let (_dir, sub) = started(ProcessSubType::Output, "cat");
+        let path = sub.fifo_path.clone();
+        assert!(
+            finishes_within(10, move || sub.cleanup().unwrap()),
+            "cleanup waited forever for an unopened >(cat)"
+        );
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn a_connected_input_substitution_still_delivers_its_output() {
+        // `cat <(cat FILE)`: the reader gets everything, then cleanup returns.
+        // (`echo` is a builtin, which a substitution does not run.)
+        let src = TempDir::new().unwrap();
+        let file = src.path().join("in.txt");
+        std::fs::write(&file, "hi\n").unwrap();
+        let (_dir, sub) = started(ProcessSubType::Input, &format!("cat {}", file.display()));
+        let text = std::fs::read_to_string(&sub.fifo_path).unwrap();
+        assert_eq!(text, "hi\n");
+        assert!(finishes_within(10, move || sub.cleanup().unwrap()));
+    }
+
+    #[test]
+    fn a_connected_output_substitution_finishes_its_work_before_cleanup_returns() {
+        // `echo data > >(tee FILE)`: cleanup waits until tee has written FILE.
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("out.txt");
+        let mut state = ShellState::new(dir.path().to_str().unwrap()).unwrap();
+        let mut sub = ProcessSubstitution::create(
+            ProcessSubType::Output,
+            format!("tee {}", out.display()),
+            &mut state,
+        )
+        .unwrap();
+        sub.start(&mut state).unwrap();
+        std::fs::write(&sub.fifo_path, "data\n").unwrap();
+        assert!(finishes_within(10, move || sub.cleanup().unwrap()));
+        assert_eq!(std::fs::read_to_string(&out).unwrap(), "data\n");
     }
 }
