@@ -42,8 +42,9 @@ fn a_read_interrupted_by_sigchld_is_restarted() {
         (n, byte, errno)
     });
     // The handle comes from the parent's JoinHandle: on musl a pthread_t is a
-    // raw pointer, which a channel cannot carry between threads.
-    let thread = reader.as_pthread_t();
+    // raw pointer, which a channel cannot carry between threads. std gives a
+    // c_ulong on every Linux target, so cast it to libc's pthread_t.
+    let thread = reader.as_pthread_t() as libc::pthread_t;
     std::thread::sleep(Duration::from_millis(100));
     // SAFETY: `thread` is the reader thread. It is still alive, blocked in
     // read(2), because the byte that ends the read is written only below.
