@@ -1767,7 +1767,13 @@ pub fn fg(state: &mut ShellState, job_spec: Option<&str>) -> Result<()> {
                 job_cmd.trim_end_matches(" &")
             );
         } else {
-            // Job completed - remove from table
+            // Job completed: nothing can open its FIFOs now, so release the
+            // process substitutions it held, then remove it from the table.
+            for sub in state.jobs.take_process_subs(job_id) {
+                if let Err(e) = sub.cleanup() {
+                    eprintln!("Warning: Failed to cleanup process substitution: {}", e);
+                }
+            }
             state.jobs.remove_job(job_id);
         }
     }

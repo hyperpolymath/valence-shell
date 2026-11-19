@@ -72,6 +72,9 @@ pub enum ExecutionResult {
 
 impl ExecutableCommand for Command {
     fn execute(&self, state: &mut ShellState) -> Result<ExecutionResult> {
+        // Safe point: collect the background jobs that have ended, and
+        // release their process substitutions, before the next command runs.
+        state.reap_jobs();
         match self {
             // Filesystem operations (reversible)
             Command::Mkdir { path, redirects } => {
@@ -521,9 +524,12 @@ impl ExecutableCommand for Command {
                         redirects,
                         state,
                     ) {
-                        // The job may open a FIFO later: do not release or
-                        // remove one that it has not read yet.
-                        Ok(_job_id) => expansion.cleanup_when_consumed(),
+                        // The job may open a FIFO later: the job table keeps
+                        // the substitutions and releases them when it reaps
+                        // the job.
+                        Ok(job_id) => state
+                            .jobs
+                            .attach_process_subs(job_id, expansion.process_subs),
                         // No job: nothing will open the FIFOs.
                         Err(e) => {
                             eprintln!("{}: {}", expanded_program, e);

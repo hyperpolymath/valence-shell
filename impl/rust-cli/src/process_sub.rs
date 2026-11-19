@@ -23,6 +23,7 @@ use crate::parser::{parse_command, Command, ProcessSubType};
 use crate::state::ShellState;
 
 /// Process substitution instance
+#[derive(Debug)]
 pub struct ProcessSubstitution {
     /// Path to the FIFO
     pub fifo_path: PathBuf,
@@ -111,34 +112,22 @@ impl ProcessSubstitution {
     /// Wait for background process and cleanup.
     ///
     /// Callers run this after the last command that could open the FIFO has
-    /// finished. A child that no command opened is still blocked in its
-    /// `open(2)` of the FIFO, waiting for a partner, so a plain `wait` would
-    /// never return (`echo <(pwd)` prints the path and opens nothing). While
-    /// the child runs, the shell therefore opens the end that the child waits
-    /// for, without blocking, and closes it at once: a `<(cmd)` writer sees
-    /// its reader leave, and a `>(cmd)` reader sees end of file. A connected
-    /// child is not cut short: the shell keeps waiting until it exits, so a
+    /// finished (for a background job, when the job has been reaped). A child
+    /// that no command opened is still blocked in its `open(2)` of the FIFO,
+    /// waiting for a partner, so a plain `wait` would never return
+    /// (`echo <(pwd)` prints the path and opens nothing). While the child
+    /// runs, the shell therefore opens the end that the child waits for,
+    /// without blocking, and closes it at once: a `<(cmd)` writer sees its
+    /// reader leave, and a `>(cmd)` reader sees end of file. A connected child
+    /// is not cut short: the shell keeps waiting until it exits, so a
     /// `>(cmd)` reader still finishes the work it was given.
-    pub fn cleanup(self) -> Result<()> {
-        self.finish(true)
-    }
-
-    /// Wait for the substitution to end, then remove its FIFO, without
-    /// releasing the child. For a background job, which may open the FIFO at
-    /// any later time: a release could end the child or remove the FIFO first.
-    pub fn cleanup_when_consumed(self) -> Result<()> {
-        self.finish(false)
-    }
-
-    fn finish(mut self, release: bool) -> Result<()> {
+    pub fn cleanup(mut self) -> Result<()> {
         if let Some(mut child) = self.child_process.take() {
             let status = loop {
                 if let Some(status) = child.try_wait()? {
                     break status;
                 }
-                if release {
-                    self.release_waiting_child();
-                }
+                self.release_waiting_child();
                 std::thread::sleep(std::time::Duration::from_millis(10));
             };
             // A `<(cmd)` writer whose reader has gone ends on SIGPIPE. That is
@@ -455,18 +444,45 @@ mod tests {
 
     #[test]
     fn a_handed_off_input_substitution_waits_for_a_late_reader() {
-        // `cat <(cat FILE) &`: the shell hands the substitution off before the
-        // background job opens the FIFO. The writer must not be released and
-        // the FIFO must still exist when the job opens it.
+        // `cat <(cat FILE) &`: the shell hands the substitution to the job
+        // table before the background job opens the FIFO. The writer must not
+        // be released while the job runs, and the FIFO must still exist when
+        // the job opens it. Cleanup follows the reaping of the job.
+        use crate::job::JobTable;
         let src = TempDir::new().unwrap();
         let file = src.path().join("in.txt");
         std::fs::write(&file, "hi\n").unwrap();
         let (_dir, sub) = started(ProcessSubType::Input, &format!("cat {}", file.display()));
         let path = sub.fifo_path.clone();
-        let handed_off = std::thread::spawn(move || sub.cleanup_when_consumed().unwrap());
+
+        // The job table under test reaps this child, so no handle is kept.
+        let pid = std::process::Command::new("sleep")
+            .arg("1")
+            .spawn()
+            .unwrap()
+            .id() as i32;
+        let mut jobs = JobTable::new();
+        let id = jobs.add_job(pid, "sleep 1 &".to_string(), vec![pid]);
+        jobs.attach_process_subs(id, vec![sub]);
+
+        assert!(jobs.reap_finished().is_empty(), "the job still runs");
         std::thread::sleep(std::time::Duration::from_millis(200));
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "hi\n");
-        assert!(finishes_within(10, move || handed_off.join().unwrap()));
+
+        let finished = loop {
+            let finished = jobs.reap_finished();
+            if !finished.is_empty() {
+                break finished;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        };
+        assert!(finishes_within(10, move || {
+            for job in finished {
+                for sub in job.process_subs {
+                    sub.cleanup().unwrap();
+                }
+            }
+        }));
         assert!(!path.exists());
     }
 

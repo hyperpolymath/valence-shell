@@ -55,6 +55,12 @@ pub fn run(state: &mut ShellState) -> Result<()> {
     let mut stdout = io::stdout();
 
     loop {
+        // Report the background jobs that ended since the last prompt.
+        state.reap_jobs();
+        for notice in state.job_notices.drain(..) {
+            println!("{notice}");
+        }
+
         // Build prompt
         let prompt = build_prompt(state);
         print!("{}", prompt);

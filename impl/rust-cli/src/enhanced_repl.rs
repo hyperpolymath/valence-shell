@@ -291,6 +291,12 @@ pub fn run(state: &mut ShellState) -> Result<()> {
     let mut accumulated_input = String::new();
 
     loop {
+        // Report the background jobs that ended since the last prompt.
+        state.reap_jobs();
+        for notice in state.job_notices.drain(..) {
+            println!("{notice}");
+        }
+
         // Build prompt
         let txn_name = state.active_transaction.as_ref().map(|t| t.name.clone());
         let undo_count = state.history.iter().filter(|o| !o.undone).count();
