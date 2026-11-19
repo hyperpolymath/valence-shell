@@ -5,6 +5,7 @@
 
 #![cfg(unix)]
 
+use std::os::unix::thread::JoinHandleExt;
 use std::time::{Duration, Instant};
 
 #[test]
@@ -32,10 +33,7 @@ fn a_read_interrupted_by_sigchld_is_restarted() {
     // SAFETY: `fds` is a live array of two c_ints for pipe(2) to fill.
     assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
     let (read_fd, write_fd) = (fds[0], fds[1]);
-    let (tx, rx) = std::sync::mpsc::channel();
     let reader = std::thread::spawn(move || {
-        // SAFETY: pthread_self takes no arguments.
-        tx.send(unsafe { libc::pthread_self() }).unwrap();
         let mut byte = 0u8;
         // SAFETY: `byte` is a live, exclusively borrowed u8 and the length
         // is 1; read_fd is the open read end of the pipe.
@@ -43,9 +41,12 @@ fn a_read_interrupted_by_sigchld_is_restarted() {
         let errno = std::io::Error::last_os_error();
         (n, byte, errno)
     });
-    let thread = rx.recv().unwrap();
+    // The handle comes from the parent's JoinHandle: on musl a pthread_t is a
+    // raw pointer, which a channel cannot carry between threads.
+    let thread = reader.as_pthread_t();
     std::thread::sleep(Duration::from_millis(100));
-    // SAFETY: `thread` is the live reader thread, blocked in read(2).
+    // SAFETY: `thread` is the reader thread. It is still alive, blocked in
+    // read(2), because the byte that ends the read is written only below.
     assert_eq!(unsafe { libc::pthread_kill(thread, libc::SIGCHLD) }, 0);
     std::thread::sleep(Duration::from_millis(100));
     // SAFETY: write_fd is the open write end; one byte from a live u8.
