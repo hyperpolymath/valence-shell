@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 == [Unreleased]
 
+=== Changed — 2026-11-17 (A2ML descriptiles moved into the repo deed)
+
+- The retired `.machine_readable/6a2/` A2ML files (STATE, META, ECOSYSTEM,
+  AGENTIC, NEUROSYM, PLAYBOOK, the directory manifest, the anchor and the
+  directory README) are archived verbatim under `archive/a2ml-v1/` with their
+  history. Their content now lives in `valence-shell_chora.deed`, a
+  `repo-deed` that passes the standards `deed_lint`. Fields with no mapping row
+  are kept as comments, and every field's disposition, including the items
+  that need owner input, is in `archive/a2ml-v1/MIGRATION-LEDGER.adoc`.
+  Addresses Hypatia SD004; SD007 stays open on one owner-policy line of
+  `.claude/CLAUDE.md` (ledger row U-2).
+
 === Changed — 2026-11-01 (assurance-boundary re-audit)
 
 - Corrected prose that had drifted across the assurance boundary. The audit

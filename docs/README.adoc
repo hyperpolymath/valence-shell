@@ -50,7 +50,8 @@ This README provides orientation; individual files are self-describing.
 | `PROOF_HOLES_AUDIT.adoc`
 | Active proof-debt ledger across the 6-system stack
   (Coq/Lean4/Agda/Isabelle/Mizar/Z3 + Idris2 ABI). Source of truth for
-  the `[coq-proof-status]` block in `../.machine_readable/6a2/STATE.a2ml`.
+  the `[coq-proof-status]` block of the retired `STATE.a2ml`, archived at
+  `../archive/a2ml-v1/6a2-STATE.a2ml.txt`.
 
 | `POSIX_COMPLIANCE.md`
 | Per-feature POSIX compliance tracker (M1-M11 milestones; M1-M9
@@ -105,4 +106,5 @@ This README provides orientation; individual files are self-describing.
 * `../README.md` / `../EXPLAINME.adoc` — repo entry points
 * `../CLAUDE.md` — AI-assistant honest-status document
 * `../ROADMAP.adoc` — release track + audit closure list
-* `../.machine_readable/6a2/STATE.a2ml` — machine-readable state
+* `../valence-shell_chora.deed` — the repo deed (machine-readable descriptiles);
+  migration record in `../archive/a2ml-v1/MIGRATION-LEDGER.adoc`

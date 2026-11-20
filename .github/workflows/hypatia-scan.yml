@@ -47,15 +47,31 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      # Hypatia RE001: the scan job holds GITHUB_TOKEN and the fleet PAT next
-      # to fetched code (the Hypatia and gitbot-fleet clones, the mix build).
-      # Audit mode records every outbound connection without blocking; the
-      # job's endpoints (hex.pm, GitHub, the Elixir builds) are too many to
-      # enumerate safely as a block list here.
-      - name: Monitor outbound requests (audit)
+      # Hypatia RE001/RE002: the scan job holds GITHUB_TOKEN and the fleet PAT
+      # next to fetched code (the Hypatia and gitbot-fleet clones, the mix
+      # build), so outbound traffic is blocked except for the hosts it needs:
+      # GitHub (checkout, clones, API, SARIF upload, PR comment), the BEAM and
+      # Hex builds setup-beam and mix fetch, Actions artifact storage, and the
+      # Green Web Foundation API one Hypatia rule queries. If a run reports a
+      # blocked endpoint, add it here deliberately.
+      - name: Restrict outbound requests to the scan's known hosts
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            uploads.github.com:443
+            builds.hex.pm:443
+            repo.hex.pm:443
+            hex.pm:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            api.thegreenwebfoundation.org:443
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2

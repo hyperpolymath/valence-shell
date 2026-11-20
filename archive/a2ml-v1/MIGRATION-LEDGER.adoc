@@ -1,0 +1,240 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Migration ledger: `.machine_readable/6a2/` A2ML to the repo deed (valence-shell, 2026-11-17)
+:toc:
+
+This ledger records every field of the retired `.machine_readable/6a2/` files:
+where it went, why it did not move, or what the owner must supply. Row IDs match
+the comments in `valence-shell_chora.deed`.
+
+Why now: Hypatia reported SD004 on the six `.machine_readable/6a2/*.a2ml`
+descriptiles ("descriptile in retired location; the current canon keeps
+descriptiles as clauses of the repo deed") and SD007 on `.claude/CLAUDE.md`,
+which named `.machine_readable/6a2/`. A2ML is retired (D99, D269c, D312, D313).
+
+Authorities, all read on 2026-11-17:
+
+* `metadatastician/standards` at `151276d6`: `1-formats/deed/spec/abnf/deed.abnf`
+  (v2.0.0), `1-formats/deed/tools/README.adoc`, the mapping specs in
+  `1-formats/deed/mappings/` (`meta-ecosystem-to-repo-deed`,
+  `agentic-neurosym-playbook-to-repo-deed`, `state-v1-decision` (option B),
+  `ai-manifest-decision` (option A), `clade-to-repo-deed`, `README`),
+  `canon.lock`, `2-protocols/chora/CHORA-SPEC.adoc` (sections 9 and 11.1) and
+  `docs/estate-reconciliation/A7-contractiles-descriptiles-anchor.adoc`
+  (section 6.4, the anchor table).
+* Precedent: `hyperpolymath/absolute-zero` at `8a3162a`,
+  `absolute-zero_chora.deed` and `archive/a2ml-v1/MIGRATION-LEDGER.adoc`.
+* Registry: `hyperpolymath/gv-clade-index` at `09ef2838`,
+  `verisim/seed/chora-registry_praxis.deed`.
+
+== Archive map
+
+The nine files were moved with `git mv`, so their history is kept. The
+`.machine_readable/6a2/` directory no longer exists.
+
+[cols="3,3",options="header"]
+|===
+| Source (before) | Archived as
+| `.machine_readable/6a2/STATE.a2ml` | `6a2-STATE.a2ml.txt`
+| `.machine_readable/6a2/META.a2ml` | `6a2-META.a2ml.txt`
+| `.machine_readable/6a2/ECOSYSTEM.a2ml` | `6a2-ECOSYSTEM.a2ml.txt`
+| `.machine_readable/6a2/AGENTIC.a2ml` | `6a2-AGENTIC.a2ml.txt`
+| `.machine_readable/6a2/NEUROSYM.a2ml` | `6a2-NEUROSYM.a2ml.txt`
+| `.machine_readable/6a2/PLAYBOOK.a2ml` | `6a2-PLAYBOOK.a2ml.txt`
+| `.machine_readable/6a2/0-AI-MANIFEST.a2ml` | `6a2-0-AI-MANIFEST.a2ml.txt`
+| `.machine_readable/6a2/anchor/ANCHOR.a2ml` | `6a2-anchor-ANCHOR.a2ml.txt`
+| `.machine_readable/6a2/README.adoc` | `6a2-README.adoc.txt`
+|===
+
+The archived files are byte-identical to their sources. Two of them,
+`6a2-0-AI-MANIFEST.a2ml.txt` and `6a2-anchor-ANCHOR.a2ml.txt`, carried no SPDX
+header in the source and still carry none: a header was not added, because an
+archive is verbatim and an SPDX edit is the owner's (owner input, row X-1).
+
+== Where each file went
+
+[cols="2,4",options="header"]
+|===
+| Source | Destination
+| META | Nothing emitted; every key fails closed (M-1 to M-5). Kept as deed comments.
+| ECOSYSTEM | `(ecosystem :project :ecosystem :position-type)` in the deed; the rest as comments (E-1 to E-5).
+| AGENTIC | `(agentic :version :last-updated (permissions …))` in the deed; constraints and bridge rules as comments (A-1 to A-4).
+| NEUROSYM | `(neurosym :version :last-updated (hypatia …))` in the deed (N-1, N-2).
+| PLAYBOOK | `(playbook :version :last-updated (deployment) (incident-response) (release-process))`; commented content kept as comments (P-1 to P-4).
+| STATE | Option B: nothing emitted; journal archived (S-1 to S-9).
+| 6a2/0-AI-MANIFEST | Archived only (G-1).
+| 6a2/README | Archived only (R-1).
+| anchor/ANCHOR | No `(anchor …)` clause yet; fields recorded as comments with their A7 6.4 destinations (AN-1 to AN-7).
+|===
+
+== Ledger rows
+
+=== Target form
+
+[cols="1,3,4",options="header"]
+|===
+| ID | Item | Disposition
+| T-1 | Clause form vs the A7 split form | The descriptiles are clauses of `valence-shell_chora.deed`, as the absolute-zero precedent and Hypatia SD004 name them. The *more elegant long-term option*, and the current mapping specs' stated target, is the A7 split: `.machine_readable/descriptiles/{META,ECOSYSTEM,AGENTIC,NEUROSYM}.deed` (`descriptile-deed`, J30, J33, J35), with `(playbook …)` staying in the chora deed. This change departs from it because (a) A7 is a draft and its profiles gate only their own fixtures; (b) every `descriptile-deed` requires `:affirmed` and `:affirmed-by` (J4), an affirmation no translator may give for the owner; (c) the readers today (Hypatia's RSR scorer, `deed_lint`) accept the chora clauses, and A7 reads a chora `(agentic …)` or `(neurosym …)` with a warning for one release (YF05, YF06). Owner decision: when to move to the split form.
+|===
+
+=== Identity and canon pin
+
+[cols="1,3,4",options="header"]
+|===
+| ID | Item | Disposition
+| I-1 | `:repo-uuid` | Emitted as `#uuid"4f114668-94c6-8a71-a7b1-cd69345c08ad"`. Source: the registry seed `verisim/seed/chora-registry_praxis.deed` in `hyperpolymath/gv-clade-index` at `09ef2838` holds `(repo :name "valence-shell" :owner "hyperpolymath" :uuid #uuid"4f114668-…" :minted-in gv-clade-index …)`, with no `(former …)`, so the birth path is `github.com/hyperpolymath/valence-shell`. Cross-check: the ADR-008 profile C UUIDv8 of `gv-clade-index:github.com/hyperpolymath/valence-shell` recomputes to the same value; the same recipe reproduces absolute-zero's registry id. The legacy UUID in `.machine_readable/CLADE.a2ml` is a version 5 value and was not used (V8, Q2). The opaque `#uuid` form is used (U4); no `deed_lint` older than `#uuid` is pinned here (the dogfood gate's validator scans `.a2ml` only). *Owner check recommended:* the value was read from a fresh public clone of the registry, not from a pinned copy.
+| I-2 | `:beholding-chora` | Emitted as `#uuid"0889b37b-defb-831f-973c-e119500db00e"`, the hyperpolymath estate id in the CHORA-SPEC section 9 table, recomputed from `chora:estate/github.com/hyperpolymath`. The birth estate is hyperpolymath (B1).
+| I-3 | `(identity …)`, `(clade …)`, `(forges …)`, `(lineage …)`, `(status …)` | Not emitted. Their source is `.machine_readable/CLADE.a2ml`, out of scope here (O-1). CHORA-SPEC 5.4 (draft) makes `(identity …)` required once; that lands with the CLADE migration.
+| C-1 | `(canon …)` pin | Emitted with `:version "2.1.5"`, `:criteria-sha256` and `:gates-sha256` copied from `canon.lock` `[canon]` and `[canon.artifacts]` at standards `151276d6`, and read back with standards' own `deed_canon` reader. `canon.lock` marks the release `status = "draft"`. `:lockstep-since` is not emitted: it is a per-repo adoption date the source does not carry.
+|===
+
+=== META
+
+[cols="1,3,4",options="header"]
+|===
+| ID | Item | Disposition
+| M-1 | `[metadata] project = "valence-shell"` | No table row (the family-2 `[metadata]` rows are `version` and `last-updated`). The value equals the deed's `:canonical-name`. Kept as a comment.
+| M-2 | `[metadata] author` | Fail closed: the table row is `[project-info] author`, not `[metadata] author`; a corner shape extends the table, it is never translated ad hoc. Kept as a comment.
+| M-3 | `[metadata] license = "MPL-2.0"` | Fail closed for the same reason. A `:license` is also a licence surface, which is owner-only. Kept as a comment.
+| M-4 | `[metadata] standard = "RSR 2026"` | No table row. Kept as a comment.
+| M-5 | No `version`, `last-updated`, ADRs, development practices or maintenance axes in the source | Nothing emitted, nothing invented, so no `(meta …)` clause (drop doctrine: a clause exists when it carries content). Hypatia's RSR criterion for META therefore reads no deed carrier; it did not read `6a2/` either.
+|===
+
+=== ECOSYSTEM
+
+[cols="1,3,4",options="header"]
+|===
+| ID | Item | Disposition
+| E-1 | `[metadata] project`, `ecosystem`; `[position] type` | Emitted as `:project "valence-shell"` (equals `:canonical-name`, P-6), `:ecosystem "hyperpolymath"`, `:position-type "component"`.
+| E-2 | `[position] role = "operational-shell-layer"` | No table row (the `[position]` rows are `type`, `purpose`, `what-this-is-not`). Kept as a comment.
+| E-3 | `[architecture]` (layer, layer-name, semantics-layer, receipts-layer) | No table row. Kept as a comment.
+| E-4 | `[bridges.echo-types]`, `[bridges.ochrance]` | No table row, and not `[related-projects]` entries, so no `(related …)` is emitted: the source states no `relationship` from the closed set and no `notes`. The bridge's authority is `docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc` and `.machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml` (O-4). Owner input if these should become `(related …)` edges: the relationship term for each.
+| E-5 | `[bridge-entry-points]` | No table row. Both paths still resolve; kept as a comment.
+| E-6 | Source header comment "Forbidden-moves codified in `.machine_readable/MUST.contractile`" | Stale: no such file exists in the tree. Recorded, not fixed (the AGENTIC constraints text repeats it, A-2).
+|===
+
+=== AGENTIC
+
+[cols="1,3,4",options="header"]
+|===
+| ID | Item | Disposition
+| A-1 | `[metadata] version`, `last-updated`; `[agent-permissions]` | Emitted: `:version "0.1.0"`, `:last-updated "2026-03-16"`, `(permissions :source #t :tests #t :docs #t :config #t :create-files #t)`.
+| A-2 | `[agent-constraints]` (comment-carried) | D4-1: the block diverges from template canon (it adds the bridge forbidden moves), so it fails closed. The family-4 table says a populated constraint is an edict, a `(rule …)` in `Mustfile.deed` (A7 YL3), and the contractiles are out of scope (O-2). Kept verbatim as deed comments. Owner input: the edicts, when the contractiles migrate.
+| A-3 | `[bridge-aware-rules]` | No table row. Kept verbatim as deed comments. The CI script and workflow it names exist and still run.
+| A-4 | `[maintenance-integrity]`, `[methodology]`, `[automation-hooks]` | Absent from the source, so `(integrity …)`, `(methodology …)` and `(hooks …)` are not emitted. The integrity booleans are not copied from the estate template: that would invent per-repo state.
+|===
+
+=== NEUROSYM
+
+[cols="1,3,4",options="header"]
+|===
+| ID | Item | Disposition
+| N-1 | `[metadata]`; `[hypatia-config] scan-enabled`, `scan-depth` | Emitted: `:version "0.1.0"`, `:last-updated "2026-03-16"`, `(hypatia :scan-enabled #t :scan-depth standard …)`.
+| N-2 | `[hypatia-config] report-format = "logtalk"` | Emitted as `:report-format "json"`. This is the table's migration rule, not a guess: "`logtalk`", a retired format, becomes `"json"` and is never carried across. (absolute-zero, migrated before the rule, carried its value verbatim.)
+|===
+
+=== PLAYBOOK
+
+[cols="1,3,4",options="header"]
+|===
+| ID | Item | Disposition
+| P-1 | `[metadata] version`, `last-updated` | Emitted.
+| P-2 | `[deployment]`, `[incident-response]`, `[release-process]` | They hold no keys, only commented text, so they are slot-preserved as empty clauses (family-1 slot doctrine, as the table rules). The commented text is kept verbatim as deed comments.
+| P-3 | `[docs-format]`, `[maintenance-operations]`, `@profile` | Absent from the source. Not emitted: a slot with no source section would be invented structure.
+| P-4 | Commented steps name `.machine_readable/STATE.a2ml` and `META.a2ml` | Stale: neither path is live. Owner input: the replacement steps (the deed and the archive).
+|===
+
+=== STATE (option B)
+
+[cols="1,3,4",options="header"]
+|===
+| ID | Item | Disposition
+| S-1 | `[metadata] status = "active"` | Not emitted. It duplicates the CLADE phase; the one lifecycle claim is the `(status …)` clause of `STATE.deed` (A7 J15), whose source is CLADE (O-1).
+| S-2 | `[project-context] phase = "advanced-research-prototype"` | Not emitted. It is neither a lifecycle phase nor a maturity level (`experimental alpha beta production lts`), and picking one would be a judgement, not a translation. Owner input: the `(maturity :level …)` value.
+| S-3 | `[metadata] version = "0.9.0"`, `last-updated` | Not emitted; no row in option B. The semver pin is `impl/rust-cli/Cargo.toml`.
+| S-4 | `[project-context] completion-percentage = 78` | Dropped (derivable, state-v1-decision section 3). Note: `ROADMAP.adoc` quotes "~74%" from this file, which held 78; recorded, not corrected.
+| S-5 | `[project-context] name`, `bridge-status`, `bridge-doc`, `bridge-a2ml` | Not emitted; the name is `:canonical-name`, and the bridge facts are carried by the bridge documents (E-4).
+| S-6 | `[recent-work-2026-07-01]`, `[recent-work-2026-06-02]`, `[recent-work]`, `[session-history]` | Journal. Archived, not translated (v2 thin-journal doctrine). The record continues in `CHANGELOG.adoc` and git history.
+| S-7 | `[coq-proof-status]` | Derivable counts and their prose. Archived. The live authorities are `docs/PROOF_HOLES_AUDIT.adoc` and `EXPLAINME.adoc` (Proof Ledger); the docs that pointed at this block now point there or at the archive (U-3, U-4).
+| S-8 | `[dogfooding-status]` | Journal-shaped disclosure. Archived. `ROADMAP.adoc` still asks for it to be added to `STATE.a2ml` (U-6).
+| S-9 | `[crg]` (grade C, audit notes) | No home in option B. Archived; the dated audit is `docs/governance/CRG-AUDIT-2026-04-18.adoc`.
+|===
+
+=== Directory manifest, README and anchor
+
+[cols="1,3,4",options="header"]
+|===
+| ID | Item | Disposition
+| G-1 | `6a2/0-AI-MANIFEST.a2ml` | A directory manifest for the six-file `6a2/` layout (canonical locations, lock-file protocol), not the root agent-allocation manifest of ai-manifest-decision. Its keys match no family table, so it fails closed. Archived only; the layout it describes no longer exists.
+| R-1 | `6a2/README.adoc` | Archived only (`6a2-README.adoc.txt`); it described the retired directory.
+| AN-1 | `(anchor …)` clause | Not emitted. The legacy anchor has no `authority`, and the clause requires `:authority` exactly once; A7 6.4 says such a translation is incomplete and the translator never invents one. *Owner input:* the `:authority` value, then the clause `(anchor :schema "hyperpolymath.anchor/2" :authority "…" (metadata :version "0.9.0"))`.
+| AN-2 | `id: "org.hyperpolymath.valence-shell"` | Dropped (A7 6.4): the chora `:repo-uuid` is the id.
+| AN-3 | `version: "0.9.0"` | Destination `(anchor (metadata :version "0.9.0"))`; waits for AN-1. Kept as a comment.
+| AN-4 | `clade: "unknown"` | Dropped from the anchor. Placements come from chora-registry, which holds `clade-12` fv (primary) and ix (rank 1) for this repo; a chora `(clade …)` lands with the CLADE migration (O-1).
+| AN-5 | `status: "active"` | Dropped from the anchor; lifecycle is `STATE.deed`'s (S-1).
+| AN-6 | `ssg` (engine `casket`, output_dir `public`, boj_trigger `true`, cartridge `ssg-mcp`) | Destination `META.deed` `(ssg …)` (J29), which does not exist here (T-1). Kept as a comment. Owner input: confirm the values are this repo's and not template boilerplate.
+| AN-7 | `parents: ["org.hyperpolymath.boj-server"]` | Destination an ECOSYSTEM `(related … :relationship parent :uuid …)` (J26). Not emitted: the registry records valence-shell as `standalone` with no parent, so this edge conflicts with the registry. Owner ruling needed.
+|===
+
+=== Out of scope (not migrated in this change)
+
+[cols="1,3,4",options="header"]
+|===
+| ID | Item | Reason
+| O-1 | `.machine_readable/CLADE.a2ml` | Excluded by the task. CLADE is not folded into a descriptile: its identity content goes to the chora deed and its lifecycle to `STATE.deed` (CHORA-SPEC 11.1, clade-to-repo-deed). Its own change.
+| O-2 | `.machine_readable/contractiles/*.a2ml` | Excluded. Contractiles become edicts (`<Verb>file.deed`) and K9 contracts, a separate migration. `Mustfile.a2ml`: the `six-directory-present` (critical) and `anchors-directory` checks named `.machine_readable/6a2/`; the first passed before this migration. Both are replaced by one `repo-deed-present` check (deed and ledger exist, `6a2/` is gone), so the invariant follows the layout instead of failing on every checkout (Codex review on #229). The `bust/`, `dust/` and `self-validating` checks name paths that were already absent and are unchanged.
+| O-3 | `.machine_readable/bot_directives/*.a2ml` | Excluded. `methodology.a2ml` line 112 still says "Phase 0 reads STATE.a2ml first". Not edited (frozen A2ML). Its prose `README.adoc` was updated (U-7).
+| O-4 | `.machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml` | Excluded. Named by `.github/scripts/check-bridge-forbidden-phrases.sh` as a required artefact and by `.claude/CLAUDE.md`.
+| O-5 | `.machine_readable/IDRIS2_AXIOMS.a2ml` | Excluded and must stay in place: `.github/scripts/check-idris2-believe-me.sh` reads it, and `idris-verification.yml` triggers on it.
+| O-6 | `.machine_readable/integrations/*.a2ml` (feedback-o-tron, proven, verisimdb, vexometer) | Not descriptiles; no mapping spec. Not touched.
+| O-7 | Root `0-AI-MANIFEST.a2ml` | Not in `6a2/`. The root agent-allocation manifest has its own decision (ai-manifest-decision, option A, `(manifest …)`). Read by `Mustfile.a2ml`, `www/.well-known/ai.txt` and docs. Its own change.
+| O-8 | `audits/assail-classifications.a2ml` | Not a descriptile. Not touched.
+| O-9 | `alkahest-shell-transmuter/.machine_readable/6a2/` | A nested subproject with its own six `6a2/` files. Hypatia's SD004 reads only the repo root's `.machine_readable/6a2/`. Its own change.
+|===
+
+=== Consumers of the moved paths
+
+[cols="1,3,4",options="header"]
+|===
+| ID | Item | Disposition
+| U-1 | `.claude/CLAUDE.md` "Machine-Readable Artefacts" list | Updated to name the deed, this ledger and the archive (SD007). Nothing else in the file was changed.
+| U-2 | `.claude/CLAUDE.md` language-policy table, row "Guile Scheme" | Named `.machine_readable/6a2/STATE.a2ml`, `META.a2ml` and `ECOSYSTEM.a2ml`. *Resolved 2026-11-17:* the row now points at `valence-shell_chora.deed`, following the absolute-zero precedent; the row's language rule is unchanged. SD007 clears.
+| U-3 | `docs/README.adoc` (two references) | Updated to the deed, `PROOF_HOLES_AUDIT.adoc` and the archived STATE.
+| U-4 | `proofs/coq/README.adoc` (three references) | Updated to the archived STATE and the live authorities. The file's own counts (`admitted = 1`) disagree with `docs/PROOF_HOLES_AUDIT.adoc` (0 admits); recorded, not corrected.
+| U-5 | `ROADMAP.adoc` "Current Status" | The path updated to the archived STATE. The "~74%" figure is left as written (S-4).
+| U-6 | `ROADMAP.adoc` open items "Add `[dogfooding-status]` to STATE.a2ml" and "Add 3+ ADRs to META.a2ml" | Both named retired files. The tasks are kept, reworded to drop the file names and marked "target pending", so nobody is sent to edit an archive (Codex review on #229). Where dogfooding status lives, and when ADRs become `(adr …)` entries (T-1), is still owner input.
+| U-7 | `.machine_readable/bot_directives/README.adoc` | The `AGENTIC.a2ml` line now names the deed's `(agentic …)` clause.
+| U-8 | Dated records: `CHANGELOG.adoc` history, `docs/audits/*`, `docs/governance/CRG-AUDIT-2026-04-18.adoc`, `docs/reports/*` | Left as written.
+|===
+
+=== Other
+
+[cols="1,3,4",options="header"]
+|===
+| ID | Item | Disposition
+| X-1 | No SPDX header in two archived sources (`6a2-0-AI-MANIFEST.a2ml.txt`, `6a2-anchor-ANCHOR.a2ml.txt`) | Not added; owner-only (licence edits are manual).
+|===
+
+== Validation (2026-11-17)
+
+[cols="3,2,5",options="header"]
+|===
+| Check | Result | Notes
+| `bun deed_lint.js valence-shell_chora.deed` (standards `151276d6`) | PASS | `OK   valence-shell_chora.deed`.
+| `deed_lint.js --ast-json` | PASS | Head `repo-deed`; top-level `:schema-version`, `:canonical-name`, `:beholding-chora`, `:repo-uuid`, and the clauses `canon`, `ecosystem`, `agentic`, `neurosym`, `playbook`.
+| `deed_lint.js --anchor`, `--egress`, `--contractiles`, `--rsr-profile` | PASS | Each reports no such clause.
+| standards `deed_canon` reader (from `scripts/check-canon-lockstep.sh`) | PASS | Reads `2.1.5` and both hashes.
+| `.github/scripts/check-bridge-forbidden-phrases.sh` | PASS | Run after the edits.
+| `git grep -n '6a2/'` | 1 live hit, an owner item | The frozen `Mustfile.a2ml` checks (O-2). Every other hit is in this archive and ledger, a `CHANGELOG.adoc` history entry (this change's included), a dated audit record, or the out-of-scope subproject (O-9).
+|===
+
+== Open items (owner)
+
+. Anchor `:authority` (AN-1), then the `(anchor …)` clause.
+. The boj-server parent edge against the registry's `standalone` (AN-7); the `ssg` values (AN-6).
+. The maturity level (S-2).
+. Whether the bridges become `(related …)` edges, and with which relationship (E-4).
+. The AGENTIC constraints as `Mustfile.deed` edicts (A-2).
+. The `ROADMAP.adoc` items (U-6); the PLAYBOOK steps (P-4).
+. When to move to the A7 split descriptile deeds, with their affirmation (T-1).
+. Confirm the `:repo-uuid` read from the registry (I-1).
+. SPDX headers on the two archived files that lack them (X-1).
