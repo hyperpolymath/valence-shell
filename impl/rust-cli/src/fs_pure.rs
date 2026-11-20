@@ -65,20 +65,32 @@ use std::path::Path;
 ///
 /// On non-Linux targets this is equivalent to [`File::open`].
 pub fn open_pure(path: &Path) -> io::Result<File> {
+    open_noatime(File::options().read(true), path)
+}
+
+/// Open an existing file for reading and writing through one handle, with the
+/// same `O_NOATIME` handling as [`open_pure`] for the reads.
+///
+/// For callers that read a file and then change it: one handle means what
+/// was read and what is changed are the same file, even if the path is
+/// renamed or replaced in between. The file is not created or truncated.
+pub fn open_pure_read_write(path: &Path) -> io::Result<File> {
+    open_noatime(File::options().read(true).write(true), path)
+}
+
+/// Open with `O_NOATIME` on Linux, without it if the kernel refuses the flag.
+fn open_noatime(options: &mut std::fs::OpenOptions, path: &Path) -> io::Result<File> {
     #[cfg(target_os = "linux")]
     {
         use std::os::unix::fs::OpenOptionsExt;
-        let mut opts = File::options();
-        opts.read(true).custom_flags(libc::O_NOATIME);
-        match opts.open(path) {
-            Ok(f) => Ok(f),
-            Err(e) if e.raw_os_error() == Some(libc::EPERM) => File::open(path),
-            Err(e) => Err(e),
+        match options.clone().custom_flags(libc::O_NOATIME).open(path) {
+            Err(e) if e.raw_os_error() == Some(libc::EPERM) => options.open(path),
+            result => result,
         }
     }
     #[cfg(not(target_os = "linux"))]
     {
-        File::open(path)
+        options.open(path)
     }
 }
 
