@@ -258,7 +258,14 @@ pub enum Command {
         count: usize,
         show_proofs: bool,
     },
-    Exit,
+    /// `exit [status]`. The status is kept unexpanded until it runs.
+    /// `too_many` is set when more than one operand was given; what follows
+    /// then depends on whether a person is typing, so it is decided when the
+    /// command runs.
+    Exit {
+        code: Option<String>,
+        too_many: bool,
+    },
     Quit,
 
     // Transactions
@@ -271,6 +278,25 @@ pub enum Command {
     // Display commands
     Graph,
     Proofs,
+    /// `help [command]`
+    Help {
+        topic: Option<String>,
+        redirects: Vec<Redirection>,
+    },
+
+    /// A built-in that was given arguments it does not take: an option it
+    /// does not handle, too many operands, or none where one is needed.
+    /// Running it prints `message` and fails with status 1; nothing else
+    /// is done.
+    ///
+    /// This is a command and not a parse error because the line is well
+    /// formed, and what follows depends on the failure: in
+    /// `mkdir -p x || echo fallback` the second command must run. As a
+    /// parse error it stopped the whole list, condition or loop from being
+    /// read at all.
+    Refused {
+        message: String,
+    },
     Ls {
         path: Option<String>,
         redirects: Vec<Redirection>,
@@ -1853,9 +1879,32 @@ pub fn parse_command(input: &str) -> Result<Command> {
     let cmd = &command_tokens[0];
     let args: Vec<String> = command_tokens[1..].to_vec();
 
-    // Parse base command with redirections
-    parse_base_command(cmd, args, redirects, background)
+    // Parse base command with redirections. A built-in that does not take
+    // what it was given is a command that fails when it is run (see
+    // `Command::Refused`).
+    match parse_base_command(cmd, args, redirects, background) {
+        Err(error) => match error.downcast::<Refusal>() {
+            Ok(Refusal(message)) => Ok(Command::Refused { message }),
+            Err(other) => Err(other),
+        },
+        parsed => parsed,
+    }
 }
+
+/// What a built-in says when it does not take the arguments it was given.
+/// It is raised while the command is read, and becomes
+/// [`Command::Refused`] there. Any other error from reading a command is
+/// still a parse error.
+#[derive(Debug)]
+struct Refusal(String);
+
+impl std::fmt::Display for Refusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Refusal {}
 
 /// Check if a string is a valid variable name
 /// Valid: starts with letter or underscore, then letters/digits/underscores
@@ -3253,6 +3302,89 @@ pub fn is_incomplete_control_structure(input: &str) -> bool {
     block_depth > 0
 }
 
+/// Splits the arguments of a built-in command into options and operands, and
+/// refuses what the built-in does not handle.
+///
+/// A built-in that took an option for a file name, or dropped the operands it
+/// had no room for, did something other than what was typed and reported
+/// success (`mkdir -p a/b` made a directory named `-p`). Refusing is the safe
+/// answer until the option exists. `--` ends the options, so a name that
+/// starts with `-` can still be given.
+fn builtin_operands(
+    name: &str,
+    args: &[String],
+    known_options: &[&str],
+    min: usize,
+    max: usize,
+    missing: &str,
+) -> Result<(Vec<String>, Vec<String>)> {
+    let mut options = Vec::new();
+    let mut operands = Vec::new();
+    let mut options_ended = false;
+    for arg in args {
+        if !options_ended && arg == "--" {
+            options_ended = true;
+        } else if !options_ended && reads_as_option(arg) {
+            if !known_options.contains(&arg.as_str()) {
+                return Err(Refusal(format!(
+                    "{name}: option '{arg}' is not supported by the built-in {name}; nothing was done"
+                ))
+                .into());
+            }
+            options.push(arg.clone());
+        } else {
+            operands.push(arg.clone());
+        }
+    }
+    if operands.len() < min {
+        return Err(Refusal(missing.to_string()).into());
+    }
+    if operands.len() > max {
+        let takes = match max {
+            0 => "no operands".to_string(),
+            1 => "one operand".to_string(),
+            n => format!("{n} operands"),
+        };
+        return Err(Refusal(format!(
+            "{name}: the built-in {name} takes {takes}, but {} were given; nothing was done",
+            operands.len()
+        ))
+        .into());
+    }
+    Ok((options, operands))
+}
+
+/// Whether `word` reads as an option to a built-in: it starts with `-` and is
+/// not `-` alone, which names standard input or the previous directory.
+pub(crate) fn reads_as_option(word: &str) -> bool {
+    word.len() > 1 && word.starts_with('-')
+}
+
+/// Whether `word`, where `chmod` expects its mode, is an option. A mode may
+/// start with `-` (`chmod -x f`), so only the option spellings count.
+pub(crate) fn is_chmod_option(word: &str) -> bool {
+    matches!(word, "-R" | "-c" | "-f" | "-v") || word.starts_with("--")
+}
+
+/// Parses the count given to `undo` or `redo`: nothing means one.
+fn step_count(name: &str, args: &[String]) -> Result<usize> {
+    match args {
+        [] => Ok(1),
+        [count] => match count.parse::<usize>() {
+            Ok(n) if n > 0 => Ok(n),
+            _ => Err(Refusal(format!(
+                "{name}: '{count}' is not a count of operations; nothing was done"
+            ))
+            .into()),
+        },
+        _ => Err(Refusal(format!(
+            "{name}: takes one count, but {} arguments were given; nothing was done",
+            args.len()
+        ))
+        .into()),
+    }
+}
+
 fn parse_base_command(
     cmd: &str,
     args: Vec<String>,
@@ -3261,102 +3393,137 @@ fn parse_base_command(
 ) -> Result<Command> {
     match cmd {
         "mkdir" => {
-            if args.is_empty() {
-                return Err(anyhow!("mkdir: missing operand"));
-            }
+            let (_, operands) =
+                builtin_operands("mkdir", &args, &[], 1, 1, "mkdir: missing operand")?;
             Ok(Command::Mkdir {
-                path: args[0].clone(),
+                path: operands[0].clone(),
                 redirects,
             })
         }
         "rmdir" => {
-            if args.is_empty() {
-                return Err(anyhow!("rmdir: missing operand"));
-            }
+            let (_, operands) =
+                builtin_operands("rmdir", &args, &[], 1, 1, "rmdir: missing operand")?;
             Ok(Command::Rmdir {
-                path: args[0].clone(),
+                path: operands[0].clone(),
                 redirects,
             })
         }
         "touch" => {
-            if args.is_empty() {
-                return Err(anyhow!("touch: missing operand"));
-            }
+            let (_, operands) =
+                builtin_operands("touch", &args, &[], 1, 1, "touch: missing operand")?;
             Ok(Command::Touch {
-                path: args[0].clone(),
+                path: operands[0].clone(),
                 redirects,
             })
         }
         "rm" => {
-            if args.is_empty() {
-                return Err(anyhow!("rm: missing operand"));
-            }
+            let (_, operands) = builtin_operands("rm", &args, &[], 1, 1, "rm: missing operand")?;
             Ok(Command::Rm {
-                path: args[0].clone(),
+                path: operands[0].clone(),
                 redirects,
             })
         }
         "obliterate" => {
             // GDPR-style secure deletion. `--force`/`-f` skips confirmation.
-            let force = args.iter().any(|a| a == "--force" || a == "-f");
-            let path = args.iter().find(|a| !a.starts_with('-')).cloned();
-            match path {
-                Some(path) => Ok(Command::Obliterate {
-                    path,
-                    force,
-                    redirects,
-                }),
-                None => Err(anyhow!("obliterate: missing operand")),
-            }
+            // Exactly one target: an obliteration cannot be undone, so an
+            // operand that would be passed over in silence is refused.
+            let (options, operands) = builtin_operands(
+                "obliterate",
+                &args,
+                &["--force", "-f"],
+                1,
+                1,
+                "obliterate: missing operand",
+            )?;
+            Ok(Command::Obliterate {
+                path: operands[0].clone(),
+                force: !options.is_empty(),
+                redirects,
+            })
         }
         "cp" => {
-            if args.len() < 2 {
-                return Err(anyhow!("cp: missing destination operand"));
-            }
+            let (_, operands) =
+                builtin_operands("cp", &args, &[], 2, 2, "cp: missing destination operand")?;
             Ok(Command::Cp {
-                src: args[0].clone(),
-                dst: args[1].clone(),
+                src: operands[0].clone(),
+                dst: operands[1].clone(),
                 redirects,
             })
         }
         "mv" => {
-            if args.len() < 2 {
-                return Err(anyhow!("mv: missing destination operand"));
-            }
+            let (_, operands) =
+                builtin_operands("mv", &args, &[], 2, 2, "mv: missing destination operand")?;
             Ok(Command::Mv {
-                src: args[0].clone(),
-                dst: args[1].clone(),
+                src: operands[0].clone(),
+                dst: operands[1].clone(),
                 redirects,
             })
         }
         "chmod" => {
+            // `--` ends the options here as it does for the other built-ins:
+            // what follows is the mode and the file, whatever they look like.
+            let options_ended = args.first().is_some_and(|first| first == "--");
+            let args = if options_ended { &args[1..] } else { &args[..] };
+            // The first argument is the mode, which may itself start with `-`
+            // (`chmod -x f`), so only the option spellings are refused there.
+            if !options_ended {
+                if let Some(first) = args.first() {
+                    if is_chmod_option(first) {
+                        return Err(Refusal(format!(
+                            "chmod: option '{first}' is not supported by the built-in chmod; nothing was done"
+                        ))
+                        .into());
+                    }
+                }
+            }
             if args.len() < 2 {
                 return Err(anyhow!("chmod: usage: chmod MODE FILE"));
             }
+            let mut after_mode: Vec<String> = Vec::new();
+            if options_ended {
+                after_mode.push("--".to_string());
+            }
+            after_mode.extend_from_slice(&args[1..]);
+            let (_, operands) = builtin_operands(
+                "chmod",
+                &after_mode,
+                &[],
+                1,
+                1,
+                "chmod: usage: chmod MODE FILE",
+            )?;
             Ok(Command::Chmod {
                 mode: args[0].clone(),
-                path: args[1].clone(),
+                path: operands[0].clone(),
                 redirects,
             })
         }
         "chown" => {
-            if args.len() < 2 {
-                return Err(anyhow!("chown: usage: chown OWNER[:GROUP] FILE"));
-            }
+            let (_, operands) = builtin_operands(
+                "chown",
+                &args,
+                &[],
+                2,
+                2,
+                "chown: usage: chown OWNER[:GROUP] FILE",
+            )?;
             Ok(Command::Chown {
-                owner: args[0].clone(),
-                path: args[1].clone(),
+                owner: operands[0].clone(),
+                path: operands[1].clone(),
                 redirects,
             })
         }
         "ln" => {
             // ln -s target link_name
-            // Filter out -s flag
-            let filtered: Vec<_> = args.iter().filter(|a| *a != "-s").cloned().collect();
-            if filtered.len() < 2 {
-                return Err(anyhow!("ln: usage: ln -s target link_name"));
-            }
-            if !args.contains(&"-s".to_string()) {
+            let (options, filtered) = builtin_operands(
+                "ln",
+                &args,
+                &["-s"],
+                2,
+                2,
+                "ln: usage: ln -s target link_name",
+            )?;
+            if options.is_empty() {
                 return Err(anyhow!("ln: only symbolic links supported (use ln -s)"));
             }
             Ok(Command::Ln {
@@ -3366,11 +3533,11 @@ fn parse_base_command(
             })
         }
         "undo" => {
-            let count = args.first().and_then(|s| s.parse().ok()).unwrap_or(1);
+            let count = step_count("undo", &args)?;
             Ok(Command::Undo { count })
         }
         "redo" => {
-            let count = args.first().and_then(|s| s.parse().ok()).unwrap_or(1);
+            let count = step_count("redo", &args)?;
             Ok(Command::Redo { count })
         }
 
@@ -3432,7 +3599,10 @@ fn parse_base_command(
                 .unwrap_or(10);
             Ok(Command::History { count, show_proofs })
         }
-        "exit" => Ok(Command::Exit),
+        "exit" => Ok(Command::Exit {
+            code: args.first().cloned(),
+            too_many: args.len() > 1,
+        }),
         "quit" => Ok(Command::Quit),
 
         // Transactions
@@ -3450,18 +3620,30 @@ fn parse_base_command(
         // Display commands
         "graph" => Ok(Command::Graph),
         "proofs" | "proof" => Ok(Command::Proofs),
-        "ls" => Ok(Command::Ls {
-            path: args.first().map(|s| s.to_string()),
-            redirects,
-        }),
+        "help" | "?" => {
+            let (_, operands) =
+                builtin_operands("help", &args, &[], 0, 1, "help: missing operand")?;
+            Ok(Command::Help {
+                topic: operands.first().cloned(),
+                redirects,
+            })
+        }
+        "ls" => {
+            let (_, operands) = builtin_operands("ls", &args, &[], 0, 1, "ls: missing operand")?;
+            Ok(Command::Ls {
+                path: operands.first().cloned(),
+                redirects,
+            })
+        }
         "pwd" => Ok(Command::Pwd { redirects }),
         "cd" => {
             // cd doesn't support redirections (it's a state change, not output)
             if !redirects.is_empty() {
                 return Err(anyhow!("cd: redirections not supported for this command"));
             }
+            let (_, operands) = builtin_operands("cd", &args, &[], 0, 1, "cd: missing operand")?;
             Ok(Command::Cd {
-                path: args.first().map(|s| s.to_string()),
+                path: operands.first().cloned(),
             })
         }
 

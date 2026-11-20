@@ -22,31 +22,47 @@ Opus audit session that fixed all broken tests, real bugs, and documentation.
 
 ### What Actually Works (v0.9.0)
 
-The Rust CLI is a functional interactive shell with these features:
+**Measured, not claimed (2026-11-17, gate G0).** `impl/rust-cli/tests/conformance_battery.rs`
+starts the built shell on 128 everyday command lines and compares the result with bash:
+**69 match**. The cases that fail are listed in
+`impl/rust-cli/tests/conformance/known_failing.txt`. That list is a ratchet: it may only
+shrink, and a case may not be added to it to make a build pass.
 
-- Built-in filesystem operations (mkdir, rmdir, touch, rm) with undo/redo
-- External command execution via PATH lookup
-- Reversible file operations (`cp`, `mv`, `ln -s`) with formal proofs
-- Unix pipelines (`cmd1 | cmd2 | cmd3`)
-- I/O redirections (`>`, `>>`, `<`, `2>`, `2>>`, `&>`, `2>&1`)
-- Process substitution (`<(cmd)` and `>(cmd)`)
-- Arithmetic expansion (`$((expr))`)
-- Here documents (`<<DELIM`) and here strings (`<<<word`)
-- Glob expansion (`*.txt`, `file?.rs`, `[a-z]*`, `{1,2,3}`)
-- Quote processing (single, double, backslash)
-- Control structures (`if/then/elif/else/fi`, `while/do/done`, `for/in/do/done`, `case/esac`)
-- `test`/`[` and `[[ ]]` conditionals
-- Logical operators (`&&` `||`) with short-circuit evaluation
-- Shell builtins (`echo`, `read`, `source`, `eval`, `set`, `unset`, `true`, `false`)
-- Shell variables (`$VAR`, `${VAR}`, `export`) with reversible assignment (undo/redo)
-- Job control (`bg`, `fg`, `jobs`, `kill`, `&` operator)
+Works through the built shell (passing battery cases, or checked by hand interactively):
+
+- Built-in file operations with undo/redo (`mkdir`, `rmdir`, `touch`, `rm`, `cp`, `mv`,
+  `ln -s`, `chmod`, `chown`) in their plain forms only: one operand each, two for `cp`,
+  `mv` and `ln -s`, and a mode or an owner followed by one file for `chmod` and `chown`. None
+  takes an option (the `-s` of `ln -s` apart). An option or an extra operand is refused, and
+  nothing is done
+- External command execution via PATH lookup; pipelines of external programs
+- `>`, `>>`, `<` and here strings (`<<<word`); `&&` and `||`
+- `test`, `[ ... ]`, and `[[ ... ]]` on its own; `if/elif/else`, `while`, a single `for`, `case`
+- Functions, `local`, `return`; `$VAR`, `${VAR}`, `${VAR:-default}`, `${#VAR}`, `${VAR:o:n}`
+- `$((expr))`, and `$(cmd)` of another program, as the whole value of an assignment
+- `echo`, `printf`, `eval`, `set --`, `set -e`, `alias`, `trap ... EXIT`, `exit N`
+- A command that fails fails only itself, with a status: the next command of a script,
+  a function or a loop runs, and `||` runs its right side
+- Reversible variable assignment (undo/redo)
 - Transaction grouping (`begin`/`commit`/`rollback`)
-- Interactive REPL with history and multi-line input for control structures
-- Command correction (zsh-style "Did you mean?")
-- `explain` command (proof-annotated dry runs)
-- `checkpoint`/`restore` (named snapshots with proof certificates)
-- `diff` (state comparison between checkpoints or current state)
-- `replay` (animated history with proof narration)
+- `explain`, `checkpoint`/`restore`, `diff`, `replay`, `history --proofs`
+- Interactive REPL: line editing, history, multi-line control structures, `help`,
+  `&` at the end of a line and `jobs`
+
+In the source and unit-tested, but NOT working through the built shell (battery cases fail):
+
+- Glob, brace and tilde expansion: applied only when the command also has a redirection
+- `$((expr))` and `$(cmd)` inside an argument (`echo $((1+2))` prints the text); backquotes
+- A quoted `*`, `?`, `[`, `{` or `~` reaches other programs with a backslash added
+- `${VAR#pat}`, `${VAR%pat}`, `${VAR^^}` (give an empty string); `$$`
+- Nested `for` loops (silently wrong), `break`, `continue`, `! cmd`
+- Subshells, brace groups in pipelines, arrays, `(( ))`, the C-style `for`
+- `export` and `VAR=value cmd` do not reach the program being run
+- Here documents passed with `-c`; redirections on built-in commands outside the session root
+  (`ls nosuch 2>/dev/null`)
+- Ctrl-Z does not suspend a running program
+
+Not exercised by the battery: process substitution, command correction, the pager.
 
 ### Proof policy (normative, estate-wide)
 
@@ -271,22 +287,21 @@ vsh::parser::expand_variables(&input, &state);
 
 ### Immediate Priorities
 
-1. **Word splitting in external command arguments** (requires quote-context threading)
-2. **Alias expansion in pipe segments** (currently only first command in a pipeline)
-3. **Echidna integration** for automated property-based verification
-4. **`~user` tilde expansion** (requires getpwnam/NSS lookup)
+**The shell-language items that used to be listed here are parked** (owner ruling OD-42,
+2026-11-17; recorded in `docs/plans/VSH-ROUTE-PLAN-2026-11-04.adoc` on valence-shell#230,
+with the measurements in `docs/plans/VSH-PRODUCT-REVIEW-2026-11-17.adoc`). The engine is
+the product: reversible operations, the journal, containment, the record, and the proofs.
+The interpreter is one front end and comes last.
 
-### This Week
+Forward order:
 
-1. Implement shell functions (`func() { ... }`)
-2. Shell script execution (`.sh` files)
-3. Set up Echidna property-based validation pipeline
+1. **S0, the truthful baseline** (gate G0): what is claimed equals what the battery shows
+2. **The engine** (route plan phases B, C3 to C5, D, E): runtime holes, state outside the
+   tree, a store for old file contents, the spec spine, contracts on the Rust core
+3. **The capture experiment** (undo for any command), which decides the first front end
 
-### This Month
-
-1. Implement shell functions (`func() { ... }`)
-2. Shell script execution (`.sh` files)
-3. Begin Idris2 extraction path for v2.0
+Do not spend effort on POSIX coverage of the interpreter (word splitting, `~user`, alias
+expansion in pipelines) unless the owner asks for it.
 
 ### What NOT to Do
 
@@ -294,6 +309,9 @@ vsh::parser::expand_variables(&input, &state);
 - Do NOT inflate version numbers
 - Do NOT add features before closing proof holes
 - Do NOT trust Sonnet's commit messages or claims without verification
+- Do NOT add a case to `tests/conformance/known_failing.txt` to get a green build: fix the
+  shell, or correct a wrong expectation and say why
+- Do NOT tick a feature as working unless a test that runs the built shell shows it
 
 ## Building and Testing
 

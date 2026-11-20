@@ -284,6 +284,19 @@ pub struct ShellState {
     /// Last exit code from external command (for $? support)
     pub last_exit_code: i32,
 
+    /// Whether a person is typing into this shell. Set by the interactive
+    /// loops. A script, or `-c`, leaves it unset.
+    pub interactive: bool,
+
+    /// `set -e`: a simple command that fails ends the shell, with its status.
+    pub errexit: bool,
+
+    /// How many contexts are open in which `set -e` does not apply: the
+    /// condition of `if`, `elif`, `while` and `until`, and every command of
+    /// an `&&` or `||` list but the last. A function called there is inside
+    /// the context too.
+    pub errexit_suppressed: usize,
+
     /// Previous directory for cd - support
     pub previous_dir: Option<PathBuf>,
 
@@ -346,6 +359,9 @@ impl ShellState {
             transactions: Vec::new(),
             state_file,
             last_exit_code: 0,
+            interactive: false,
+            errexit: false,
+            errexit_suppressed: 0,
             previous_dir: None,
             variables: HashMap::new(),
             exported_vars: HashSet::new(),

@@ -1,18 +1,21 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-//! Valence Shell (vsh) - A Formally Verified Reversible Shell
+//! Valence Shell (vsh) - a reversible shell, a research prototype
 //!
 //! This is the user-facing CLI for Valence Shell. It provides:
 //! - Interactive shell with command history
-//! - Undo/redo for all filesystem operations
+//! - Undo, and redo where it is implemented, for the shell's own
+//!   filesystem operations (`obliterate` cannot be undone)
 //! - Transaction grouping
 //! - Proof references for each operation
 //! - Shell script execution (`vsh script.sh`, `vsh -c "cmd"`)
 //!
 //! Architecture:
-//! - This Rust binary handles UI and fast-path operations
-//! - Complex operations delegate to BEAM daemon
-//! - Zig FFI provides the verified POSIX interface
+//! - This Rust binary does everything the shell does today
+//! - The proofs are about a model; the link from the model to this code is
+//!   tested, not proved (see the `proofs` command)
+//! - The BEAM daemon is planned and not built, and the Zig FFI layer is not
+//!   connected to this shell
 //!
 //! Author: Jonathan D.A. Jewell
 
@@ -186,6 +189,10 @@ fn main() -> Result<()> {
         print_banner();
     }
 
+    // An interactive shell leaves with the status of its last command, or the
+    // one given to `exit`. The one-shot subcommands leave with 0 or an error.
+    let interactive = matches!(cli.command, Some(Commands::Shell) | None);
+
     match cli.command {
         Some(Commands::Mkdir { path }) => {
             commands::mkdir(&mut state, &path, cli.verbose)?;
@@ -229,18 +236,42 @@ fn main() -> Result<()> {
         }
     }
 
-    // Run EXIT trap if registered
-    if let Some(exit_cmd) = state
-        .traps
-        .get(vsh::posix_builtins::TrapSignal::Exit)
-        .map(|s| s.to_string())
-    {
-        if let Ok(cmd) = vsh::parser::parse_command(&exit_cmd) {
-            let _ = cmd.execute(&mut state);
-        }
+    run_exit_trap(&mut state);
+
+    if interactive {
+        std::process::exit(state.last_exit_code);
     }
 
     Ok(())
+}
+
+/// Run the EXIT trap, if one is set.
+///
+/// The text of a trap is a list of commands, as a script is:
+/// `trap 'echo a; echo b' EXIT` runs both. It used to be read as one
+/// command, so `echo` was given `a; echo b` as its words. A statement that
+/// cannot be read, or that fails with an error, is reported and the rest
+/// still run; `exit` in the trap ends it.
+fn run_exit_trap(state: &mut state::ShellState) {
+    let Some(body) = state
+        .traps
+        .get(vsh::posix_builtins::TrapSignal::Exit)
+        .map(|s| s.to_string())
+    else {
+        return;
+    };
+    for statement in vsh::parser::split_on_statement_separators(&body) {
+        let statement = statement.trim();
+        if statement.is_empty() {
+            continue;
+        }
+        let ran = vsh::parser::parse_command(statement).and_then(|cmd| cmd.execute(state));
+        match ran {
+            Ok(ExecutionResult::Exit) => break,
+            Ok(_) => {}
+            Err(e) => eprintln!("vsh: trap: {e}"),
+        }
+    }
 }
 
 /// Execute script content (string of commands, one per line or semicolon-separated)
@@ -276,7 +307,9 @@ fn execute_script_content(content: &str, state: &mut state::ShellState) -> Resul
             Ok(cmd) => {
                 let result = cmd.execute(state)?;
                 match result {
-                    ExecutionResult::Exit => return Ok(()),
+                    // `exit` has already set the status to leave with. Stop
+                    // here; the EXIT trap and the exit itself follow the loop.
+                    ExecutionResult::Exit => break,
                     ExecutionResult::ExternalCommand { exit_code }
                     | ExecutionResult::Return { exit_code } => {
                         state.last_exit_code = exit_code;
@@ -293,16 +326,7 @@ fn execute_script_content(content: &str, state: &mut state::ShellState) -> Resul
         }
     }
 
-    // Run EXIT trap if registered
-    if let Some(exit_cmd) = state
-        .traps
-        .get(vsh::posix_builtins::TrapSignal::Exit)
-        .map(|s| s.to_string())
-    {
-        if let Ok(cmd) = vsh::parser::parse_command(&exit_cmd) {
-            let _ = cmd.execute(state);
-        }
-    }
+    run_exit_trap(state);
 
     std::process::exit(state.last_exit_code);
 }

@@ -11,7 +11,7 @@
 //! - Keyboard navigation (space/enter/q)
 
 use anyhow::{Context, Result};
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::process::{Command, Stdio};
 
 /// Smart pager configuration
@@ -192,7 +192,11 @@ impl Pager {
     pub fn page(&self, content: &str) -> Result<()> {
         let line_count = content.lines().count();
 
-        if !self.should_page(line_count) {
+        // A pager is for a person at a terminal. When the output goes to a
+        // file or to another program, write it as it is: a pager there adds
+        // nothing, and one that does not take the options given to it (plain
+        // `more`, where there is no `less`) loses the text.
+        if !io::stdout().is_terminal() || !self.should_page(line_count) {
             // Output is short - just print directly
             print!("{}", content);
             io::stdout().flush()?;

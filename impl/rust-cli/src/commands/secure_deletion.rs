@@ -158,7 +158,11 @@ fn overwrite_pass(file: &mut std::fs::File, file_size: u64, pattern: Pattern) ->
     Ok(())
 }
 
-/// Perform 3-pass NIST SP 800-88 Purge-style secure overwrite.
+/// Overwrite the file three times.
+///
+/// In NIST SP 800-88 terms an overwrite with ordinary write calls is the
+/// *Clear* level at most. *Purge* needs a device sanitize command or
+/// cryptographic erase (see `secure_erase`).
 ///
 /// Pass order matches the task spec (random / zeros / final pattern), chosen
 /// because the final pattern is a known constant — useful for verifying that
@@ -307,7 +311,8 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
         eprintln!("  Size: {} bytes", file_size.to_string().bright_yellow());
         eprintln!();
         eprintln!("This will:");
-        eprintln!("  1. Overwrite with 3-pass NIST SP 800-88 Purge pattern (random, 0x00, 0xFF)");
+        eprintln!("  1. Overwrite the file three times (random, 0x00, 0xFF).");
+        eprintln!("     In NIST SP 800-88 terms this is the Clear level at most, not Purge.");
         eprintln!("  2. Delete the file");
         eprintln!("  3. Reduce ordinary file-level recovery opportunities");
         eprintln!("     (CoW filesystems like btrfs/ZFS/APFS and SSDs with FTL");

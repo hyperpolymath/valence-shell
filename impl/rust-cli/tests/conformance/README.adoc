@@ -1,0 +1,107 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= impl/rust-cli/tests/conformance/ — the conformance battery (gate G0)
+
+Gate G0 of the route plan (owner ruling OD-43): what the project says a front
+end can do equals what this battery shows it does.
+
+== Files
+
+[cols="2,5"]
+|===
+| File | Role
+
+| `battery.jsonl`
+| One case per line: an id, a command line (`cmd`), and the standard output
+  (`out`) and exit status (`rc`) a reference shell gave for it. The first line
+  is a comment object.
+
+| `known_failing.txt`
+| The ids of the cases that do not match today. A ratchet: a case that has
+  matched never goes onto it (see "The ratchet" and "Adding a case").
+
+| `../conformance_battery.rs`
+| The test. It starts the built `vsh` on each case in a fresh directory and
+  compares.
+|===
+
+== Running it
+
+[source,bash]
+----
+cd impl/rust-cli
+cargo test --test conformance_battery
+----
+
+A report of every case is written to `target/tmp/conformance-report.txt`.
+
+== The ratchet
+
+* A case that is not on the list and fails is a regression. The test fails.
+* A case that is on the list and passes must be taken off it. The test fails
+  until it is.
+* Do not add a case to the list to make a failing build pass. Fix the shell.
+  If an expectation is wrong, correct the case and say why in the commit.
+* The number of cases on the list is also written in the test
+  (`KNOWN_FAILING_COUNT`). A case added to the file fails the test until that
+  number is raised, and a case removed fails it until the number is lowered.
+  So the list cannot grow by an edit to the list alone. One thing is not
+  caught: a case taken off and another put on in the same change. A check
+  against the base branch would catch that; it needs a workflow, and the Rust
+  workflows do not start at present.
+
+== What is compared
+
+* Standard output, after colour codes and the shell's own `[op:…]` and
+  `[txn:…]` receipt lines are removed.
+* The exit status.
+* Not standard error, and not the files left behind.
+
+The receipt lines are ignored on purpose, and that hides a real difference: a
+tracked command such as `mkdir d` prints a receipt on standard output, where
+other shells print nothing. A script that captures a command's output would
+see it. Whether receipts belong on standard output is an open question for the
+engine's command-line tool (stage S1).
+
+== Where the expectations come from
+
+Recorded from GNU bash 5.2.21 on 2026-11-17, each case in an empty directory.
+The five `rm-NN` cases were written by hand from the POSIX description of `rm`.
+
+Cases were chosen to give the same result on any Linux system: they create the
+files they use and do not depend on what a system directory holds. Of the 128
+cases, 21 use syntax only bash has; `dash` matches bash on the rest.
+
+The test is built on Linux only. The expectations are from Linux, and several
+cases use the GNU forms of `stat`, `wc` and other programs, which print
+differently on other systems.
+
+One case was corrected after review. `rm-05` set up its two files with
+`touch a b`, which the built-in refuses, so nothing was created, the `rm` had
+nothing to remove, and the case matched for the wrong reason. It now creates
+the files one at a time and fails, as it should: the built-in `rm` takes one
+operand. A case must be able to fail: check that its set-up runs.
+
+== Adding a case
+
+. Append a line to `battery.jsonl` with a new id of the form `group-NN`.
+. Take `out` and `rc` from a reference shell run in an empty directory.
+. Run the test. If the case fails, the shell has a gap. Fix the shell before
+  the case is merged. If the fix does not belong to the work in hand, keep the
+  case out of `battery.jsonl` for now, and record its command line and the
+  reference result with the work that will close the gap.
+
+A new case does not go onto `known_failing.txt`, and `KNOWN_FAILING_COUNT` is
+not raised for one. The list is the set of failures measured when the battery
+was added, and it only shrinks.
+
+== Limits
+
+* The battery is small and home-made. A public corpus should become the
+  yardstick for any work on the shell language (review, section 11).
+* It runs only the non-interactive path (`vsh -c`).
+* A case that does not finish within five seconds counts as failed, and the
+  shell and the commands in its process group are stopped. A command that has
+  moved to a process group of its own is not reached.
+* A line of `battery.jsonl` that is not a whole case is an error, so a case
+  cannot drop out unseen.
