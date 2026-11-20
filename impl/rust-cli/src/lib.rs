@@ -21,6 +21,7 @@ pub mod friendly_errors;
 pub mod fs_pure;
 pub mod functions;
 pub mod glob;
+pub mod grade;
 pub mod help;
 pub mod highlighter;
 pub mod history;
@@ -39,6 +40,7 @@ pub mod state;
 pub mod test_command;
 
 pub mod verification;
+pub mod word;
 
 /// Echidna property-based verification integration (optional feature)
 #[cfg(feature = "echidna")]

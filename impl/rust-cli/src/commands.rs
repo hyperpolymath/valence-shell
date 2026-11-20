@@ -1767,7 +1767,10 @@ pub fn fg(state: &mut ShellState, job_spec: Option<&str>) -> Result<()> {
                 job_cmd.trim_end_matches(" &")
             );
         } else {
-            // Job completed - remove from table
+            // Job completed: nothing can open its FIFOs now, so release the
+            // process substitutions it held, then remove it from the table.
+            let subs = state.jobs.take_process_subs(job_id);
+            state.jobs.finish_process_subs(subs);
             state.jobs.remove_job(job_id);
         }
     }
@@ -2856,7 +2859,7 @@ mod tests {
         let state = ShellState::new(tmp.path().to_str().unwrap()).unwrap();
         let cmd = crate::parser::Command::External {
             program: "git".to_string(),
-            args: vec!["status".to_string()],
+            args: vec!["status".into()],
             redirects: vec![],
             background: false,
         };

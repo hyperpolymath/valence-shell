@@ -6,12 +6,12 @@
 //! and manages stdio.
 
 use anyhow::{Context, Result};
+use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use crate::glob;
 use crate::redirection::{RedirectSetup, Redirection};
 use crate::signals;
 use crate::state::ShellState;
@@ -26,7 +26,7 @@ use crate::state::ShellState;
 /// - File modification tracking for undo
 pub fn execute_external_with_redirects(
     program: &str,
-    args: &[String],
+    args: &[OsString],
     redirects: &[Redirection],
     state: &mut ShellState,
 ) -> Result<i32> {
@@ -37,8 +37,7 @@ pub fn execute_external_with_redirects(
     let (stdin_cfg, stdout_cfg, stderr_cfg) =
         stdio_config_from_redirects(redirects, &redirect_setup, state)?;
 
-    // Expand glob patterns in arguments (Phase 6 M12)
-    let expanded_args = expand_glob_args(args, state)?;
+    // The arguments arrive already expanded, globs included (`crate::word`).
 
     // PATH lookup
     let executable = find_in_path(program)?;
@@ -46,7 +45,7 @@ pub fn execute_external_with_redirects(
     // Build command with redirected stdio
     let mut command = Command::new(&executable);
     command
-        .args(&expanded_args)
+        .args(args)
         .stdin(stdin_cfg)
         .stdout(stdout_cfg)
         .stderr(stderr_cfg);
@@ -118,15 +117,15 @@ pub fn execute_external_with_redirects(
 /// use vsh::state::ShellState;
 ///
 /// let stages = vec![
-///     ("ls".to_string(), vec!["-la".to_string()]),
-///     ("grep".to_string(), vec!["test".to_string()]),
+///     ("ls".to_string(), vec!["-la".into()]),
+///     ("grep".to_string(), vec!["test".into()]),
 /// ];
 /// let mut state = ShellState::new("/tmp")?;
 /// let exit_code = external::execute_pipeline(&stages, &[], &mut state)?;
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn execute_pipeline(
-    stages: &[(String, Vec<String>)],
+    stages: &[(String, Vec<OsString>)],
     redirects: &[Redirection],
     state: &mut ShellState,
 ) -> Result<i32> {
@@ -285,11 +284,11 @@ pub fn execute_pipeline(
 /// ```no_run
 /// use vsh::external;
 ///
-/// let exit_code = external::execute_external("ls", &["-la".to_string()])?;
+/// let exit_code = external::execute_external("ls", &["-la".into()])?;
 /// assert_eq!(exit_code, 0);
 /// # Ok::<(), anyhow::Error>(())
 /// ```
-pub fn execute_external(program: &str, args: &[String]) -> Result<i32> {
+pub fn execute_external(program: &str, args: &[OsString]) -> Result<i32> {
     // PATH lookup
     let executable = find_in_path(program)?;
 
@@ -475,66 +474,6 @@ fn stdin_from_bytes(content: &[u8], what: &str) -> Result<Stdio> {
     Ok(Stdio::from(reader))
 }
 
-/// Expand glob patterns in command arguments (Phase 6 M12)
-///
-/// For each argument:
-/// - If it contains glob metacharacters (*, ?, [, {), expand it
-/// - If expansion succeeds, use matching paths
-/// - If expansion fails or returns empty, use literal pattern (POSIX behavior)
-/// - If no metacharacters, use argument as-is
-///
-/// # POSIX Behavior
-/// - Brace expansion happens first: {a,b} -> [a, b]
-/// - Then glob expansion: *.txt -> [file1.txt, file2.txt]
-/// - Empty matches return literal: "*.xyz" if no .xyz files
-///
-/// # Examples
-/// ```ignore
-/// expand_glob_args(&["echo", "*.txt"], state)  // -> ["echo", "file1.txt", "file2.txt"]
-/// expand_glob_args(&["ls", "file?.rs"], state) // -> ["ls", "file1.rs", "file2.rs"]
-/// expand_glob_args(&["rm", "*.xyz"], state)    // -> ["rm", "*.xyz"] (no .xyz files)
-/// ```
-fn expand_glob_args(args: &[String], _state: &ShellState) -> Result<Vec<String>> {
-    let mut expanded: Vec<String> = Vec::new();
-
-    // Get current working directory for glob expansion
-    let cwd = std::env::current_dir().context("Failed to get current working directory")?;
-
-    for arg in args {
-        // Check if argument contains glob metacharacters
-        if glob::contains_glob_pattern(arg) {
-            // First, expand braces: file{1,2}.txt -> [file1.txt, file2.txt]
-            let brace_expanded = glob::expand_braces(arg);
-
-            // Then expand each brace result for glob patterns
-            let mut glob_matches: Vec<String> = Vec::new();
-            for pattern in &brace_expanded {
-                // Expand glob pattern relative to current directory
-                match glob::expand_glob(pattern, &cwd) {
-                    Ok(matches) if !matches.is_empty() => {
-                        // Found matches - add them as strings
-                        for path in matches {
-                            glob_matches.push(path.to_string_lossy().to_string());
-                        }
-                    }
-                    _ => {
-                        // No matches or error - use literal pattern (POSIX behavior)
-                        glob_matches.push(pattern.clone());
-                    }
-                }
-            }
-
-            // Add all matches (or literal if no matches)
-            expanded.extend(glob_matches);
-        } else {
-            // No glob pattern - use argument as-is
-            expanded.push(arg.clone());
-        }
-    }
-
-    Ok(expanded)
-}
-
 /// Handle command exit status, converting signals to exit codes
 fn handle_exit_status(status: std::process::ExitStatus) -> Result<i32> {
     #[cfg(unix)]
@@ -613,7 +552,7 @@ fn is_executable(path: &PathBuf) -> bool {
 /// Job ID for the background job
 pub fn execute_external_background(
     program: &str,
-    args: &[String],
+    args: &[OsString],
     redirects: &[Redirection],
     state: &mut ShellState,
 ) -> Result<usize> {
@@ -631,7 +570,14 @@ pub fn execute_external_background(
     let command_str = if args.is_empty() {
         format!("{} &", program)
     } else {
-        format!("{} {} &", program, args.join(" "))
+        format!(
+            "{} {} &",
+            program,
+            args.iter()
+                .map(|arg| arg.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
     };
 
     // Build command with redirected stdio
@@ -720,7 +666,7 @@ mod tests {
     #[test]
     fn test_external_command_with_args() {
         // Test command with arguments
-        let exit_code = execute_external("echo", &["hello".to_string()]).unwrap();
+        let exit_code = execute_external("echo", &["hello".into()]).unwrap();
         assert_eq!(exit_code, 0, "echo should return 0");
     }
 
@@ -756,7 +702,7 @@ mod tests {
         let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
         let stages = vec![
-            ("echo".to_string(), vec!["hello".to_string()]),
+            ("echo".to_string(), vec!["hello".into()]),
             ("cat".to_string(), vec![]),
             ("cat".to_string(), vec![]),
         ];
@@ -773,7 +719,7 @@ mod tests {
         let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
         let stages = vec![
-            ("echo".to_string(), vec!["test".to_string()]),
+            ("echo".to_string(), vec!["test".into()]),
             ("cat".to_string(), vec![]),
         ];
         let redirects = vec![crate::redirection::Redirection::Output {
@@ -797,7 +743,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let mut state = crate::state::ShellState::new(temp.path().to_str().unwrap()).unwrap();
 
-        let stages: Vec<(String, Vec<String>)> = vec![];
+        let stages: Vec<(String, Vec<OsString>)> = vec![];
         let result = execute_pipeline(&stages, &[], &mut state);
         assert!(result.is_err(), "Empty pipeline should return error");
     }

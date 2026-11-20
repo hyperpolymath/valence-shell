@@ -11,6 +11,111 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 == [Unreleased]
 
+=== Fixed — 2026-11-18 (arguments: globs, quote removal)
+
+- Glob expansion now applies to the arguments of every external command,
+  every pipeline stage, `echo` and function calls. Before, only an external
+  command that also had a redirection expanded its arguments: `wc -c *.txt`
+  passed `*.txt` to `wc`, `ls *.txt | wc -l` and `echo *.txt` did not expand.
+- Quoted arguments no longer reach the program with a backslash in front of
+  `*`, `?`, `[` or `{`: `echo '*.txt'` printed `\*.txt` and now prints
+  `*.txt`. A partly quoted word globs only its unquoted part (`'*'x.*`).
+- `echo` performs command substitution and arithmetic expansion
+  (`echo $((2+3))` printed `$((2+3))`), and `$(echo ...)` works.
+- `$((1+(2*3)))` and other substitutions containing `(` are read to their
+  matching `)`.
+- An expansion error in an argument (such as a glob limit from #191) fails
+  the command with exit status 1 and does not run it. With a redirection the
+  status was 127. An error while the program name or a pipeline stage name
+  is expanded is not changed: it is returned to the caller, so `||` sees it.
+
+=== Fixed — 2026-11-19 (review of #242, small findings)
+
+- An AND-OR list keeps the quoting of each piece of a word: `echo '*'x.* && true`
+  printed `*x.*` and now expands the unquoted part.
+- A glob match reaches an external command with the exact bytes of its file
+  name. A name that is not UTF-8 was replaced by a lossy copy that did not
+  exist.
+- A name that is not UTF-8 is no longer matched by a literal U+FFFD in the
+  pattern. `*` and `?` still match it.
+- Resolving a symbolic link to learn whether it is a directory is charged as
+  a read unit; it was free.
+- New limit `max_listing_bytes` (64 MiB): the names held while one directory
+  is listed. Exceeding it is a `GlobLimitExceeded` that names the directory.
+- A `Meter` charge that would pass `u64::MAX` is refused and reported
+  exactly; `Exceeded::level` is now `u128`. Before, the level saturated and
+  a limit of `u64::MAX` accepted the charge.
+- `Expansion::fields` in `src/word.rs` is `Vec<OsString>`; the external
+  command functions take `OsString` arguments. `glob::escape` is new.
+- The `fuzz_glob_expansion` target removes its fixture at exit, escapes the
+  fixture root in absolute patterns, and checks that `/**/*` reaches the
+  fixture.
+- Tests: `wc` output is compared without its column padding; a glob in a
+  later pipeline stage is covered.
+
+=== Fixed — 2026-11-18 (review of #242)
+
+- An unquoted non-ASCII letter no longer hangs the shell: `echo é` did not
+  return, because the statement splitter did not advance past it.
+- `'é'{a,b}` and `${é:-x}` no longer panic or misread the word: brace and
+  parameter expansion used character counts as byte offsets.
+- `${X:2:N}` with a very large `N` gives the rest of the value; it panicked
+  on overflow.
+- A quoted or escaped parenthesis no longer ends a command substitution:
+  `$(echo ')')`.
+- A quoted hyphen in a bracket expression is a member, not a range:
+  `[a'-'z]*.txt` no longer matches `m.txt`.
+- `~'local'/x` keeps its tilde: a quoted piece in the tilde prefix stops
+  the expansion.
+- `$A''suffix && true` expands `A`: in an AND-OR list the word was read
+  back as `$Asuffix`.
+
+=== Changed — 2026-11-18 (typed words)
+
+- New module `src/word.rs`: a `Word` keeps the quoting of each of its pieces
+  (unquoted, single, double, backslash), and `word::expand_words` performs
+  tilde, parameter, command, arithmetic and process substitution, brace
+  expansion, glob expansion and quote removal on it. `Command::External`,
+  `Command::Pipeline` and `Command::Echo` now carry `Vec<Word>` arguments.
+  Other commands still use the older string encoding; see
+  `docs/POSIX_COMPLIANCE.adoc` (Milestones 5 and 6) for what is not migrated.
+- Removed `external::expand_glob_args`; its rules (no match or invalid
+  pattern keeps the word, a limit is an error) moved to `word.rs` with their
+  tests.
+
+=== Fixed — 2026-11-18 (glob expansion out of memory, #191)
+
+- `**` no longer follows symbolic links to directories, so a link back to a
+  parent directory can no longer make an expansion grow without end. On the old
+  code `**/*` over a 7-entry tree with two such links passed 2.5 GB in 15 s,
+  and `**/no-such-name` over it never returned. ClusterFuzzLite hit the same
+  fault with `/**/*` (libFuzzer out-of-memory at 2560 MB, PR #230, check run
+  134118693669). The rule now matches bash 5.2 with `globstar` for patterns
+  that start with `**`.
+- Glob expansion is metered while it runs: at most 10,000,000 walker read
+  units, 100,000 matches and 6 MiB of matches per command. A read unit is
+  charged for each directory opened, each entry listed, each name looked up
+  and each symbolic link resolved. The type of an entry comes with the
+  listing and is not charged again. The limit is on these units; it is not
+  a cap on every file-system operation the shell makes. Reaching a limit is
+  a `GlobLimitExceeded` error that names the limit, the usage so far and the
+  directory being read; the command is not run. Before, the match limit was
+  checked only after every path had been collected, and an external command
+  then received the literal pattern instead of an error.
+- `.*` and `.h*` find hidden files, as bash does.
+- A file name that is not valid UTF-8 no longer panics the expansion.
+- The `fuzz_glob_expansion` target expands over a small fixed tree instead of
+  the runner's file system, and checks the limits on every input.
+- `impl/rust-cli/fuzz/Cargo.lock` regenerated; it was missing `hmac` and
+  `subtle`.
+
+=== Added — 2026-11-18
+
+- `src/grade.rs`: resource grades. A cost adds up in sequence; an occupancy
+  keeps a high-water mark. A `Meter` refuses the charge that would pass its
+  limit. Glob expansion is the first user; operation-history retention (#190)
+  is the intended second. The grade laws are property-tested, not proved.
+
 === Changed — 2026-11-01 (assurance-boundary re-audit)
 
 - Corrected prose that had drifted across the assurance boundary. The audit

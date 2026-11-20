@@ -72,6 +72,9 @@ pub enum ExecutionResult {
 
 impl ExecutableCommand for Command {
     fn execute(&self, state: &mut ShellState) -> Result<ExecutionResult> {
+        // Safe point: collect the background jobs that have ended, and
+        // release their process substitutions, before the next command runs.
+        state.reap_jobs();
         match self {
             // Filesystem operations (reversible)
             Command::Mkdir { path, redirects } => {
@@ -488,47 +491,49 @@ impl ExecutableCommand for Command {
                 // Expand program name (no process substitutions in program name)
                 let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
 
+                // Word expansion: variables, substitutions, braces, globs and
+                // quote removal. A failed expansion (for example a glob that
+                // reaches a limit) fails the command without running it.
+                let expansion =
+                    match crate::word::expand_words(args, state, crate::word::ProcessSubs::Allow) {
+                        Ok(expansion) => expansion,
+                        Err(e) => {
+                            eprintln!("vsh: {}: {}", expanded_program, e);
+                            return Ok(ExecutionResult::ExternalCommand { exit_code: 1 });
+                        }
+                    };
+
                 // Check if the command is a shell function before external execution.
                 // `if let Some(...)` performs a single map lookup; the former
                 // double-lookup plus expect shape could panic and duplicated
                 // the lookup.
                 if let Some(func_def) = state.functions.get(&expanded_program).cloned() {
-                    let expanded_args: Vec<String> = args
-                        .iter()
-                        .map(|a| crate::parser::expand_variables(a, state))
-                        .collect();
-                    return execute_function_call(&func_def, &expanded_args, state);
+                    let result = execute_function_call(&func_def, &expansion.lossy_fields(), state);
+                    expansion.cleanup();
+                    return result;
                 }
 
-                // Expand arguments with process substitutions
-                let mut all_process_subs = Vec::new();
-                let mut expanded_args = Vec::new();
-
-                for arg in args {
-                    let (expanded_arg, proc_subs) =
-                        crate::parser::expand_with_process_sub(arg, state)?;
-                    expanded_args.push(expanded_arg);
-                    all_process_subs.extend(proc_subs);
-                }
+                let expanded_args = &expansion.fields;
 
                 // Execute main command
                 if *background {
                     // Background execution
-                    let _job_id = external::execute_external_background(
+                    match external::execute_external_background(
                         &expanded_program,
-                        &expanded_args,
+                        expanded_args,
                         redirects,
                         state,
-                    )
-                    .unwrap_or_else(|e| {
-                        eprintln!("{}: {}", expanded_program, e);
-                        0 // No job created
-                    });
-
-                    // Cleanup all process substitutions
-                    for proc_sub in all_process_subs {
-                        if let Err(e) = proc_sub.cleanup() {
-                            eprintln!("Warning: Failed to cleanup process substitution: {}", e);
+                    ) {
+                        // The job may open a FIFO later: the job table keeps
+                        // the substitutions and releases them when it reaps
+                        // the job.
+                        Ok(job_id) => state
+                            .jobs
+                            .attach_process_subs(job_id, expansion.process_subs),
+                        // No job: nothing will open the FIFOs.
+                        Err(e) => {
+                            eprintln!("{}: {}", expanded_program, e);
+                            expansion.cleanup();
                         }
                     }
 
@@ -537,12 +542,12 @@ impl ExecutableCommand for Command {
                     // Foreground execution
                     let exit_code = if redirects.is_empty() {
                         // No redirections - use simple path
-                        external::execute_external(&expanded_program, &expanded_args)
+                        external::execute_external(&expanded_program, expanded_args)
                     } else {
                         // Has redirections - use redirection-aware execution
                         external::execute_external_with_redirects(
                             &expanded_program,
-                            &expanded_args,
+                            expanded_args,
                             redirects,
                             state,
                         )
@@ -552,12 +557,7 @@ impl ExecutableCommand for Command {
                         127
                     });
 
-                    // Cleanup all process substitutions
-                    for proc_sub in all_process_subs {
-                        if let Err(e) = proc_sub.cleanup() {
-                            eprintln!("Warning: Failed to cleanup process substitution: {}", e);
-                        }
-                    }
+                    expansion.cleanup();
 
                     Ok(ExecutionResult::ExternalCommand { exit_code })
                 }
@@ -569,25 +569,28 @@ impl ExecutableCommand for Command {
                 redirects,
                 background,
             } => {
-                // Expand variables and command substitutions in all pipeline stages
-                let expanded_stages: Result<Vec<(String, Vec<String>)>> = stages
-                    .iter()
-                    .map(|(program, args)| {
-                        let expanded_program =
-                            crate::parser::expand_with_command_sub(program, state)?;
-                        let expanded_args: Result<Vec<String>> = args
-                            .iter()
-                            .map(|arg| crate::parser::expand_with_command_sub(arg, state))
-                            .collect();
-                        Ok((expanded_program, expanded_args?))
-                    })
-                    .collect();
-                let expanded_stages = expanded_stages?;
-
-                if *background && !expanded_stages.is_empty() {
+                if *background && !stages.is_empty() {
                     return Err(anyhow::anyhow!(
                         "Background pipelines are not supported yet; refusing to run them in the foreground"
                     ));
+                }
+
+                // Expand every stage before any stage runs, so a failed
+                // expansion runs no part of the pipeline.
+                let mut expanded_stages: Vec<(String, Vec<std::ffi::OsString>)> = Vec::new();
+                let mut process_subs = Vec::new();
+                for (program, args) in stages {
+                    let expanded_program = crate::parser::expand_with_command_sub(program, state)?;
+                    match crate::word::expand_words(args, state, crate::word::ProcessSubs::Allow) {
+                        Ok(expansion) => {
+                            expanded_stages.push((expanded_program, expansion.fields));
+                            process_subs.extend(expansion.process_subs);
+                        }
+                        Err(e) => {
+                            eprintln!("vsh: {}: {}", expanded_program, e);
+                            return Ok(ExecutionResult::ExternalCommand { exit_code: 1 });
+                        }
+                    }
                 }
 
                 let exit_code = external::execute_pipeline(&expanded_stages, redirects, state)
@@ -595,6 +598,12 @@ impl ExecutableCommand for Command {
                         eprintln!("Pipeline error: {}", e);
                         127
                     });
+
+                crate::word::Expansion {
+                    fields: Vec::new(),
+                    process_subs,
+                }
+                .cleanup();
 
                 Ok(ExecutionResult::ExternalCommand { exit_code })
             }
@@ -684,10 +693,15 @@ impl ExecutableCommand for Command {
                 interpret_escapes,
                 redirects,
             } => {
-                let expanded_args: Vec<String> = args
-                    .iter()
-                    .map(|a| crate::parser::expand_variables(a, state))
-                    .collect();
+                let expansion =
+                    match crate::word::expand_words(args, state, crate::word::ProcessSubs::Allow) {
+                        Ok(expansion) => expansion,
+                        Err(e) => {
+                            eprintln!("vsh: echo: {}", e);
+                            return Ok(ExecutionResult::ExternalCommand { exit_code: 1 });
+                        }
+                    };
+                let expanded_args = &expansion.lossy_fields();
 
                 let output = if *interpret_escapes {
                     expanded_args
@@ -719,6 +733,7 @@ impl ExecutableCommand for Command {
                         Ok(())
                     })?;
                 }
+                expansion.cleanup();
                 Ok(ExecutionResult::Success)
             }
 
@@ -1291,7 +1306,7 @@ impl ExecutableCommand for Command {
                 if args.is_empty() {
                     program.clone()
                 } else {
-                    format!("{} {}", program, args.join(" "))
+                    format!("{} {}", program, join_words(args))
                 }
             }
             Command::Pipeline { stages, .. } => {
@@ -1301,7 +1316,7 @@ impl ExecutableCommand for Command {
                         if args.is_empty() {
                             prog.clone()
                         } else {
-                            format!("{} {}", prog, args.join(" "))
+                            format!("{} {}", prog, join_words(args))
                         }
                     })
                     .collect();
@@ -1377,7 +1392,7 @@ impl ExecutableCommand for Command {
                 format!("{} {} {}", left.description(), op_str, right.description())
             }
 
-            Command::Echo { args, .. } => format!("echo {}", args.join(" ")),
+            Command::Echo { args, .. } => format!("echo {}", join_words(args)),
             Command::True => "true".to_string(),
             Command::False => "false".to_string(),
             Command::Read { var_names, .. } => format!("read {}", var_names.join(" ")),
@@ -1643,6 +1658,15 @@ fn execute_loop(
     }
 
     Ok(last_result)
+}
+
+/// Words written back as source and separated by spaces.
+fn join_words(words: &[crate::word::Word]) -> String {
+    words
+        .iter()
+        .map(|w| w.to_string())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Match a word against a case pattern (supports glob-style wildcards)
