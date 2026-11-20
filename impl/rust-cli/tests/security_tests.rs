@@ -358,32 +358,55 @@ fn security_sandbox_enforcement() {
     // (tested via path traversal tests above)
 }
 
+/// Nothing the shell creates is owned by anyone but the invoking user, and
+/// nothing it creates carries a set-user-ID, set-group-ID or sticky bit.
+///
+/// This holds as root and as an ordinary user, so the test does not skip.
+/// (The test of this name used to contain no assertion in any branch.)
+#[cfg(unix)]
 #[test]
 fn security_no_privilege_escalation() {
-    // Verify we're not running as root in environments that can be non-root.
-    //
-    // In containerised CI (GitHub Actions default runners, many Docker images)
-    // the test harness legitimately runs as root. Failing the whole security
-    // suite there is noise, not signal. We treat running-as-root as a warning
-    // the operator must acknowledge via VSH_ALLOW_ROOT_TESTS=1, but otherwise
-    // skip rather than fail so the suite stays portable.
-    #[cfg(unix)]
-    {
-        let euid = unsafe { libc::geteuid() };
-        if euid == 0 {
-            if std::env::var("VSH_ALLOW_ROOT_TESTS").is_ok() {
-                eprintln!(
-                    "warning: running security tests as root (VSH_ALLOW_ROOT_TESTS set); \
-                     do not do this on a real system"
-                );
-                return;
-            }
-            eprintln!(
-                "security_no_privilege_escalation: SKIPPED (running as root). \
-                 Set VSH_ALLOW_ROOT_TESTS=1 to acknowledge."
+    use std::os::unix::fs::MetadataExt;
+
+    let temp = TempDir::new().unwrap();
+    let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
+    vsh::commands::mkdir(&mut state, "dir", false).unwrap();
+    vsh::commands::touch(&mut state, "dir/file", false).unwrap();
+    vsh::commands::touch(&mut state, "top", false).unwrap();
+    drop(state);
+
+    let euid = nix::unistd::geteuid().as_raw();
+    let mut checked = 0;
+    let mut pending = vec![temp.path().to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        for entry in fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            let meta = fs::symlink_metadata(&path).unwrap();
+            assert_eq!(
+                meta.uid(),
+                euid,
+                "{} is not owned by the invoking user",
+                path.display()
             );
+            assert_eq!(
+                meta.mode() & 0o7000,
+                0,
+                "{} carries a set-ID or sticky bit (mode {:o})",
+                path.display(),
+                meta.mode() & 0o7777
+            );
+            checked += 1;
+            if meta.is_dir() {
+                pending.push(path);
+            }
         }
     }
+    // dir, dir/file, top, and at least one state file.
+    assert!(checked >= 4, "only {checked} paths were checked");
+
+    // The shell binary itself must not be set-user-ID or set-group-ID.
+    let binary = fs::metadata(env!("CARGO_BIN_EXE_vsh")).unwrap();
+    assert_eq!(binary.mode() & 0o6000, 0, "the vsh binary is set-ID");
 }
 
 // ============================================================

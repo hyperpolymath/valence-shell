@@ -14,6 +14,34 @@ use crate::proof_refs;
 use crate::state::{Operation, OperationType, ShellState};
 use crate::verification;
 
+/// The target of a symbolic link as the bytes an operation record stores.
+///
+/// On Unix a link target is a string of bytes and need not be text, so the
+/// bytes are kept as they are. Turning them into text first replaced what
+/// was not text, and undo then made a link to a different path.
+#[cfg(unix)]
+fn link_target_bytes(target: &std::path::Path) -> Vec<u8> {
+    use std::os::unix::ffi::OsStrExt;
+    target.as_os_str().as_bytes().to_vec()
+}
+
+#[cfg(not(unix))]
+fn link_target_bytes(target: &std::path::Path) -> Vec<u8> {
+    target.to_string_lossy().into_owned().into_bytes()
+}
+
+/// The link target an operation record stores, as a path.
+#[cfg(unix)]
+fn link_target_from_bytes(bytes: &[u8]) -> std::path::PathBuf {
+    use std::os::unix::ffi::OsStrExt;
+    std::path::PathBuf::from(std::ffi::OsStr::from_bytes(bytes))
+}
+
+#[cfg(not(unix))]
+fn link_target_from_bytes(bytes: &[u8]) -> std::path::PathBuf {
+    std::path::PathBuf::from(String::from_utf8_lossy(bytes).into_owned())
+}
+
 // Secure deletion (RMO - Remove-Match-Obliterate)
 pub mod secure_deletion;
 
@@ -79,7 +107,7 @@ pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_mkdir(state.root(), path)?;
+    verification::verify_mkdir(state.root(), &state.rooted(path))?;
 
     // Check preconditions (matching Coq)
     if full_path.exists() {
@@ -91,8 +119,12 @@ pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
         anyhow::bail!("Parent directory does not exist (ENOENT)");
     }
 
-    // Execute operation
-    fs::create_dir(&full_path).context("mkdir failed")?;
+    // Execute operation, beneath the session root.
+    let contained = state.contained(path)?;
+    state
+        .root_dir()
+        .create_dir(&contained)
+        .context("mkdir failed")?;
 
     // Record in history
     let op = Operation::new(OperationType::Mkdir, path.to_string(), None);
@@ -146,7 +178,7 @@ pub fn rmdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_rmdir(state.root(), path)?;
+    verification::verify_rmdir(state.root(), &state.rooted(path))?;
 
     // Check preconditions
     if !full_path.exists() {
@@ -210,7 +242,7 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let full_path = state.resolve_path(path);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_create_file(state.root(), path)?;
+    verification::verify_create_file(state.root(), &state.rooted(path))?;
 
     if full_path.exists() {
         anyhow::bail!("Path already exists (EEXIST)");
@@ -221,7 +253,16 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
         anyhow::bail!("Parent directory does not exist (ENOENT)");
     }
 
-    fs::write(&full_path, "").context("touch failed")?;
+    // Create beneath the session root. `create_new` also closes the gap
+    // between the existence check above and the creation.
+    let contained = state.contained(path)?;
+    state
+        .root_dir()
+        .open_with(
+            &contained,
+            cap_std::fs::OpenOptions::new().write(true).create_new(true),
+        )
+        .context("touch failed")?;
 
     let op = Operation::new(OperationType::CreateFile, path.to_string(), None);
     let op_id = op.id;
@@ -241,6 +282,138 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// The permissions, owner and modification time in `meta`.
+#[cfg(unix)]
+fn file_meta(meta: &cap_std::fs::Metadata) -> Option<crate::state::FileMeta> {
+    use cap_std::fs::MetadataExt;
+    Some(crate::state::FileMeta {
+        mode: meta.mode() & 0o7777,
+        uid: meta.uid(),
+        gid: meta.gid(),
+        mtime: meta.mtime(),
+        mtime_nsec: meta.mtime_nsec(),
+    })
+}
+
+#[cfg(not(unix))]
+fn file_meta(_meta: &cap_std::fs::Metadata) -> Option<crate::state::FileMeta> {
+    None
+}
+
+/// Put back a file that was removed: its content, and what it was if
+/// `meta` is known.
+///
+/// `recorded` is a path from the history, relative to the session root. The
+/// file is created beneath the session root, and only if nothing has the
+/// name. Whatever has taken the name since the removal is left as it is:
+/// writing over it replaced a file that another program had made. The file
+/// is created readable by its owner only, and gets its recorded
+/// permissions once the content is in place, so its content is never
+/// exposed under looser permissions than it had.
+fn restore_removed_file(
+    state: &ShellState,
+    recorded: &str,
+    content: &[u8],
+    meta: Option<&crate::state::FileMeta>,
+) -> Result<()> {
+    use std::io::Write;
+
+    let contained = state.contained_abs(&state.resolve_op_path(recorded))?;
+    let mut options = cap_std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use cap_std::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = match state.root_dir().open_with(&contained, &options) {
+        Ok(file) => file.into_std(),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => anyhow::bail!(
+            "something else has the name {recorded} now, and it was left as it is; \
+             move it away to restore the removed file"
+        ),
+        Err(e) => return Err(e.into()),
+    };
+    file.write_all(content)?;
+
+    #[cfg(unix)]
+    if let Some(meta) = meta {
+        use std::os::unix::fs::PermissionsExt;
+        // The owner first: changing it clears set-ID bits. It needs
+        // privilege when the owner differs, so a failure is not an error.
+        let _ = std::os::unix::fs::fchown(&file, Some(meta.uid), Some(meta.gid));
+        file.set_permissions(fs::Permissions::from_mode(meta.mode & 0o7777))?;
+        if let Some(modified) = modification_time(meta) {
+            file.set_modified(modified)?;
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = meta;
+
+    Ok(())
+}
+
+/// Put back the content of a file that a redirection emptied.
+///
+/// `recorded` is a path from the history, relative to the session root. The
+/// file must still be there. It is opened beneath the session root without
+/// truncating it and checked while open, as a redirection's target is: a
+/// regular file with no other name. Only then is it emptied and written.
+/// Opening it with truncation emptied whatever had the name by then, a
+/// hard link to a file outside the session root included.
+fn restore_content(state: &ShellState, recorded: &str, content: &[u8]) -> Result<()> {
+    use std::io::Write;
+
+    let path = state.resolve_op_path(recorded);
+    let contained = state.contained_abs(&path)?;
+    let mut file =
+        crate::redirection::open_checked_target(state.root_dir(), &contained, &path)?.into_std();
+    file.set_len(0)?;
+    file.write_all(content)?;
+    Ok(())
+}
+
+/// The recorded modification time as a `SystemTime`, if it is representable.
+#[cfg(unix)]
+fn modification_time(meta: &crate::state::FileMeta) -> Option<std::time::SystemTime> {
+    let nanos = u32::try_from(meta.mtime_nsec).ok()?;
+    if meta.mtime >= 0 {
+        std::time::UNIX_EPOCH.checked_add(std::time::Duration::new(meta.mtime as u64, nanos))
+    } else {
+        std::time::UNIX_EPOCH
+            .checked_sub(std::time::Duration::from_secs(meta.mtime.unsigned_abs()))?
+            .checked_add(std::time::Duration::from_nanos(u64::from(nanos)))
+    }
+}
+
+/// Remove the regular file at `contained` (beneath the session root), which
+/// `named` describes, and return what undo needs to put it back: its content
+/// and what the file was. `command` names the caller in the error.
+///
+/// A file that cannot be read cannot be restored, so it is not removed:
+/// saving it as empty would lose it on undo.
+fn remove_keeping(
+    state: &ShellState,
+    contained: &std::path::Path,
+    named: &cap_std::fs::Metadata,
+    command: &str,
+) -> Result<(Vec<u8>, Option<crate::state::FileMeta>)> {
+    // Only a regular file is read. Opening a FIFO would wait for a writer,
+    // and a device can be read without end.
+    if !named.is_file() {
+        anyhow::bail!("{command} refused: not a regular file");
+    }
+    let content = state.root_dir().read(contained).with_context(|| {
+        format!("{command} refused: the file cannot be read, so it could not be restored by undo")
+    })?;
+    let meta = file_meta(named);
+    state
+        .root_dir()
+        .remove_file(contained)
+        .with_context(|| format!("{command} failed"))?;
+    Ok((content, meta))
 }
 
 /// Remove a file at the specified path.
@@ -270,26 +443,44 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
-    let full_path = state.resolve_path(path);
-
     // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_delete_file(state.root(), path)?;
+    verification::verify_delete_file(state.root(), &state.rooted(path))?;
 
-    if !full_path.exists() {
-        anyhow::bail!("Path does not exist (ENOENT)");
-    }
-    if full_path.is_dir() {
+    // Look at the name itself, beneath the session root.
+    let contained = state.contained(path)?;
+    let named = match state.root_dir().symlink_metadata(&contained) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            anyhow::bail!("Path does not exist (ENOENT)")
+        }
+        Err(e) => return Err(e).context("rm failed"),
+    };
+    if named.is_dir() {
         anyhow::bail!("Path is a directory - use rmdir (EISDIR)");
     }
 
-    // Store content for undo (pure read of the soon-to-be-deleted file;
-    // routed through fs_pure to honour the noatime discipline).
-    let content = crate::fs_pure::read_to_end(&full_path).unwrap_or_default();
-
-    fs::remove_file(&full_path).context("rm failed")?;
-
-    let op =
-        Operation::new(OperationType::DeleteFile, path.to_string(), None).with_undo_data(content);
+    let op = if named.is_symlink() {
+        // Removing a link removes the link, not what it points to. Undo
+        // puts the link back.
+        let target = state
+            .root_dir()
+            .read_link_contents(&contained)
+            .context("rm failed: cannot read the link")?;
+        state
+            .root_dir()
+            .remove_file(&contained)
+            .context("rm failed")?;
+        Operation::new(OperationType::Unlink, path.to_string(), None)
+            .with_undo_data(link_target_bytes(&target))
+    } else {
+        let (content, meta) = remove_keeping(state, &contained, &named, "rm")?;
+        let op = Operation::new(OperationType::DeleteFile, path.to_string(), None)
+            .with_undo_data(content);
+        match meta {
+            Some(meta) => op.with_undo_meta(meta),
+            None => op,
+        }
+    };
     let op_id = op.id;
     state.record_operation(op);
 
@@ -341,7 +532,7 @@ pub fn cp(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
     let dst_path = state.resolve_path(dst);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_copy_file(state.root(), src, dst)?;
+    verification::verify_copy_file(state.root(), &state.rooted(src), &state.rooted(dst))?;
 
     // Check preconditions (matching Lean 4 copyFilePrecondition)
     if !src_path.exists() {
@@ -363,8 +554,12 @@ pub fn cp(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
 
     // Record in history: path = dst, undo_data = src path for reference
     // Undo = delete the destination file
+    //
+    // The source is stored relative to the session root, as the destination
+    // is. Stored as typed, a copy made in `sub` was redone from the root
+    // with the wrong source: another file of that name, or none.
     let op = Operation::new(OperationType::CopyFile, dst.to_string(), None)
-        .with_undo_data(src.as_bytes().to_vec());
+        .with_undo_data(state.rooted(src).into_bytes());
     let op_id = op.id;
     state.record_operation(op);
 
@@ -418,7 +613,7 @@ pub fn mv(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
     let dst_path = state.resolve_path(dst);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_move(state.root(), src, dst)?;
+    verification::verify_move(state.root(), &state.rooted(src), &state.rooted(dst))?;
 
     // Check preconditions (matching Lean 4 movePrecondition)
     if !src_path.exists() {
@@ -439,8 +634,12 @@ pub fn mv(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
         anyhow::bail!("Parent of destination does not exist (ENOENT)");
     }
 
-    // Execute operation
-    fs::rename(&src_path, &dst_path).context("mv failed")?;
+    // Execute operation, beneath the session root.
+    let (from, to) = (state.contained(src)?, state.contained(dst)?);
+    state
+        .root_dir()
+        .rename(&from, state.root_dir(), &to)
+        .context("mv failed")?;
 
     // Record: store both paths null-separated for undo
     // path = "src\0dst" so undo can move dst back to src
@@ -496,7 +695,7 @@ pub fn symlink(state: &mut ShellState, target: &str, link: &str, verbose: bool) 
     let link_path = state.resolve_path(link);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_symlink(state.root(), target, link)?;
+    verification::verify_symlink(state.root(), target, &state.rooted(link))?;
 
     // Check preconditions (matching Lean 4 SymlinkPrecondition)
     if link_path.exists() || link_path.symlink_metadata().is_ok() {
@@ -846,7 +1045,7 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             continue;
         };
 
-        let path = state.resolve_path(&op.path);
+        let path = state.resolve_op_path(&op.path);
 
         // Execute inverse operation
         match inverse_type {
@@ -860,12 +1059,21 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 fs::remove_file(&path).context("Undo touch failed")?;
             }
             OperationType::CreateFile => {
-                let content = op.undo_data.as_ref().cloned().unwrap_or_default();
-                fs::write(&path, content).context("Undo rm failed")?;
+                // A record with no content cannot put the file back. An
+                // empty file in its place would look like a restore.
+                let content = op
+                    .undo_data
+                    .as_deref()
+                    .context("Undo rm failed: the record holds no content")?;
+                restore_removed_file(state, &op.path, content, op.undo_meta.as_ref())
+                    .context("Undo rm failed")?;
             }
             OperationType::WriteFile => {
-                let content = op.undo_data.as_ref().cloned().unwrap_or_default();
-                fs::write(&path, content).context("Undo write failed")?;
+                let content = op
+                    .undo_data
+                    .as_deref()
+                    .context("Undo write failed: the record holds no content")?;
+                restore_content(state, &op.path, content).context("Undo write failed")?;
             }
             OperationType::FileAppended => {
                 // Undo append: truncate file to original size
@@ -890,8 +1098,8 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 if parts.len() != 2 {
                     anyhow::bail!("Invalid move operation record");
                 }
-                let src_path = state.resolve_path(parts[0]);
-                let dst_path = state.resolve_path(parts[1]);
+                let src_path = state.resolve_op_path(parts[0]);
+                let dst_path = state.resolve_op_path(parts[1]);
                 fs::rename(&dst_path, &src_path).context("Undo mv failed")?;
             }
             OperationType::Unlink => {
@@ -903,7 +1111,7 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 let target = op
                     .undo_data
                     .as_ref()
-                    .map(|d| String::from_utf8_lossy(d).to_string())
+                    .map(|d| link_target_from_bytes(d))
                     .context("Missing symlink target for undo")?;
                 #[cfg(unix)]
                 std::os::unix::fs::symlink(&target, &path)
@@ -1047,7 +1255,12 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
         };
 
-        let path = state.resolve_path(&op.path);
+        let path = state.resolve_op_path(&op.path);
+
+        // What a removal or a truncation destroys this time: the content,
+        // and for a removal what the file was. The new record carries it,
+        // so that it can be undone like the first one.
+        let mut kept: Option<(Vec<u8>, Option<crate::state::FileMeta>)> = None;
 
         // Re-execute the original operation
         match op.op_type {
@@ -1061,15 +1274,28 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 fs::write(&path, "").context("Redo touch failed")?;
             }
             OperationType::DeleteFile => {
-                fs::remove_file(&path).context("Redo rm failed")?;
+                // As `rm` does it: beneath the session root, and keeping
+                // the content. Without it, `rm f; undo; redo; undo` put an
+                // empty file in place of `f`.
+                let contained = state.contained_abs(&path)?;
+                let named = state
+                    .root_dir()
+                    .symlink_metadata(&contained)
+                    .context("Redo rm failed")?;
+                kept = Some(remove_keeping(state, &contained, &named, "Redo rm")?);
             }
             OperationType::WriteFile => {
                 // Would need new content
                 anyhow::bail!("WriteFile redo not yet implemented");
             }
             OperationType::FileTruncated => {
-                // Redo truncate: truncate file (original undo_data was the old content)
-                fs::write(&path, "").context("Redo truncate failed")?;
+                // Empty the file again, keeping what it holds now, as the
+                // redirection did.
+                let contained = state.contained_abs(&path)?;
+                let content =
+                    crate::redirection::truncate_keeping(state.root_dir(), &contained, &path)
+                        .context("Redo truncate failed")?;
+                kept = Some((content, None));
             }
             OperationType::FileAppended => {
                 // Cannot redo append without knowing what was appended
@@ -1084,7 +1310,8 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                     .as_ref()
                     .map(|d| String::from_utf8_lossy(d).to_string())
                     .context("Missing source path for redo cp")?;
-                let src_path = state.resolve_path(&src);
+                // The source is recorded relative to the session root.
+                let src_path = state.resolve_op_path(&src);
                 fs::copy(&src_path, &path).context("Redo cp failed")?;
             }
             OperationType::Move => {
@@ -1093,8 +1320,8 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 if parts.len() != 2 {
                     anyhow::bail!("Invalid move operation record for redo");
                 }
-                let src_path = state.resolve_path(parts[0]);
-                let dst_path = state.resolve_path(parts[1]);
+                let src_path = state.resolve_op_path(parts[0]);
+                let dst_path = state.resolve_op_path(parts[1]);
                 fs::rename(&src_path, &dst_path).context("Redo mv failed")?;
             }
             OperationType::Symlink => {
@@ -1102,7 +1329,7 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 let target = op
                     .undo_data
                     .as_ref()
-                    .map(|d| String::from_utf8_lossy(d).to_string())
+                    .map(|d| link_target_from_bytes(d))
                     .context("Missing symlink target for redo")?;
                 #[cfg(unix)]
                 std::os::unix::fs::symlink(&target, &path).context("Redo ln -s failed")?;
@@ -1152,7 +1379,22 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
         }
 
-        let new_op = Operation::new(op.op_type, op.path.clone(), None);
+        let mut new_op = Operation::new(op.op_type, op.path.clone(), None);
+        if let Some((content, meta)) = kept {
+            new_op.undo_data = Some(content);
+            new_op.undo_meta = meta;
+        } else if matches!(
+            op.op_type,
+            OperationType::CopyFile | OperationType::Symlink | OperationType::Unlink
+        ) {
+            // A copy, a link and the removal of a link are redone from what
+            // the first record carried (the source, the link's target), and
+            // undoing or redoing the new record needs it again. Without it,
+            // `rm link; undo; redo; undo` failed with "Missing symlink
+            // target for undo".
+            new_op.undo_data = op.undo_data.clone();
+            new_op.undo_meta = op.undo_meta;
+        }
         let new_id = new_op.id;
         state.record_redo_operation(new_op);
 
@@ -1355,7 +1597,7 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
     // Undo all operations in reverse order
     for op in ops.iter().rev() {
         if let Some(inverse_type) = op.op_type.inverse() {
-            let path = state.resolve_path(&op.path);
+            let path = state.resolve_op_path(&op.path);
 
             let result = match inverse_type {
                 OperationType::Rmdir => fs::remove_dir(&path).context("Failed to remove directory"),
@@ -1363,14 +1605,22 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                 OperationType::DeleteFile => {
                     fs::remove_file(&path).context("Failed to remove file")
                 }
-                OperationType::CreateFile => {
-                    let content = op.undo_data.as_ref().cloned().unwrap_or_default();
-                    fs::write(&path, content).context("Failed to restore file")
-                }
-                OperationType::WriteFile => {
-                    let content = op.undo_data.as_ref().cloned().unwrap_or_default();
-                    fs::write(&path, content).context("Failed to restore file content")
-                }
+                OperationType::CreateFile => op
+                    .undo_data
+                    .as_deref()
+                    .context("Failed to restore file: the record holds no content")
+                    .and_then(|content| {
+                        restore_removed_file(state, &op.path, content, op.undo_meta.as_ref())
+                            .context("Failed to restore file")
+                    }),
+                OperationType::WriteFile => op
+                    .undo_data
+                    .as_deref()
+                    .context("Failed to restore file content: the record holds no content")
+                    .and_then(|content| {
+                        restore_content(state, &op.path, content)
+                            .context("Failed to restore file content")
+                    }),
                 OperationType::FileAppended => {
                     // Rollback append: truncate file to original size
                     if let Some(size_bytes) = op.undo_data.as_ref() {
@@ -1393,8 +1643,8 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                     // Rollback move: move it back (dst -> src)
                     let parts: Vec<&str> = op.path.splitn(2, '\0').collect();
                     if parts.len() == 2 {
-                        let src_path = state.resolve_path(parts[0]);
-                        let dst_path = state.resolve_path(parts[1]);
+                        let src_path = state.resolve_op_path(parts[0]);
+                        let dst_path = state.resolve_op_path(parts[1]);
                         fs::rename(&dst_path, &src_path).context("Failed to undo move")
                     } else {
                         Err(anyhow::anyhow!("Invalid move operation record"))
@@ -1407,7 +1657,7 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                 OperationType::Symlink => {
                     // Rollback unlink: re-create the symlink
                     if let Some(target_bytes) = op.undo_data.as_ref() {
-                        let target = String::from_utf8_lossy(target_bytes).to_string();
+                        let target = link_target_from_bytes(target_bytes);
                         #[cfg(unix)]
                         {
                             std::os::unix::fs::symlink(&target, &path)

@@ -6,7 +6,7 @@
 //! and manages stdio.
 
 use anyhow::{Context, Result};
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -30,12 +30,25 @@ pub fn execute_external_with_redirects(
     redirects: &[Redirection],
     state: &mut ShellState,
 ) -> Result<i32> {
-    // Setup redirections (validates, opens files, saves state)
-    let redirect_setup = RedirectSetup::setup(redirects, state)?;
+    // Set the redirections up (validate, open the files, save their
+    // state), run the command, and record what the set-up changed whatever
+    // becomes of the command: found or not, finished or interrupted.
+    RedirectSetup::run(redirects, state, |redirect_setup, state| {
+        run_with_redirects(program, args, redirects, redirect_setup, state)
+    })
+}
 
+/// Run `program` with its redirections already set up as `redirect_setup`.
+fn run_with_redirects(
+    program: &str,
+    args: &[String],
+    redirects: &[Redirection],
+    redirect_setup: &RedirectSetup,
+    state: &mut ShellState,
+) -> Result<i32> {
     // Configure stdio from redirections
     let (stdin_cfg, stdout_cfg, stderr_cfg) =
-        stdio_config_from_redirects(redirects, &redirect_setup, state)?;
+        stdio_config_from_redirects(redirects, redirect_setup, state)?;
 
     // Expand glob patterns in arguments (Phase 6 M12)
     let expanded_args = expand_glob_args(args, state)?;
@@ -67,8 +80,7 @@ pub fn execute_external_with_redirects(
     loop {
         match child.try_wait().context("Failed to wait for child")? {
             Some(status) => {
-                // Child exited - record modifications and return
-                redirect_setup.record_for_undo(state)?;
+                // Child exited. The caller records the modifications.
                 return handle_exit_status(status);
             }
             None => {
@@ -81,7 +93,9 @@ pub fn execute_external_with_redirects(
                     // Wait for child to actually terminate
                     child.wait().context("Failed to wait for killed child")?;
 
-                    // Don't record modifications - operation interrupted
+                    // The modifications are recorded all the same (by the
+                    // caller): the targets were emptied and may have been
+                    // written to.
                     return Ok(130); // 128 + SIGINT(2)
                 }
 
@@ -139,13 +153,24 @@ pub fn execute_pipeline(
         return execute_external_with_redirects(&stages[0].0, &stages[0].1, redirects, state);
     }
 
-    // Setup final redirection output files
-    let redirect_setup = if !redirects.is_empty() {
-        Some(RedirectSetup::setup(redirects, state)?)
-    } else {
-        None
-    };
+    if redirects.is_empty() {
+        return run_pipeline(stages, redirects, None, state);
+    }
+    // Set up the final redirection, run the stages, and record what the
+    // set-up changed whatever becomes of them.
+    RedirectSetup::run(redirects, state, |redirect_setup, state| {
+        run_pipeline(stages, redirects, Some(redirect_setup), state)
+    })
+}
 
+/// Run the stages of a pipeline. `redirect_setup` is the set-up of the
+/// redirections of the last stage, if it has any.
+fn run_pipeline(
+    stages: &[(String, Vec<String>)],
+    redirects: &[Redirection],
+    redirect_setup: Option<&RedirectSetup>,
+    state: &mut ShellState,
+) -> Result<i32> {
     // Configure stdio for stages and spawn children
     let mut children: Vec<std::process::Child> = Vec::new();
     let mut prev_stdout: Option<std::process::ChildStdout> = None;
@@ -179,7 +204,7 @@ pub fn execute_pipeline(
         // Option both removes a duplicated emptiness check and eliminates
         // a previous panic site.
         let stdout_cfg = if is_last {
-            match &redirect_setup {
+            match redirect_setup {
                 Some(setup) => stdio_config_from_redirects(redirects, setup, state)?.1,
                 None => Stdio::inherit(),
             }
@@ -189,7 +214,7 @@ pub fn execute_pipeline(
         };
 
         // Configure stderr (inherit unless redirected in last stage).
-        let stderr_cfg = match (is_last, &redirect_setup) {
+        let stderr_cfg = match (is_last, redirect_setup) {
             (true, Some(setup)) => stdio_config_from_redirects(redirects, setup, state)?.2,
             _ => Stdio::inherit(),
         };
@@ -242,18 +267,14 @@ pub fn execute_pipeline(
                         signals::clear_interrupt();
                         child.wait().context("Failed to wait for killed child")?;
 
-                        // Don't record modifications - operation interrupted
+                        // The caller records the modifications all the
+                        // same.
                         return Ok(130); // 128 + SIGINT
                     }
                     std::thread::sleep(Duration::from_millis(50));
                 }
             }
         }
-    }
-
-    // Record undo for final redirection (if any)
-    if let Some(setup) = redirect_setup {
-        setup.record_for_undo(state)?;
     }
 
     Ok(final_exit_code)
@@ -330,9 +351,16 @@ pub fn execute_external(program: &str, args: &[String]) -> Result<i32> {
 }
 
 /// Convert redirections to stdio configuration
+///
+/// The child is given the files that `setup` opened. They were opened once,
+/// beneath the session root, and checked while open (see
+/// [`RedirectSetup::handle`]). Before, each name was opened a second time
+/// here with an ordinary path: a name given to a link in between was
+/// followed out of the session root, and a file was truncated without the
+/// checks.
 fn stdio_config_from_redirects(
     redirects: &[Redirection],
-    _setup: &RedirectSetup,
+    setup: &RedirectSetup,
     state: &mut ShellState,
 ) -> Result<(Stdio, Stdio, Stdio)> {
     let mut stdin_cfg = Stdio::inherit();
@@ -342,12 +370,10 @@ fn stdio_config_from_redirects(
     // Track stdout's file handle for 2>&1 fd duplication
     let mut stdout_file_dup: Option<File> = None;
 
-    for redirect in redirects {
+    for (index, redirect) in redirects.iter().enumerate() {
         match redirect {
-            Redirection::Output { file } => {
-                let target = state.resolve_path(file);
-                let file_handle = File::create(&target)
-                    .with_context(|| format!("Failed to open output file: {}", target.display()))?;
+            Redirection::Output { .. } | Redirection::Append { .. } => {
+                let file_handle = setup.handle(index)?;
                 // Keep a clone for potential 2>&1 duplication
                 stdout_file_dup = Some(
                     file_handle
@@ -357,51 +383,18 @@ fn stdio_config_from_redirects(
                 stdout_cfg = Stdio::from(file_handle);
             }
 
-            Redirection::Append { file } => {
-                let target = state.resolve_path(file);
-                let file_handle = OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&target)
-                    .with_context(|| {
-                        format!(
-                            "Failed to open output file for append: {}",
-                            target.display()
-                        )
-                    })?;
-                stdout_file_dup = Some(
-                    file_handle
-                        .try_clone()
-                        .context("Failed to duplicate stdout file handle for 2>&1 tracking")?,
-                );
-                stdout_cfg = Stdio::from(file_handle);
+            Redirection::Input { .. } => {
+                stdin_cfg = Stdio::from(setup.handle(index)?);
             }
 
-            Redirection::Input { file } => {
-                let target = state.resolve_path(file);
-                let file_handle = crate::fs_pure::open_pure(&target)
-                    .with_context(|| format!("Failed to open input file: {}", target.display()))?;
-                stdin_cfg = Stdio::from(file_handle);
+            Redirection::ErrorOutput { .. } | Redirection::ErrorAppend { .. } => {
+                stderr_cfg = Stdio::from(setup.handle(index)?);
             }
 
-            Redirection::ErrorOutput { file } | Redirection::ErrorAppend { file } => {
-                let target = state.resolve_path(file);
-                let file_handle = if matches!(redirect, Redirection::ErrorAppend { .. }) {
-                    OpenOptions::new().create(true).append(true).open(&target)
-                } else {
-                    File::create(&target)
-                }
-                .with_context(|| format!("Failed to open error file: {}", target.display()))?;
-
-                stderr_cfg = Stdio::from(file_handle);
-            }
-
-            Redirection::BothOutput { file } => {
-                let target = state.resolve_path(file);
-                let file_handle = File::create(&target)
-                    .with_context(|| format!("Failed to open output file: {}", target.display()))?;
-
-                // Clone the file handle for both stdout and stderr
+            Redirection::BothOutput { .. } => {
+                // One open file for both streams, so that they share one
+                // position in it.
+                let file_handle = setup.handle(index)?;
                 let file_handle2 = file_handle
                     .try_clone()
                     .context("Failed to duplicate file handle")?;
@@ -617,12 +610,26 @@ pub fn execute_external_background(
     redirects: &[Redirection],
     state: &mut ShellState,
 ) -> Result<usize> {
-    // Setup redirections if any
-    let redirect_setup = RedirectSetup::setup(redirects, state)?;
+    // Set the redirections up, start the job, and record what the set-up
+    // changed. A background job's redirection was never recorded, so a
+    // file it emptied could not be restored by undo.
+    RedirectSetup::run(redirects, state, |redirect_setup, state| {
+        start_background(program, args, redirects, redirect_setup, state)
+    })
+}
 
+/// Start `program` as a background job, with its redirections already set
+/// up as `redirect_setup`.
+fn start_background(
+    program: &str,
+    args: &[String],
+    redirects: &[Redirection],
+    redirect_setup: &RedirectSetup,
+    state: &mut ShellState,
+) -> Result<usize> {
     // Configure stdio from redirections
     let (stdin_cfg, stdout_cfg, stderr_cfg) =
-        stdio_config_from_redirects(redirects, &redirect_setup, state)?;
+        stdio_config_from_redirects(redirects, redirect_setup, state)?;
 
     // PATH lookup
     let executable = find_in_path(program)?;
@@ -673,6 +680,103 @@ pub fn execute_external_background(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A command's output goes to the file the set-up opened and checked,
+    /// whatever the name refers to by the time the command starts. The
+    /// name used to be opened a second time, with an ordinary path: a name
+    /// given to a file outside the session root in between was followed,
+    /// and that file was truncated and written.
+    #[cfg(unix)]
+    #[test]
+    fn test_a_command_writes_to_the_file_that_was_opened_and_checked() {
+        use std::fs;
+
+        for as_hard_link in [true, false] {
+            let temp = tempfile::TempDir::new().unwrap();
+            let root = temp.path().join("root");
+            let victim = temp.path().join("victim");
+            fs::create_dir(&root).unwrap();
+            fs::write(&victim, "PRECIOUS").unwrap();
+            let mut state = ShellState::new(root.to_str().unwrap()).unwrap();
+            let redirects = vec![Redirection::Output {
+                file: "out".to_string(),
+            }];
+            let setup = RedirectSetup::setup(&redirects, &state).unwrap();
+
+            // Another program gives the name to the file outside the root.
+            fs::remove_file(root.join("out")).unwrap();
+            if as_hard_link {
+                fs::hard_link(&victim, root.join("out")).unwrap();
+            } else {
+                std::os::unix::fs::symlink(&victim, root.join("out")).unwrap();
+            }
+
+            let (_, stdout, _) =
+                stdio_config_from_redirects(&redirects, &setup, &mut state).unwrap();
+            let status = Command::new("sh")
+                .arg("-c")
+                .arg("echo written")
+                .stdout(stdout)
+                .status()
+                .unwrap();
+
+            assert!(status.success());
+            assert_eq!(
+                fs::read_to_string(&victim).unwrap(),
+                "PRECIOUS",
+                "as a hard link: {as_hard_link}"
+            );
+        }
+    }
+
+    /// A command that cannot be found has had its `>` target emptied by
+    /// then, as in bash. That is recorded all the same, so undo restores
+    /// the file. It was recorded only when the command had run.
+    #[test]
+    fn test_a_command_that_is_not_found_leaves_its_redirect_undoable() {
+        use std::fs;
+
+        let temp = tempfile::TempDir::new().unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap();
+        let mut state = ShellState::new(root.to_str().unwrap()).unwrap();
+        fs::write(root.join("out"), "ORIGINAL").unwrap();
+        let redirects = vec![Redirection::Output {
+            file: "out".to_string(),
+        }];
+
+        let outcome = execute_external_with_redirects(
+            "no-such-command-for-this-test",
+            &[],
+            &redirects,
+            &mut state,
+        );
+
+        assert!(outcome.is_err());
+        assert_eq!(fs::read(root.join("out")).unwrap(), b"");
+        crate::commands::undo(&mut state, 1, false).unwrap();
+        assert_eq!(fs::read(root.join("out")).unwrap(), b"ORIGINAL");
+    }
+
+    /// A background command's redirection is recorded too. It never was,
+    /// so the file it emptied could not be restored.
+    #[cfg(unix)]
+    #[test]
+    fn test_a_background_command_leaves_its_redirect_undoable() {
+        use std::fs;
+
+        let temp = tempfile::TempDir::new().unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap();
+        let mut state = ShellState::new(root.to_str().unwrap()).unwrap();
+        fs::write(root.join("out"), "ORIGINAL").unwrap();
+        let redirects = vec![Redirection::Output {
+            file: "out".to_string(),
+        }];
+
+        execute_external_background("true", &[], &redirects, &mut state).unwrap();
+
+        crate::commands::undo(&mut state, 1, false).unwrap();
+        assert_eq!(fs::read(root.join("out")).unwrap(), b"ORIGINAL");
+    }
 
     #[test]
     fn test_find_ls() {

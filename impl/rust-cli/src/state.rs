@@ -157,6 +157,19 @@ impl std::fmt::Display for OperationType {
     }
 }
 
+/// What a file was, apart from its content: permission bits, owner and
+/// modification time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileMeta {
+    /// Permission and set-ID bits (the low 12 bits of the mode).
+    pub mode: u32,
+    pub uid: u32,
+    pub gid: u32,
+    /// Modification time: seconds and nanoseconds since the Unix epoch.
+    pub mtime: i64,
+    pub mtime_nsec: i64,
+}
+
 /// A single filesystem operation with complete undo/redo information.
 ///
 /// Each operation is assigned a unique UUID and records all data needed for reversal.
@@ -190,6 +203,13 @@ pub struct Operation {
     /// Data needed for undo (e.g., file contents before write)
     pub undo_data: Option<Vec<u8>>,
 
+    /// The removed file's permissions, owner and modification time, so
+    /// that undo restores the file as it was and not merely its content.
+    /// Absent on operations that removed nothing and on records written
+    /// before this field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub undo_meta: Option<FileMeta>,
+
     /// Whether this operation has been undone
     pub undone: bool,
 
@@ -206,6 +226,7 @@ impl Operation {
             timestamp: Utc::now(),
             transaction_id,
             undo_data: None,
+            undo_meta: None,
             undone: false,
             undone_by: None,
         }
@@ -213,6 +234,11 @@ impl Operation {
 
     pub fn with_undo_data(mut self, data: Vec<u8>) -> Self {
         self.undo_data = Some(data);
+        self
+    }
+
+    pub fn with_undo_meta(mut self, meta: FileMeta) -> Self {
+        self.undo_meta = Some(meta);
         self
     }
 }
@@ -243,6 +269,15 @@ pub struct Transaction {
     pub committed: bool,
 }
 
+/// What [`ShellState::scrub_obliterated`] changed: the operations as they
+/// were, with their places in the history, and the redo stack as it was if
+/// anything was taken off it.
+#[derive(Debug)]
+pub struct Scrubbed {
+    operations: Vec<(usize, Operation)>,
+    redo_stack: Option<VecDeque<Operation>>,
+}
+
 /// Main shell state managing operation history, undo/redo stacks, and transactions.
 ///
 /// The state is persisted to `~/.cache/vsh/state.json` and restored on shell startup.
@@ -263,8 +298,21 @@ pub struct Transaction {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub struct ShellState {
-    /// Sandbox root path
+    /// The session root: the directory the shell was started on. It is
+    /// fixed for the life of the session, and nothing the shell does may
+    /// reach outside it. `cd` moves [`Self::cwd`], not this.
     pub root: PathBuf,
+
+    /// The working directory. Always the session root or a directory
+    /// beneath it. Paths a user types are relative to it; paths in the
+    /// history are relative to the session root, so they mean the same
+    /// thing after a `cd`.
+    cwd: PathBuf,
+
+    /// An open handle on the session root. Paths given to it are relative
+    /// and are resolved beneath it by the operating system, so no symlink
+    /// and no `..` can make them name anything outside the session root.
+    root_dir: cap_std::fs::Dir,
 
     /// Operation history (append-only)
     pub history: Vec<Operation>,
@@ -338,7 +386,12 @@ impl ShellState {
             fs::canonicalize(&root_path).context("Failed to canonicalize sandbox root")?;
         let state_file = root_path.join(".vsh_state.json");
 
+        let root_dir = cap_std::fs::Dir::open_ambient_dir(&root_path, cap_std::ambient_authority())
+            .context("Failed to open sandbox root")?;
+
         let mut state = Self {
+            cwd: root_path.clone(),
+            root_dir,
             root: root_path,
             history: Vec::new(),
             redo_stack: VecDeque::new(),
@@ -368,6 +421,18 @@ impl ShellState {
 
     /// Record an operation
     pub fn record_operation(&mut self, mut op: Operation) {
+        self.root_operation_path(&mut op);
+        self.record_rooted_operation(op);
+    }
+
+    /// Record an operation whose path is already relative to the session
+    /// root.
+    ///
+    /// [`Self::record_operation`] takes a path as it was typed and makes it
+    /// relative to the root, reading it against the working directory. A
+    /// path that is relative to the root already must not go through that
+    /// again: from `sub`, `sub/f` would become `sub/sub/f`.
+    pub fn record_rooted_operation(&mut self, mut op: Operation) {
         // Associate with active transaction if any
         if let Some(ref mut txn) = self.active_transaction {
             op.transaction_id = Some(txn.id);
@@ -393,6 +458,11 @@ impl ShellState {
     ///
     /// Unlike [`Self::record_operation`], this preserves remaining redo entries
     /// so that multiple sequential redos work correctly.
+    ///
+    /// The path of a redone operation comes from the history, so it is
+    /// relative to the session root already and is recorded as it is.
+    /// Reading it against the working directory again recorded `sub/f` for
+    /// `f` when the redo was done from `sub`.
     pub fn record_redo_operation(&mut self, mut op: Operation) {
         if let Some(ref mut txn) = self.active_transaction {
             op.transaction_id = Some(txn.id);
@@ -558,10 +628,361 @@ impl ShellState {
         }
     }
 
+    /// The directory the session was started on. It does not move with
+    /// `cd`.
+    pub fn session_root(&self) -> &Path {
+        &self.root
+    }
+
+    /// The working directory: the session root or a directory beneath it.
+    pub fn cwd(&self) -> &Path {
+        &self.cwd
+    }
+
+    /// Change the working directory to `target`, which must be a directory
+    /// inside the session root once every symbolic link in it is resolved.
+    ///
+    /// # Errors
+    ///
+    /// Fails if `target` is not a directory or lies outside the session
+    /// root. The working directory is then unchanged.
+    pub fn set_cwd(&mut self, target: &Path) -> Result<()> {
+        let resolved = fs::canonicalize(target)
+            .with_context(|| format!("cd: {}: No such file or directory", target.display()))?;
+        if !resolved.is_dir() {
+            anyhow::bail!("cd: {}: Not a directory", target.display());
+        }
+        if !resolved.starts_with(&self.root) {
+            anyhow::bail!(
+                "cd: {}: outside the session root {}",
+                target.display(),
+                self.root.display()
+            );
+        }
+        // The history stores paths as text. In a directory whose name is not
+        // text, every operation would be recorded under a different path,
+        // and undo would act on that one. The shell does not enter a
+        // directory it could not name in its history. (A name typed at the
+        // prompt is always text; this is reached through a symbolic link.)
+        if resolved.to_str().is_none() {
+            anyhow::bail!(
+                "cd: {}: the directory's name is not valid UTF-8, so operations there \
+                 could not be recorded for undo",
+                target.display()
+            );
+        }
+        self.cwd = resolved;
+        Ok(())
+    }
+
+    /// `typed`, a path relative to the working directory, as a path
+    /// relative to the session root. This is the form the history stores.
+    /// A path that does not lie inside the session root is returned as it
+    /// was typed.
+    pub fn rooted(&self, typed: &str) -> String {
+        match self.contained(typed) {
+            Ok(relative) if relative.as_os_str() == "." => String::new(),
+            Ok(relative) => relative.to_string_lossy().into_owned(),
+            Err(_) => typed.to_string(),
+        }
+    }
+
+    /// The location of a path recorded in the history. Recorded paths are
+    /// relative to the session root, whatever the working directory is now.
+    pub fn resolve_op_path(&self, recorded: &str) -> PathBuf {
+        resolve_under_root(&self.root, recorded)
+    }
+
+    /// Forget what the history holds about a path that has been
+    /// obliterated: `rooted` itself, or anything beneath it if it was a
+    /// directory.
+    ///
+    /// Earlier operations on the path keep their place in the history, but
+    /// lose their undo data (which may be the very content that was
+    /// obliterated) and are marked undone by the obliteration `by`, so that
+    /// no later `undo` or `redo` can bring any of it back. The caller
+    /// records the obliteration next, which saves the scrubbed history.
+    ///
+    /// A recorded path concerns the obliterated one if it is that path or
+    /// lies beneath it, as written or once the symbolic links in its
+    /// directories are resolved. The same file can be reached under two
+    /// names when a link inside the session root points at its directory;
+    /// comparing the names as written left the other name's records, and
+    /// the content in them, in place.
+    ///
+    /// Returns what was changed, so that [`Self::restore_scrubbed`] can put
+    /// it back if the scrubbed history then cannot be saved.
+    pub fn scrub_obliterated(&mut self, rooted: &str, by: Uuid) -> Scrubbed {
+        let mut scrubbed = Scrubbed {
+            operations: Vec::new(),
+            redo_stack: None,
+        };
+        if rooted.is_empty() {
+            return scrubbed;
+        }
+        let target = self.real_location(rooted);
+        // By path component, so that it holds whatever separator the
+        // platform writes: `dir` contains `dir/f`, and not `directory`.
+        let concerned: Vec<bool> = self
+            .history
+            .iter()
+            .map(|op| self.concerns(op, rooted, &target))
+            .collect();
+        for (index, op) in self.history.iter_mut().enumerate() {
+            if !concerned[index] {
+                continue;
+            }
+            scrubbed.operations.push((index, op.clone()));
+            op.undo_data = None;
+            op.undo_meta = None;
+            if !op.undone {
+                op.undone = true;
+                op.undone_by = Some(by);
+            }
+        }
+        let kept: VecDeque<Operation> = self
+            .redo_stack
+            .iter()
+            .filter(|op| !self.concerns(op, rooted, &target))
+            .cloned()
+            .collect();
+        if kept.len() != self.redo_stack.len() {
+            scrubbed.redo_stack = Some(std::mem::replace(&mut self.redo_stack, kept));
+        }
+        scrubbed
+    }
+
+    /// Put back what [`Self::scrub_obliterated`] changed. For an
+    /// obliteration that did not go ahead: the file is still there, so the
+    /// history must still be able to undo what was done to it.
+    pub fn restore_scrubbed(&mut self, scrubbed: Scrubbed) {
+        for (index, op) in scrubbed.operations {
+            if let Some(slot) = self.history.get_mut(index) {
+                *slot = op;
+            }
+        }
+        if let Some(redo_stack) = scrubbed.redo_stack {
+            self.redo_stack = redo_stack;
+        }
+    }
+
+    /// Whether a recorded operation is about `rooted`, whose real location
+    /// is `target`, or about something beneath it.
+    fn concerns(&self, op: &Operation, rooted: &str, target: &Path) -> bool {
+        if matches!(
+            op.op_type,
+            OperationType::SetVariable
+                | OperationType::UnsetVariable
+                | OperationType::HardwareErase
+        ) {
+            return false;
+        }
+        // An operation on a link itself (making it, removing it, moving
+        // it) is about the link. Any other operation went through the link
+        // to the file it points at: `echo x > alias` saved the bytes of the
+        // target under the name `alias`. Such a record is also compared by
+        // where its path leads now, with the last link followed too.
+        let on_the_link = matches!(
+            op.op_type,
+            OperationType::Symlink | OperationType::Unlink | OperationType::Move
+        );
+        op.path.split('\0').any(|recorded| {
+            Path::new(recorded).starts_with(Path::new(rooted))
+                || self.real_location(recorded).starts_with(target)
+                || (!on_the_link
+                    && fs::canonicalize(self.resolve_op_path(recorded))
+                        .is_ok_and(|real| real.starts_with(target)))
+        })
+    }
+
+    /// Take out of the history archive what it holds about a path that is
+    /// about to be obliterated: the undo data of every archived operation
+    /// that [`Self::scrub_obliterated`] would have scrubbed in the history.
+    ///
+    /// Operations that age out of the history are written to the archive
+    /// with their undo data, which can be the content that is being
+    /// obliterated. Scrubbing only the history left that copy on disk.
+    ///
+    /// The archive is rewritten through a temporary file and renamed into
+    /// place, so it is either the old archive or the scrubbed one. A line
+    /// that cannot be read as an operation is kept as it is. Nothing is
+    /// done when no archive is configured or none has been written yet.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the archive cannot be read or rewritten. The caller must
+    /// then not obliterate.
+    pub(crate) fn scrub_archive(&self, rooted: &str) -> Result<()> {
+        use std::io::Write;
+
+        let Some(archive_path) = self.history_archive_path.as_ref() else {
+            return Ok(());
+        };
+        if rooted.is_empty() {
+            return Ok(());
+        }
+        let archived = match fs::read_to_string(archive_path) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => {
+                return Err(e).with_context(|| {
+                    format!("Failed to read history archive {}", archive_path.display())
+                })
+            }
+        };
+
+        let target = self.real_location(rooted);
+        let mut changed = false;
+        let mut scrubbed = String::with_capacity(archived.len());
+        for line in archived.lines() {
+            match serde_json::from_str::<Operation>(line) {
+                Ok(mut op)
+                    if (op.undo_data.is_some() || op.undo_meta.is_some())
+                        && self.concerns(&op, rooted, &target) =>
+                {
+                    op.undo_data = None;
+                    op.undo_meta = None;
+                    scrubbed.push_str(&serde_json::to_string(&op)?);
+                    changed = true;
+                }
+                _ => scrubbed.push_str(line),
+            }
+            scrubbed.push('\n');
+        }
+        if !changed {
+            return Ok(());
+        }
+
+        let mut temporary = archive_path.clone().into_os_string();
+        temporary.push(".scrub");
+        let temporary = PathBuf::from(temporary);
+        let written = (|| -> std::io::Result<()> {
+            let mut file = fs::File::create(&temporary)?;
+            file.write_all(scrubbed.as_bytes())?;
+            file.sync_all()?;
+            fs::rename(&temporary, archive_path)?;
+            if let Some(parent) = archive_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+                fs::File::open(parent)?.sync_all()?;
+            }
+            Ok(())
+        })();
+        written.with_context(|| {
+            format!(
+                "Failed to rewrite history archive {}",
+                archive_path.display()
+            )
+        })
+    }
+
+    /// Where a recorded path is now, with the symbolic links in its
+    /// directories resolved as far as they still exist. The last component
+    /// is kept as written: a record about a link is about the link, not
+    /// about what it points to.
+    fn real_location(&self, recorded: &str) -> PathBuf {
+        let path = self.resolve_op_path(recorded);
+        let Some(name) = path.file_name().map(std::ffi::OsStr::to_os_string) else {
+            return path;
+        };
+        let mut missing = Vec::new();
+        let mut directory = path.parent();
+        while let Some(current) = directory {
+            if let Ok(real) = fs::canonicalize(current) {
+                let mut location = real;
+                location.extend(missing.iter().rev());
+                location.push(&name);
+                return location;
+            }
+            match current.file_name() {
+                Some(part) => missing.push(part.to_os_string()),
+                None => break,
+            }
+            directory = current.parent();
+        }
+        path
+    }
+
+    /// Rewrite the path of an operation about to be recorded so that it is
+    /// relative to the session root. Variable operations carry a name, not
+    /// a path, and are left alone. A move carries two paths.
+    fn root_operation_path(&self, op: &mut Operation) {
+        match op.op_type {
+            OperationType::SetVariable | OperationType::UnsetVariable => {}
+            // A hardware erase names a device (`/dev/nvme0n1`), not a file
+            // in the session root. The record must keep that name.
+            OperationType::HardwareErase => {}
+            OperationType::Move => {
+                let rooted: Vec<String> =
+                    op.path.split('\0').map(|part| self.rooted(part)).collect();
+                op.path = rooted.join("\0");
+            }
+            _ => op.path = self.rooted(&op.path),
+        }
+    }
+
+    /// The handle on the session root. Use it, with a path from
+    /// [`Self::contained`], for anything that creates, changes or removes a
+    /// file.
+    pub fn root_dir(&self) -> &cap_std::fs::Dir {
+        &self.root_dir
+    }
+
+    /// `path`, as typed relative to the working directory, as a path
+    /// relative to the session root, for use with [`Self::root_dir`].
+    ///
+    /// # Errors
+    ///
+    /// Fails if the path lies outside the session root.
+    pub fn contained(&self, path: &str) -> Result<PathBuf> {
+        self.contained_abs(&self.resolve_path(path))
+    }
+
+    /// As [`Self::contained`], for a path already resolved by
+    /// [`Self::resolve_path`].
+    ///
+    /// # Errors
+    ///
+    /// Fails if the path lies outside the session root, or is not valid
+    /// UTF-8. The history stores paths as text. A path that is not text
+    /// would be stored as a different path, and undo would then act on
+    /// that one, so the operation is refused before anything is done.
+    pub fn contained_abs(&self, full: &Path) -> Result<PathBuf> {
+        let relative = full
+            .strip_prefix(&self.root)
+            .map_err(|_| anyhow::anyhow!("{} is outside the session root", full.display()))?;
+        if relative.to_str().is_none() {
+            anyhow::bail!(
+                "{} is not valid UTF-8, so it could not be recorded for undo; nothing was done",
+                full.display()
+            );
+        }
+        Ok(if relative.as_os_str().is_empty() {
+            PathBuf::from(".")
+        } else {
+            relative.to_path_buf()
+        })
+    }
+
     /// Resolve a path relative to sandbox root
     /// Prevents path traversal attacks via `..` components
+    ///
+    /// A path that starts with `/` is read from the session root, with one
+    /// exception: a real path that lies inside the session root is that
+    /// path. `pwd`, `$PWD`, `~+` and `~-` all give real paths, and reading
+    /// them from the session root added the root a second time, so
+    /// `touch ~+/f` failed in every directory. `cd` already read them this
+    /// way. The result is inside the session root either way.
     pub fn resolve_path(&self, path: &str) -> PathBuf {
-        resolve_under_root(&self.root, path)
+        if path.starts_with('/') && Path::new(path).starts_with(&self.root) {
+            return normalise_within(&self.root, Path::new(path));
+        }
+        if path.starts_with('/') || self.cwd == self.root {
+            return resolve_under_root(&self.root, path);
+        }
+        // Relative to the working directory, which is inside the root. The
+        // working directory is used as the path it is: its name may hold
+        // bytes that are not text, and writing it out as text and reading
+        // it back would name another directory.
+        resolve_under_base(&self.root, &self.cwd, path)
     }
 
     /// Get root path as string (for Lean FFI)
@@ -585,6 +1006,13 @@ impl ShellState {
     }
 
     /// Save state to file
+    /// Save the history now, and report a failure. The recording functions
+    /// only warn when a save fails; a caller that must not go on without
+    /// the save uses this.
+    pub(crate) fn save_history(&self) -> Result<()> {
+        self.save()
+    }
+
     fn save(&self) -> Result<()> {
         let state = SerializableState {
             history: self.history.clone(),
@@ -930,7 +1358,21 @@ pub fn resolve_under_root(root: &Path, path: &str) -> PathBuf {
     } else {
         root.join(path)
     };
+    normalise_within(root, &raw)
+}
 
+/// Resolve the relative `path` against `base`, a directory inside the
+/// sandbox `root`, under the same rule as [`resolve_under_root`].
+///
+/// `base` is joined as the path it is. Its name may hold bytes that are not
+/// text, which writing it out as text and reading it back would change.
+pub fn resolve_under_base(root: &Path, base: &Path, path: &str) -> PathBuf {
+    normalise_within(root, &base.join(path))
+}
+
+/// Drop `.` components and apply `..` components of `raw`, never going above
+/// `root`.
+fn normalise_within(root: &Path, raw: &Path) -> PathBuf {
     // Normalize path components to prevent traversal via ..
     let mut normalized = PathBuf::new();
     for component in raw.components() {
@@ -962,6 +1404,78 @@ pub fn resolve_under_root(root: &Path, path: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A hardware erase names a device, not a file under the session root.
+    /// Its record keeps that name. It used to be rewritten as `dev/nvme0n1`.
+    #[test]
+    fn test_a_hardware_erase_record_keeps_its_device_name() {
+        let root = tempfile::tempdir().unwrap();
+        let mut state = ShellState::new(root.path().to_str().unwrap()).unwrap();
+
+        state.record_operation(Operation::new(
+            OperationType::HardwareErase,
+            "/dev/nvme0n1".to_string(),
+            None,
+        ));
+
+        assert_eq!(state.history.last().unwrap().path, "/dev/nvme0n1");
+    }
+
+    /// Scrubbing an obliterated directory reaches what is inside it and
+    /// nothing else: not a neighbour whose name only starts the same way.
+    #[test]
+    fn test_scrub_reaches_what_is_inside_the_directory_and_nothing_else() {
+        let root = tempfile::tempdir().unwrap();
+        let mut state = ShellState::new(root.path().to_str().unwrap()).unwrap();
+        for path in ["dir", "dir/f", "dir/deep/g", "directory/h", "dir2"] {
+            state.record_rooted_operation(
+                Operation::new(OperationType::DeleteFile, path.to_string(), None)
+                    .with_undo_data(b"content".to_vec()),
+            );
+        }
+
+        state.scrub_obliterated("dir", Uuid::new_v4());
+
+        let kept: Vec<&str> = state
+            .history
+            .iter()
+            .filter(|op| op.undo_data.is_some())
+            .map(|op| op.path.as_str())
+            .collect();
+        assert_eq!(kept, ["directory/h", "dir2"]);
+    }
+
+    /// A record of a write made through a link holds the bytes of the
+    /// link's target, under the link's name. Obliterating the target must
+    /// reach it. A record about the link itself (making it, removing it)
+    /// is about the link, and stays.
+    #[cfg(unix)]
+    #[test]
+    fn test_scrub_reaches_content_recorded_under_a_link_to_the_file() {
+        let root = tempfile::tempdir().unwrap();
+        let mut state = ShellState::new(root.path().to_str().unwrap()).unwrap();
+        fs::write(root.path().join("real"), "now").unwrap();
+        std::os::unix::fs::symlink("real", root.path().join("alias")).unwrap();
+        for op_type in [
+            OperationType::FileTruncated,
+            OperationType::Symlink,
+            OperationType::Unlink,
+        ] {
+            state.record_rooted_operation(
+                Operation::new(op_type, "alias".to_string(), None).with_undo_data(b"data".to_vec()),
+            );
+        }
+
+        state.scrub_obliterated("real", Uuid::new_v4());
+
+        let kept: Vec<OperationType> = state
+            .history
+            .iter()
+            .filter(|op| op.undo_data.is_some())
+            .map(|op| op.op_type)
+            .collect();
+        assert_eq!(kept, [OperationType::Symlink, OperationType::Unlink]);
+    }
 
     #[test]
     fn test_operation_inverse() {

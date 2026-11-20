@@ -604,7 +604,9 @@ pub fn eval_arith(expr: &ArithExpr, state: &ShellState) -> Result<i64> {
             let val = eval_arith(expr, state)?;
             match op {
                 ArithOp::UnaryPlus => Ok(val),
-                ArithOp::UnaryMinus => Ok(-val),
+                // Wraps at the edge of i64, as addition does and as bash does:
+                // the negation of the smallest value is itself.
+                ArithOp::UnaryMinus => Ok(val.wrapping_neg()),
                 ArithOp::LogNot => Ok(if val == 0 { 1 } else { 0 }),
                 ArithOp::BitNot => Ok(!val),
                 _ => Err(anyhow!("Invalid unary operator")),
@@ -643,14 +645,17 @@ pub fn eval_arith(expr: &ArithExpr, state: &ShellState) -> Result<i64> {
                     if rval == 0 {
                         Err(anyhow!("Division by zero"))
                     } else {
-                        Ok(lval / rval)
+                        // `i64::MIN / -1` does not fit in an i64. It wraps to
+                        // `i64::MIN`, as bash gives, instead of panicking.
+                        Ok(lval.wrapping_div(rval))
                     }
                 }
                 ArithOp::Mod => {
                     if rval == 0 {
                         Err(anyhow!("Modulo by zero"))
                     } else {
-                        Ok(lval % rval)
+                        // `i64::MIN % -1` is 0; plain `%` panics on it.
+                        Ok(lval.wrapping_rem(rval))
                     }
                 }
                 ArithOp::Pow => {
