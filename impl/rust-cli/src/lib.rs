@@ -25,6 +25,7 @@ pub mod help;
 pub mod highlighter;
 pub mod history;
 pub mod job;
+pub mod journal;
 pub mod pager;
 pub mod parser;
 pub mod posix_builtins;

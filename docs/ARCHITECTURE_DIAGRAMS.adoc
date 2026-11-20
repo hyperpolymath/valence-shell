@@ -103,7 +103,7 @@ System Documentation
 │  │            │                  │                  │           │    │
 │  │     ┌──────▼──────────────────▼──────────────────▼───────┐  │    │
 │  │     │  State Persistence (JSON)                          │  │    │
-│  │     │  ~/.vsh_state.json                                 │  │    │
+│  │     │  <root>/.vsh_state.journal                         │  │    │
 │  │     └────────────────────────────────────────────────────┘  │    │
 │  └─────────────────────────────────────────────────────────────┘    │
 │                                                                      │
@@ -214,7 +214,7 @@ USER INPUT: echo "Hello $USER" > output.txt
 ┌─────────────────┐
 │  7. UPDATE      │  Update shell state
 │    STATE        │  last_exit_code = 0
-│  (state.rs)     │  Persist to ~/.vsh_state.json
+│  (state.rs)     │  Persist to <root>/.vsh_state.journal
 └────────┬────────┘
          │
          ▼
@@ -391,7 +391,7 @@ USER: undo
 
     ┌────────────┐
     │   START    │  Initialize shell
-    │  (clean)   │  Load ~/.vsh_state.json (if exists)
+    │  (clean)   │  Load <root>/.vsh_state.journal (if exists)
     └──────┬─────┘
            │
            ▼

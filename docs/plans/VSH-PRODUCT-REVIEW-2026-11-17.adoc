@@ -1,0 +1,1239 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= valence-shell: product review, comparison and staged model
+Jonathan Jewell (hyperpolymath)
+:toc: left
+:toc-title: Contents
+:toclevels: 2
+:doctype: article
+:icons: font
+:sectanchors:
+
+*Date:* 2026-11-17
+*Status:* REVIEW. The owner ruled on section 10 on 2026-11-17: route B (engine
+first), the truthful baseline next on its own branch, the capture experiment to
+decide the first front end, and hole (b) left for the change-set engine. The
+rulings are OD-42 to OD-45 in the route plan (`VSH-ROUTE-PLAN-2026-11-04.adoc`).
+The text below is as written before those rulings.
+
+*Asked for:* a harsh review of the whole shell plan: what the product is and
+what it is for; how it compares, in function and in modularity, with bash, NGS,
+plug-in frameworks such as oh-my-zsh, and other shells; a rating of each aspect,
+now and where it is heading; what each direction costs on the way to a usable
+and one day production shell; and a development model in which every step
+leaves a stable product.
+
+*Evidence grades:*
+
+* *Measured*: a command was run or a file read in this session (2026-11-17).
+* *Reported*: read on a primary page by a research pass in this session and
+  linked. Items re-read by hand are marked *checked*.
+* *Inference*: reasoned from the above.
+* *Unverified*: not checked.
+
+== 0. Bottom line
+
+. *As a shell it is not usable today.* On 112 everyday command lines it gives
+  the same result as bash on 57. `dash`, a minimal POSIX shell, gives the same
+  result on 91, and brush, an existing shell written in Rust, on 111. The
+  failures are ordinary: `[ -d / ]` always fails; a quoted `*` or `[` reaches
+  programs with a backslash added; `cat *.txt` is not expanded; `mkdir -p a/b`
+  creates a directory named `-p`; `exit 7` exits with 0; a nested `for` loop
+  gives the wrong answer. Several of these report success. All of them are on
+  `main` and predate this month's branches (Measured, section 2).
+. *The tests did not see it, and neither does the plan.* No test file on `main`
+  runs the built program; they call its functions. The plan's definition of done
+  (gates G1 to G11) has no gate for use as a shell, so "v1.0-honest" could ship
+  with every one of these failures (Measured, sections 2.6 and 8.1).
+. *What is distinctive does work.* The history with proof references, the dry
+  run, checkpoints, transactions, undo and redo all behave as described in an
+  interactive session, and the two open pull requests add a crash-safe journal
+  and handle-based containment (Measured, section 2.7).
+. *Undo reaches very little of a real session.* It covers the shell's own file
+  commands, redirections and variables. An edit in an editor, `sed -i`, `git`,
+  a build: none of it can be undone. This limits usefulness more than any gap
+  in the language (Measured, section 3).
+. *There is a product here, and it is not "another bash".* Nothing in wide use
+  gives undo and redo, with grouping, for the effects of arbitrary commands.
+  The nearest tool, `try`, shows the mechanism works, and an experiment in this
+  session reproduced it at about 4.5 ms per command (sections 4.2 and 7.4).
+. *Recommended direction:* treat the engine as the product and the shell
+  language as one of several front ends, built last. In order: a command-line
+  tool and library; a plug-in for bash, zsh and fish; capture of any command;
+  a server for AI agents; and only then an interactive shell of its own,
+  probably on an existing core. Each step is a product someone can use. The
+  other routes, their costs and the ratings are in sections 7 and 10.
+
+'''''
+
+== 1. What was measured, and how
+
+[cols="2,5",options="header"]
+|===
+|Item |Value
+
+|Builds |`main` at `63c14a0`; the journal branch at `4f7fa6a` (valence-shell#230); the containment branch at `bb6aa75` (valence-shell#232). Release builds, rustc 1.99.1.
+|Machine |Linux 6.18 in a container, as root, 4 cores, 16 GB. Disk is ext4 on a virtual device; `/dev/shm` is tmpfs.
+|Reference |GNU bash 5.2.21. Calibration: dash, and brush 0.4.0 built from crates.io.
+|Battery |112 command lines in 18 groups: 111 one-liners and one here-document (appendix A). Each runs in a fresh directory under bash and under the shell being tested, through `-c`. A line passes when standard output and exit status both match bash.
+|Probes |About 150 further command lines for root causes, the file commands, undo, and what a program receives as arguments.
+|Interactive |The interactive shell driven through `tmux` (a real terminal): typing, Tab, arrow keys, Ctrl-C, Ctrl-Z, `less`, `vim`.
+|Timing |200 runs for start-up; single runs for the larger workloads.
+|===
+
+Limits of the method:
+
+* `rm` lines are not in the automated battery. A safety check in this
+  environment declines `bash -c` scripts that run `rm`, so the shell's `rm` was
+  probed directly instead.
+* Everything ran as root, so nothing here shows behaviour for an ordinary user.
+* Linux only. Nothing was run on macOS or BSD.
+* The battery is this review's own. It is small and was written before the
+  results were known. A public corpus (section 11) should replace it as the
+  yardstick.
+
+'''''
+
+== 2. The shell as a shell
+
+=== 2.1 The battery
+
+[cols="3,2,2,2,2,2",options="header"]
+|===
+|Shell |Same as bash |POSIX part (91) |bash-only part (21) |Different output |Exit status only
+
+|dash |91 |91 |0 |21 |0
+|brush 0.4.0 |111 |90 |21 |1 |0
+|*vsh, `main`* |*57* |*53* |*4* |*54* |*1*
+|vsh, journal branch |57 |53 |4 |54 |1
+|vsh, containment branch |56 |52 |4 |55 |1
+|===
+
+The "POSIX part" is the 91 lines that dash gets right; the other 21 use syntax
+only bash has. The one line the containment branch loses is `cd /tmp && pwd`,
+which it refuses on purpose (`cd` stays inside the session root). The one line
+brush "fails" is an alias used in a non-interactive shell, where bash itself
+does not expand it.
+
+By group, lines that match bash (Measured):
+
+[cols="2,1,1,1,1",options="header"]
+|===
+|Group |Lines |dash |vsh `main` |vsh containment
+
+|arith |5 |2 |1 |1
+|array |3 |0 |0 |0
+|basic |3 |3 |3 |3
+|builtin |17 |13 |9 |8
+|case |2 |2 |2 |2
+|ext (other programs) |8 |8 |7 |7
+|fs (file commands) |8 |8 |7 |7
+|func |6 |5 |5 |5
+|glob |6 |4 |1 |1
+|if |3 |2 |1 |1
+|logic |7 |6 |3 |3
+|loop |9 |7 |1 |1
+|pipe |5 |5 |4 |4
+|quote |4 |2 |2 |2
+|redir |7 |6 |4 |4
+|sub (subshells, groups) |4 |4 |1 |1
+|subst (command substitution) |4 |4 |0 |0
+|vars |11 |10 |6 |6
+|===
+
+=== 2.2 Root causes
+
+Each was reproduced on the `main` build. "Silent" means the command reports
+success and the result is wrong.
+
+[cols="1,5,4,1",options="header"]
+|===
+|# |What happens |Example |Silent
+
+|R1 |A quoted `*`, `?`, `[`, `{` or `~` is passed on with a backslash in front. The parser marks quoted characters with a backslash in a flat string (`quoted_word_to_string`, `parser.rs:2527`) and nothing takes it off again before the program is started |`grep '[0-9]' f` searches for `\[0-9]`. `awk '{print $1}'` is a syntax error. `pass:[echo "*"]` prints `pass:[\*]` |Yes
+|R2 |Unquoted wildcards, braces and `~` are expanded only when the command also has a redirection. The plain path (`execute_external`) never calls the expansion; the redirection path does (`external.rs:41`) |`cat *.txt` fails with "No such file"; `cat *.txt > out` works |No
+|R3 |`[ … ]` always fails. The parser removes the closing `]` (`parser.rs:3713`) and the evaluator then requires it (`test_command.rs:248`) |`[ -d / ] && echo yes` prints "test: missing ']'" |No
+|R4 |Command substitution works only as the whole value of an assignment, and only for another program |`x=$(date +%Y)` works. `x=$(echo hi)`, `echo $(date)`, `for i in $(seq 3)` and backquotes do not |Partly
+|R5 |Arithmetic expansion works only in an assignment |`pass:[i=$((i+1))]` works; `pass:[echo $((1+2))]` prints the text `pass:[$((1+2))]` |Yes
+|R6 |`${x#p}`, `${x%p}` and `${x^^}` give an empty string. `$$` is not known |`x=abcdef; echo ${x#abc}` prints an empty line |Yes
+|R7 |The file commands take one operand and no options. An option is treated as the operand; further operands are dropped |`mkdir -p a/b` creates a directory named `-p`. `touch a b c` creates `a`. `ls -la` is an error |Yes
+|R8 |In `-c` and script mode, a failing built-in command ends the whole script |`ls nosuch; echo after` prints nothing after the error |No
+|R9 |`exit N` exits with status 0. `set -e` has no effect. `! cmd`, `break`, `continue` and `wait` do not exist, so a loop that relies on `break` never ends. `&` is accepted only at the end of a line |`exit 7; echo $?` in the caller gives 0 |Partly
+|R10 |`export` and `VAR=value cmd` do not reach the program being run |`export FOO=bar; sh -c 'echo $FOO'` prints an empty line |Yes
+|R11 |A `for` loop inside a `for` loop runs the inner loop once with the outer variable empty |`for i in a b; do for j in 1 2; do echo $i$j; done; done` prints `1 2` |Yes
+|R12 |Not supported: arrays, `pass:[(( ))]`, `let`, the C-style `for`, `[[ -d x ]] && …`, subshells, a brace group or a `while` loop in a pipeline, `read` from a here-string, `type`, `command -v`, `pushd` |`echo a b \| while read x y; do …` gives "Command not found: while" |No
+|R13 |A redirection on a built-in command is resolved inside the session root |`ls nosuch 2>/dev/null` fails: "Parent directory does not exist: <root>/dev" |No
+|R14 |After starting a program the shell polls for its exit every 50 ms (`external.rs:326`, and two more loops like it) |1,000 runs of `/bin/true` take 50.5 s on the journal build (100 runs take 5.1 s on `main`); bash takes 1.4 s for 1,000 |-
+|===
+
+R1 and R7 are the dangerous ones. They change what a command does without
+saying so.
+
+R1 to R6 share one cause. The POSIX shell turns a word into arguments in fixed
+steps: tilde, parameter, command and arithmetic expansion, then field
+splitting, then pathname expansion, then quote removal. Here the steps are
+spread over the parser and three execution paths, and "was this character
+quoted" is carried as backslashes inside a string. The root `CLAUDE.md` already
+lists the consequence as its first priority ("requires quote-context
+threading"). This cannot be patched into correctness one case at a time
+(Inference); section 9.1 gives the structural answer.
+
+=== 2.3 The file commands against coreutils
+
+Twenty-two everyday forms, on the containment build (the parser is the same on
+`main`). Starting tree in each case: files `a` and `b`, directories `dir`
+(holding `inner`) and `sub`. Measured.
+
+[cols="3,3,4",options="header"]
+|===
+|Typed |coreutils |vsh
+
+|`cp a c`, `mv a c`, `chmod +x a`, `ln -s a l`, `cd sub` |as expected |Same
+|`cd -` with no previous directory |error |Same error
+|`cp -r dir dir2`, `cp -p a c`, `mv -f a b`, `chmod -R 700 dir` |as expected |Error: the option is taken for a file name
+|`cp a b sub/`, `mv a b sub/` |both go into `sub` |Error: "Destination already exists: b"
+|`mv a sub` |`a` moves into `sub` |Error: "Destination already exists: sub"
+|`ln -sf a l`, `ls -1` |as expected |Error
+|`mkdir -p x/y/z` |creates the chain |*Creates a directory named `-p`, exit 0*
+|`mkdir x y`, `touch x y`, `chmod 755 a b` |act on both |*Act on the first only, exit 0*
+|`ls dir sub` |lists both |*Lists the first only, exit 0*
+|`ln a hard` |hard link |Refused (by design: symbolic links only)
+|`cd` |goes to `$HOME` |Goes to the session root (by design on the containment branch)
+|===
+
+Six forms behave as coreutils do, nine fail with an error, five do something
+else and report success, and two differ on purpose. The earlier direct probes
+of `rm` gave the same picture: `rm -f x`, `rm -rf x` and `rm -r x` treat the
+option as the file to remove.
+
+The built-in commands also see only the session root, while other programs see
+the whole machine: `cp /etc/hostname .` fails, `cat /etc/hostname` works. On
+`main` the root itself moves with `cd`, so `cd /etc; touch x` created `/etc/x`
+during this review (removed afterwards). That is hole (f) of the route plan and
+is closed on valence-shell#232.
+
+=== 2.4 Interactive use
+
+Journal build, through `tmux`. Measured.
+
+[cols="3,5",options="header"]
+|===
+|Works |Detail
+
+|Line editing, history, reverse search |Up arrow and Ctrl-R work (the `reedline` library). History is kept in `~/.vsh_history`.
+|Multi-line input |`for … do` shows a continuation prompt and runs on `done`.
+|Completion of command names |`ec` then Tab gives `echo`.
+|Ctrl-C |At the prompt the shell stays. On a running program it stops the program.
+|Full-screen programs |`less` and `vim` run and return.
+|Background jobs |`sleep 2 &` then `jobs` lists it.
+|The shell's own commands |`history --proofs`, `explain`, `checkpoint`, `diff`, `restore`, `replay`, `graph`, `begin`, `commit`, `rollback`, `undo`, `redo` and the `obliterate` confirmation all respond as documented.
+|===
+
+[cols="3,5",options="header"]
+|===
+|Does not work |Detail
+
+|`help` |"help: Command not found: help". The banner tells the user to type it.
+|`ls -la` |"Error: Not a directory" (R7). `ls -la \| cat` works, because in a pipeline the real `ls` runs.
+|Completion of file names |Only when the word starts with `./`. `cat al` then Tab and `cd su` then Tab give "NO RECORDS FOUND".
+|Ctrl-Z |Prints `^Z`; the shell goes on waiting and typed text is not read until Ctrl-C. No suspend, so `fg` and `bg` have nothing to act on.
+|Prompt |`PS1` is ignored. The prompt is `vsh>` with an operation count.
+|Start-up file |None. There is no `~/.vshrc`, no configuration file and no hook.
+|Piped input |`printf 'echo hi\n' \| vsh` fails: "Error reading input: No such device or address". Scripts must be passed as a file or with `-c`.
+|===
+
+=== 2.5 Speed
+
+Measured; one machine, so treat the ratios as indicative.
+
+[cols="4,2,2,2,2",options="header"]
+|===
+|Workload |bash |vsh `main` |vsh journal |vsh containment
+
+|Start and run `true` (ms, 200 runs; dash 1.60) |2.25 |2.04 |2.11 |2.33
+|1,000 file creations, built-in `touch`, tmpfs (ms) |1,530 ^1^ |321 |24 |527
+|The same on disk (ms) |1,530 ^1^ |706 |253 |687
+|1,000 runs of `/bin/true` (ms) |1,391 |- |50,514 |-
+|Counting loop, 20,000 turns (ms) |67 |- |434 ^2^ |-
+|200 MB through `cat \| tr \| wc` (ms) |592 |- |667 |-
+|===
+
+^1^ bash starts the `touch` program each time.
+^2^ Each assignment is recorded as an undoable operation: the loop wrote a
+3.1 MB journal.
+
+Start-up and pipelines are fine. Built-in operations are fast, and the journal
+made them about thirteen times faster than `main` on tmpfs, because `main`
+rewrites its whole state file on every operation. Two costs stand out: R14
+(50 ms on every program), and the price of recording every variable assignment
+durably (on a real disk each record is a flush).
+
+=== 2.6 Size, tests and releases
+
+Measured, journal branch unless stated.
+
+* 25,788 lines of Rust in 34 files. By role (approximate): the interpreter
+  (parser, expansion, execution of programs, redirection, arithmetic, test,
+  functions, jobs) about 13,000 lines, of which `parser.rs` is 5,315; the
+  engine (state, commands, journal, deletion, audit, verification) about 9,400;
+  the interactive layer about 2,700.
+* 140 crates in the dependency tree, 25 of them direct. Release binary 3.7 MB
+  (brush: 14.4 MB).
+* 880 tests pass on the journal branch, 869 on the containment branch. On
+  `main` and the journal branch *no test file runs the built program*: all 22
+  call library functions. The tests named for wildcards call `expand_glob`
+  directly; the tests for `[` call `parse_test_expr` with the `]` still in
+  place. That is how R2 and R3 pass their tests and fail in use. The containment
+  branch adds the first tests that run the program (the fifteen hole
+  regressions).
+* No release tags. No packages.
+* Other implementation directories that are not part of the running shell:
+  `impl/elixir` (6,417 lines; build broken), `impl/zig` and `ffi` (8,877 lines;
+  builds, not connected), `impl/ocaml` (860 lines; design only), `impl/mcp`
+  (8 files of AffineScript; its README describes ReScript and Deno files that
+  are no longer there). The `alkahest-shell-transmuter` directory (49 files) is
+  a separate alpha project.
+* 60 files sit at the top level of the repository, 35 of them documents,
+  several of which are reports from earlier sessions.
+
+=== 2.7 What works well
+
+The parts that carry the project's idea are the best-made parts (Measured):
+
+* `explain rm f` shows the preconditions, the state change, the inverse and the
+  theorem, and changes nothing.
+* `checkpoint`, `diff` and `restore` name a state, show what separates it from
+  now, and return to it.
+* `begin`, `commit` and `rollback` group operations. On valence-shell#230
+  rollback first checks every operation's record and refuses the whole rollback
+  if one cannot be reversed. A failure that only the file system reveals
+  part-way through still leaves the transaction open, with the newer operations
+  reversed (ruling OD-39).
+* The journal on valence-shell#230 survives a crash at every point the harness
+  can reach, and its model is proved in Agda. That holds for one shell. Two
+  shells on the same root can still lose each other's records until the lock of
+  step C3.
+* On valence-shell#232, thirteen of the fifteen known runtime holes are closed.
+
+Three things in the product's own output say more than the proof ledger allows,
+and should be reworded whatever else is decided:
+
+* `replay` and `diff` print "all proven reversible ✓" and "All reversals proven".
+  The theorems are about the model; the link from the model to this code is
+  `tested-only` in the ledger. One of the theorems named, for variables, is
+  listed in `history --proofs` as "pending".
+* `proofs` prints "✓ Zig FFI layer checks preconditions". That layer is not
+  connected to the shell.
+* `obliterate` describes its three overwrites as "NIST SP 800-88 Purge". In
+  that standard, overwriting with ordinary write commands is the *Clear* level;
+  Purge needs device commands or cryptographic erase (Reported: section 5.3).
+
+'''''
+
+== 3. What undo covers in a real session
+
+Undo covers what the shell does itself: `mkdir`, `rmdir`, `touch`, `rm`, `cp`,
+`mv`, `ln -s`, `chmod`, `chown`, output redirection and variable assignment.
+Measured in an interactive session and with `-c`:
+
+[cols="4,4",options="header"]
+|===
+|Action |`undo` afterwards
+
+|`touch t`, `rm t`, `mv a b` |Reversed
+|Edit and save a file in `vim` |"Nothing to undo"
+|`sed -i s/a/X/ f` |Not reversed; `undo` goes to the operation before it
+|`git init` |"Nothing to undo"
+|`echo hi > f` on `main` and the journal branch |Fails: "Undo touch failed: No such file or directory". Fixed on valence-shell#232 (the redirection records a path relative to the root)
+|A file changed by another program since the operation |`undo` overwrites the other program's data (hole b, still open: section 10, decision 4)
+|===
+
+In ordinary work most changes to files are made by other programs: editors,
+version control, build tools, package managers, `sed`, `tar`. So the feature the
+project is named for applies to a small share of what a user does, and only if
+they type the plain form of a handful of commands (section 2.3).
+
+Two further limits follow from recording everything durably:
+
+* The previous value of an overwritten variable is written to the state file
+  (Measured: after `T=first; T=second` the file holds `first`). A secret held
+  in a variable therefore reaches the disk. The file is mode 0600 on the
+  journal branch and 0644 on `main`.
+* Contents of removed and overwritten files are kept in the same file until
+  step C4 of the route plan moves them to a store of their own.
+
+'''''
+
+== 4. What this is
+
+=== 4.1 Three things in one repository
+
+. *An engine for reversible operations*: operations with inverses, a history,
+  transactions, checkpoints, a journal, containment, and deliberate
+  irreversible deletion with a record. About 9,400 lines. Sound in outline,
+  with known holes being closed.
+. *A proof corpus about a model of that engine*: Agda as the source, rechecked
+  in Lean and Coq. Sound for the model. Not connected to the code by anything
+  mechanical.
+. *A shell interpreter wrapped round the engine*: about half the Rust. It is
+  the weakest part, the largest part, and the part the roadmap spends most of
+  its words on ("v0.10.x POSIX coverage").
+
+The first two are what make the project different. The third is what a user
+meets first.
+
+=== 4.2 What is new here and what is not
+
+Reported unless marked; links in section 5.3.
+
+[cols="2,5,4",options="header"]
+|===
+|Feature |Already available elsewhere |Not available elsewhere
+
+|Undo |Deleted files (`trash-cli`, `gio trash`). Whole volumes back to a snapshot (snapper on btrfs, ZFS, NILFS2). One command inspected before it is applied (`try`). Files an AI agent changed with its own editing tool (agent checkpoints) |Undo and redo of the effects of arbitrary commands, one command at a time, with grouping. No mainstream shell has undo
+|Containment |Landlock, bubblewrap, firejail, nsjail, systemd settings: mature, and they wrap any shell |Nothing: this is a property the product must have, not a reason to choose it
+|Record of what was done |`auditd`, `sudo` session logs, `tlog`, Teleport; sealing in journald and in transparency logs |A record that ties each command to the changes it made and can show it was not altered
+|Deletion with evidence |Device commands (`nvme sanitize`, `blkdiscard --secure`), cryptographic erase |Nothing reliable for a single file on flash or copy-on-write storage, and software cannot change that
+|Proofs |Smoosh (a tested semantics of the POSIX shell, not proved); CoLiS (a core calculus proved, the translation trusted) |No machine-checked shell exists. Proofs about the operations, as here, are a smaller target and a reachable one
+|===
+
+Two signals from that history deserve weight:
+
+* Microsoft withdrew file-system transactions twice for lack of use:
+  Transactional NTFS ("extremely limited developer interest") and the
+  transaction cmdlets in PowerShell ("very limited usage"). Transactions that
+  developers have to ask for were not wanted (Reported).
+* `try` won a best-paper award at OSDI in 2026 (Reported, checked), and every
+  AI coding agent's documentation says its rewind does not cover what shell
+  commands did (Reported; checked for one of them). Undo that needs no
+  cooperation from the command is wanted now.
+
+=== 4.3 The jobs it could do
+
+[cols="1,4,4,3",options="header"]
+|===
+|# |Job |What people use today |What it would take
+
+|J1 |"I am about to do something risky to this directory tree and want to be able to take it back exactly" |Copy the directory first; git, if it is a repository; a snapshot, if the file system has them |Undo for any command, in the shell they already use, at no noticeable cost
+|J2 |"An AI agent is about to run commands in my project. I want it confined, I want to see what it changed, and I want one step back" |Containers and sandboxes (isolate, do not undo); git; agent checkpoints (their own edits only) |The same engine behind a tool interface for agents
+|J3 |"I must be able to show what was done, and what was deleted" |`sudo` logs, `auditd`, ticket systems, device erase certificates |A sealed record, and deletion methods that match the storage
+|J4 |"I study or teach reversible computing and verified systems" |Papers |The model, the proofs and a small demonstrator
+|===
+
+None of the four needs a new shell language. J1 and J2 need coverage of
+arbitrary commands and low friction. J3 needs integrity of the record. J4 needs
+the proofs. A new interpreter is a way of delivering them, and it is the most
+expensive way.
+
+=== 4.4 A statement of identity to rule on
+
+Proposed for the project's deed once the owner has ruled. Until then it is a
+proposal and no descriptive file is changed.
+
+*IS:* an environment for accountable operations on a directory tree. Every
+change it makes is either reversible, with a machine-checked account of why the
+reversal is right, or deliberately irreversible, with a durable record that it
+happened. Shells, scripts and agents are ways of reaching it.
+
+*IS NOT:* a replacement for bash; a POSIX shell; a sandbox for hostile code; a
+backup system; a compliance product; a proof that a storage device forgot
+anything.
+
+*The name still fits:* a valence shell is the outer layer through which an atom
+bonds. Here it is the layer through which a tree is changed.
+
+'''''
+
+== 5. Comparison
+
+=== 5.1 Shells as products
+
+The research pass for this table stopped part-way on a usage limit. The rows
+marked *checked* were read by hand on the project's own page on 2026-11-17, and
+the battery column is Measured. The other rows are from general knowledge and
+are *Unverified* here; they are kept short for that reason.
+
+[cols="2,5,2,4,2",options="header"]
+|===
+|Shell |What it is |Same as bash on the 112 lines |How it is extended |Grade
+
+|bash |The default shell on most Linux systems; POSIX with many extensions |112 (the reference) |Sourced files, functions, a prompt variable, a hook before each prompt, programmable completion. Collections: bash-it, oh-my-bash |Unverified
+|dash |A small, strict POSIX shell used for system scripts |91 |Hardly at all; that is its point |Measured
+|zsh with oh-my-zsh |zsh is a POSIX-like shell with extensions. Oh My Zsh is "an open source, community-driven framework for managing your zsh configuration": 300+ optional plugins, 140+ themes, 2,500+ contributors, about 191,000 stars, MIT |Not run |A plugin is a file that zsh reads at start-up. It is switched on by naming it in `plugins=(...)` in `~/.zshrc`; a user's own go in `custom/plugins/` |Oh My Zsh *checked*; zsh Unverified
+|fish |Not POSIX. Known for what it does unconfigured: suggestions, highlighting, completion |Not run |Its own configuration language; functions and completions as files; plugin managers such as fisher |Unverified
+|nushell |Not POSIX. Pipelines carry tables and records, not text |Not run |Its own language with modules; plugins are separate programs that speak a serialised protocol |Unverified
+|NGS |"Next Generation Shell is a modern programming language for DevOps." It holds that bash and Python are both "inadequate for Ops tasks". Multiple dispatch, user-defined types, exceptions for non-zero exit codes. Written in C, GPL-3.0, about 1,500 stars. Its README says "The work on the shell has just started" and that NGS "does not have a REPL yet" |Not run |As a programming language: methods and types |*checked*
+|Oils |Two languages in one project: OSH, which aims to run existing bash scripts, and YSH, a new language. Tested with a large corpus of cases run against several shells |Not run |- |Unverified
+|brush 0.4.0 |"bash/POSIX-compatible shell implemented in Rust". "Bash-compatible. Embeddable. Extensible." More than 2,500 test cases "run the same script under brush and Bash and compare stdout, stderr, exit status, and filesystem side effects". Rated by its authors as "daily-driver quality" on Linux and on macOS (Apple silicon). Still missing: `select`, `wait -n`, `disown`, some traps. MIT, about 2,300 stars |111 |"brush-core is a tested implementation of Bash semantics that your own Rust software can embed and extend" |*checked*; battery Measured
+|PowerShell |Pipelines carry objects; modules; runs on Linux |Not run |Modules and a package gallery |Unverified
+|*vsh today* |Section 2 |*57* |Nothing: no start-up file, no hooks, no prompt variable, no library interface |Measured
+|===
+
+What the table says (Inference):
+
+* *No shell here won users with safety features.* Each offers either
+  compatibility with existing scripts (bash, zsh, brush, OSH), a clearly better
+  time at the prompt (fish), or a new model of data (nushell, PowerShell). The
+  extras this project offers are not in that list, so they will not carry a
+  shell that is weaker than those on the basics.
+* *NGS is a language first.* The project the owner had in mind as a model is a
+  scripting language for operations work whose own README says its shell has
+  only just been started. A new language is a long road even for a focused
+  author, and it is a different product from an interactive shell.
+* *The most widely used "shell product" in the table is a collection of
+  plug-ins.* Oh My Zsh has no interpreter of its own. It reaches its users
+  inside the shell they already have.
+* *A bash-compatible core in Rust already exists, is MIT-licensed, and is built
+  to be embedded.* brush also tests itself the way gate G0 proposes: the same
+  script under both shells, comparing output, exit status and effects on the
+  file system.
+
+=== 5.2 Modularity
+
+What "modular like oh-my-zsh" needs from a shell: a start-up file; a way to
+read other files; functions and aliases; hook functions that run before and
+after each command; a completion interface; a prompt the user can define. A
+plug-in is then a file that uses those, and a theme is a prompt definition.
+
+valence-shell has the second and third (`source`, functions, aliases) and none
+of the rest (Measured, section 2.4). So a plug-in system *for* this shell is
+not possible today, and building one would mean building most of what makes an
+interactive shell first.
+
+The other direction needs nothing from this shell's interpreter: deliver
+`undo`, `redo`, transactions and the engine's file commands *as a plug-in for*
+bash, zsh and fish. The host shell supplies the language, the completion, the
+prompt and the user's existing configuration. That is stage S2.
+
+The engine is modular in a different sense that matters more: section 8.4
+splits it into a core, capture, the record, and front ends behind one
+interface.
+
+An NGS-like direction is still open later, without a new parser: a typed
+scripting layer over the engine in a language the estate already has
+(section 11).
+
+=== 5.3 Where each extra already exists
+
+Reported by a research pass on 2026-11-17 from the linked pages, except the
+three marked *checked*, which were re-read by hand.
+
+*Undo, dry run, transactions*
+
+* `try` runs a command against an overlay of the file system built from Linux
+  namespaces and overlayfs, then asks "Commit these changes? [y/N]". Linux 5.11
+  or later; MIT licence. It calls itself a "semisolate (as opposed to a fully
+  isolated sandbox)" and says "network calls are all allowed". Its paper won a
+  best-paper award at OSDI 2026. It has no undo after the commit (*checked*).
+  https://github.com/binpash/try
+* snapper compares and reverts between two snapshots on btrfs or thin LVM
+  (`undochange`); `zfs rollback` discards everything since a snapshot; NILFS2
+  takes checkpoints continuously. All work on whole volumes or by time, not by
+  command (Inference).
+  https://man.archlinux.org/man/snapper.8.en,
+  https://openzfs.github.io/openzfs-docs/man/master/8/zfs-rollback.8.html,
+  https://docs.kernel.org/filesystems/nilfs2.html
+* `trash-cli` and `gio trash` cover deletion only. The author of `trash-cli`
+  says of aliasing `rm` to it: "You can but you shouldn't".
+  https://github.com/andreafrancia/trash-cli
+* Transactional NTFS: Microsoft "strongly recommends" alternatives and cites
+  "extremely limited developer interest". The transaction cmdlets of Windows
+  PowerShell were removed from PowerShell 6 for "very limited usage".
+  https://learn.microsoft.com/en-us/windows/win32/fileio/deprecation-of-txf,
+  https://learn.microsoft.com/en-us/powershell/scripting/whats-new/differences-from-windows-powershell
+* No mainstream shell has undo (Inference from absence).
+* AI coding agents: Claude Code's rewind restores files changed by its own
+  editing tools; "A file that only Bash commands changed isn't tracked and
+  stays as it is" (*checked*). Cursor's checkpoints restore "files only";
+  Gemini CLI commits to a shadow git repository before its own file tools run;
+  Copilot CLI restores "the files it changed". No vendor page read claims to
+  roll back what shell commands did.
+  https://code.claude.com/docs/en/checkpointing,
+  https://cursor.com/docs/agent/chat/checkpoints,
+  https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/checkpointing.md,
+  https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/roll-back-changes
+
+*Containment*
+
+* Landlock lets any process restrict itself (Linux 5.13 onward); bubblewrap,
+  firejail, nsjail and systemd's sandbox settings are widely packaged. Agents
+  use Seatbelt on macOS and bubblewrap, Landlock and seccomp on Linux.
+  https://docs.kernel.org/userspace-api/landlock.html,
+  https://github.com/containers/bubblewrap
+* `openat2` with `RESOLVE_BENEATH` (Linux 5.6) and the `cap-std` library, which
+  valence-shell#232 uses, confine a program's own path handling. `cap-std`
+  states that it "is not a sandbox for untrusted Rust code".
+  https://man7.org/linux/man-pages/man2/openat2.2.html,
+  https://github.com/bytecodealliance/cap-std
+* Shells with confinement built in exist only as research (Shill, OSDI 2014).
+  https://www.usenix.org/conference/osdi14/technical-sessions/presentation/moore
+
+*Record of what was done*
+
+* `auditd` records system calls. It can record the calls a shell makes for a
+  built-in command. An event can include a `proctitle` record with the title
+  and command-line parameters of the process that made the call, so a command
+  given as `sh -c '...'` can appear there, and a command typed into a running
+  shell does not. Not every event has that record: an audit rule can leave it
+  out (corrected three times after review; the field is from the audit field
+  dictionary, read 2026-11-17, and the rest is not re-read on a primary
+  page).
+  https://github.com/linux-audit/audit-documentation/blob/main/specs/fields/field-dictionary.csv,
+  `sudo` records sessions and `sudo_logsrvd` collects them; Teleport records
+  terminal sessions and says recordings can be evaded.
+  https://man7.org/linux/man-pages/man7/audit.rules.7.html,
+  https://www.sudo.ws/docs/man/sudo_logsrvd.man/,
+  https://goteleport.com/docs/reference/architecture/session-recording/
+* Sealing exists in general form: journald's Forward Secure Sealing, and
+  transparency logs such as Rekor.
+  https://www.freedesktop.org/software/systemd/man/latest/journalctl.html,
+  https://docs.sigstore.dev/logging/overview/
+* No mature tool that binds shell commands to a sealed chain was found. A chain
+  alone cannot show that nothing was removed from its end; that needs a witness
+  outside it.
+
+*Deletion*
+
+* NIST SP 800-88 Rev. 2, published September 2025, replaces Rev. 1 of 2014
+  (*checked*). It keeps three levels: Clear (ordinary read and write commands),
+  Purge (device sanitize commands or cryptographic erase) and Destroy.
+  https://csrc.nist.gov/pubs/sp/800/88/r2/final
+* Wei and others (FAST 2011): "none of the existing hard drive-oriented
+  techniques for individual file sanitization are effective on SSDs". GNU
+  `shred` lists journaling, snapshots, RAID, compression and flash as defeating
+  it.
+  https://www.usenix.org/legacy/events/fast11/tech/full_papers/Wei.pdf,
+  https://www.gnu.org/software/coreutils/manual/html_node/shred-invocation.html
+* GDPR Article 17 prescribes no technique. The UK regulator asks that backups
+  be put "beyond use"; a European Data Protection Board report of February 2026
+  asks controllers to verify erasure and "be able to demonstrate such erasure".
+  https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/individual-rights/individual-rights/right-to-erasure/,
+  https://www.edpb.europa.eu/system/files/2026-02/edpb_cef-report_2025_right-to-erasure_en.pdf
+
+*Proofs*
+
+* Smoosh (POPL 2020) is an executable semantics of the POSIX shell validated by
+  testing: "Our tested semantics". CoLiS proves an interpreter for a core
+  language correct in Why3; the translation from shell to that language is
+  trusted. No machine-checked implementation of a full shell was found.
+  https://arxiv.org/abs/1907.05308,
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC7480694/
+
+'''''
+
+== 6. Ratings by aspect
+
+Scale: *0* absent; *1* present, but wrong or unsafe in ordinary use; *2* works
+when demonstrated, fails in ordinary use; *3* usable within stated limits;
+*4* dependable; *5* as good as the best available.
+
+"Open PRs" means `main` with valence-shell#230 and #232 merged. "Reaches 4 at"
+names the stage of section 8 where the aspect becomes dependable.
+
+[cols="3,1,1,6,2",options="header"]
+|===
+|Aspect |`main` |Open PRs |Evidence |Reaches 4 at
+
+|Command language |1 |1 |57 of 112; R1 to R6, R9, R11, R12 |S2 by using the user's own shell; S6 for a shell of its own
+|File commands |1 |1 |6 of 22 forms; five silent (section 2.3) |S1
+|Running other programs |1 |1 |R1, R2, R10, R14. Pipes and redirection to files work |S2 or S6
+|Interactive use |2 |2 |Editing and history are good; `help`, file completion, Ctrl-Z, prompt and start-up file are missing |S2 or S6
+|Undo: how much it reaches |1 |1 |The shell's own commands only (section 3) |S3
+|Undo: is it right |1 |3 |Fifteen runtime holes; thirteen closed on #232; (b) and (o) open |S1
+|Transactions |2 |3 |Rollback checks first on #230 |S1
+|Durability of its own state |1 |3 |`main` rewrites one file. #230 has the journal, a crash harness and a proved model, for one shell. Two shells on the same root can still lose records: a rewrite by one discards what the other appended since |C3 (the lock)
+|Containment |1 |3 |On `main`, `cd` moves the root. #232 confines the built-in commands by handle. Other programs are not confined |S3 and S4
+|Record of what was done |1 |2 |A plain file inside the tree it describes; no sealing. #232 writes the intent before an obliteration |S5
+|Deletion with evidence |1 |2 |Overwrite only, mislabelled; #232 refuses symbolic and hard links |S5, and 3 at most for single files
+|Proofs about the model |4 |4 |Agda source checks; Lean and Coq recheck, with the gaps listed in the ledger |Reached
+|Link from the proofs to the code |1 |1 |`tested-only` in the ledger; no contracts on the Rust |Phase E
+|Tests of the product |0 |1 |No test runs the program on `main`; fifteen do on #232 |S0
+|Modularity and extension |0 |0 |No library interface, start-up file, plug-ins or hooks |S1 and S2
+|Speed |2 |3 |R14; the journal is about thirteen times faster on built-in operations |S0
+|Truth of its own claims |2 |2 |Status pages are honest; feature lists and three in-product texts overstate |S0
+|Privacy |1 |2 |Old file contents in a 0644 file on `main`; 0600 on #230 but still inside the tree, and old variable values are kept |C3, plus a rule for variables
+|Releases and packaging |0 |0 |No tags or packages; Rust CI cannot start |S1
+|Portability |1 |1 |Linux only; nothing run elsewhere |Open
+|===
+
+Taken together: as an engine with proofs it is a 3 and rising; as a shell it is
+a 1.
+
+'''''
+
+== 7. Routes and what they cost
+
+=== 7.1 The unit
+
+One *work package* (WP) is about what valence-shell#230 was: a model, an
+implementation, a test harness and its review rounds. That is roughly one long
+working session of the kind this month has had. Every figure below is a size
+class inferred from this month's work, not a promise (Inference).
+
+=== 7.2 Five routes for the front end
+
+*Route A. Grow the present interpreter into a POSIX shell.*
+
+* Needs: a new word and expansion pipeline in place of the string escapes
+  (section 9.1), 2 to 3 WP; the missing constructs and built-in commands, up to
+  dash's level on a public corpus, 3 to 6 WP; options for the file commands,
+  job control, completion, a start-up file and a prompt, 2 to 4 WP. bash's own
+  extensions after that have no fixed end.
+* Buys: a shell like the others, with the extras attached.
+* Others on this road (section 5.1): brush stands on more than 2,500
+  comparison tests against bash, and NGS's own README says its shell has only
+  just been started.
+* It is the most expensive route to the least distinctive result.
+
+*Route B. The engine first, front ends in stages.* Section 8. Recommended.
+
+*Route C. Put an existing shell core in front now.* brush is the candidate
+(Measured):
+
+* 111 of the 112 lines; MIT licence; `brush-core` 21,732 lines and
+  `brush-parser` 10,154 lines; version 0.x.
+* A program that embeds it can register its own built-in commands
+  (`register_builtin` in `brush-core` 0.5.0). No hook was found for wrapping
+  the programs it starts.
+* Needs: the engine's commands registered as built-ins, and a decision on how
+  capture attaches: 1 to 2 WP for a working interactive shell, then the cost of
+  following a young project whose interface is not yet stable.
+* It adds about 32,000 lines that are outside every proof to the path a command
+  takes. Adding the dependency is the owner's call.
+
+*Route D. Agents only.* Build the engine, capture and the agent server
+(stages S1, S3, S4) and no shell for people.
+
+*Route E. Research artefact only.* Keep the model, the journal proofs and a
+small demonstrator; publish; make no product.
+
+Rated 1 to 5 on each aspect, higher is better (for cost and risk, higher means
+cheaper and safer). Inference.
+
+[cols="4,1,1,1,1,1",options="header"]
+|===
+|Aspect |A own shell |B engine first |C existing core |D agents only |E research only
+
+|Usable by someone soon |1 |4 |4 |3 |1
+|Delivers what is distinctive |2 |5 |3 |4 |2
+|Cost |1 |3 |3 |4 |5
+|Risk |2 |4 |3 |3 |5
+|Fit with the proofs (small trusted core) |2 |5 |3 |4 |5
+|Who can use it |2 |4 |3 |2 |1
+|A stable product at each step |2 |5 |3 |4 |-
+|*Elegance and correctness (E, of 10)* |*4* |*9* |*6* |*7* |*5*
+|*Dependability, security, privacy (D, of 10)* |*4* |*8* |*6* |*7* |*8*
+|===
+
+B and C are not rivals in the long run: C is the likely answer to stage S6 of
+route B.
+
+=== 7.3 Three routes for the engine
+
+* *One inverse per operation* (today). Eleven operations, each with its own
+  undo, redo and rollback code. The route plan already asks for a single
+  inverse table (step B5).
+* *Change sets with footprints* (recommended, section 9.2). One type covers the
+  built-in commands and the captured effects of any other command.
+* *Snapshots only*, leaving the work to btrfs or ZFS. No per-command undo
+  without those file systems, and it needs privileges. Usable as an optional
+  back end, not as the base.
+
+=== 7.4 Experiment: capturing any command
+
+Measured in this session, as root, on Linux 6.18.
+
+* A command was run in a new user and mount namespace against an overlay of a
+  directory tree. `sed -i`, an unlink, a new file and a new directory were all
+  captured in the overlay's upper layer, and the real tree was unchanged.
+* `git init`, `git add` and `git commit` over 200 files, then `sed -i` on two
+  of them, ran normally inside. 377 entries were captured. The real tree's hash
+  was the same before and after.
+* Cost per command: 2.11 ms plain; 4.10 ms with the namespaces; 6.64 ms with
+  the overlay mounted. About 4.5 ms is added. (R14 adds 50 ms today.)
+
+Not shown: applying the captured changes to the real tree and undoing them
+later, which is the part to build; an ordinary user; nested mounts; large
+trees; any system without overlayfs.
+
+=== 7.5 What the pieces cost
+
+Inference. "Planned" means already in the route plan.
+
+[cols="5,2,5",options="header"]
+|===
+|Piece |Size |Notes
+
+|The battery as a CI ratchet; honest wording; `help`; built-ins refuse what they do not understand |0.5 WP |Stage S0
+|R3, R9 (exit status), R14: each a few lines |with S0 |Pure defects
+|Rest of Phase B: hole (b), remaining commands on the handle, the ban on ambient file calls, one inverse table |1 WP |Planned
+|C3 state outside the tree and a lock; C4 store for old contents; C5 recovery |1 to 2 WP |Planned
+|Change-set type, in the model and in Rust |1 to 2 WP |Replaces the inverse table; closes (b) for good
+|Library interface, command-line tool with machine-readable output, first tagged release |1 WP |Stage S1; the extraction is planned as Phase E
+|File commands with the common options, checked against coreutils |1 WP |Refuse the rest
+|Plug-in for bash, zsh and fish |1 WP |Stage S2
+|Capture: run, apply, undo; the experiment first |2 to 3 WP |Stage S3. macOS is a separate, unknown cost
+|Agent server |1 to 2 WP |Stage S4
+|Sealed record, verifier, deletion by storage type |1 to 2 WP |Stage S5; needs decisions on keys
+|Spec spine: finite model, oracle, trace corpus |2 to 3 WP |Planned, Phase D
+|Contracts on the Rust core |2 to 4 WP |Planned, Phase E; depends on tool maturity
+|An interactive shell on an existing core |1 to 2 WP, then upkeep |Stage S6, route C
+|An interactive shell of our own |8 to 13 WP, then no fixed end |Route A
+|===
+
+'''''
+
+== 8. A staged model: a stable product at every step
+
+=== 8.1 The gap in the present plan
+
+The route plan's definition of done has eleven gates, all about the engine and
+the proofs, and lists "full POSIX" as a non-goal. It does not say what the
+shell must be able to do. So a release could meet every gate and still fail
+`[ -d / ]`.
+
+Proposed *gate G0, use*: what the project claims a front end can do equals
+what a battery, run in CI against a reference, shows it does. The battery is a
+ratchet: a listed failure that starts to pass must be taken off the list, and
+an unlisted failure fails the build. valence-shell#232 already uses this
+pattern for the runtime holes.
+
+=== 8.2 The stages
+
+Each stage ends in a tagged release with a generated report of what passed.
+
+[cols="1,4,3,4,3,1",options="header"]
+|===
+|Stage |Product |Who can use it |Gate |Stop rule |Size
+
+|*S0* Truthful baseline |The present shell, with claims that match measurements |Nobody new |G0 runs in CI. Built-in commands refuse options and extra operands they do not handle. `help` works. The three texts of section 2.7 are reworded. R3, R9 and R14 fixed |None: always worth doing |0.5 WP
+|*S1* The engine as a product |A library and a command-line tool for reversible operations in a contained tree: the operations, `undo`, `redo`, transactions, checkpoints, `explain`, `obliterate`; machine-readable output; real exit codes; state outside the tree |Scripts; other tools; the estate |Every operation's round trip agrees with the executable model on generated sequences. Crash harness clean. All fifteen holes closed. First release |If nobody, the owner included, uses it in a script within a month of release, revisit section 4.4 before going on |4 to 6 WP, mostly planned
+|*S2* Undo in the shell you already use |One plug-in file each for bash, zsh and fish: `undo`, `redo`, `txn`, a prompt segment, a per-directory switch, and the engine's file commands in place of the system's inside enabled trees |Anyone on Linux, in their own shell with their own configuration |Same tree as coreutils on generated cases for every supported form. Under 5 ms added to start-up. Four weeks of the owner's daily use with no wrong undo |If the owner switches it off in their own shell, stop and reassess |1 WP
+|*S3* Undo for any command |`vsh run -- command`, and the plug-in wrapping command lines in enabled trees: the command runs against an overlay; its changes are applied with the old versions kept; one change set is journalled; `undo` restores exactly |The same people, now for editors, git, builds |On a corpus of twenty real tools: tree hash before equals tree hash after undo, or a clear refusal. A crash while applying recovers to before or after |If capture cannot run for an ordinary user on two mainstream distributions, or exactness fails without a refusal: keep S2 and say so |2 to 3 WP
+|*S4* For agents |A tool server offering run, show changes, apply, undo, checkpoint and the record, with the tree confined |People running AI coding agents |Escape tests pass. On a task corpus, rollback restores the tree exactly. The record lists every command with its changes |If agent vendors close the gap themselves, offer the library instead |1 to 2 WP
+|*S5* Accountability |A sealed record kept outside the tree, evidence that can be exported and checked by a separate tool, and deletion methods chosen by storage type and named correctly |Operations and compliance work |Edits, deletions, truncation and reordering of the record are detected. The verifier is a second implementation |None set yet |1 to 2 WP
+|*S6* A shell of its own |An interactive shell with the engine built in |People who want one program |Decided on evidence from S2 to S4 about what users lack. Battery at dash's level on the POSIX part, then a public corpus |If S2 to S4 users lack nothing a plug-in cannot give, do not build it |Route C or A
+|===
+
+The assurance work runs beside the stages: the journal model is done; the
+finite model, the oracle and the change-set lemmas belong to S1; the apply
+protocol to S3; the chain to S5; contracts on the Rust core from S1 onward.
+
+=== 8.3 How the present phases fit
+
+Phases A, B, C3 to C5, D and E of the route plan are all stage S1. Phase F is
+part of S0. Nothing built this month is lost on routes B, C, D or E. On route
+A the interpreter would come first and the engine work would wait.
+
+What changes under route B: S0 is new and comes first; the POSIX items in
+`ROADMAP.adoc` ("v0.10.x") and in the root `CLAUDE.md` ("Immediate priorities")
+are parked; the present interpreter stays as an experimental front end with its
+claims cut to what the battery shows.
+
+=== 8.4 Sections that evolve separately
+
+[cols="2,5,3",options="header"]
+|===
+|Section |Holds |Rule
+
+|Core |Change sets, journal, store for old contents, containment, inverses |No terminal output and no parsing. Everything proved or under contract lives here
+|Capture |Running a command against an overlay and producing a change set |Depends on the core only
+|Record |The sealed log and its verifier |Depends on the core only
+|Front ends |Command-line tool, plug-ins, agent server, interactive shell |May be replaced without touching the core
+|Proofs |One model per core module |The Agda tree is the source
+|===
+
+The core's interface (a change set in, a journal record out) is the stable
+boundary. That boundary is what lets each front end ship on its own.
+
+=== 8.5 Working rules for fast, largely autonomous coding
+
+. *An oracle before code.* No area is opened for autonomous work without
+  something executable to check it against and a ratchet: a reference shell for
+  language behaviour, coreutils for the file commands, the model for the
+  engine, tree hashes for capture, the crash harness for durability.
+. *An experiment before a build*, time-boxed, with GO or NO-GO written down.
+. *One stage, one release.*
+. *Claims are generated* from what passes, not written by hand.
+. *Refuse, never approximate.* Input that is not understood is an error.
+. *Mutation checks* on the tests and proofs of each gate, as was done for the
+  journal model.
+. *Exactness stays with the formal side and the owner*: what a theorem says,
+  licences, identity, keys.
+. *A named first user* for each stage, and a stop rule.
+
+Work that suits this well: S0, the file-command options, the plug-ins, the
+agent server. Work that does not: the statements of the theorems, the trust
+design of the record, anything about identity or licence.
+
+'''''
+
+== 9. Types, logics and proofs that give a more final answer
+
+=== 9.1 Words that know what was quoted
+
+R1 to R6 exist because quoting is stored as backslashes in strings. The
+structural fix is a word type: a word is a list of segments, each marked quoted
+or not. Expansion produces fields. Only unquoted segments are split and matched
+against file names. Arguments are built from fields, and no escape character
+exists inside the program at all, so the fault of R1 cannot be written.
+
+One property covers the class: for every byte string `s`, the argument that a
+program receives for the quoted form of `s` is `s`. It is a property test
+today and a short lemma over the word type later. This matters only if an
+interpreter of our own is kept.
+
+=== 9.2 Change sets with footprints
+
+An operation's effect is a set of changes; each change gives a path, what was
+there before and what is there after (kind, metadata, content hash). The
+inverse swaps before and after. A change set may be applied only when every
+path it names is in its "before" state.
+
+A change set's *footprint* is the paths it names together with their parent
+directories, because creating or removing `a/b` also changes what `a` holds.
+
+* *One theorem instead of eleven:* applying the inverse after the change set
+  returns the tree, given that precondition. `mkdir` and `rmdir`, write and
+  restore, move and move back are instances.
+* *Hole (b) is answered by construction:* an undo whose paths no longer match
+  what the operation left is not applicable, so it is refused. Nothing needs to
+  be remembered to check.
+* *Paths outside the footprint are untouched* (the frame rule of separation
+  logic), so changes that other programs make outside it do not invalidate an
+  undo.
+* *Two change sets whose footprints do not overlap commute* (as in the patch
+  theories of Darcs and Pijul), so an earlier operation can be undone without
+  undoing the later ones. Different paths are not enough for this: creating
+  `a/b` depends on creating `a`. Two changes are independent only when neither
+  path is the other or an ancestor of it. Dependent changes are undone
+  together, newest first, or the undo is refused. No shell or snapshot tool
+  offers selective undo.
+* The built-in commands and the captured effects of any program become the same
+  thing, which is what makes stage S3 an extension and not a second engine.
+
+In the estate's own vocabulary, the "before" half of a change set is the echo
+of a lossy map: the witness needed to go back. That reading stays
+documentation only, as the bridge rules require.
+
+=== 9.3 Authority only by handle
+
+valence-shell#232 gives the built-in commands a handle on the session root and
+no other way to reach files. The remaining step in the plan, a ban on ambient
+file calls outside one module, turns a convention into something the compiler
+checks. For other programs the same idea is Landlock together with the
+overlay.
+
+=== 9.4 A one-use permit for what cannot be undone
+
+Obliteration is refused inside a transaction by a run-time check. A permit
+value that cannot be copied, issued by the confirmation and consumed by the
+operation, makes "irreversible operations happen only with a fresh, explicit
+permit" something the type checker enforces. Rust's ownership expresses it
+directly. It is also the natural meeting point with the estate's affine types.
+
+=== 9.5 A chained record
+
+Each entry of the record carries the hash of the one before, and checkpoints
+are signed. That makes edits and reordering detectable. It does not show that
+entries were not cut from the end; a copy of the latest hash held somewhere
+else does. The model-level lemma is small. The real questions are where the
+keys and that copy live, and they are the owner's.
+
+=== 9.6 Ratchets
+
+The battery, the hole list and the proof manifest are the same device: a list
+that may only shrink, checked by a machine. Every stage gate in section 8 has
+that form.
+
+'''''
+
+== 10. Decisions for the owner
+
+Rated E (elegance and correctness) and D (dependability, security, privacy),
+out of 10. The elegant arm is named in each.
+
+*Decision 1. Which route.*
+
+[cols="4,1,1,5",options="header"]
+|===
+|Option |E |D |Note
+
+|B. Engine first, front ends in stages |9 |8 |The elegant arm, and recommended
+|A. Own shell first |4 |4 |What the roadmap implies today
+|C. An existing shell core in front now |6 |6 |Usable soonest as a shell; a large dependency outside the proofs
+|D. Agents only |7 |7 |The out-of-the-box arm: narrow and timely
+|E. Research artefact only |5 |8 |Gives up the aim of production
+|===
+
+*Decision 2. The truthful baseline (S0).*
+
+[cols="4,1,1,5",options="header"]
+|===
+|Option |E |D |Note
+
+|Now, as its own small pull request from `main` |9 |9 |The elegant arm, and recommended. Needs a fourth branch
+|The ratchet and the wording only, no fixes |7 |8 |Leaves `[`, the exit status and the 50 ms wait as they are
+|Later, with Phase F |5 |5 |The claims stay ahead of the product meanwhile
+|Mark the interpreter experimental and spend nothing more on it |6 |7 |The out-of-the-box arm; fits routes D and E
+|===
+
+*Decision 3. The first front end after the engine.*
+
+[cols="4,1,1,5",options="header"]
+|===
+|Option |E |D |Note
+
+|Let the capture experiment decide |9 |8 |The elegant arm, and recommended. It needs only the journal and the store for old contents, so it can run before S1 is finished. GO: capture first, and the plug-in is a thin layer over it. NO-GO: the plug-in with the engine's own commands
+|Plug-in first |7 |8 |Daily use soonest; part of it is discarded if capture works
+|Agent server first |7 |7 |Follows the clearest demand
+|Publish the engine and model first, no front end yet |5 |8 |The out-of-the-box arm
+|===
+
+*Decision 4. Hole (b): undo destroys what another program has written since.*
+
+[cols="4,1,1,5",options="header"]
+|===
+|Option |E |D |Note
+
+|Check the footprint: each operation records what it left (kind, size, time, content hash); undo and rollback compare first and refuse on a difference; a forced undo first saves what is there |9 |9 |The elegant arm, and recommended. It is the rule of section 9.2 applied early
+|Refuse only, with no way to force |7 |9 |Safe; can leave a history that cannot be unwound
+|Always undo, but keep a copy of what was displaced |6 |7 |Recoverable, but newer work is replaced without asking
+|Leave it for the change-set engine |8 |5 |The out-of-the-box arm: one fix in the right place, with a data-loss hole open until then
+|===
+
+*Smaller points, with the default I will use unless told otherwise:*
+
+* Variables: keep their undo in memory and stop writing old values to disk
+  (privacy and speed, section 3). This changes what `undo` does to variables
+  across restarts.
+* The three texts of section 2.7 are reworded in S0 or Phase F, whichever comes
+  first.
+* The top-level documents and the implementation directories that do not run
+  are the owner's to keep or archive. Nothing is deleted.
+
+'''''
+
+== 11. Beyond this repository
+
+For the maintained list.
+
+* *brush* (MIT, `reubeno/brush`): the candidate core for stage S6. Worth
+  watching for a stable embedding interface and a hook on program start.
+* *`try`* (MIT, `binpash/try`): the closest prior art for stage S3, and a
+  possible source of test cases and of collaboration.
+* *A public conformance corpus:* the Oils project's spec tests run thousands of
+  cases against several shells. They should replace this review's battery as
+  the yardstick for any shell language work. Not run here.
+* *januskey `reversible-core`:* if `vsh-core` is extracted in S1, the estate
+  has two reversible engines. Whether they are one is an estate decision (D204
+  is a ruling, not an implementation).
+* *maa-framework:* stage S5 gives the record a concrete form; its definitions
+  should come from there.
+* *echo-types:* section 9.2's reading of undo data as an echo is documentation
+  only. A mechanised link would be new work in that repository's terms.
+* *AffineScript:* a typed scripting layer over the engine (the NGS-like
+  direction of section 5.2), and the permit of section 9.4, are natural uses of
+  affine types. Its readiness was not assessed.
+* *`standards`:* PROOF-POLICY grades proofs. Nothing grades whether a product
+  does what its page says. Gate G0 may be worth proposing estate-wide.
+* *The allowed-actions list* (step A1) still stops Rust CI in valence-shell,
+  maa-framework and absolute-zero. A ratchet that CI cannot run is not a gate.
+* *`impl/mcp`:* stale, and written against Deno, which the estate is removing.
+  The language of the stage S4 server needs a ruling.
+
+'''''
+
+== 12. What was not verified
+
+* Nothing was run as an ordinary user, or on macOS or BSD.
+* The capture experiment showed capture only. Applying and undoing are not
+  built.
+* brush was run on the 112 lines, non-interactively. Its interactive behaviour,
+  stability and upkeep were not assessed.
+* Sections 4.2 and 5.3 rest on a research pass that read the linked pages;
+  three of its items were re-read by hand. Its own list of what it could not
+  verify stands: among them the status of Plash, how `auditd` relates to a
+  shell's built-in commands (secondary sources), and whether `try` contains
+  anything beyond file effects.
+* The research pass for section 5.1 stopped on a usage limit. Three projects'
+  pages (NGS, Oh My Zsh, brush) were read by hand; the other rows of that table
+  are unverified, and no adoption figures or start-up timings for other shells
+  were gathered.
+* Timings come from one virtual machine.
+* The sizes in section 7 are inferred from one month's work.
+* Syntax highlighting, the pager and command correction were not examined.
+* The Elixir, Zig, OCaml and Idris2 directories were sized, not built, in this
+  review.
+* The battery is home-made and small.
+
+'''''
+
+== Appendix A. The battery
+
+One line per command line tested. Columns: dash, brush 0.4.0, vsh `main`, vsh
+containment branch. `ok` means standard output and exit status both match bash
+5.2.21; `rc` means the output matches and the exit status does not; `--` means
+the output differs. `~` stands for a line break in the last entry. The journal
+branch gives the same column as `main`.
+
+....
+dash  brush main  cont   group    command line
+ ok    ok    ok    ok    basic    echo hello
+ ok    ok    ok    ok    basic    echo "a  b"   'c  d'
+ ok    ok    ok    ok    basic    echo one; echo two
+ ok    ok    ok    ok    vars     x=5; echo $x
+ ok    ok    ok    ok    vars     x=hello; echo "${x}world"
+ ok    ok    ok    ok    vars     x="a b"; echo $x | wc -w
+ ok    ok    ok    ok    vars     echo ${UNSET:-default}
+ ok    ok    --    --    vars     x=abcdef; echo ${x#abc} ${x%def} ${#x}
+ --    ok    --    --    vars     x=hello; echo ${x^^} ${x:1:3}
+ ok    ok    --    --    vars     export FOO=bar; sh -c 'echo $FOO'
+ ok    ok    --    --    vars     FOO=tmp sh -c 'echo $FOO'
+ ok    ok    ok    ok    vars     echo $HOME | grep -c /
+ ok    ok    ok    ok    vars     echo $? ; false; echo $?
+ ok    ok    --    --    vars     echo "$$" | grep -c '[0-9]'
+ ok    ok    --    --    arith    echo $((1+2*3))
+ --    ok    --    --    arith    x=7; echo $((x % 4)) $((x ** 2))
+ ok    ok    ok    ok    arith    i=0; i=$((i+1)); echo $i
+ --    ok    --    --    arith    ((x=3+4)); echo $x
+ --    ok    --    --    arith    let y=2*5; echo $y
+ ok    ok    --    --    subst    echo $(echo nested)
+ ok    ok    --    --    subst    echo "today: $(date +%Y | cut -c1-2)"
+ ok    ok    --    --    subst    x=`echo back`; echo $x
+ ok    ok    --    --    subst    echo $(echo $(echo deep))
+ ok    ok    ok    ok    pipe     echo hello | tr a-z A-Z
+ ok    ok    ok    ok    pipe     printf 'b\na\nc\n' | sort | head -2
+ ok    ok    ok    ok    pipe     echo hi | cat | cat | wc -c
+ ok    ok    ok    ok    pipe     false | true; echo $?
+ ok    ok    --    --    pipe     seq 1 5 | awk '{s+=$1} END{print s}'
+ ok    ok    ok    ok    redir    echo x > f; cat f
+ ok    ok    ok    ok    redir    echo x > f; echo y >> f; wc -l < f
+ ok    ok    --    --    redir    ls /nonexistent 2>/dev/null; echo rc=$?
+ ok    ok    --    --    redir    ls /nonexistent > out 2>&1; grep -c . out
+ --    ok    ok    ok    redir    cat <<< "herestring"
+ ok    ok    ok    ok    redir    echo err >&2 2>/dev/null; echo ok
+ ok    ok    ok    ok    logic    true && echo yes || echo no
+ ok    ok    ok    ok    logic    false && echo yes || echo no
+ ok    ok    --    --    logic    [ -d / ] && echo dir
+ ok    ok    --    --    logic    [ 3 -gt 2 ] && [ a = a ] && echo ok
+ --    ok    --    --    logic    [[ abc == a* ]] && echo match
+ ok    ok    ok    ok    logic    test -f /etc/passwd && echo file
+ ok    ok    --    --    logic    ! false && echo negated
+ ok    ok    ok    ok    if       if true; then echo t; else echo f; fi
+ ok    ok    --    --    if       if [ 1 -eq 2 ]; then echo a; elif [ 1 -eq 1 ]; then echo b; fi
+ --    ok    --    --    if       x=3; if (( x > 2 )); then echo big; fi
+ ok    ok    ok    ok    loop     for i in 1 2 3; do echo $i; done
+ ok    ok    --    --    loop     for i in $(seq 3); do echo n$i; done
+ ok    ok    --    --    loop     for f in /etc/pass*; do echo ${f##*/}; done
+ ok    ok    --    --    loop     i=0; while [ $i -lt 3 ]; do i=$((i+1)); done; echo $i
+ --    ok    --    --    loop     for ((i=0;i<3;i++)); do echo $i; done
+ ok    ok    --    --    loop     for i in 1 2 3; do [ $i = 2 ] && continue; echo $i; done
+ ok    ok    --    --    loop     for i in 1 2 3; do [ $i = 2 ] && break; echo $i; done
+ ok    ok    --    --    loop     until false; do echo once; break; done
+ --    ok    --    --    loop     while read l; do echo "got $l"; done <<< "line"
+ ok    ok    ok    ok    case     case foo in f*) echo starts;; *) echo other;; esac
+ ok    ok    ok    ok    case     x=b; case $x in a|b) echo ab;; esac
+ ok    ok    ok    ok    func     f() { echo "in f $1"; }; f arg
+ ok    ok    ok    ok    func     f() { return 3; }; f; echo $?
+ ok    ok    ok    ok    func     f() { local v=inner; echo $v; }; v=outer; f; echo $v
+ --    ok    ok    ok    func     function g { echo g; }; g
+ ok    ok    ok    ok    func     f() { echo $#; }; f a b c
+ ok    ok    --    --    func     fact() { [ $1 -le 1 ] && echo 1 || echo $(( $1 * $(fact $(($1-1))) )); }; fact 5
+ ok    ok    --    --    glob     touch a.txt b.txt c.md; echo *.txt
+ ok    ok    --    --    glob     touch a1 a2 b1; echo a?
+ ok    ok    ok    ok    glob     touch x.rs; echo *.nomatch
+ ok    ok    --    --    glob     mkdir -p d/e; touch d/e/f; echo d/*/f
+ --    ok    --    --    glob     echo {a,b}{1,2}
+ --    ok    --    --    glob     echo {1..5}
+ ok    ok    ok    ok    quote    echo 'single $x' "double \$x"
+ --    ok    ok    ok    quote    echo "a\tb" 'a\tb'
+ ok    ok    --    --    quote    x='*'; echo "$x"
+ --    ok    --    --    quote    echo $'tab\there'
+ --    ok    --    --    array    a=(x y z); echo ${a[1]} ${#a[@]}
+ --    ok    --    --    array    a=(1 2 3); for v in "${a[@]}"; do echo $v; done
+ --    ok    --    --    array    declare -A m; m[k]=v; echo ${m[k]}
+ ok    ok    --    --    sub      (cd /tmp; pwd); pwd | grep -c /
+ ok    ok    ok    ok    sub      x=1; (x=2); echo $x
+ ok    ok    --    --    sub      { echo a; echo b; } | wc -l
+ ok    ok    --    --    sub      echo a & wait; echo done
+ ok    ok    ok    --    builtin  cd /tmp && pwd
+ ok    ok    ok    ok    builtin  printf '%s-%d\n' abc 42
+ --    ok    --    --    builtin  read a b <<< "one two"; echo $b
+ ok    ok    ok    ok    builtin  set -- p q r; echo $2 $#
+ ok    ok    --    --    builtin  set -e; false; echo notreached
+ ok    ok    --    --    builtin  x=1; unset x; echo "[${x}]"
+ ok    ok    --    --    builtin  type echo | head -1 | grep -c echo
+ ok    --    ok    ok    builtin  alias ll='echo aliased'; ll
+ ok    ok    ok    ok    builtin  trap 'echo bye' EXIT; echo hi
+ ok    ok    ok    ok    builtin  eval 'echo evaled'
+ --    ok    ok    ok    builtin  shift 2>/dev/null; echo ok
+ --    ok    --    --    builtin  pushd /tmp >/dev/null; pwd; popd >/dev/null
+ ok    ok    ok    ok    builtin  echo -n nonl; echo
+ ok    ok    ok    ok    builtin  echo -e 'a\nb' | wc -l
+ ok    ok    rc    rc    builtin  exit 7
+ ok    ok    --    --    builtin  command -v ls | grep -c ls
+ --    ok    --    --    builtin  true; echo ${PIPESTATUS[0]}
+ ok    ok    --    --    fs       mkdir -p a/b/c && ls a/b
+ ok    ok    ok    ok    fs       mkdir d && rmdir d && echo gone
+ ok    ok    ok    ok    fs       echo data > f; cp f g; cat g
+ ok    ok    ok    ok    fs       echo data > f; mv f g; cat g
+ ok    ok    ok    ok    fs       touch f; chmod 600 f; stat -c %a f
+ ok    ok    ok    ok    fs       ln -s target link; readlink link
+ ok    ok    ok    ok    fs       touch f; ls -la f | wc -l
+ ok    ok    ok    ok    fs       echo a > f; cat f f | wc -l
+ ok    ok    ok    ok    ext      ls / | head -1 | wc -l
+ ok    ok    ok    ok    ext      env | grep -c PATH
+ ok    ok    ok    ok    ext      sh -c 'exit 4'; echo $?
+ ok    ok    ok    ok    ext      git --version | grep -c git
+ ok    ok    ok    ok    ext      sleep 0.01; echo slept
+ ok    ok    ok    ok    ext      echo abc | sed 's/b/X/'
+ ok    ok    ok    ok    ext      find . -maxdepth 0 | wc -l
+ ok    ok    --    --    ext      X=1 Y=2 env | grep -c '^[XY]='
+ ok    ok    --    --    redir    cat <<EOF2~heredoc $((1+1))~EOF2
+....
+
+== Appendix B. The runner
+
+Usage: `runner.sh <work-dir> <shell-under-test> <battery-file> <result-file>`.
+The shell under test is called as `<shell> -r <dir> -c <line>`; for dash and
+brush a two-line wrapper drops the first two arguments. Battery lines have the
+form `group|command line`.
+
+The runner's own error file is kept outside the directories under test (a
+correction made after review; all four shells give the same verdicts as before
+it).
+
+[source,bash]
+----
+#!/usr/bin/env bash
+# Compare everyday shell snippets under bash and vsh. No file is removed.
+S="$1"; V="$2"; LIST="$3"; OUT="$4"
+export NO_COLOR=1 RUST_BACKTRACE=0
+: > "$OUT"
+norm() { sed -e 's/\x1b\[[0-9;]*m//g' -e '/^\[op:[0-9a-f]*\]/d' -e '/^\[txn:[0-9a-f]*\]/d'; }
+run_one() {
+  local cat="$1" snip="$2" d1 d2 d3 bo br vo vr verr st
+  d1=$(mktemp -d -p "$S/work"); d2=$(mktemp -d -p "$S/work")
+  bo=$(cd "$d1" && timeout 10 bash -c "$snip" 2>/dev/null </dev/null); br=$?
+  vo=$(cd "$d2" && timeout 10 "$V" -r "$d2" -c "$snip" 2>"$E" </dev/null | norm)
+  d3=$(mktemp -d -p "$S/work")
+  (cd "$d3" && timeout 10 "$V" -r "$d3" -c "$snip" >/dev/null 2>&1 </dev/null); vr=$?
+  verr=$(head -c 160 "$E" | tr '\n\t' '  ')
+  if [ "$bo" = "$vo" ] && [ "$br" = "$vr" ]; then st=PASS; elif [ "$bo" = "$vo" ]; then st=RC; else st=FAIL; fi
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$st" "$cat" "$(printf "%s" "$snip" | tr "\n\t" "~ ")" "$br" "$(printf '%s' "$bo" | head -c 50 | tr '\n\t' '~ ')" "$vr" "$(printf '%s' "$vo" | head -c 50 | tr '\n\t' '~ ')" "$verr" >> "$OUT"
+}
+mkdir -p "$S/work"
+# Absolute paths: each run changes directory, and a relative path would then
+# point somewhere else.
+S=$(cd "$S" && pwd)
+V=$(cd "$(dirname "$V")" && pwd)/$(basename "$V")
+# Error output is kept outside the directories under test.
+E="$S/work/stderr.txt"
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  cat="${line%%|*}"; snip="${line#*|}"
+  run_one "$cat" "$snip"
+done < "$LIST"
+run_one redir "$(printf 'cat <<EOF2\nheredoc $((1+1))\nEOF2')"
+----

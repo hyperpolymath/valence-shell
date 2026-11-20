@@ -337,7 +337,7 @@ pub fn obliterate(state: &mut ShellState, path: &str, verbose: bool, force: bool
     let op_id = op.id;
     // RMO residue: persist the append-only attestation BEFORE moving `op`.
     append_rmo_residue(state, &op, "obliterated");
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     // Output
     println!(
@@ -471,7 +471,7 @@ pub fn obliterate_dir(
     let op_id = op.id;
     // RMO residue: persist the append-only attestation BEFORE moving `op`.
     append_rmo_residue(state, &op, "obliterated-dir");
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {}",
