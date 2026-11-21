@@ -172,7 +172,8 @@ fn test_function_that_fails_pops_its_frame() -> Result<()> {
     state.set_positional_params(vec!["outer_arg".to_string()]);
 
     // `inner` fails: the parent of the directory does not exist
-    let inner_cmd = parse_command("inner() { local X=inner_val; mkdir no/such/parent/dir; }")?;
+    let inner_cmd =
+        parse_command("inner() { local X=inner_val; mkdir inner_ran; mkdir no/such/parent/dir; }")?;
     inner_cmd.execute(&mut state)?;
     let outer_cmd = parse_command("outer() { local X=outer_val; inner inner_arg; }")?;
     outer_cmd.execute(&mut state)?;
@@ -182,6 +183,10 @@ fn test_function_that_fails_pops_its_frame() -> Result<()> {
 
     // The error still reaches the caller
     assert!(result.is_err(), "the failed mkdir should be an error");
+    assert!(
+        temp.path().join("inner_ran").is_dir(),
+        "inner should create its marker directory before the failing mkdir"
+    );
 
     // Both frames are gone, and the caller has its own values back
     assert_eq!(state.functions.call_depth(), 0);
