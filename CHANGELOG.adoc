@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 == [Unreleased]
 
+=== Added — 2026-11-23 (CI/gate caller)
+
+- `.github/workflows/ci-gate.yml`: the estate's thin caller that produces the
+  `CI/gate` commit status the branch ruleset requires. Pinned to
+  proven-cicd-and-workflows `a0760ce`; the pin is a placeholder until the suite
+  carries this repo's profile, so the gate fails closed until then.
+
 === Changed — 2026-11-01 (assurance-boundary re-audit)
 
 - Corrected prose that had drifted across the assurance boundary. The audit
