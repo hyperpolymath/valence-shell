@@ -647,9 +647,17 @@ impl RedirectSetup {
             self.modifications
                 .push(FileModification::Created { path: changed });
         } else if append {
+            // The file is emptied by a preceding `>` of the same command
+            // before anything is appended (`> f 2>> f`), so what the
+            // append starts from is nothing, not what the file holds now.
+            let emptied_first = self
+                .pending_truncations
+                .iter()
+                .any(|&(_, record)| self.modifications[record].path() == changed.as_path());
+            let original_size = if emptied_first { 0 } else { meta.len() };
             self.modifications.push(FileModification::Appended {
                 path: changed,
-                original_size: meta.len(),
+                original_size,
             });
         } else {
             // Save the original content, read from the file that will be

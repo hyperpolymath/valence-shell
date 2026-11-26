@@ -563,7 +563,7 @@ fn prepare_obliteration(state: &mut ShellState, op: &Operation, intent: &str) ->
         .context("Nothing was obliterated, because the audit entry could not be written")?;
     // The archive of operations that aged out of the history can hold the
     // content too.
-    state.scrub_archive(&op.path).context(
+    let archive_before = state.scrub_archive(&op.path).context(
         "Nothing was obliterated, because the history archive could not be rewritten without \
          the earlier contents of what was to be obliterated",
     )?;
@@ -572,6 +572,12 @@ fn prepare_obliteration(state: &mut ShellState, op: &Operation, intent: &str) ->
         // The file stays, so the history must still be able to undo what
         // was done to it.
         state.restore_scrubbed(scrubbed);
+        // The file stays, so the archived undo data must stay too.
+        if let Some(original) = archive_before {
+            if let Err(restore) = state.restore_archive(&original) {
+                eprintln!("warning: the history archive could not be restored: {restore:#}");
+            }
+        }
         return Err(e).context(
             "Nothing was obliterated, because the history could not be saved without the \
              earlier contents of what was to be obliterated",

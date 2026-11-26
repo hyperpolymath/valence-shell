@@ -812,18 +812,16 @@ impl ShellState {
     ///
     /// Fails if the archive cannot be read or rewritten. The caller must
     /// then not obliterate.
-    pub(crate) fn scrub_archive(&self, rooted: &str) -> Result<()> {
-        use std::io::Write;
-
+    pub(crate) fn scrub_archive(&self, rooted: &str) -> Result<Option<String>> {
         let Some(archive_path) = self.history_archive_path.as_ref() else {
-            return Ok(());
+            return Ok(None);
         };
         if rooted.is_empty() {
-            return Ok(());
+            return Ok(None);
         }
         let archived = match fs::read_to_string(archive_path) {
             Ok(text) => text,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => {
                 return Err(e).with_context(|| {
                     format!("Failed to read history archive {}", archive_path.display())
@@ -850,15 +848,31 @@ impl ShellState {
             scrubbed.push('\n');
         }
         if !changed {
-            return Ok(());
+            return Ok(None);
         }
+        self.write_archive(&scrubbed)?;
+        Ok(Some(archived))
+    }
 
+    /// Put back the archive text that [`Self::scrub_archive`] returned, when
+    /// what was to follow the scrub failed and nothing was obliterated.
+    pub(crate) fn restore_archive(&self, original: &str) -> Result<()> {
+        self.write_archive(original)
+    }
+
+    /// Replace the history archive with `text`, durably and atomically.
+    fn write_archive(&self, text: &str) -> Result<()> {
+        use std::io::Write;
+
+        let Some(archive_path) = self.history_archive_path.as_ref() else {
+            return Ok(());
+        };
         let mut temporary = archive_path.clone().into_os_string();
         temporary.push(".scrub");
         let temporary = PathBuf::from(temporary);
         let written = (|| -> std::io::Result<()> {
             let mut file = fs::File::create(&temporary)?;
-            file.write_all(scrubbed.as_bytes())?;
+            file.write_all(text.as_bytes())?;
             file.sync_all()?;
             fs::rename(&temporary, archive_path)?;
             if let Some(parent) = archive_path.parent().filter(|p| !p.as_os_str().is_empty()) {
@@ -1015,6 +1029,7 @@ impl ShellState {
 
     fn save(&self) -> Result<()> {
         let state = SerializableState {
+            version: STATE_FORMAT,
             history: self.history.clone(),
             transactions: self.transactions.clone(),
             active_transaction: self.active_transaction.clone(),
@@ -1035,6 +1050,29 @@ impl ShellState {
 
         let json = crate::fs_pure::read_to_string(&self.state_file)?;
         let state: SerializableState = serde_json::from_str(&json)?;
+
+        if state.version < STATE_FORMAT {
+            // Before this format, a record made after `cd sub` held a path
+            // relative to `sub`. Read against the session root it would
+            // name a different file, and `undo` would act on that one.
+            // Which records are affected cannot be told, so none are
+            // applied; the old file is kept beside the new one.
+            let mut legacy = self.state_file.clone().into_os_string();
+            legacy.push(".legacy");
+            fs::rename(&self.state_file, &legacy).with_context(|| {
+                format!(
+                    "Failed to set aside the old history {}",
+                    self.state_file.display()
+                )
+            })?;
+            eprintln!(
+                "warning: {} was written by an older version, whose paths cannot be \
+                 placed safely; starting with an empty history (old file kept as {})",
+                self.state_file.display(),
+                PathBuf::from(&legacy).display()
+            );
+            return Ok(());
+        }
 
         self.history = state.history;
         self.transactions = state.transactions;
@@ -1337,8 +1375,15 @@ impl ShellState {
     }
 }
 
+/// Current state-file format: recorded paths are relative to the session root.
+const STATE_FORMAT: u32 = 1;
+
 #[derive(Serialize, Deserialize)]
 struct SerializableState {
+    /// Format of `history`. Absent (0) in files written before recorded
+    /// paths were relative to the session root; see [`STATE_FORMAT`].
+    #[serde(default)]
+    version: u32,
     history: Vec<Operation>,
     transactions: Vec<Transaction>,
     active_transaction: Option<Transaction>,

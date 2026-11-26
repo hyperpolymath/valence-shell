@@ -163,6 +163,8 @@ fn main() -> Result<()> {
     // Started with `-r` from somewhere else, the shell ran its first
     // commands in that other directory, outside the session root.
     std::env::set_current_dir(state.cwd()).context("Failed to enter the session root")?;
+    // `set_current_dir` leaves the inherited `PWD` naming the launch directory.
+    std::env::set_var("PWD", state.cwd());
 
     // Mode 1: Execute inline command string (-c "command")
     if let Some(ref cmd_string) = cli.command_string {
