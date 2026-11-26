@@ -32,7 +32,22 @@ gnu-grep = "latest"
 # Task runner alias
 [alias]
 task = "go-task"
-build = "cargo build --release"
-test = "cargo test"
-lint = "bun install --frozen-lockfile && bunx --no-install --bun prettier --check ."
-fmt = "bun install --frozen-lockfile && bunx --no-install --bun prettier --write ."
+
+# Runnable commands (the [alias] table is for tool-version aliases only)
+[tasks.build]
+description = "Build the Rust CLI"
+dir = "impl/rust-cli"
+run = "cargo build --release"
+
+[tasks.test]
+description = "Test the Rust CLI"
+dir = "impl/rust-cli"
+run = "cargo test"
+
+[tasks.lint]
+description = "Check formatting with the pinned Prettier"
+run = "bun install --frozen-lockfile && bunx --no-install --bun prettier --check ."
+
+[tasks.fmt]
+description = "Format with the pinned Prettier"
+run = "bun install --frozen-lockfile && bunx --no-install --bun prettier --write ."
