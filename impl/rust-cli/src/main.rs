@@ -149,6 +149,23 @@ fn main() -> Result<()> {
 
     let mut state = state::ShellState::new(&root)?;
 
+    // A script named on the command line is found from the directory the
+    // shell was started in, so it is located before that directory is left.
+    let script = cli.script.as_ref().map(|path| {
+        std::env::current_dir()
+            .map(|started_in| started_in.join(path))
+            .unwrap_or_else(|_| std::path::PathBuf::from(path))
+    });
+
+    // Enter the session root. The shell's own working directory starts
+    // there, and the process must be there too: a command that the shell
+    // starts inherits the directory of the process, and `$PWD` reports it.
+    // Started with `-r` from somewhere else, the shell ran its first
+    // commands in that other directory, outside the session root.
+    std::env::set_current_dir(state.cwd()).context("Failed to enter the session root")?;
+    // `set_current_dir` leaves the inherited `PWD` naming the launch directory.
+    std::env::set_var("PWD", state.cwd());
+
     // Mode 1: Execute inline command string (-c "command")
     if let Some(ref cmd_string) = cli.command_string {
         // Set positional parameters: $0 = "vsh", $1.. = script_args
@@ -157,9 +174,9 @@ fn main() -> Result<()> {
     }
 
     // Mode 2: Execute a script file (vsh script.sh [args...])
-    if let Some(ref script_path) = cli.script {
+    if let (Some(script_path), Some(script_file)) = (cli.script.as_ref(), script.as_ref()) {
         // Check for shebang or just execute
-        let script_content = vsh::fs_pure::read_to_string(std::path::Path::new(script_path))
+        let script_content = vsh::fs_pure::read_to_string(script_file)
             .context(format!("Cannot read script: {}", script_path))?;
 
         // Set positional parameters: $0 = script_path, $1.. = script_args

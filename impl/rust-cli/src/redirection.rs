@@ -8,7 +8,7 @@
 use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use crate::state::ShellState;
@@ -36,64 +36,49 @@ where
     // Resolve redirect file paths before capturing stdout
     // (state.resolve_path needs immutable access)
     // IMPORTANT: Expand variables in file paths first (fixes M11 edge case)
-    let resolved_redirects: Vec<(Redirection, PathBuf)> = redirects
+    let resolved_redirects: Vec<(usize, PathBuf)> = redirects
         .iter()
-        .filter_map(|r| match r {
-            Redirection::Output { file } => {
+        .enumerate()
+        .filter_map(|(index, r)| match r {
+            Redirection::Output { file }
+            | Redirection::Append { file }
+            | Redirection::BothOutput { file } => {
                 let expanded = crate::parser::expand_variables(file, state);
-                Some((r.clone(), state.resolve_path(&expanded)))
-            }
-            Redirection::Append { file } => {
-                let expanded = crate::parser::expand_variables(file, state);
-                Some((r.clone(), state.resolve_path(&expanded)))
-            }
-            Redirection::BothOutput { file } => {
-                let expanded = crate::parser::expand_variables(file, state);
-                Some((r.clone(), state.resolve_path(&expanded)))
+                Some((index, state.resolve_path(&expanded)))
             }
             _ => None,
         })
         .collect();
 
-    // Setup redirections (validates, opens files, records original state)
-    let redirect_setup = RedirectSetup::setup(redirects, state)?;
+    // Set the redirections up (validate, open the files, save their
+    // original state), run the command, and record what the set-up
+    // changed, whatever becomes of the command.
+    RedirectSetup::run(redirects, state, |redirect_setup, state| {
+        // Capture stdout
+        let mut buffer = gag::BufferRedirect::stdout()?;
 
-    // Capture stdout
-    let mut buffer = gag::BufferRedirect::stdout()?;
+        // Execute command with mutable state
+        f(state)?;
 
-    // Execute command with mutable state
-    f(state)?;
+        // Get captured output
+        let mut output = String::new();
+        buffer.read_to_string(&mut output)?;
+        drop(buffer); // Release stdout
 
-    // Get captured output
-    let mut output = String::new();
-    buffer.read_to_string(&mut output)?;
-    drop(buffer); // Release stdout
-
-    // Write to redirect targets
-    for (redirect, path) in resolved_redirects {
-        match redirect {
-            Redirection::Output { .. } | Redirection::BothOutput { .. } => {
-                fs::write(&path, &output)
-                    .with_context(|| format!("Failed to write to: {}", path.display()))?;
-            }
-
-            Redirection::Append { .. } => {
-                let mut f = OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&path)
-                    .with_context(|| format!("Failed to open for append: {}", path.display()))?;
-                f.write_all(output.as_bytes())?;
-            }
-
-            _ => {} // Filtered out above
+        // Write to the redirect targets, through the files the set-up
+        // opened and checked. Opening the names a second time here went
+        // round that check: a name given to another file in between (a
+        // hard link to a file outside the root, say) was opened and
+        // overwritten.
+        for (index, path) in resolved_redirects {
+            redirect_setup
+                .handle(index)?
+                .write_all(output.as_bytes())
+                .with_context(|| format!("Failed to write to: {}", path.display()))?;
         }
-    }
 
-    // Record modifications for undo
-    redirect_setup.record_for_undo(state)?;
-
-    Ok(())
+        Ok(())
+    })
 }
 
 /// I/O redirection operator for commands.
@@ -239,6 +224,195 @@ pub struct RedirectSetup {
 
     /// File modifications made (for undo)
     pub modifications: Vec<FileModification>,
+
+    /// For each redirection given to [`Self::setup`], in order, the place
+    /// in `opened_files` of the file opened for it, if it names a file.
+    targets: Vec<Option<usize>>,
+
+    /// The `>` targets that are opened and saved but not emptied yet: the
+    /// place of each in `opened_files` and of its record in
+    /// `modifications`. See [`Self::truncate_pending`].
+    pending_truncations: Vec<(usize, usize)>,
+}
+
+/// `path`, an absolute path inside the session root, as the root-relative
+/// form the history stores. Recording the absolute path made undo resolve
+/// it under the root a second time and fail.
+fn rooted_path(state: &ShellState, path: &Path) -> String {
+    match state.contained_abs(path) {
+        Ok(relative) => relative.to_string_lossy().into_owned(),
+        Err(_) => path.to_string_lossy().into_owned(),
+    }
+}
+
+/// The file a redirection writes to, opened beneath the session root
+/// without truncating it, and whether this call created it.
+///
+/// An existing file is opened first. Only if there is none is one created,
+/// and then exclusively, so a file that another program makes in between
+/// is never taken for a new one (its content would be lost, and `undo`
+/// would delete it).
+fn open_redirect_target(
+    root: &cap_std::fs::Dir,
+    contained: &Path,
+    append: bool,
+) -> std::io::Result<(cap_std::fs::File, bool)> {
+    use std::io::ErrorKind;
+
+    match open_existing_target(root, contained, append) {
+        Ok(file) => Ok((file, false)),
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            let mut options = cap_std::fs::OpenOptions::new();
+            if append {
+                options.append(true);
+            } else {
+                options.write(true);
+            }
+            options.create_new(true);
+            match root.open_with(contained, &options) {
+                Ok(file) => Ok((file, true)),
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => Err(std::io::Error::new(
+                    ErrorKind::AlreadyExists,
+                    "the name is a symbolic link to a file that does not exist, or another \
+                     program created the file at the same moment; nothing was written",
+                )),
+                Err(e) => Err(e),
+            }
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// An existing redirect target, opened without truncating it.
+///
+/// For `>` it is opened for reading too, so that the bytes saved for undo
+/// are read from the very file that is then truncated, and, where the
+/// system has it, with `O_NOATIME`, so that saving them does not change the
+/// file's access time (see [`crate::fs_pure`]).
+fn open_existing_target(
+    root: &cap_std::fs::Dir,
+    contained: &Path,
+    append: bool,
+) -> std::io::Result<cap_std::fs::File> {
+    let mut options = cap_std::fs::OpenOptions::new();
+    if append {
+        options.append(true);
+        return root.open_with(contained, &options);
+    }
+    options.read(true).write(true);
+    #[cfg(target_os = "linux")]
+    {
+        use cap_std::fs::OpenOptionsExt;
+        let mut pure = options.clone();
+        pure.custom_flags(libc::O_NOATIME);
+        match root.open_with(contained, &pure) {
+            // Not the owner: the kernel refuses the flag. Open without it.
+            Err(e) if e.raw_os_error() == Some(libc::EPERM) => {}
+            other => return other,
+        }
+    }
+    root.open_with(contained, &options)
+}
+
+/// Refuse an open redirect target that must not be written to. `shown` is
+/// its path, for the message.
+fn check_writable_target(meta: &cap_std::fs::Metadata, shown: &Path) -> Result<()> {
+    if !meta.is_file() {
+        anyhow::bail!(
+            "Output redirection target is not a file: {}",
+            shown.display()
+        );
+    }
+    // A file with more than one hard link has other names, which may lie
+    // outside the session root. Writing to it would change what those
+    // names hold, so it is refused.
+    let links = cap_fs_ext::MetadataExt::nlink(meta);
+    if links > 1 {
+        anyhow::bail!(
+            "Cannot redirect to {}: the file has {} hard links, and writing to it \
+             would change the data under its other names too",
+            shown.display(),
+            links
+        )
+    }
+    Ok(())
+}
+
+/// The existing file at `contained` (beneath the session root `root`),
+/// opened for reading and writing without truncating it, and checked while
+/// open as a redirection's target is: it must be a regular file with no
+/// other name. `shown` is its path, for the messages.
+pub(crate) fn open_checked_target(
+    root: &cap_std::fs::Dir,
+    contained: &Path,
+    shown: &Path,
+) -> Result<cap_std::fs::File> {
+    let target = open_existing_target(root, contained, false)
+        .with_context(|| format!("Failed to open file for writing: {}", shown.display()))?;
+    let meta = target
+        .metadata()
+        .with_context(|| format!("Failed to stat file: {}", shown.display()))?;
+    check_writable_target(&meta, shown)?;
+    Ok(target)
+}
+
+/// Empty the file at `contained` (beneath the session root `root`) and
+/// return what it held, for redoing a `>` redirection. `shown` is its path,
+/// for the messages.
+///
+/// As for the redirection itself, the file is opened once, checked, read
+/// and then truncated through that one handle, so the bytes returned are
+/// those of the file that was emptied.
+pub(crate) fn truncate_keeping(
+    root: &cap_std::fs::Dir,
+    contained: &Path,
+    shown: &Path,
+) -> Result<Vec<u8>> {
+    let mut target = open_checked_target(root, contained, shown)?;
+    let mut original_content = Vec::new();
+    target
+        .read_to_end(&mut original_content)
+        .with_context(|| format!("Failed to read file for backup: {}", shown.display()))?;
+    target
+        .set_len(0)
+        .with_context(|| format!("Failed to truncate: {}", shown.display()))?;
+    Ok(original_content)
+}
+
+/// The absolute path of the file that `contained` names once the links in
+/// it are followed, checked to be the file that was opened (`opened` is the
+/// open file's metadata).
+///
+/// # Errors
+///
+/// Fails if the name leads to another file than the one opened (it was
+/// changed in between), or if the real path is not valid UTF-8, which the
+/// history cannot store.
+fn changed_file(
+    state: &ShellState,
+    contained: &Path,
+    opened: &cap_std::fs::Metadata,
+) -> Result<PathBuf> {
+    use cap_fs_ext::MetadataExt;
+
+    let root = state.root_dir();
+    let real = root
+        .canonicalize(contained)
+        .context("Failed to resolve the path of the opened file")?;
+    let named = root
+        .symlink_metadata(&real)
+        .context("Failed to stat the opened file by its path")?;
+    if named.dev() != opened.dev() || named.ino() != opened.ino() {
+        anyhow::bail!("the name was given to another file while it was being opened");
+    }
+    if real.to_str().is_none() {
+        anyhow::bail!(
+            "its real path ({}) is not valid UTF-8, so it could not be recorded for undo; \
+             nothing was written",
+            real.display()
+        );
+    }
+    Ok(state.session_root().join(real))
 }
 
 impl Default for RedirectSetup {
@@ -253,13 +427,72 @@ impl RedirectSetup {
         Self {
             opened_files: Vec::new(),
             modifications: Vec::new(),
+            targets: Vec::new(),
+            pending_truncations: Vec::new(),
         }
+    }
+
+    /// Set up `redirects`, run `body` with them, and record what the
+    /// set-up changed, whatever becomes of `body`.
+    ///
+    /// A `>` target is emptied when it is set up. That used to be recorded
+    /// only when the command went well: a built-in that failed, a command
+    /// that could not be found or was interrupted, and every background
+    /// command left the file emptied with nothing for `undo` to restore.
+    /// Going through this function, a caller cannot leave the record out.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the set-up fails (then nothing was changed and `body` does
+    /// not run), if `body` fails, or if the record cannot be made.
+    pub fn run<T>(
+        redirects: &[Redirection],
+        state: &mut ShellState,
+        body: impl FnOnce(&Self, &mut ShellState) -> Result<T>,
+    ) -> Result<T> {
+        let setup = Self::setup(redirects, state)?;
+        let outcome = body(&setup, state);
+        let recorded = setup.record_for_undo(state);
+        let value = outcome?;
+        recorded?;
+        Ok(value)
+    }
+
+    /// A second handle on the file opened for the redirection at `index`
+    /// of the list given to [`Self::setup`].
+    ///
+    /// Whatever writes or reads the redirected stream uses this handle. The
+    /// file was opened once, beneath the session root, and checked while
+    /// open. Opening its name again would go round both: the name can be
+    /// given to another file in between.
+    ///
+    /// # Errors
+    ///
+    /// Fails if that redirection does not name a file, or the handle cannot
+    /// be duplicated.
+    pub fn handle(&self, index: usize) -> Result<File> {
+        let file = self
+            .targets
+            .get(index)
+            .copied()
+            .flatten()
+            .and_then(|place| self.opened_files.get(place))
+            .context("No file was opened for this redirection")?;
+        file.try_clone()
+            .context("Failed to duplicate the handle of a redirection target")
     }
 
     /// Prepare file redirections before command execution
     ///
     /// Validates all redirections, opens files, and records original state for undo.
-    /// Fails atomically if any redirection is invalid.
+    ///
+    /// No file is emptied until every redirection has been set up. If one
+    /// of them is refused, the targets of the others still hold what they
+    /// held. A file that an earlier redirection created stays, empty, as
+    /// it does in bash.
+    ///
+    /// Prefer [`Self::run`], which also makes the record for undo on every
+    /// path.
     pub fn setup(redirects: &[Redirection], state: &ShellState) -> Result<Self> {
         // Validate all redirections first (fail fast)
         validate_redirections(redirects, state)?;
@@ -267,6 +500,7 @@ impl RedirectSetup {
         let mut setup = Self::new();
 
         for redirect in redirects {
+            let opened_before = setup.opened_files.len();
             match redirect {
                 Redirection::Output { file } => {
                     setup.setup_output_redirect(file, state, false)?;
@@ -300,9 +534,78 @@ impl RedirectSetup {
                     // Handled by external command execution (creates temp file)
                 }
             }
+            let opened = setup.opened_files.len() > opened_before;
+            setup.targets.push(opened.then_some(opened_before));
         }
 
+        setup.truncate_pending()?;
+
         Ok(setup)
+    }
+
+    /// Empty the files that `>` redirections opened, once every
+    /// redirection of the command has been set up.
+    ///
+    /// Emptying each file as it was set up lost its content when a later
+    /// redirection was then refused: `echo hi > out 2> dangling` emptied
+    /// `out`, failed on `dangling`, and dropped the record that held what
+    /// `out` had contained.
+    ///
+    /// If a file cannot be emptied, those emptied before it get their
+    /// content back, so the targets are either all emptied or all as they
+    /// were.
+    fn truncate_pending(&mut self) -> Result<()> {
+        self.truncate_pending_with(|file| file.set_len(0))
+    }
+
+    /// [`Self::truncate_pending`], with the step that empties a file passed
+    /// in as `empty`, so that a test can make that step fail.
+    fn truncate_pending_with(
+        &mut self,
+        empty: impl Fn(&File) -> std::io::Result<()>,
+    ) -> Result<()> {
+        let pending = std::mem::take(&mut self.pending_truncations);
+        for (done, &(place, record)) in pending.iter().enumerate() {
+            let mut file = &self.opened_files[place];
+            if let Err(e) = empty(file).and_then(|()| file.rewind()) {
+                let not_restored = self.write_back(&pending[..done]);
+                let path = self.modifications[record].path().display().to_string();
+                let failed = anyhow::Error::new(e).context(format!("Failed to truncate: {path}"));
+                if not_restored.is_empty() {
+                    return Err(failed);
+                }
+                return Err(failed.context(format!(
+                    "The earlier content could not be written back to: {}",
+                    not_restored.join(", ")
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Write the saved content back to the files of `emptied` (places in
+    /// `opened_files` and `modifications`). Returns the paths of those
+    /// that could not be written.
+    fn write_back(&self, emptied: &[(usize, usize)]) -> Vec<String> {
+        let mut not_restored = Vec::new();
+        for &(place, record) in emptied {
+            let FileModification::Truncated {
+                path,
+                original_content,
+            } = &self.modifications[record]
+            else {
+                continue;
+            };
+            let mut file = &self.opened_files[place];
+            let written = file
+                .rewind()
+                .and_then(|()| file.write_all(original_content))
+                .and_then(|()| file.rewind());
+            if written.is_err() {
+                not_restored.push(path.display().to_string());
+            }
+        }
+        not_restored
     }
 
     /// Setup output redirection (> or >>)
@@ -316,55 +619,71 @@ impl RedirectSetup {
         let expanded = crate::parser::expand_variables(file, state);
         let path = state.resolve_path(&expanded);
 
+        // The target is opened beneath the session root, once, and without
+        // truncating it. Everything else is decided from the open file. A
+        // check made on the name before the open can be overtaken: between
+        // the two, the name can be given to another file (a hard link to a
+        // file outside the root, say), and the open would then truncate
+        // that one. A path that leaves the root through a symlink is
+        // refused by the open itself.
+        let contained = state.contained_abs(&path)?;
+        let (mut target, created) = open_redirect_target(state.root_dir(), &contained, append)
+            .with_context(|| format!("Failed to open file for writing: {}", path.display()))?;
+        let meta = target
+            .metadata()
+            .with_context(|| format!("Failed to stat file: {}", path.display()))?;
+        check_writable_target(&meta, &path)?;
+
+        // The record names the file that is changed. Through a link
+        // (`echo x > alias`) that is the link's target: the bytes saved for
+        // undo are the target's, and an `obliterate` of the target must be
+        // able to find them.
+        let changed = changed_file(state, &contained, &meta)
+            .with_context(|| format!("Cannot redirect to: {}", path.display()))?;
+
         // Record original state for undo
-        if path.exists() {
-            if append {
-                let metadata = fs::metadata(&path)
-                    .with_context(|| format!("Failed to stat file: {}", path.display()))?;
-
-                self.modifications.push(FileModification::Appended {
-                    path: path.clone(),
-                    original_size: metadata.len(),
-                });
-            } else {
-                // Truncate - save original content (pure read for undo backup;
-                // routed through fs_pure to honour the noatime discipline).
-                let original_content = crate::fs_pure::read_to_end(&path).with_context(|| {
-                    format!("Failed to read file for backup: {}", path.display())
-                })?;
-
-                // Warn if file is large
-                if original_content.len() > 10 * 1024 * 1024 {
-                    eprintln!(
-                        "Warning: Saving {:.1}MB file for undo. This may use significant memory.",
-                        original_content.len() as f64 / (1024.0 * 1024.0)
-                    );
-                }
-
-                self.modifications.push(FileModification::Truncated {
-                    path: path.clone(),
-                    original_content,
-                });
-            }
-        } else {
-            // File doesn't exist - will be created
+        if created {
+            // File did not exist - it was created by the open
             self.modifications
-                .push(FileModification::Created { path: path.clone() });
+                .push(FileModification::Created { path: changed });
+        } else if append {
+            // The file is emptied by a preceding `>` of the same command
+            // before anything is appended (`> f 2>> f`), so what the
+            // append starts from is nothing, not what the file holds now.
+            let emptied_first = self
+                .pending_truncations
+                .iter()
+                .any(|&(_, record)| self.modifications[record].path() == changed.as_path());
+            let original_size = if emptied_first { 0 } else { meta.len() };
+            self.modifications.push(FileModification::Appended {
+                path: changed,
+                original_size,
+            });
+        } else {
+            // Save the original content, read from the file that will be
+            // truncated. It is not truncated here: see `truncate_pending`.
+            let mut original_content = Vec::new();
+            target
+                .read_to_end(&mut original_content)
+                .with_context(|| format!("Failed to read file for backup: {}", path.display()))?;
+
+            // Warn if file is large
+            if original_content.len() > 10 * 1024 * 1024 {
+                eprintln!(
+                    "Warning: Saving {:.1}MB file for undo. This may use significant memory.",
+                    original_content.len() as f64 / (1024.0 * 1024.0)
+                );
+            }
+
+            self.pending_truncations
+                .push((self.opened_files.len(), self.modifications.len()));
+            self.modifications.push(FileModification::Truncated {
+                path: changed,
+                original_content,
+            });
         }
 
-        // Open file for writing
-        let file = if append {
-            OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)
-                .with_context(|| format!("Failed to open file for append: {}", path.display()))?
-        } else {
-            File::create(&path)
-                .with_context(|| format!("Failed to create file: {}", path.display()))?
-        };
-
-        self.opened_files.push(file);
+        self.opened_files.push(target.into_std());
 
         Ok(())
     }
@@ -403,7 +722,7 @@ impl RedirectSetup {
             let (op_type, path, undo_data) = match modification {
                 FileModification::Created { path } => {
                     // File was created by redirection
-                    let path_str = path.to_string_lossy().to_string();
+                    let path_str = rooted_path(state, &path);
                     (OperationType::CreateFile, path_str, None)
                 }
 
@@ -412,7 +731,7 @@ impl RedirectSetup {
                     original_content,
                 } => {
                     // File was truncated by > redirection
-                    let path_str = path.to_string_lossy().to_string();
+                    let path_str = rooted_path(state, &path);
                     (
                         OperationType::FileTruncated,
                         path_str,
@@ -425,7 +744,7 @@ impl RedirectSetup {
                     original_size,
                 } => {
                     // File was appended to by >> redirection
-                    let path_str = path.to_string_lossy().to_string();
+                    let path_str = rooted_path(state, &path);
                     // Encode size as bytes
                     let size_bytes = original_size.to_le_bytes().to_vec();
                     (OperationType::FileAppended, path_str, Some(size_bytes))
@@ -441,7 +760,10 @@ impl RedirectSetup {
                 op = op.with_undo_data(data);
             }
 
-            state.record_operation(op);
+            // `path` is relative to the session root already (see
+            // `rooted_path`), so it must not be read against the working
+            // directory a second time.
+            state.record_rooted_operation(op);
         }
 
         Ok(())
@@ -906,5 +1228,261 @@ mod tests {
 
         let restored = fs::read_to_string(&file_path).unwrap();
         assert_eq!(restored, "original");
+    }
+
+    /// The file a test's redirection was opened on: its device and inode.
+    #[cfg(unix)]
+    fn identity(file: &File) -> (u64, u64) {
+        use std::os::unix::fs::MetadataExt;
+        let meta = file.metadata().unwrap();
+        (meta.dev(), meta.ino())
+    }
+
+    /// Each redirection is handed the file that was opened for it, and a
+    /// redirection that names no file has none.
+    #[cfg(unix)]
+    #[test]
+    fn test_each_redirection_gets_the_handle_of_its_own_file() {
+        let temp = TempDir::new().unwrap();
+        let state = test_state(temp.path());
+        fs::write(temp.path().join("in"), "input").unwrap();
+        let redirects = vec![
+            Redirection::Input {
+                file: "in".to_string(),
+            },
+            Redirection::HereString {
+                content: "text".to_string(),
+                expand: false,
+            },
+            Redirection::Output {
+                file: "out".to_string(),
+            },
+            Redirection::ErrorAppend {
+                file: "err".to_string(),
+            },
+        ];
+
+        let setup = RedirectSetup::setup(&redirects, &state).unwrap();
+
+        for (index, name) in [(0, "in"), (2, "out"), (3, "err")] {
+            let by_name = File::open(temp.path().join(name)).unwrap();
+            assert_eq!(
+                identity(&setup.handle(index).unwrap()),
+                identity(&by_name),
+                "{name}"
+            );
+        }
+        assert!(setup.handle(1).is_err(), "a here-string names no file");
+        assert!(setup.handle(4).is_err(), "there is no fifth redirection");
+    }
+
+    /// A write through a link is recorded under the file it changed, not
+    /// under the link: the bytes saved for undo are that file's.
+    #[cfg(unix)]
+    #[test]
+    fn test_a_write_through_a_link_is_recorded_under_the_file_it_changed() {
+        let temp = TempDir::new().unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap();
+        let state = test_state(&root);
+        fs::create_dir(root.join("dir")).unwrap();
+        fs::write(root.join("dir/real"), "ORIGINAL").unwrap();
+        std::os::unix::fs::symlink("dir/real", root.join("alias")).unwrap();
+        std::os::unix::fs::symlink("dir", root.join("way")).unwrap();
+
+        for (name, append) in [("alias", false), ("way/real", true)] {
+            let mut setup = RedirectSetup::new();
+            setup.setup_output_redirect(name, &state, append).unwrap();
+            setup.truncate_pending().unwrap();
+            assert_eq!(
+                setup.modifications[0].path(),
+                root.join("dir/real"),
+                "{name}"
+            );
+        }
+        // The first one truncated the file, and kept what it held.
+        assert_eq!(fs::read(root.join("dir/real")).unwrap(), b"");
+    }
+
+    /// No target is emptied until every redirection of the command is set
+    /// up. `echo hi > out 2> dangling` emptied `out`, was then refused on
+    /// `dangling`, and dropped the record of what `out` had held.
+    #[cfg(unix)]
+    #[test]
+    fn test_no_target_is_emptied_when_a_later_redirection_is_refused() {
+        let temp = TempDir::new().unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap();
+        let state = test_state(&root);
+        fs::write(root.join("out"), "ORIGINAL").unwrap();
+        std::os::unix::fs::symlink("nowhere", root.join("dangling")).unwrap();
+        let redirects = vec![
+            Redirection::Output {
+                file: "out".to_string(),
+            },
+            Redirection::ErrorOutput {
+                file: "dangling".to_string(),
+            },
+        ];
+
+        assert!(RedirectSetup::setup(&redirects, &state).is_err());
+
+        assert_eq!(fs::read(root.join("out")).unwrap(), b"ORIGINAL");
+    }
+
+    /// If a target cannot be emptied, those emptied before it get their
+    /// content back.
+    #[test]
+    fn test_targets_get_their_content_back_when_one_cannot_be_emptied() {
+        let temp = TempDir::new().unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap();
+        let state = test_state(&root);
+        fs::write(root.join("one"), "FIRST").unwrap();
+        fs::write(root.join("two"), "SECOND").unwrap();
+        let mut setup = RedirectSetup::new();
+        setup.setup_output_redirect("one", &state, false).unwrap();
+        setup.setup_output_redirect("two", &state, false).unwrap();
+
+        let emptied = std::cell::Cell::new(0);
+        let refused = setup.truncate_pending_with(|file| {
+            emptied.set(emptied.get() + 1);
+            if emptied.get() == 2 {
+                return Err(std::io::Error::other("the second file cannot be emptied"));
+            }
+            file.set_len(0)
+        });
+
+        assert!(refused.is_err());
+        assert_eq!(fs::read(root.join("one")).unwrap(), b"FIRST");
+        assert_eq!(fs::read(root.join("two")).unwrap(), b"SECOND");
+    }
+
+    /// What the set-up changed is recorded whatever becomes of the command.
+    /// A command that failed after its `>` target was emptied left nothing
+    /// for undo to restore.
+    #[test]
+    fn test_run_records_the_set_up_when_the_command_fails() {
+        let temp = TempDir::new().unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap();
+        let mut state = test_state(&root);
+        fs::write(root.join("f"), "ORIGINAL").unwrap();
+        let redirects = vec![Redirection::Output {
+            file: "f".to_string(),
+        }];
+
+        let outcome: Result<()> = RedirectSetup::run(&redirects, &mut state, |_, _| {
+            anyhow::bail!("the command failed")
+        });
+
+        assert!(outcome.is_err());
+        assert_eq!(fs::read(root.join("f")).unwrap(), b"");
+        crate::commands::undo(&mut state, 1, false).unwrap();
+        assert_eq!(fs::read(root.join("f")).unwrap(), b"ORIGINAL");
+    }
+
+    /// A truncation that is redone empties the file a second time, and its
+    /// record must hold the content again. It held none, so `echo x > f;
+    /// undo; redo; undo` left `f` empty.
+    #[cfg(unix)]
+    #[test]
+    fn test_a_redone_truncation_can_be_undone_again() {
+        let temp = TempDir::new().unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap();
+        let mut state = test_state(&root);
+        fs::write(root.join("f"), "ORIGINAL").unwrap();
+
+        let redirects = vec![Redirection::Output {
+            file: "f".to_string(),
+        }];
+        RedirectSetup::run(&redirects, &mut state, |_, _| Ok(())).unwrap();
+        assert_eq!(fs::read(root.join("f")).unwrap(), b"");
+
+        crate::commands::undo(&mut state, 1, false).unwrap();
+        assert_eq!(fs::read(root.join("f")).unwrap(), b"ORIGINAL");
+        crate::commands::redo(&mut state, 1, false).unwrap();
+        assert_eq!(fs::read(root.join("f")).unwrap(), b"");
+        crate::commands::undo(&mut state, 1, false).unwrap();
+        assert_eq!(fs::read(root.join("f")).unwrap(), b"ORIGINAL");
+    }
+
+    /// Redoing a truncation makes the checks the redirection made: a file
+    /// that has gained another name since is not emptied.
+    #[cfg(unix)]
+    #[test]
+    fn test_a_truncation_is_not_redone_on_a_file_with_another_name() {
+        let temp = TempDir::new().unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap();
+        let mut state = test_state(&root);
+        fs::write(root.join("f"), "ORIGINAL").unwrap();
+
+        let redirects = vec![Redirection::Output {
+            file: "f".to_string(),
+        }];
+        RedirectSetup::run(&redirects, &mut state, |_, _| Ok(())).unwrap();
+        crate::commands::undo(&mut state, 1, false).unwrap();
+        fs::hard_link(root.join("f"), root.join("other-name")).unwrap();
+
+        let refused = crate::commands::redo(&mut state, 1, false).unwrap_err();
+
+        assert!(format!("{refused:#}").contains("hard links"), "{refused:#}");
+        assert_eq!(fs::read(root.join("other-name")).unwrap(), b"ORIGINAL");
+    }
+
+    /// A link whose target does not exist is refused, and nothing is made.
+    /// The file would have to be created through the link, and a file that
+    /// another program makes at that moment cannot be told from it.
+    #[cfg(unix)]
+    #[test]
+    fn test_a_redirect_to_a_link_with_no_target_is_refused_and_makes_nothing() {
+        let temp = TempDir::new().unwrap();
+        let state = test_state(temp.path());
+        std::os::unix::fs::symlink("nowhere", temp.path().join("dangling")).unwrap();
+
+        let mut setup = RedirectSetup::new();
+        let refused = setup
+            .setup_output_redirect("dangling", &state, false)
+            .unwrap_err();
+
+        assert!(
+            format!("{refused:#}").contains("symbolic link"),
+            "{refused:#}"
+        );
+        assert!(!temp.path().join("nowhere").exists());
+        assert!(setup.modifications.is_empty());
+        assert!(setup.opened_files.is_empty());
+    }
+
+    /// Saving the old content for undo is a read, and it must not change
+    /// the file's access time (see `fs_pure`). The file is read through
+    /// the handle that then truncates it.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_saving_the_old_content_does_not_change_the_access_time() {
+        use std::time::{Duration, UNIX_EPOCH};
+
+        let temp = TempDir::new().unwrap();
+        let state = test_state(temp.path());
+        let path = temp.path().join("f");
+        fs::write(&path, "OLD CONTENT").unwrap();
+        // An access time older than the modification time: the one case in
+        // which a read moves it under `relatime`.
+        let accessed = UNIX_EPOCH + Duration::from_secs(1_000_000_000);
+        let modified = UNIX_EPOCH + Duration::from_secs(1_100_000_000);
+        let times = fs::FileTimes::new()
+            .set_accessed(accessed)
+            .set_modified(modified);
+        File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_times(times)
+            .unwrap();
+
+        let mut setup = RedirectSetup::new();
+        setup.setup_output_redirect("f", &state, false).unwrap();
+
+        assert!(matches!(
+            &setup.modifications[0],
+            FileModification::Truncated { original_content, .. } if original_content == b"OLD CONTENT"
+        ));
+        assert_eq!(fs::metadata(&path).unwrap().accessed().unwrap(), accessed);
     }
 }
