@@ -1,0 +1,14 @@
+# package.json is JCS-canonical and pnpm-lock.yaml is tool-generated (LANGUAGE-POLICY §1.4).
+# Prettier must not reformat them.
+package.json
+pnpm-lock.yaml
+
+# Vendored, generated or estate-stamped content has no Prettier baseline:
+# reformatting it would diverge from its source of truth.
+alkahest-shell-transmuter/
+proofs/lean4/lake-manifest.json
+.github/
+.claude/
+docs/wiki/
+docs/*.md
+CLAUDE.md

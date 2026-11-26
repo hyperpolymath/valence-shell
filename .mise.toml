@@ -3,6 +3,7 @@
 # = "asdf version management"
 # = "Run asdf install to install all tools"
 # = "Primary runtime"
+bun = "latest"
 deno = "2.1.4"
 zig = "0.13.0"
 # = "Language runtimes"
