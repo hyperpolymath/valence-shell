@@ -118,7 +118,8 @@ Pure induction on list length.
 | Statement | `expand_glob(pattern, base_dir)` terminates in time `O(|pattern| × |files_in_base_dir|)`.
 | File | `impl/rust-cli/src/glob.rs` — no proof today.
 | Why | Glob expansion is a frequent attack surface for DoS in shells. A complexity bound is a real security property.
-| Lift | Property test (`proptest`) for termination + complexity, then a formal bound in Lean 4.
+| Lift | Property test (`proptest`) for termination + complexity. A bound proved in Lean 4 would be about a Lean model of the walk: optional model evidence, not a statement about the Rust code. The Rust walker (`expand_glob`) needs source-level verification, which the proof policy assigns to Creusot with Pearlite contracts, and Verus.
+| Progress (2026-11-18) | `tested-only`. The walk now processes each (directory, pattern component) pair at most once and meters reads, matches and match bytes (`src/grade.rs`). `tests/glob_bounds_tests.rs` checks the reported read count against counts made directly from fixtures, and that a 12-component pattern over a 31-entry chain stays within 2 x 12 x 31 reads. Still `open` as a proof: no Creusot or Verus contract exists on `expand_glob`, and none has been attempted; no Lean model bound exists either. Ledger rows: `EXPLAINME.adoc#proof-ledger` ("Glob expansion stays within its read bound on the test fixtures" and "Glob expansion terminates within `O(|pattern| x |entries|)` reads").
 |===
 
 [[A-7]]

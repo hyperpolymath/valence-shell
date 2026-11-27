@@ -311,6 +311,14 @@ pub struct ShellState {
     /// Job table for background job management
     pub jobs: crate::job::JobTable,
 
+    /// Messages about background jobs that have ended (`[1]+  Done  cmd`),
+    /// printed by the interactive shell before its next prompt.
+    pub job_notices: Vec<String>,
+
+    /// True in an interactive shell, which prints job notices. A script or
+    /// `-c` run has no reader for them, so none are queued.
+    pub interactive: bool,
+
     /// Named checkpoints mapping name → history index at checkpoint time
     pub checkpoints: HashMap<String, (usize, DateTime<Utc>)>,
 
@@ -325,6 +333,28 @@ pub struct ShellState {
 }
 
 impl ShellState {
+    /// Reap the background jobs that have ended, release their process
+    /// substitutions and queue a `Done` notice for each in
+    /// [`ShellState::job_notices`]. Cheap: one non-blocking `waitpid` per
+    /// running process. Called at the safe points between commands.
+    pub fn reap_jobs(&mut self) {
+        for job in self.jobs.reap_finished() {
+            self.jobs.finish_process_subs(job.process_subs);
+            if self.interactive {
+                self.job_notices.push(format!(
+                    "[{}]{}  {:<20} {}",
+                    job.id,
+                    self.jobs.marker(job.id),
+                    "Done",
+                    job.command.trim_end_matches(" &")
+                ));
+            }
+            self.jobs.remove_job(job.id);
+        }
+        // Not gated by SIGCHLD: one cheap try_wait per substitution.
+        self.jobs.settle_process_subs();
+    }
+
     /// Create new shell state with given root
     pub fn new(root: &str) -> Result<Self> {
         let root_path = PathBuf::from(root);
@@ -354,6 +384,8 @@ impl ShellState {
             positional_params: Vec::new(),
             fifo_counter: std::sync::atomic::AtomicUsize::new(0),
             jobs: crate::job::JobTable::new(),
+            job_notices: Vec::new(),
+            interactive: false,
             checkpoints: HashMap::new(),
             functions: FunctionTable::new(),
             traps: TrapTable::new(),

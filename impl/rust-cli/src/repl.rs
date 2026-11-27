@@ -43,6 +43,9 @@ use crate::state::ShellState;
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn run(state: &mut ShellState) -> Result<()> {
+    // Job notices have a reader here: they print before each prompt.
+    state.interactive = true;
+
     // Install SIGINT handler for graceful Ctrl+C handling; a failure only
     // means Ctrl-C keeps its default behaviour, so warn and continue.
     if let Err(e) = ctrlc::set_handler(move || {
@@ -55,6 +58,12 @@ pub fn run(state: &mut ShellState) -> Result<()> {
     let mut stdout = io::stdout();
 
     loop {
+        // Report the background jobs that ended since the last prompt.
+        state.reap_jobs();
+        for notice in state.job_notices.drain(..) {
+            println!("{notice}");
+        }
+
         // Build prompt
         let prompt = build_prompt(state);
         print!("{}", prompt);

@@ -2,8 +2,73 @@
 // Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 //! Glob pattern expansion (filename wildcards)
 //!
-//! Implements POSIX-compliant glob expansion with *, ?, [...], and {...}.
-//! Glob patterns are expanded to matching file paths at command execution time.
+//! Expands `*`, `?`, `[...]` and the recursive `**` against the file system,
+//! with fixed limits on how much work and memory one expansion may use.
+//! Brace expansion (`{a,b}`) is a separate, purely textual step: see
+//! [`expand_braces`].
+//!
+//! # Matching rules
+//!
+//! The rules follow bash 5.2 with `shopt -s globstar`, `dotglob` off and
+//! `globskipdots` on (the default):
+//!
+//! - `*`, `?` and `[...]` match within one path component. Single components
+//!   are matched by the `glob` crate's [`glob::Pattern`].
+//! - A name that starts with `.` is matched only by a component that itself
+//!   starts with a literal `.`. So `*` skips hidden files, `.*` and `.h*` find
+//!   them, and `.` and `..` are never produced by a wildcard.
+//! - A component that is exactly `**` matches zero or more directories. It
+//!   lists a symbolic link to a directory but does not descend into it, and it
+//!   does not enter hidden directories. Other components do go through
+//!   symbolic links, so `link/*` lists the target directory.
+//!   One measured difference: when `**` is *not* the first component (an
+//!   absolute pattern, `./**/*`, `d/**/*`), bash 5.2 enters a symbolic link to
+//!   a directory found by `**` for one more component, and vsh does not. On
+//!   one machine `/usr/**/*` gave bash 2,956 more paths than vsh, every one of
+//!   them below a link such as `/usr/bin/X11 -> .`.
+//! - A pattern that ends in `**` lists everything below its directory, and the
+//!   directory itself when it is named (`d/**` gives `d/`, `d/e`, ...).
+//! - A pattern that ends in `/` matches directories only, and each result ends
+//!   in `/`.
+//! - Results are sorted and each path appears once. (bash lists a path again
+//!   for every way the pattern matches it, so `**/*/**/*` can repeat a path
+//!   many times.)
+//! - A pattern that matches nothing gives an empty list; the caller decides
+//!   whether to keep the word literally.
+//!
+//! # Limits
+//!
+//! One expansion is metered on these axes ([`GlobLimits`]):
+//!
+//! | Axis | Kind | Default |
+//! |------|------|---------|
+//! | walker read units (one for each directory opened, entry listed, name looked up and symbolic link resolved; an entry type that the listing gave is not charged) | cost: adds up | 10,000,000 |
+//! | bytes of one directory listing held (name length + 1 for each entry) | occupancy, per listing | 64 MiB |
+//! | matches held | occupancy: high-water mark | 100,000 |
+//! | bytes of matches held (path length + 1 for each match) | occupancy | 6 MiB |
+//!
+//! The meters are charged *while* the walk runs, so an expansion stops at the
+//! first unit over a limit instead of collecting everything first. Stopping
+//! returns a [`GlobLimitExceeded`] error that names the limit and carries the
+//! usage so far and the directory being read; no partial result is returned.
+//! Because entries are visited in sorted order, the same pattern over the same
+//! tree always stops at the same place with the same report.
+//!
+//! The default byte limit is 6 MiB because Linux refuses any `execve` whose
+//! argument strings take more than that, whatever the stack limit (measured on
+//! Linux 6.18: 6,279,840 bytes accepted at both a 64 MiB and an unlimited
+//! stack), so a larger expansion could never reach an external command.
+//!
+//! bash has no such limits: it expanded `/**/*` on a test machine to 643,683
+//! paths. The limits here are deliberate departures, made so that a single
+//! word cannot exhaust the shell's memory.
+//!
+//! # Work bound
+//!
+//! Each pair (directory, pattern component) is processed at most once, so the
+//! walk reads each directory at most once per component of the pattern. That
+//! is the `O(|pattern| x |entries|)` shape stated as frontier item A-6 in
+//! `docs/PROOF-OPEN-FRONTIER.adoc`; here it is tested, not proved.
 //!
 //! # Examples
 //! ```no_run
@@ -14,12 +79,123 @@
 //! // Returns: ["file1.txt", "file2.txt", ...]
 //! ```
 
-use anyhow::{bail, Context, Result};
+use crate::grade::{Cost, Exceeded, Meter, Occupancy};
+use anyhow::{Context, Result};
+use std::collections::{BTreeSet, HashSet};
+use std::ffi::OsString;
+use std::fmt;
+use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Maximum number of results from glob expansion (prevents resource exhaustion from
-/// patterns like `/**/*` on deep directory trees).
-const MAX_GLOB_RESULTS: usize = 100_000;
+/// Default limit on file-system reads in one expansion.
+pub const MAX_GLOB_READS: u64 = 10_000_000;
+
+/// Default limit on the number of matches one expansion may hold.
+pub const MAX_GLOB_RESULTS: u64 = 100_000;
+
+/// Default limit on the bytes of matches one expansion may hold: 6 MiB, the
+/// most Linux `execve` accepts for argument strings.
+pub const MAX_GLOB_MATCH_BYTES: u64 = 6 * 1024 * 1024;
+
+/// Default limit on the bytes of names held while one directory is listed
+/// (name length + 1 for each entry): 64 MiB.
+pub const MAX_GLOB_LISTING_BYTES: u64 = 64 * 1024 * 1024;
+
+/// The limits one glob expansion runs under.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GlobLimits {
+    /// Most file-system reads: directories opened, entries listed, names looked up.
+    pub max_reads: u64,
+    /// Most matches held at once.
+    pub max_matches: u64,
+    /// Most bytes of matches held at once (path length + 1 per match).
+    pub max_match_bytes: u64,
+    /// Most bytes of names held while one directory is listed (name length + 1
+    /// per entry). The listing is sorted before use, so it is held whole.
+    pub max_listing_bytes: u64,
+}
+
+impl GlobLimits {
+    /// The limits [`expand_glob`] uses.
+    pub const DEFAULT: GlobLimits = GlobLimits {
+        max_reads: MAX_GLOB_READS,
+        max_matches: MAX_GLOB_RESULTS,
+        max_match_bytes: MAX_GLOB_MATCH_BYTES,
+        max_listing_bytes: MAX_GLOB_LISTING_BYTES,
+    };
+}
+
+impl Default for GlobLimits {
+    fn default() -> Self {
+        GlobLimits::DEFAULT
+    }
+}
+
+/// What one expansion used, on each metered axis.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GlobUsage {
+    /// File-system reads: directories opened, entries listed, names looked up.
+    pub reads: Cost,
+    /// Matches held.
+    pub matches: Occupancy,
+    /// Bytes of matches held (path length + 1 per match).
+    pub match_bytes: Occupancy,
+}
+
+impl fmt::Display for GlobUsage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} file-system reads, {} matches, {} bytes of matches",
+            self.reads.total(),
+            self.matches.peak(),
+            self.match_bytes.peak()
+        )
+    }
+}
+
+/// A successful expansion: the matches and what finding them cost.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Expansion {
+    /// Matching paths, sorted, each once.
+    pub paths: Vec<PathBuf>,
+    /// The resources the expansion used.
+    pub usage: GlobUsage,
+}
+
+/// The error returned when an expansion reaches one of its [`GlobLimits`].
+///
+/// It is a record of where the walk stopped, not a partial result: it says
+/// that more exists and where the walk was, without listing what was found.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GlobLimitExceeded {
+    /// The pattern as given.
+    pub pattern: String,
+    /// The limit that was reached: which axis, its value, and the level the
+    /// refused step would have reached.
+    pub exceeded: Exceeded,
+    /// What had been used when the walk stopped.
+    pub usage: GlobUsage,
+    /// The directory being read when the walk stopped, written the way the
+    /// matches would be (relative to the base directory unless the pattern is
+    /// absolute).
+    pub at: PathBuf,
+}
+
+impl fmt::Display for GlobLimitExceeded {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "glob pattern '{}' was not expanded: {} (stopped while reading '{}' after {})",
+            self.pattern,
+            self.exceeded,
+            self.at.display(),
+            self.usage
+        )
+    }
+}
+
+impl std::error::Error for GlobLimitExceeded {}
 
 /// Check if a string contains glob metacharacters
 ///
@@ -58,16 +234,11 @@ pub fn contains_glob_pattern(s: &str) -> bool {
     false
 }
 
-/// Expand a glob pattern to matching file paths
+/// Expand a glob pattern to matching file paths, under [`GlobLimits::DEFAULT`].
 ///
-/// Uses the `glob` crate for POSIX-compliant pattern matching.
-/// Returns paths sorted alphabetically (POSIX requirement).
-///
-/// # POSIX Behavior
-/// - Patterns that match nothing return empty vec (caller handles literal fallback)
-/// - Hidden files (starting with .) require explicit match: .* or .config
-/// - Results are sorted alphabetically
-/// - * and ? do not match directory separators (/)
+/// Relative patterns are matched below `base_dir` and give paths relative to
+/// it; patterns that start with `/` give absolute paths. See the
+/// [module documentation](self) for the matching rules and the limits.
 ///
 /// # Examples
 /// ```no_run
@@ -85,56 +256,581 @@ pub fn contains_glob_pattern(s: &str) -> bool {
 /// ```
 ///
 /// # Errors
-/// Returns error if:
-/// - Pattern is invalid
-/// - Base directory cannot be accessed
+/// Returns an error if the pattern is invalid, or a [`GlobLimitExceeded`]
+/// (reachable with `anyhow::Error::downcast_ref`) if the expansion reaches a
+/// limit. Directories that cannot be read are skipped, as bash does.
 pub fn expand_glob(pattern: &str, base_dir: &Path) -> Result<Vec<PathBuf>> {
-    // Build full glob pattern (base_dir + pattern)
-    let full_pattern = if pattern.starts_with('/') {
-        // Absolute path
-        pattern.to_string()
-    } else {
-        // Relative to base_dir
-        base_dir.join(pattern).to_string_lossy().to_string()
-    };
+    expand_glob_with_limits(pattern, base_dir, &GlobLimits::DEFAULT).map(|e| e.paths)
+}
 
-    // Use glob crate for pattern matching with POSIX options
-    let options = glob::MatchOptions {
-        // POSIX: * and ? do not match leading dot (hidden files)
-        require_literal_leading_dot: true,
-        // Case-sensitive matching (POSIX default)
-        case_sensitive: true,
-        // Require literal separator
-        require_literal_separator: false,
-    };
+/// Expand a glob pattern under the given limits, reporting what it used.
+///
+/// # Examples
+/// ```
+/// use vsh::glob::{expand_glob_with_limits, GlobLimitExceeded, GlobLimits};
+///
+/// let dir = tempfile::tempdir().unwrap();
+/// for name in ["a.txt", "b.txt", "c.txt"] {
+///     std::fs::write(dir.path().join(name), b"").unwrap();
+/// }
+///
+/// let limits = GlobLimits { max_matches: 2, ..GlobLimits::DEFAULT };
+/// let err = expand_glob_with_limits("*.txt", dir.path(), &limits).unwrap_err();
+/// let stopped = err.downcast_ref::<GlobLimitExceeded>().unwrap();
+/// assert_eq!(stopped.exceeded.axis, "matches held");
+/// assert_eq!((stopped.exceeded.limit, stopped.exceeded.level), (2, 3));
+/// ```
+///
+/// # Errors
+/// As for [`expand_glob`].
+pub fn expand_glob_with_limits(
+    pattern: &str,
+    base_dir: &Path,
+    limits: &GlobLimits,
+) -> Result<Expansion> {
+    expand_glob_continuing(pattern, base_dir, limits, GlobUsage::default())
+}
 
-    let mut matches: Vec<PathBuf> = glob::glob_with(&full_pattern, options)
-        .with_context(|| format!("Invalid glob pattern: {}", pattern))?
-        .filter_map(|entry| entry.ok())
-        .collect();
+/// Expand a glob pattern under limits that it shares with earlier expansions.
+///
+/// The meters start from `spent`, the usage an earlier expansion reported, so
+/// several patterns (the brace alternatives of one word, or the words of one
+/// command) together stay within one set of [`GlobLimits`]. The returned usage
+/// includes `spent`, and the matches of earlier expansions count as still held.
+///
+/// # Errors
+/// As for [`expand_glob`].
+pub fn expand_glob_continuing(
+    pattern: &str,
+    base_dir: &Path,
+    limits: &GlobLimits,
+    spent: GlobUsage,
+) -> Result<Expansion> {
+    let compiled =
+        Compiled::new(pattern).with_context(|| format!("Invalid glob pattern: {}", pattern))?;
+    let mut walker = Walker::new(pattern, base_dir, &compiled, limits, spent)
+        .map_err(|stopped| anyhow::Error::new(*stopped))?;
+    walker
+        .run()
+        .map_err(|stopped| anyhow::Error::new(*stopped))?;
+    Ok(Expansion {
+        usage: walker.usage(),
+        paths: walker.found.into_iter().collect(),
+    })
+}
 
-    // Sort results (POSIX requirement)
-    matches.sort();
+/// One path component of a compiled pattern.
+#[derive(Debug)]
+enum Component {
+    /// No metacharacters: looked up by name, without listing the directory.
+    Literal(String),
+    /// Matched against each name in the directory.
+    Wild(glob::Pattern),
+    /// `**`: zero or more directories.
+    Recursive,
+}
 
-    // Guard against resource exhaustion from overly broad patterns
-    if matches.len() > MAX_GLOB_RESULTS {
-        bail!(
-            "Glob pattern '{}' matched {} files (limit: {})",
+#[derive(Debug)]
+struct Compiled {
+    components: Vec<Component>,
+    absolute: bool,
+    dirs_only: bool,
+}
+
+impl Compiled {
+    fn new(pattern: &str) -> std::result::Result<Self, glob::PatternError> {
+        let mut components: Vec<Component> = Vec::new();
+        for part in pattern.split('/').filter(|part| !part.is_empty()) {
+            let component = if part == "**" {
+                // `**/**` matches exactly what `**` matches.
+                if matches!(components.last(), Some(Component::Recursive)) {
+                    continue;
+                }
+                Component::Recursive
+            } else if part.contains(['*', '?', '[']) {
+                Component::Wild(glob::Pattern::new(part)?)
+            } else {
+                Component::Literal(part.to_string())
+            };
+            components.push(component);
+        }
+        Ok(Compiled {
+            components,
+            absolute: pattern.starts_with('/'),
+            dirs_only: pattern.len() > 1 && pattern.ends_with('/'),
+        })
+    }
+}
+
+/// The text a name is matched as.
+///
+/// The `glob` crate matches `str` only. A byte that is not valid UTF-8 becomes
+/// one character from U+F780..U+F7FF (private use), so `?` and `*` still
+/// match it, and it does not look like a literal U+FFFD in the name or the
+/// pattern, as a lossy conversion would make it.
+// snip: a pattern that contains one of those 128 private-use characters
+// matches the invalid byte too; an exact matcher needs a byte-level `Pattern`.
+fn match_text(name: &std::ffi::OsStr) -> std::borrow::Cow<'_, str> {
+    if let Some(text) = name.to_str() {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let mut out = String::new();
+    for chunk in name.as_encoded_bytes().utf8_chunks() {
+        out.push_str(chunk.valid());
+        for &byte in chunk.invalid() {
+            // Invalid bytes are 0x80..=0xFF, so this stays in U+F780..U+F7FF.
+            out.push(
+                char::from_u32(0xF700 + u32::from(byte)).unwrap_or(char::REPLACEMENT_CHARACTER),
+            );
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
+
+/// `text` as a pattern that matches exactly `text`: `*`, `?` and `[` in it
+/// are taken literally. Use it for a directory prefix that is not a pattern.
+///
+/// # Examples
+/// ```
+/// assert_eq!(vsh::glob::escape("/tmp/a*b"), "/tmp/a[*]b");
+/// ```
+pub fn escape(text: &str) -> String {
+    glob::Pattern::escape(text)
+}
+
+const MATCH_OPTIONS: glob::MatchOptions = glob::MatchOptions {
+    case_sensitive: true,
+    require_literal_separator: true,
+    require_literal_leading_dot: true,
+};
+
+/// The result of a step of the walk. The error is boxed: it is built once, on
+/// the path that stops the walk, and is larger than the values the steps return.
+type Walk<T> = std::result::Result<T, Box<GlobLimitExceeded>>;
+
+/// The walk: a depth-first search over states (directory, component index),
+/// each processed at most once.
+struct Walker<'a> {
+    pattern: &'a str,
+    base: &'a Path,
+    compiled: &'a Compiled,
+    reads: Meter<Cost>,
+    matches: Meter<Occupancy>,
+    match_bytes: Meter<Occupancy>,
+    max_listing_bytes: u64,
+    found: BTreeSet<PathBuf>,
+}
+
+impl<'a> Walker<'a> {
+    fn new(
+        pattern: &'a str,
+        base: &'a Path,
+        compiled: &'a Compiled,
+        limits: &GlobLimits,
+        spent: GlobUsage,
+    ) -> Walk<Self> {
+        // A usage already over a limit (a hand-built `GlobUsage`, for example)
+        // is refused here, before any read, so every meter starts within its
+        // limit. The refusal is the same structured error as a limit met on
+        // the walk, stopped at the base directory with the usage given.
+        let refuse = |exceeded| {
+            Box::new(GlobLimitExceeded {
+                pattern: pattern.to_string(),
+                exceeded,
+                usage: spent,
+                at: PathBuf::from("."),
+            })
+        };
+        Ok(Walker {
             pattern,
-            matches.len(),
-            MAX_GLOB_RESULTS,
+            base,
+            compiled,
+            reads: Meter::starting_at("file-system reads", limits.max_reads, spent.reads)
+                .map_err(refuse)?,
+            matches: Meter::starting_at("matches held", limits.max_matches, spent.matches)
+                .map_err(refuse)?,
+            match_bytes: Meter::starting_at(
+                "bytes of matches held",
+                limits.max_match_bytes,
+                spent.match_bytes,
+            )
+            .map_err(refuse)?,
+            max_listing_bytes: limits.max_listing_bytes,
+            found: BTreeSet::new(),
+        })
+    }
+
+    fn usage(&self) -> GlobUsage {
+        GlobUsage {
+            reads: self.reads.grade(),
+            matches: self.matches.grade(),
+            match_bytes: self.match_bytes.grade(),
+        }
+    }
+
+    /// Where `path` (as it would be reported) is on the file system.
+    fn real(&self, path: &Path) -> PathBuf {
+        if self.compiled.absolute {
+            path.to_path_buf()
+        } else if path.as_os_str().is_empty() {
+            self.base.to_path_buf()
+        } else {
+            self.base.join(path)
+        }
+    }
+
+    fn stopped(&self, exceeded: Exceeded, at: &Path) -> Box<GlobLimitExceeded> {
+        Box::new(GlobLimitExceeded {
+            pattern: self.pattern.to_string(),
+            exceeded,
+            usage: self.usage(),
+            at: if at.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                at.to_path_buf()
+            },
+        })
+    }
+
+    fn charge_read(&mut self, at: &Path) -> Walk<()> {
+        self.reads.charge(1).map_err(|e| self.stopped(e, at))
+    }
+
+    /// Record a match, once.
+    fn emit(&mut self, path: PathBuf, at: &Path) -> Walk<()> {
+        let path = if self.compiled.dirs_only {
+            path.join("")
+        } else {
+            path
+        };
+        if self.found.contains(&path) {
+            return Ok(());
+        }
+        let bytes = path.as_os_str().len() as u64 + 1;
+        // Check both limits before recording either, so a refused match leaves
+        // no trace in the reported usage.
+        self.matches.check(1).map_err(|e| self.stopped(e, at))?;
+        self.match_bytes
+            .check(bytes)
+            .map_err(|e| self.stopped(e, at))?;
+        self.matches.charge(1).map_err(|e| self.stopped(e, at))?;
+        self.match_bytes
+            .charge(bytes)
+            .map_err(|e| self.stopped(e, at))?;
+        self.found.insert(path);
+        Ok(())
+    }
+
+    /// List a directory in name order, charging the open and every entry.
+    /// An unreadable directory gives no entries.
+    fn list(&mut self, dir: &Path) -> Walk<Vec<(OsString, fs::FileType)>> {
+        self.charge_read(dir)?;
+        let mut entries = Vec::new();
+        // The listing is held whole to sort it; meter the names it holds.
+        let mut held = Meter::<Occupancy>::new(
+            "bytes of one directory listing held",
+            self.max_listing_bytes,
+        );
+        if let Ok(read) = fs::read_dir(self.real(dir)) {
+            for entry in read {
+                self.charge_read(dir)?;
+                if let Ok(entry) = entry {
+                    if let Ok(kind) = entry.file_type() {
+                        let name = entry.file_name();
+                        held.charge(name.len() as u64 + 1)
+                            .map_err(|e| self.stopped(e, dir))?;
+                        entries.push((name, kind));
+                    }
+                }
+            }
+        }
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        Ok(entries)
+    }
+
+    /// Whether `path` is a directory, going through a symbolic link.
+    ///
+    /// A type that the directory listing already gave costs nothing. Looking
+    /// the path up (no type known, or a symbolic link to resolve) is one read,
+    /// charged before the lookup.
+    fn is_dir(&mut self, path: &Path, kind: Option<fs::FileType>, at: &Path) -> Walk<bool> {
+        match kind {
+            Some(kind) if kind.is_dir() => Ok(true),
+            Some(kind) if !kind.is_symlink() => Ok(false),
+            _ => {
+                self.charge_read(at)?;
+                Ok(fs::metadata(self.real(path)).is_ok_and(|m| m.is_dir()))
+            }
+        }
+    }
+
+    fn run(&mut self) -> Walk<()> {
+        let count = self.compiled.components.len();
+        if count == 0 {
+            return Ok(());
+        }
+        let start = if self.compiled.absolute {
+            PathBuf::from("/")
+        } else {
+            PathBuf::new()
+        };
+        let mut stack: Vec<(PathBuf, usize)> = vec![(start, 0)];
+        let mut seen: HashSet<(PathBuf, usize)> = HashSet::new();
+
+        while let Some((dir, index)) = stack.pop() {
+            if !seen.insert((dir.clone(), index)) {
+                continue;
+            }
+            let last = index + 1 == count;
+            let compiled = self.compiled;
+            // Successor states, pushed in reverse so they are visited in name order.
+            let mut next: Vec<(PathBuf, usize)> = Vec::new();
+
+            match &compiled.components[index] {
+                Component::Literal(name) => {
+                    let child = dir.join(name);
+                    if last {
+                        // One lookup. An intermediate component is charged by
+                        // `is_dir` below, so it is not charged here as well.
+                        self.charge_read(&dir)?;
+                        let exists = fs::symlink_metadata(self.real(&child)).is_ok();
+                        if exists && (!compiled.dirs_only || self.is_dir(&child, None, &dir)?) {
+                            self.emit(child, &dir)?;
+                        }
+                    } else if self.is_dir(&child, None, &dir)? {
+                        next.push((child, index + 1));
+                    }
+                }
+                Component::Wild(pattern) => {
+                    for (name, kind) in self.list(&dir)? {
+                        if !pattern.matches_with(&match_text(&name), MATCH_OPTIONS) {
+                            continue;
+                        }
+                        let child = dir.join(&name);
+                        if last {
+                            if !compiled.dirs_only || self.is_dir(&child, Some(kind), &dir)? {
+                                self.emit(child, &dir)?;
+                            }
+                        } else if self.is_dir(&child, Some(kind), &dir)? {
+                            next.push((child, index + 1));
+                        }
+                    }
+                }
+                Component::Recursive => {
+                    // Zero directories: the pattern continues here.
+                    if !last {
+                        next.push((dir.clone(), index + 1));
+                    } else if !dir.as_os_str().is_empty() {
+                        self.emit(dir.join(""), &dir)?;
+                    }
+                    // One more directory: descend into real, visible directories.
+                    for (name, kind) in self.list(&dir)? {
+                        if name.as_encoded_bytes().starts_with(b".") {
+                            continue;
+                        }
+                        let child = dir.join(&name);
+                        if last && (!compiled.dirs_only || self.is_dir(&child, Some(kind), &dir)?) {
+                            self.emit(child.clone(), &dir)?;
+                        }
+                        if kind.is_dir() {
+                            next.push((child, index));
+                        }
+                    }
+                }
+            }
+            stack.extend(next.into_iter().rev());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod walk_tests {
+    use super::*;
+    use proptest::prelude::*;
+    use tempfile::TempDir;
+
+    fn expand(pattern: &str, base: &Path) -> Vec<String> {
+        expand_glob(pattern, base)
+            .unwrap()
+            .into_iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn literal_and_wild_components() {
+        let t = TempDir::new().unwrap();
+        fs::create_dir_all(t.path().join("src/sub")).unwrap();
+        for f in ["src/a.rs", "src/b.txt", "src/sub/c.rs", "top.rs"] {
+            fs::write(t.path().join(f), b"").unwrap();
+        }
+        assert_eq!(expand("src/*.rs", t.path()), ["src/a.rs"]);
+        assert_eq!(expand("*/*/*.rs", t.path()), ["src/sub/c.rs"]);
+        assert_eq!(expand("./*.rs", t.path()), ["./top.rs"]);
+        assert_eq!(
+            expand("**/*.rs", t.path()),
+            ["src/a.rs", "src/sub/c.rs", "top.rs"]
+        );
+        assert_eq!(expand("src/**/c.rs", t.path()), ["src/sub/c.rs"]);
+        assert!(expand("*.none", t.path()).is_empty());
+    }
+
+    #[test]
+    fn intermediate_literal_is_charged_once() {
+        // `real/file` needs two lookups: `real`, then `file`. A budget of two
+        // reads must be enough, and a budget of one must stop at the second.
+        let t = TempDir::new().unwrap();
+        fs::create_dir(t.path().join("real")).unwrap();
+        fs::write(t.path().join("real/file"), b"").unwrap();
+
+        let two = GlobLimits {
+            max_reads: 2,
+            ..GlobLimits::DEFAULT
+        };
+        let found = expand_glob_with_limits("real/file", t.path(), &two).unwrap();
+        assert_eq!(found.paths, [PathBuf::from("real/file")]);
+
+        let one = GlobLimits {
+            max_reads: 1,
+            ..GlobLimits::DEFAULT
+        };
+        let err = expand_glob_with_limits("real/file", t.path(), &one).unwrap_err();
+        assert!(err.downcast_ref::<GlobLimitExceeded>().is_some());
+    }
+
+    #[test]
+    fn a_resumed_usage_over_a_limit_is_refused_before_any_read() {
+        // A hand-built usage that is already over a limit cannot start a walk:
+        // every meter must begin within its limit.
+        use crate::grade::{Cost, Exceeded, Grade};
+        let t = TempDir::new().unwrap();
+        let limits = GlobLimits {
+            max_reads: 2,
+            ..GlobLimits::DEFAULT
+        };
+        let spent = GlobUsage {
+            reads: Cost::of(5),
+            ..GlobUsage::default()
+        };
+        let err = expand_glob_continuing("*", t.path(), &limits, spent).unwrap_err();
+        // The structured glob error, so a caller that passes on only
+        // `GlobLimitExceeded` does not take the refusal for "no match".
+        let stopped = err
+            .downcast_ref::<GlobLimitExceeded>()
+            .expect("a GlobLimitExceeded refusal");
+        assert_eq!(
+            stopped.exceeded,
+            Exceeded {
+                axis: "file-system reads",
+                limit: 2,
+                level: 5
+            }
+        );
+        assert_eq!(stopped.usage, spent);
+        assert_eq!(stopped.at, PathBuf::from("."));
+    }
+
+    #[test]
+    fn absolute_patterns_give_absolute_paths() {
+        let t = TempDir::new().unwrap();
+        fs::write(t.path().join("x.txt"), b"").unwrap();
+        let pattern = format!("{}/*.txt", escape(&t.path().to_string_lossy()));
+        assert_eq!(
+            expand_glob(&pattern, Path::new("/nonexistent")).unwrap(),
+            [t.path().join("x.txt")]
         );
     }
 
-    // Convert absolute paths back to relative if needed
-    if !pattern.starts_with('/') {
-        matches = matches
-            .into_iter()
-            .map(|p| p.strip_prefix(base_dir).unwrap_or(&p).to_path_buf())
-            .collect();
+    #[test]
+    fn invalid_patterns_are_errors_not_limits() {
+        let t = TempDir::new().unwrap();
+        for bad in ["a**", "***", "[z-"] {
+            let err = expand_glob(bad, t.path()).unwrap_err();
+            assert!(err.downcast_ref::<GlobLimitExceeded>().is_none(), "{bad}");
+        }
     }
 
-    Ok(matches)
+    #[test]
+    fn a_base_directory_with_metacharacters_is_taken_literally() {
+        let t = TempDir::new().unwrap();
+        let base = t.path().join("we[ir]d*");
+        fs::create_dir(&base).unwrap();
+        fs::write(base.join("f.txt"), b"").unwrap();
+        assert_eq!(expand("*.txt", &base), ["f.txt"]);
+    }
+
+    #[test]
+    fn empty_pattern_matches_nothing() {
+        let t = TempDir::new().unwrap();
+        assert!(expand("", t.path()).is_empty());
+    }
+
+    // ------------------------------------------------------------------
+    // Differential check against the `glob` crate, which this walker
+    // replaces. On trees without symbolic links and for patterns that do not
+    // end in `**` and have no component starting with `.`, the two must find
+    // the same set of paths (the crate can list a path twice; this walker
+    // lists it once). Those exclusions are exactly where the rules changed.
+    // ------------------------------------------------------------------
+
+    fn crate_glob(pattern: &str, base: &Path) -> BTreeSet<PathBuf> {
+        let options = glob::MatchOptions {
+            require_literal_leading_dot: true,
+            case_sensitive: true,
+            require_literal_separator: false,
+        };
+        let base_pattern = glob::Pattern::escape(&base.to_string_lossy());
+        glob::glob_with(&format!("{base_pattern}/{pattern}"), options)
+            .unwrap()
+            .filter_map(|p| p.ok())
+            .map(|p| p.strip_prefix(base).unwrap().to_path_buf())
+            .collect()
+    }
+
+    fn tree() -> impl Strategy<Value = Vec<(Vec<&'static str>, bool)>> {
+        let name = prop::sample::select(vec!["a", "b", "ab", "ba", ".h"]);
+        prop::collection::vec((prop::collection::vec(name, 1..4), any::<bool>()), 0..25)
+    }
+
+    fn pattern() -> impl Strategy<Value = String> {
+        let component = prop::sample::select(vec![
+            "*", "?", "a*", "*b", "[ab]", "[!a]*", "a", "b", "ab", "**",
+        ]);
+        (prop::collection::vec(component, 1..5), any::<bool>()).prop_filter_map(
+            "pattern ends in **",
+            |(parts, slash)| {
+                if parts.last() == Some(&"**") {
+                    return None;
+                }
+                let mut p = parts.join("/");
+                if slash {
+                    p.push('/');
+                }
+                Some(p)
+            },
+        )
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+        #[test]
+        fn agrees_with_the_glob_crate(entries in tree(), pattern in pattern()) {
+            let t = TempDir::new().unwrap();
+            for (parts, is_dir) in &entries {
+                let path = parts.iter().collect::<PathBuf>();
+                let full = t.path().join(&path);
+                if let Some(parent) = full.parent() {
+                    if fs::create_dir_all(parent).is_err() {
+                        continue;
+                    }
+                }
+                let _ = if *is_dir { fs::create_dir_all(&full) } else { fs::write(&full, b"") };
+            }
+            let ours: BTreeSet<PathBuf> = expand_glob(&pattern, t.path()).unwrap().into_iter().collect();
+            prop_assert_eq!(ours, crate_glob(&pattern, t.path()), "pattern {}", pattern);
+        }
+    }
 }
 
 /// Expand brace patterns: a{b,c}d -> [abd, acd]
@@ -170,7 +866,8 @@ fn expand_braces_limited(pattern: &str, remaining: usize) -> Vec<String> {
     }
 
     // Find first unescaped {
-    let chars = pattern.chars().enumerate().peekable();
+    // Byte offsets, not character counts: the slices below index bytes.
+    let chars = pattern.char_indices();
     let mut brace_start = None;
     let mut brace_depth = 0;
     let mut escaped = false;

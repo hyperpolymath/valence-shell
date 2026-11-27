@@ -209,16 +209,27 @@ fn prompt_yes_no(prompt: &str) -> Result<bool> {
     Ok(input == "y" || input == "yes")
 }
 
+/// Count the files a recursive removal of `path` would delete.
+///
+/// Symbolic links are counted as entries and never followed, as `rm -r` does:
+/// following them would count files outside the tree and, with a link back to
+/// a parent directory, never finish.
+///
+/// This holds for a tree that does not change during the count. Each child
+/// directory is opened again by its path, so a directory that another process
+/// replaces with a link between the type check and the open is followed. The
+/// count is only shown in the confirmation prompt; the removal does its own
+/// checks.
 fn count_files_in_tree(path: &str) -> Result<usize> {
     let mut count = 0;
 
     fn visit_dirs(path: &std::path::Path, count: &mut usize) -> Result<()> {
-        if path.is_dir() {
+        // symlink_metadata: a link given as the root is one entry, not its target.
+        if std::fs::symlink_metadata(path)?.is_dir() {
             for entry in std::fs::read_dir(path)? {
                 let entry = entry?;
-                let path = entry.path();
-                if path.is_dir() {
-                    visit_dirs(&path, count)?;
+                if entry.file_type()?.is_dir() {
+                    visit_dirs(&entry.path(), count)?;
                 } else {
                     *count += 1;
                 }
@@ -338,6 +349,29 @@ mod tests {
 
     #[test]
     fn test_count_files() {
-        let _ = count_files_in_tree("/tmp").unwrap_or(0);
+        let t = tempfile::TempDir::new().unwrap();
+        std::fs::create_dir(t.path().join("d")).unwrap();
+        std::fs::write(t.path().join("d/f"), b"").unwrap();
+        std::fs::write(t.path().join("top"), b"").unwrap();
+        let root = t.path().to_str().unwrap();
+        assert_eq!(count_files_in_tree(root).unwrap(), 2);
+    }
+
+    /// A link back to a parent directory used to make the count recurse until
+    /// the path was too long, branching at every level.
+    #[cfg(unix)]
+    #[test]
+    fn test_count_files_does_not_follow_symlink_loops() {
+        let t = tempfile::TempDir::new().unwrap();
+        std::fs::create_dir(t.path().join("d")).unwrap();
+        std::fs::write(t.path().join("d/f"), b"").unwrap();
+        std::os::unix::fs::symlink("..", t.path().join("d/up")).unwrap();
+        std::os::unix::fs::symlink(".", t.path().join("self")).unwrap();
+        let root = t.path().to_str().unwrap();
+        // d/f, d/up and self: the two links are counted, not followed.
+        assert_eq!(count_files_in_tree(root).unwrap(), 3);
+        // A link given as the root is one entry too.
+        let link = t.path().join("self");
+        assert_eq!(count_files_in_tree(link.to_str().unwrap()).unwrap(), 1);
     }
 }
