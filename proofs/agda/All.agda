@@ -14,3 +14,7 @@ import CopyMoveOperations
 import FileContentOperations
 import RMOOperations
 import PreconditionWitnesses
+import JournalFraming
+import JournalReplay
+import JournalModel
+import JournalWitnesses

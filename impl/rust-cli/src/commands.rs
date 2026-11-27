@@ -97,7 +97,7 @@ pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     // Record in history
     let op = Operation::new(OperationType::Mkdir, path.to_string(), None);
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     // Output
     println!(
@@ -165,7 +165,7 @@ pub fn rmdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     // Record
     let op = Operation::new(OperationType::Rmdir, path.to_string(), None);
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {}",
@@ -225,7 +225,7 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 
     let op = Operation::new(OperationType::CreateFile, path.to_string(), None);
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {}",
@@ -291,7 +291,7 @@ pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     let op =
         Operation::new(OperationType::DeleteFile, path.to_string(), None).with_undo_data(content);
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {}",
@@ -366,7 +366,7 @@ pub fn cp(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
     let op = Operation::new(OperationType::CopyFile, dst.to_string(), None)
         .with_undo_data(src.as_bytes().to_vec());
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {} → {}",
@@ -447,7 +447,7 @@ pub fn mv(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
     let combined_path = format!("{}\0{}", src, dst);
     let op = Operation::new(OperationType::Move, combined_path, None);
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {} → {}",
@@ -518,7 +518,7 @@ pub fn symlink(state: &mut ShellState, target: &str, link: &str, verbose: bool) 
     let op = Operation::new(OperationType::Symlink, link.to_string(), None)
         .with_undo_data(target.as_bytes().to_vec());
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {} → {}",
@@ -580,7 +580,7 @@ pub fn chmod(state: &mut ShellState, mode_str: &str, path: &str, verbose: bool) 
     let op = Operation::new(OperationType::Chmod, path.to_string(), None)
         .with_undo_data(old_mode.to_le_bytes().to_vec());
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {:o} {}",
@@ -725,7 +725,7 @@ pub fn chown(state: &mut ShellState, owner_str: &str, path: &str, verbose: bool)
     let op = Operation::new(OperationType::Chown, path.to_string(), None)
         .with_undo_data(undo_str.into_bytes());
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {} {}",
@@ -860,11 +860,11 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                 fs::remove_file(&path).context("Undo touch failed")?;
             }
             OperationType::CreateFile => {
-                let content = op.undo_data.as_ref().cloned().unwrap_or_default();
+                let content: &[u8] = op.undo_data.as_deref().unwrap_or_default();
                 fs::write(&path, content).context("Undo rm failed")?;
             }
             OperationType::WriteFile => {
-                let content = op.undo_data.as_ref().cloned().unwrap_or_default();
+                let content: &[u8] = op.undo_data.as_deref().unwrap_or_default();
                 fs::write(&path, content).context("Undo write failed")?;
             }
             OperationType::FileAppended => {
@@ -992,7 +992,7 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
         let undo_id = undo_op.id;
         let orig_id = op.id;
 
-        state.mark_undone(orig_id, undo_id);
+        state.mark_undone(orig_id, undo_id)?;
 
         println!(
             "{} {} {} {} {}",
@@ -1047,126 +1047,170 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
         };
 
-        let path = state.resolve_path(&op.path);
-
-        // Re-execute the original operation
-        match op.op_type {
-            OperationType::Mkdir => {
-                fs::create_dir(&path).context("Redo mkdir failed")?;
+        if let Err(e) = redo_one(state, &op, verbose) {
+            // Nothing was redone. Keep the entry, so that the redo can be
+            // tried again once the cause is fixed. An entry of a kind that
+            // can never be redone is dropped, or it would block the ones
+            // behind it for the rest of the session.
+            if can_be_redone(op.op_type) {
+                state.redo_stack.push_front(op);
             }
-            OperationType::Rmdir => {
-                fs::remove_dir(&path).context("Redo rmdir failed")?;
-            }
-            OperationType::CreateFile => {
-                fs::write(&path, "").context("Redo touch failed")?;
-            }
-            OperationType::DeleteFile => {
-                fs::remove_file(&path).context("Redo rm failed")?;
-            }
-            OperationType::WriteFile => {
-                // Would need new content
-                anyhow::bail!("WriteFile redo not yet implemented");
-            }
-            OperationType::FileTruncated => {
-                // Redo truncate: truncate file (original undo_data was the old content)
-                fs::write(&path, "").context("Redo truncate failed")?;
-            }
-            OperationType::FileAppended => {
-                // Cannot redo append without knowing what was appended
-                anyhow::bail!(
-                    "FileAppended redo not yet implemented (would need appended content)"
-                );
-            }
-            OperationType::CopyFile => {
-                // Redo copy: copy again from src (stored in undo_data) to dst (path)
-                let src = op
-                    .undo_data
-                    .as_ref()
-                    .map(|d| String::from_utf8_lossy(d).to_string())
-                    .context("Missing source path for redo cp")?;
-                let src_path = state.resolve_path(&src);
-                fs::copy(&src_path, &path).context("Redo cp failed")?;
-            }
-            OperationType::Move => {
-                // Redo move: move src -> dst again
-                let parts: Vec<&str> = op.path.splitn(2, '\0').collect();
-                if parts.len() != 2 {
-                    anyhow::bail!("Invalid move operation record for redo");
-                }
-                let src_path = state.resolve_path(parts[0]);
-                let dst_path = state.resolve_path(parts[1]);
-                fs::rename(&src_path, &dst_path).context("Redo mv failed")?;
-            }
-            OperationType::Symlink => {
-                // Redo symlink: create symlink again
-                let target = op
-                    .undo_data
-                    .as_ref()
-                    .map(|d| String::from_utf8_lossy(d).to_string())
-                    .context("Missing symlink target for redo")?;
-                #[cfg(unix)]
-                std::os::unix::fs::symlink(&target, &path).context("Redo ln -s failed")?;
-                #[cfg(not(unix))]
-                anyhow::bail!("Symbolic links not supported on this platform");
-            }
-            OperationType::Unlink => {
-                // Redo unlink: remove the symlink again
-                fs::remove_file(&path).context("Redo unlink failed")?;
-            }
-            OperationType::SetVariable => {
-                // Redo set: re-apply the variable value
-                // The undo_data stores the PREVIOUS value, not the new one.
-                // For redo, we need the value that was set, but we don't have it.
-                // Redo of SetVariable is a no-op — variable state has moved on.
-                // This is correct: variable redo is best-effort; filesystem redo is exact.
-                println!(
-                    "{}",
-                    "Variable set cannot be exactly redone (state-dependent)".bright_yellow()
-                );
-            }
-            OperationType::UnsetVariable => {
-                // Redo unset: unset the variable again
-                state.variables.remove(&op.path);
-                state.exported_vars.remove(&op.path);
-            }
-            OperationType::Chmod => {
-                // Redo chmod: cannot exactly redo without storing new mode
-                println!(
-                    "{}",
-                    "chmod cannot be exactly redone (state-dependent)".bright_yellow()
-                );
-            }
-            OperationType::Chown => {
-                // Redo chown: cannot exactly redo without storing new uid:gid
-                println!(
-                    "{}",
-                    "chown cannot be exactly redone (state-dependent)".bright_yellow()
-                );
-            }
-            OperationType::HardwareErase | OperationType::Obliterate => {
-                // Cannot redo - irreversible operations
-                anyhow::bail!(
-                    "{:?} cannot be redone - operation is irreversible",
-                    op.op_type
-                );
-            }
+            return Err(e);
         }
+    }
 
-        let new_op = Operation::new(op.op_type, op.path.clone(), None);
-        let new_id = new_op.id;
-        state.record_redo_operation(new_op);
+    Ok(())
+}
 
-        println!(
-            "{} {} {}",
-            format!("[op:{}]", &new_id.to_string()[..8]).bright_black(),
-            "redo".bright_cyan(),
-            op.path
-        );
+/// Whether `redo` has a way to do this kind of operation again.
+fn can_be_redone(op_type: OperationType) -> bool {
+    !matches!(
+        op_type,
+        OperationType::WriteFile
+            | OperationType::FileAppended
+            | OperationType::HardwareErase
+            | OperationType::Obliterate
+    )
+}
 
-        if verbose {
-            let proof = op.op_type.proof_reference();
-            println!("    {} {}", "Proof:".bright_black(), proof.format_short());
+/// Do one undone operation again and record it. On an error nothing has
+/// been recorded.
+fn redo_one(state: &mut ShellState, op: &Operation, verbose: bool) -> Result<()> {
+    let path = state.resolve_path(&op.path);
+
+    // The record this redo writes must be able to undo it. A removal or a
+    // truncation needs the contents as they are now, read before the file
+    // is touched. A copy, a link and an unlink need what the first record
+    // carried (the source path or the link target).
+    let undo_data: Option<Vec<u8>> = match op.op_type {
+        // Read as `rm` and a truncating redirection do: without changing
+        // the file's access time where the system allows it.
+        OperationType::DeleteFile | OperationType::FileTruncated => Some(
+            crate::fs_pure::read_to_end(&path)
+                .context("Redo: could not read the file to keep its contents")?,
+        ),
+        OperationType::CopyFile | OperationType::Symlink | OperationType::Unlink => {
+            op.undo_data.clone()
         }
+        _ => None,
+    };
+
+    // Re-execute the original operation
+    match op.op_type {
+        OperationType::Mkdir => {
+            fs::create_dir(&path).context("Redo mkdir failed")?;
+        }
+        OperationType::Rmdir => {
+            fs::remove_dir(&path).context("Redo rmdir failed")?;
+        }
+        OperationType::CreateFile => {
+            fs::write(&path, "").context("Redo touch failed")?;
+        }
+        OperationType::DeleteFile => {
+            fs::remove_file(&path).context("Redo rm failed")?;
+        }
+        OperationType::WriteFile => {
+            // Would need new content
+            anyhow::bail!("WriteFile redo not yet implemented");
+        }
+        OperationType::FileTruncated => {
+            // Redo truncate: truncate file (original undo_data was the old content)
+            fs::write(&path, "").context("Redo truncate failed")?;
+        }
+        OperationType::FileAppended => {
+            // Cannot redo append without knowing what was appended
+            anyhow::bail!("FileAppended redo not yet implemented (would need appended content)");
+        }
+        OperationType::CopyFile => {
+            // Redo copy: copy again from src (stored in undo_data) to dst (path)
+            let src = op
+                .undo_data
+                .as_ref()
+                .map(|d| String::from_utf8_lossy(d).to_string())
+                .context("Missing source path for redo cp")?;
+            let src_path = state.resolve_path(&src);
+            fs::copy(&src_path, &path).context("Redo cp failed")?;
+        }
+        OperationType::Move => {
+            // Redo move: move src -> dst again
+            let parts: Vec<&str> = op.path.splitn(2, '\0').collect();
+            if parts.len() != 2 {
+                anyhow::bail!("Invalid move operation record for redo");
+            }
+            let src_path = state.resolve_path(parts[0]);
+            let dst_path = state.resolve_path(parts[1]);
+            fs::rename(&src_path, &dst_path).context("Redo mv failed")?;
+        }
+        OperationType::Symlink => {
+            // Redo symlink: create symlink again
+            let target = op
+                .undo_data
+                .as_ref()
+                .map(|d| String::from_utf8_lossy(d).to_string())
+                .context("Missing symlink target for redo")?;
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(&target, &path).context("Redo ln -s failed")?;
+            #[cfg(not(unix))]
+            anyhow::bail!("Symbolic links not supported on this platform");
+        }
+        OperationType::Unlink => {
+            // Redo unlink: remove the symlink again
+            fs::remove_file(&path).context("Redo unlink failed")?;
+        }
+        OperationType::SetVariable => {
+            // Redo set: re-apply the variable value
+            // The undo_data stores the PREVIOUS value, not the new one.
+            // For redo, we need the value that was set, but we don't have it.
+            // Redo of SetVariable is a no-op — variable state has moved on.
+            // This is correct: variable redo is best-effort; filesystem redo is exact.
+            println!(
+                "{}",
+                "Variable set cannot be exactly redone (state-dependent)".bright_yellow()
+            );
+        }
+        OperationType::UnsetVariable => {
+            // Redo unset: unset the variable again
+            state.variables.remove(&op.path);
+            state.exported_vars.remove(&op.path);
+        }
+        OperationType::Chmod => {
+            // Redo chmod: cannot exactly redo without storing new mode
+            println!(
+                "{}",
+                "chmod cannot be exactly redone (state-dependent)".bright_yellow()
+            );
+        }
+        OperationType::Chown => {
+            // Redo chown: cannot exactly redo without storing new uid:gid
+            println!(
+                "{}",
+                "chown cannot be exactly redone (state-dependent)".bright_yellow()
+            );
+        }
+        OperationType::HardwareErase | OperationType::Obliterate => {
+            // Cannot redo - irreversible operations
+            anyhow::bail!(
+                "{:?} cannot be redone - operation is irreversible",
+                op.op_type
+            );
+        }
+    }
+
+    let mut new_op = Operation::new(op.op_type, op.path.clone(), None);
+    new_op.undo_data = undo_data;
+    let new_id = new_op.id;
+    state.record_redo_operation(new_op)?;
+
+    println!(
+        "{} {} {}",
+        format!("[op:{}]", &new_id.to_string()[..8]).bright_black(),
+        "redo".bright_cyan(),
+        op.path
+    );
+
+    if verbose {
+        let proof = op.op_type.proof_reference();
+        println!("    {} {}", "Proof:".bright_black(), proof.format_short());
     }
 
     Ok(())
@@ -1313,18 +1357,69 @@ pub fn commit_transaction(state: &mut ShellState) -> Result<()> {
     Ok(())
 }
 
-/// Rollback the current transaction, reversing all operations atomically.
+/// Why `op` cannot be reversed, as far as its record alone shows: it has no
+/// inverse, or the data its inverse needs was not recorded.
 ///
-/// Undoes all operations in the active transaction started with [`begin_transaction`].
-/// Operations are reversed in LIFO order. Reports partial failures if any rollback fails.
+/// This does not look at the disk. A reversal can still fail for a reason
+/// only the filesystem knows (a file removed by another program, say);
+/// [`rollback_transaction`] then leaves the transaction open.
+fn rollback_blocker(op: &crate::state::Operation) -> Option<String> {
+    let Some(inverse) = op.op_type.inverse() else {
+        return Some(format!("{} cannot be reversed", op.op_type));
+    };
+    let undo = op.undo_data.as_deref();
+    let blocked = match inverse {
+        OperationType::FileAppended => undo.is_none_or(|data| data.len() < 8),
+        OperationType::Chmod => undo.is_none_or(|data| data.len() < 4),
+        OperationType::Chown => undo.is_none_or(|data| {
+            let text = String::from_utf8_lossy(data);
+            let mut parts = text.splitn(2, ':');
+            let valid = |part: Option<&str>| part.is_some_and(|p| p.parse::<u32>().is_ok());
+            !(valid(parts.next()) && valid(parts.next()))
+        }),
+        OperationType::Symlink => undo.is_none(),
+        OperationType::Move => !op.path.contains('\0'),
+        // Restoring a removed file, or a file's earlier content, needs that
+        // content. Without it the reversal would write an empty file.
+        OperationType::CreateFile | OperationType::WriteFile => undo.is_none(),
+        // Restoring a variable needs its earlier value, in the form the
+        // shell saved it. Anything else would be read as "it was unset".
+        OperationType::SetVariable => undo.is_none_or(|data| {
+            serde_json::from_slice::<Option<crate::state::VariableValue>>(data).is_err()
+        }),
+        _ => false,
+    };
+    blocked.then(|| {
+        format!(
+            "the data needed to reverse this {} was not recorded",
+            op.op_type
+        )
+    })
+}
+
+/// Rollback the current transaction, reversing its operations.
+///
+/// Undoes the operations of the active transaction started with
+/// [`begin_transaction`], newest first. Each operation is marked undone as
+/// soon as it has been reversed, so a later `undo` does not try to reverse
+/// it again and an interrupted rollback can be resumed. Operations already
+/// undone inside the transaction are left alone.
+///
+/// Before anything is reversed, every operation is checked: if one has no
+/// inverse (`obliterate`, for example) or lacks the data its inverse needs,
+/// the rollback is refused and nothing is changed. That check reads only
+/// the operation records, not the disk.
+///
+/// The transaction is closed only when every operation has been reversed.
+/// If a reversal fails on the disk, the transaction stays open: run
+/// `rollback` again once the cause is fixed, or `commit` to keep what
+/// remains.
 ///
 /// # Arguments
 /// * `state` - Mutable shell state for transaction management
 ///
 /// # Errors
-/// Returns error if:
-/// - No active transaction
-/// - Rollback operations fail (reports which operations failed)
+/// Returns error if an operation could not be reversed (reports which).
 ///
 /// # Examples
 /// ```no_run
@@ -1338,19 +1433,88 @@ pub fn commit_transaction(state: &mut ShellState) -> Result<()> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
+    let Some(txn_id) = state.active_transaction.as_ref().map(|txn| txn.id) else {
+        println!("{}", "Nothing to rollback".bright_yellow());
+        return Ok(());
+    };
+
+    // Every operation of the transaction must still be in the history.
+    // The history size limit does not drop the operations of an open
+    // transaction, so this holds for a state this version wrote. It is
+    // checked all the same, for a state that came from somewhere else:
+    // reversing only what is left and then closing the transaction would
+    // leave the missing ones in place behind a transaction recorded as
+    // rolled back.
+    //
+    // The history is indexed once. Looking each operation up by a scan of
+    // the history took time that grew with the square of the transaction,
+    // and an open transaction can now be longer than the history limit.
+    let dropped = state.active_transaction.as_ref().map_or(0, |txn| {
+        let present: std::collections::HashSet<uuid::Uuid> =
+            state.history.iter().map(|op| op.id).collect();
+        txn.operations
+            .iter()
+            .filter(|id| !present.contains(id))
+            .count()
+    });
+    if dropped > 0 {
+        eprintln!(
+            "{} {} of this transaction's operations are no longer in the history, \
+             so it cannot be rolled back. Nothing was changed. Commit to close \
+             the transaction.",
+            "Rollback refused:".bright_red(),
+            dropped
+        );
+        anyhow::bail!(
+            "Transaction rollback refused: {dropped} operations are no longer in the history"
+        )
+    }
+
     let ops: Vec<_> = state
         .current_transaction_ops()
         .iter()
+        .filter(|o| !o.undone)
         .map(|o| (*o).clone())
         .collect();
 
     if ops.is_empty() {
+        // Nothing to reverse, but the transaction must not stay open.
+        close_rolled_back(state)?;
         println!("{}", "Nothing to rollback".bright_yellow());
         return Ok(());
     }
 
-    // Collect rollback failures
+    // Check first: if any operation is known not to be reversible, refuse
+    // the whole rollback before touching the disk, so a transaction is
+    // never left half rolled back for a reason that was knowable.
+    let blockers: Vec<(&str, String)> = ops
+        .iter()
+        .filter_map(|op| rollback_blocker(op).map(|why| (op.path.as_str(), why)))
+        .collect();
+    if !blockers.is_empty() {
+        eprintln!(
+            "{} {} of {} operations cannot be reversed. Nothing was changed.",
+            "Rollback refused:".bright_red(),
+            blockers.len(),
+            ops.len()
+        );
+        for (path, why) in &blockers {
+            eprintln!("  {} {}: {}", "Blocked:".bright_red(), path, why);
+        }
+        eprintln!("The transaction is still open. Commit to keep its operations.");
+        anyhow::bail!(
+            "Transaction rollback refused: {}/{} operations cannot be reversed",
+            blockers.len(),
+            ops.len()
+        )
+    }
+
+    // The failure that stopped the rollback, if any, and how many
+    // operations were reversed before it.
     let mut failed_rollbacks: Vec<(String, String)> = Vec::new();
+    let mut reversed = 0usize;
+    // Set when a reversal was done on the disk but could not be saved.
+    let mut unsaved = false;
 
     // Undo all operations in reverse order
     for op in ops.iter().rev() {
@@ -1364,11 +1528,11 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                     fs::remove_file(&path).context("Failed to remove file")
                 }
                 OperationType::CreateFile => {
-                    let content = op.undo_data.as_ref().cloned().unwrap_or_default();
+                    let content: &[u8] = op.undo_data.as_deref().unwrap_or_default();
                     fs::write(&path, content).context("Failed to restore file")
                 }
                 OperationType::WriteFile => {
-                    let content = op.undo_data.as_ref().cloned().unwrap_or_default();
+                    let content: &[u8] = op.undo_data.as_deref().unwrap_or_default();
                     fs::write(&path, content).context("Failed to restore file content")
                 }
                 OperationType::FileAppended => {
@@ -1514,18 +1678,59 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                 }
             };
 
-            // Collect failures
-            if let Err(e) = result {
-                failed_rollbacks.push((op.path.clone(), e.to_string()));
+            // Record each reversal as it happens, so the history never
+            // shows a reversed operation as live.
+            match result {
+                Ok(()) => {
+                    unsaved = state.mark_undone(op.id, txn_id).is_err();
+                    reversed += 1;
+                }
+                Err(e) => failed_rollbacks.push((op.path.clone(), e.to_string())),
             }
+        } else {
+            failed_rollbacks.push((
+                op.path.clone(),
+                format!("{} cannot be reversed", op.op_type),
+            ));
+        }
+
+        // Stop at the first failure. Older operations may depend on the one
+        // that could not be reversed (a file renamed, then written to), so
+        // reversing them out of order could put the wrong content in the
+        // wrong place.
+        //
+        // Stop as well when a reversal could not be saved. Going on would
+        // put the saved state further behind the disk with each operation;
+        // stopping keeps it at most one operation behind.
+        if !failed_rollbacks.is_empty() || unsaved {
+            break;
         }
     }
 
-    // Clear the transaction
-    state.active_transaction = None;
+    if unsaved {
+        eprintln!(
+            "{} {} of {} operations were reversed, but the saved state could not be \
+             written, so the last reversal is not recorded in it.",
+            "Rollback stopped:".bright_red(),
+            reversed,
+            ops.len()
+        );
+        eprintln!(
+            "The transaction is still open. Fix the cause and run rollback again before \
+             closing the shell: the next write that succeeds saves the whole state."
+        );
+        anyhow::bail!(
+            "Transaction rollback stopped: the saved state could not be written \
+             after {} of {} operations were reversed",
+            reversed,
+            ops.len()
+        )
+    }
 
     // Report results
     if failed_rollbacks.is_empty() {
+        // Everything is reversed: close the transaction as rolled back.
+        close_rolled_back(state)?;
         println!(
             "{} {} operations",
             "Transaction rolled back:".bright_green(),
@@ -1533,24 +1738,47 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
         );
         Ok(())
     } else {
-        let succeeded = ops.len() - failed_rollbacks.len();
         eprintln!(
-            "{} {} succeeded, {} failed",
+            "{} {} reversed, {} failed, {} not attempted",
             "Partial rollback:".bright_yellow(),
-            succeeded,
-            failed_rollbacks.len()
+            reversed,
+            failed_rollbacks.len(),
+            ops.len() - reversed - failed_rollbacks.len()
         );
 
         for (path, err) in &failed_rollbacks {
             eprintln!("  {} {}: {}", "Failed:".bright_red(), path, err);
         }
+        eprintln!(
+            "The transaction is still open. Run rollback again once the cause is fixed, \
+             or commit to keep the remaining operations."
+        );
 
         anyhow::bail!(
-            "Transaction rollback incomplete: {}/{} operations failed",
-            failed_rollbacks.len(),
+            "Transaction rollback incomplete: {} of {} operations reversed",
+            reversed,
             ops.len()
         )
     }
+}
+
+/// Close the open transaction as rolled back, and report it if that could
+/// not be saved.
+fn close_rolled_back(state: &mut ShellState) -> Result<()> {
+    state.abort_transaction();
+    if state.is_saved() {
+        return Ok(());
+    }
+    eprintln!(
+        "{} every operation was reversed and the transaction is closed, but the \
+         saved state could not be written.",
+        "Rollback not saved:".bright_red()
+    );
+    eprintln!(
+        "The next write that succeeds saves the whole state. If the shell is closed \
+         before that, the transaction will be shown as open when it starts again."
+    );
+    anyhow::bail!("Transaction rolled back, but the saved state could not be written")
 }
 
 /// Display the operation dependency graph (DAG).
@@ -2051,7 +2279,7 @@ pub fn hardware_erase(state: &mut ShellState, device: &str, method: Option<&str>
         None, // Not part of a transaction
     );
     let op_id = op.id;
-    state.record_operation(op);
+    state.record_operation(op)?;
 
     println!(
         "{} {} {} (method: {}, type: {:?})",

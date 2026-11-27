@@ -25,6 +25,8 @@ Review findings at that level of detail are recorded here as gate requirements a
 
 *Revision 2026-11-09:* owner rulings OD-30 to OD-34 bring the plan into line with the estate proof policy (`hyperpolymath/standards` `3-practice/PROOF-POLICY.adoc`). Where they conflict with anything below, the 2026-11-09 rulings win. The section "Owner rulings (2026-11-09)" lists each superseded part. Ground truth for the same day: `docs/audits/2026-11-09-proof-ground-truth.adoc`.
 
+*Revision 2026-11-17:* owner rulings OD-35 to OD-37 change the running order (the journal is redesigned before the runtime holes are fixed) and record a review of the work since 2026-11-09. Where they conflict with anything below, the 2026-11-17 rulings win. The section "Owner rulings (2026-11-17)" gives the rulings; section 14 gives the review, the revised phases and their status.
+
 *How the evidence was gathered:*
 
 * An ultracode workflow ran 50 agents, all of which completed:
@@ -115,6 +117,181 @@ the deviation records; a lane that installs a prover without one fails review.
 |===
 
 *Why proof-first still fixes runtime holes first.* The proof-first architect's own thesis orders the work as "holes come first (rungs 0–1), wiring next (CI lanes before claims), features last". It also argues that the drift guard and the WAL are _proof-necessary_: they discharge, at runtime, the one hypothesis a refinement proof cannot cover, namely that the real OS state equals the abstract state. So the Rust hole fixes (Phase 1) are part of the spine, not a departure from it. They also touch disjoint files from the Lean work (Phase 2), so the two run in parallel and the proofs are not held up.
+
+== Owner rulings (2026-11-17)
+
+Given by selector after a review of the work since 2026-11-09 (section 14).
+
+[cols="1,4,5",options="header"]
+|===
+|# |Ruling |Supersedes, and what changes
+
+|*OD-35* |*valence-shell#229 is split, on two branches.* The stress-suite repair
+and the history journal leave #229 and continue on a second branch,
+`claude/vsh-journal-redesign` (valence-shell#230). This is the elegant arm
+(E 9 / D 9), chosen over keeping #229 whole (E 7 / D 7).
+|Section 9, "Branch and PR discipline" (one branch). #229 keeps the small
+Hypatia follow-ups and the descriptile-to-deed migration. Done with `git revert`,
+so no history was rewritten. When #229 merges, `main` is merged into the journal
+branch.
+
+|*OD-36* |*The journal is redesigned first, before the runtime holes.* Running
+order: A (unblock) → C (journal) → B (holes) → D → E → F.
+|Section 9's phase order, and the paragraph above ("holes first"). Recorded once,
+as the estate's "elegance by default" rule asks: this departs from "holes before
+anything else". The sandbox escapes measured in section 14.1 stay open while the
+journal is redone. The reason for the order is that journal code already exists
+on a branch and was not converging under point fixes (section 14.2).
+
+|*OD-37* |*The forward plan lives in this document*, as a dated amendment.
+|The separate working plan written on 2026-11-17. Section 14 is that plan.
+|===
+
+A second set, given by selector later the same day, once the journal (steps C1
+and C2 of section 14.3) was in place:
+
+[cols="1,4,5",options="header"]
+|===
+|# |Ruling |Effect
+
+|*OD-38* |*`redo` can bring rolled-back operations back, one at a time.* Rollback
+is an undo of each operation of the transaction (E 8 / D 8). Treating a rollback
+as one history entry, undone as a whole (E 9 / D 6), was the more elegant arm
+and is not taken now.
+|As implemented. Test: `redo_brings_rolled_back_operations_back_in_order`.
+
+|*OD-39* |*Rollback checks first.* Before reversing anything it checks that every
+operation can be reversed and refuses the whole rollback otherwise. A failure
+found only while reversing leaves the transaction open (E 9 / D 9).
+|Implemented for what an operation's record shows: no inverse (obliterate,
+hardware erase), or missing undo data. It does not yet simulate the reversals
+against the disk, so a failure that only the filesystem knows about is still
+found part-way through. A full dry run needs the executable model of Phase D.
+
+|*OD-40* |*An unreadable saved state stops the shell, and a recovery command is
+added*: `vsh --recover` shows what is readable and lets the user keep the
+readable part or move the file aside (E 8 / D 8).
+|The shell already refuses to start and leaves the file untouched. The recovery
+command is new work, listed in section 14.3 as C5, after the journal branch is
+mergeable.
+
+|*OD-41* |*Holes first.* The journal branch stops at C2. The sandbox escapes
+(Phase B) come next, and the capability-handle experiment B1 decides both the
+containment mechanism and where the state lives.
+|OD-36's order from this point: A → C1, C2 (done) → *B* → C3, C4, C5 → D → E → F.
+This returns to "holes before anything else". valence-shell#230 stays
+unmergeable until C3 lands: its journal is crash-safe, but still inside the
+session root and without a lock between two shells.
+|===
+
+A third set, given by selector the same day, after the product review
+(section 14.10; `VSH-PRODUCT-REVIEW-2026-11-17.adoc`):
+
+[cols="1,4,5",options="header"]
+|===
+|# |Ruling |Effect
+
+|*OD-42* |*The engine is the product, and front ends come in stages.* The
+shell interpreter is one front end among several and comes last (the elegant
+arm, E 9 / D 8). Growing the interpreter first (E 4 / D 4), putting an existing
+shell core in front now (E 6 / D 6) and building for agents only (E 7 / D 7)
+were not taken.
+|The stages S0 to S6 of the review's section 8 are the forward order. Phases A,
+B, C3 to C5, D and E of this plan are stage S1. The POSIX items in
+`ROADMAP.adoc` ("v0.10.x") and the "Immediate priorities" of the root
+`CLAUDE.md` are parked; those files are corrected in S0.
+
+|*OD-43* |*The truthful baseline (S0) comes next, on its own branch*,
+`claude/vsh-product-gate`, cut from `main` (E 9 / D 9).
+|New gate *G0, use*: what is claimed for a front end equals what a battery run
+in CI shows, as a ratchet. Scope of S0: the battery; built-in commands refuse
+options and extra operands they do not handle; `help` works; the three texts of
+the review's section 2.7 are reworded; `[ … ]`, the exit status of `exit` and
+the 50 ms wait on every program are fixed.
+
+|*OD-44* |*The capture experiment decides the first front end* (E 9 / D 8). It
+runs as soon as the journal and the store for old contents (C4) exist. GO:
+capture of any command first, with the plug-in a thin layer over it. NO-GO: a
+plug-in for bash, zsh and fish with the engine's own commands.
+|Order after S0: B (the rest) → C3, C4 → the capture experiment → the first
+release of the engine, with D and E alongside.
+
+|*OD-45* |*Hole (b) waits for the change-set engine* (the out-of-the-box arm,
+E 8 / D 5). The elegant arm was a footprint check now, with a forced undo that
+first keeps a copy (E 9 / D 9). It is not taken.
+|Recorded once, as the estate's "elegance by default" rule asks: until change
+sets land in S1, `undo` can still overwrite what another program has written to
+a file since the operation. `b` stays in `KNOWN_OPEN` on valence-shell#232, and
+Phase B closes without it.
+|===
+
+Given by selector later the same day, on four questions that review of
+valence-shell#230, #232 and #233 had left open (section 14.5):
+
+[cols="1,4,5",options="header"]
+|===
+|# |Ruling |Effect
+
+|*OD-46* |*Hole (p) is closed in one design, with the store for old contents
+(C4)* (the elegant arm, E 9 / D 6). A record is to identify its file in two
+ways together: by the names the history gives the file over time, and by the
+device and inode read when the content is saved. Not taken: the history's names
+now and the identity at C4 (E 8 / D 8, the recommendation, which reaches the
+same end sooner for the case that was reproduced); refusing to obliterate while
+the history holds content it cannot place (E 4 / D 9); and paths marked so that
+their content is never kept (E 7 / D 8).
+|Recorded once, as for OD-45: until C4, `obliterate` leaves in the saved
+history any content that was saved while the file had another name
+(`mv a b; obliterate b`), or through a link that has been removed since. `p`
+joins `b` in `KNOWN_OPEN` on valence-shell#232, and Phase B closes without it.
+Closing hole p is added to the gate of C4.
+
+|*OD-47* |*The parser hands every command its words with their kind* (option,
+operand, operand after `--`, quoted or not): the elegant arm, E 9 / D 8. It is
+the answer to `name=-p; mkdir -- "$name"`, which the baseline refuses because
+the parser does not pass on where `--` stood. Not taken: carrying `--` alone
+through to the built-ins, as a follow-up (E 7 / D 8, the recommendation) or on
+the baseline branch first (E 7 / D 8).
+|It also gives what word splitting of an unquoted `$var` needs. Ruled the
+same evening, on where and when: it is built with the interpreter front end,
+after the first release of the engine, on its own branch and with an experiment
+first (a prototype for three built-ins, and how many battery cases change). So
+OD-42 and OD-41 stand: the engine and the holes come first. Until it lands the
+refusal stays: it changes nothing on disk, and its message says how to name the
+file (`./-p`). The baseline (valence-shell#233) merges as it is.
+
+|*OD-48* |*A journal that ends in zero bytes stays damage, and the recovery
+command deals with it* (section 14.5, second option: E 7 / D 9). Not taken:
+reading the zero bytes as an interrupted write, with the crash model widened
+(E 8 / D 8, the recommendation), and reading every unreadable tail as the end
+of the journal (E 4 / D 5).
+|OD-40 stands as it is and the crash model is not widened: the shell guesses
+nothing. C5 (`vsh --recover`) gains this case: it shows the zero bytes, sets
+them aside and keeps the records before them, on the user's choice. C5 is built
+before the first release of the engine. Until it exists, such a file has to be
+repaired by hand.
+
+|*OD-49* |*A command whose record cannot be saved returns an error now, and the
+record is written first once the change-set engine exists* (the
+recommendation: section 14.5, second option now, E 7 / D 8, and first option
+with Phase E, E 9 / D 9).
+|Every command that changes something returns an error when its record cannot
+be written. The message says that the change was made and is not recorded. The
+saved state can still be one operation behind after a crash between a change
+and its record; the write-ahead record of Phase E closes that. Done on the
+journal branch (section 14.4d).
+
+|*OD-50* |*The behaviour changes of the containment and baseline branches are
+confirmed.* The owner went through them by selector, in six groups: the
+seventeen listed on valence-shell#232 and the eight listed on #233. All are
+confirmed as described there.
+|Two of them settle points this plan had left open. `cd` is confined to the
+session root (OD-26, option a, was a provisional default). Arithmetic at the
+edge of 64-bit integers wraps, as in bash; this plan said "checked", meaning an
+error, and step B4 is read accordingly. With the item on the wording of the
+`proofs` command the owner noted that the Zig work is in development in the
+`atoma` repository (section 14.8).
+|===
 
 '''''
 
@@ -839,3 +1016,465 @@ _Repository and owner boundaries_
 * The CI run states come from `gh` snapshots taken by the readers on 2026-10-27, not re-queried today.
 * Not cloned: ochrance, echidna, oblibeny, affinescript, resource-algebra, systemet, tangle.
 * The raw workflow output (synthesis, judgements, critique and per-claim skeptic evidence) stayed in the planning session's container and is not committed. Every measured claim here gives its file and line, or the command used to reproduce it, so it can be re-checked from the repo.
+
+'''''
+
+== 14. Amendment 2026-11-17: review, revised phases and status
+
+Status words in this section: *Measured* means a command was run on that date.
+*Inferred* means reasoned from measured facts. *Not checked* means exactly that.
+
+=== 14.1 What the review measured
+
+*The runtime holes of section 3.2 are still open.* Phase 1 has not started and
+`tests/regressions_parsed_path.rs` does not exist. Eight of the fourteen holes
+were re-run on the build of 2026-11-17:
+
+[cols="1,4,4",options="header"]
+|===
+|Hole |Reproduction |Result (Measured)
+
+|g |`cd ..; touch escaped` |Still escapes the sandbox
+|j |`echo PWNED > link`, where `link` is an in-root symlink to an outside file |The outside file is overwritten
+|k |`touch lp/new`, where `lp` is an in-root symlink to an outside directory |A file is created outside the root
+|m |`obliterate vl --force`, where `vl` is a symlink to an outside file |The outside file's contents are destroyed
+|f |`touch f; cd sub; undo` |Deletes the user's `sub/f` and leaves `f`
+|h |`chmod 600 s; rm s; undo` |The mode comes back as 0644
+|c |obliterate inside a transaction, then rollback |Changed: a failed rollback is now reported. Obliterate inside a transaction is still allowed
+|e |i64 overflow in arithmetic |Inconclusive: the test form hit a parse error first
+|===
+
+Not re-run: a, b, d, i, l, n.
+
+*A new hole, found in review on 2026-11-17 (Measured, also on `main`):*
+`rollback` reverses the operations on disk but leaves them live in the history.
+`begin t; touch f; rollback; undo` ends with "Undo touch failed: No such file or
+directory". It joins the list as hole *o*.
+
+*A second new hole, found on 2026-11-17 while review of the scrub on
+valence-shell#232 was answered (Measured on that branch).* `obliterate` finds
+the earlier contents of a file in the saved history by path. Content that was
+saved while the file had another name is not found:
+`echo secret > a; echo x > a; mv a b; obliterate b` leaves `secret` in the
+state file, under the name `a`. The same holds for content saved through a
+symbolic link that has been removed since, in a history written before
+redirections recorded the file they changed. On `main` nothing is scrubbed at
+all (hole d), so the same check would fail there too (Inferred; not run on
+`main`). It joins the list as hole *p*, and OD-46 rules when it closes.
+
+*`ShellState::new` discards a failed load* (`state.load().ok()`), on `main` too.
+E1d says a corrupt load must fail loudly.
+
+*CI does not start the Rust or shared workflows* on the open PRs (Measured;
+cause Inferred). Seven workflows end in `startup_failure`. Each uses
+`dtolnay/rust-toolchain`, `Swatinem/rust-cache` or a `metadatastician/standards`
+reusable workflow; every workflow that still starts uses none of them. The
+inferred cause is the repository's allowed-actions list. Until the owner changes
+that setting, the evidence for Rust changes is local runs only.
+
+=== 14.2 Why the journal is being redesigned
+
+The stress-suite repair on #229 added an append log beside the state file, which
+is the arm this plan rated lower (OD-5b), with no model and no crash test. Two
+review bots then raised seventeen findings of one class, crash consistency and
+state-file handling, over several rounds. Nine were fixed one at a time. The
+other eight are not being patched; they are listed in valence-shell#230.
+
+A crash-point harness now measures the design instead
+(`impl/rust-cli/tests/journal_crash_tests.rs`). It replays a scripted session,
+builds every disk state a crash could leave between two acknowledged steps, and
+requires that the shell reopens, that the recovered state is the one before or
+after the interrupted step, and that later work survives another reopen.
+
+Result on the two-file journal, 2,075 crash states (Measured):
+
+* A journal append cut at any byte, a stray temporary file and a clean shutdown
+  all recover.
+* Two classes fail, both after a power loss, because nothing is synced: the
+  journal is truncated while the old snapshot is still in place (3 states); and
+  the first snapshot is cut short, after which the failed load is ignored and
+  the shell starts empty beside an intact journal (666 states).
+
+The test pins exactly those two classes in `KNOWN_OPEN` and fails if the list is
+wrong in either direction. The list must be empty before #230 can merge.
+
+=== 14.3 Revised phases
+
+One PR per phase, signed. Phase C runs on `claude/vsh-journal-redesign`; the
+others on `claude/laughing-hawking-pibzji`. Each phase starts with an experiment
+and ends at a machine-checked gate.
+
+*Phase A. Unblock and land what exists.*
+
+[cols="1,5,3,2",options="header"]
+|===
+|Step |What |Gate |Status
+
+|A1 (owner) |Add `dtolnay/rust-toolchain@*`, `Swatinem/rust-cache@*` and `metadatastician/standards/.github/workflows/*@*` to the allowed-actions list of valence-shell, maa-framework and absolute-zero |The seven workflows start |Open
+|A2 (owner) |Mark GitGuardian incident 36740437 a false positive |- |Open
+|A3 |Crash-point harness (section 14.2) |Zero failures, or a pinned list of failure classes |Done: two classes pinned
+|A4 |Split #229 (OD-35) |#229 green with Rust CI run |Split done; waits on A1
+|A5 |maa-framework#259 and absolute-zero#203 |Both merged |Wait on A1
+|===
+
+*Phase C. The journal (this plan's E3, E4 and P8, pulled forward by OD-36).*
+
+[cols="1,5,3,2",options="header"]
+|===
+|Step |What |Gate |Status
+
+|C1 |Journal model in Agda (OD-30): record framing, event replay, a file and crash model |Checks under the estate invocation, in `All.agda` |Done (section 14.4)
+|C2 |One file of length-prefixed, checksummed records behind a small storage interface (append, sync, atomic replace, read), with a real implementation and a simulated one that loses exactly what the model's crash may lose. Compaction writes one snapshot record to a new file, syncs it, renames it over the old one and syncs the directory. A failed load is an error that stops the shell from writing; the files are kept. Rollback writes a record that marks each reversed operation undone. Old `.vsh_state.json` files still load (fixture test) |No failing crash class; the harness also runs against the simulated storage |Done (section 14.4a)
+|C3 |State moves out of the command root to an owner-only directory keyed by session root (OD-12a), opened with `O_NOFOLLOW`, checked through the descriptor, and held under an exclusive lock for the life of the shell |The shell's own (built-in) commands cannot delete or edit state, because it lies outside the root they are confined to: a test runs `rm`, `>` and `obliterate` against the state path and finds it unchanged. A second shell on the same root is refused; a two-instance test passes. Not covered: an external command runs as the user and can reach the state by its absolute path, like any other file of theirs. Keeping external commands out needs process isolation, which is not part of this step |Open
+|C4 |Deleted-file contents go to a content-addressed blob store, not into the history. A record identifies its file by the names the history gives it over time and by the device and inode read when the content is saved (OD-46) |Removing 100 MB no longer writes about 300 MB of JSON. Hole p is closed: after `mv a b; obliterate b`, nothing that was saved under `a` is left |Open
+|C5 |`vsh --recover` (OD-40): for a saved state the shell refuses to load, show how many records are readable and what stops the rest, then keep the readable part or move the file aside, on the user's choice. Nothing is deleted. A journal that ends in zero bytes is one such state (OD-48): the zero bytes are shown and set aside, and the records before them are kept |A damaged journal can be brought back to a state the shell starts on, with the damaged bytes kept |Open
+|===
+
+By OD-41, C3, C4 and C5 run after Phase B.
+
+*Phase B. Runtime holes (this plan's Phase 1).*
+
+[cols="1,5,3",options="header"]
+|===
+|Step |What |Gate
+
+|B0 = E0 |`tests/regressions_parsed_path.rs`: one fail-first test per hole a to p, through the parsed `vsh -c` path. Rewrite `security_no_privilege_escalation` with real assertions |Each test fails on `main` for the documented reason
+|B1 |Experiment, one day: port `touch`, `mkdir` and `>` redirection to a root directory handle from the `cap-std` crate; run tests j, k, l |GO or NO-GO written down; decides the containment mechanism (section 14.5)
+|B2 = E1b |Session root fixed at start and separate from the working directory; `cd` confined (OD-26a); history paths relative to the session root; content operations refuse symlink escapes and files with more than one hard link; obliterate refuses a symlink |Tests f, g, j, k, l, m, n pass; outside files byte-identical
+|B3 = E1c |Obliterate: intent record written and synced before the overwrite; refused inside a transaction (OD-3a); earlier payloads of the target scrubbed |Tests c, d, i pass
+|B4 = E1, E1d |Undo restores mode, owner and mtime; unreadable files are refused, not saved empty; redirection records a root-relative path; checked arithmetic |Tests a, e, h pass; an arithmetic never-panics property test
+|B5 |One inverse table shared by undo, redo and rollback. This fixes redo losing undo data (`rm f; undo; redo; undo` restores `f` empty) |undo, redo, undo round-trip tests for rm, chmod, cp and `ln -s`
+|===
+
+B2 comes first inside the phase: it closes the holes that destroy data outside
+the sandbox.
+
+*Phase D. Spec spine* (this plan's Phases 3 and 4 under OD-30): FinFS in Agda
+first; oracle v2 with undo, redo, transactions and obliterate, driven by a
+state-machine property test against the shell; the golden trace corpus; the four
+Lean libraries repaired or visibly quarantined; a proof manifest with grades
+derived from CI receipts (OD-34).
+
+*Phase E. Rust contracts* (OD-31): extract `vsh-core`; Creusot/Pearlite and
+Verus contracts on `step` and `inverse`; Kani on FFI seams.
+
+*Phase F. Honest surface* (one day, any time after B): regenerate the counts in
+the root `CLAUDE.md`; fix the remaining contradictions in `ROADMAP.adoc`;
+replace the banner line "All filesystem operations are reversible" with a
+statement derived from the inverse table.
+
+=== 14.4 C1 result: the journal model (Measured 2026-11-17)
+
+Four modules in `proofs/agda/`, commit `13ea833`, checked by
+`scripts/check-agda.sh` from a clean build with Agda 2.7.0.1 and agda-stdlib
+v2.2. No postulates and no escape pragmas.
+
+[cols="2,5",options="header"]
+|===
+|Module |What it proves
+
+|`JournalFraming` |A record is a fixed-width length, the payload, then a fixed-width checksum. A record cut short at any point is rejected (`step-torn`). Whatever the decoder accepts is byte for byte a run of well-formed records at the front of the input (`decode-sound`), and re-encoding it gives a clean journal for any input (`decode-normal`). None of this needs any property of the checksum
+|`JournalReplay` |Events other than a snapshot or a trim at the history cap never remove or reorder history (`run-ids`). After a rollback no operation of that transaction is live (`rollback-no-live`)
+|`JournalModel` |A file is durable bytes plus pending bytes. If a crash keeps the durable bytes and a prefix of the pending ones, loading yields the synced events followed by a prefix of the unsynced events (`crash-recovery`). One pending write is all-or-nothing (`write-atomic`). Compaction by all-or-nothing replacement does not change the recovered state (`compaction-safe`)
+|`JournalWitnesses` |One instance of every module parameter, including an event serialisation with a proved round trip, and worked cases closed by `refl`
+|===
+
+Six mutations were each rejected by the type checker: a wrong left-over tail and
+a wrong recovered state in the worked cases; no checksum test; no
+canonical-header test; rollback that marks nothing; and `step-torn` without its
+premise.
+
+Limits:
+
+* These are theorems about the model. The Rust journal does not follow it yet.
+  The proof ledger records that link as `open`; once C2 lands it can be at most
+  `tested-only`.
+* The crash model is an assumption about storage: synced bytes survive, and the
+  unsynced part survives as a prefix. Reordered or partly written blocks, and
+  stale bytes in the unsynced region, are outside it.
+* A checksum cannot rule out bytes that were never written as a record but
+  happen to match.
+
+[[c2-result]]
+*14.4a C2 result (Measured 2026-11-17, local).* The shell state now persists
+through `impl/rust-cli/src/journal.rs`: one file, `.vsh_state.journal`, of
+records framed as a 4-byte length, the payload and its SHA-256. Each mutation
+is one record, appended and synced. The crash harness finds no failing class:
+3,079 crash images on the simulated storage (the model's file: synced bytes,
+and every prefix of the unsynced ones, after every storage call) and 3,070
+crash states on real files. Four deliberate bugs (no sync, a trim left out of
+the record, a rollback written as a commit, a torn tail left in place) were
+each caught. `cargo test`: 865 passed, 0 failed. An old `.vsh_state.json` is
+converted on first start and kept under a new name. A sync costs about 0.15 ms
+here (p95 0.43 ms), under the 2 ms threshold for syncing every record; the
+stress suite takes 82 s on disk and 39 s on tmpfs, so its CI step uses tmpfs.
+
+[[c2-header-check]]
+*14.4b Review follow-up: a check on the record's length (Measured 2026-11-17,
+local).* A review of C2 found that a changed length field could pass for an
+interrupted write. The record then seems to run past the end of the file; the
+loader set it and every later record aside, and the shell started with a
+shorter history, or an empty one. Each record's header is now the 4-byte
+length followed by a 4-byte check of it (the first four bytes of SHA-256 over
+a fixed tag and the length), so a record is length, check, payload, SHA-256
+of the payload. A whole header that fails its check is damage, and the shell
+refuses to load, as it does for a failed payload checksum.
+
+The model already had the test. Its decoder accepts a header `h` only if
+`hdr (unhdr h) ≡ h`, which says nothing for a bare length and is the header
+check once `hdr` carries one. The model gained `classify` (clean, torn or
+damaged) with `classify-torn`, `decode-crash-tail` and `crash-tail`: after a
+crash that keeps a prefix of what was appended, the rejected bytes are never
+classified as damaged, so a crash cannot set off the refusal. Four more
+mutations were rejected. The crash harness still finds no failing class:
+3,139 crash images on the simulated storage and 3,130 crash states on real
+files. `cargo test`: 889 passed, 0 failed, 15 ignored.
+
+Limits:
+
+* Damage that leaves a header passing its check, and declaring more bytes than
+  the file holds, is still read as an interrupted write. For a header changed
+  at random that is about one case in 2^32.
+* A tail of zero bytes is outside the crash model. Some storage can leave one
+  after a power loss. It is reported as damage once it holds a whole header
+  (8 bytes; before the check, 36), and the shell then refuses to start until
+  the file is repaired by hand, because the recovery command (C5) is not
+  built. Whether such a tail should be read as an interrupted write is an
+  open decision (section 14.5).
+* Journals written by earlier commits of this branch have the old header and
+  are refused as damaged. The format was never merged or released, so there
+  is no converter.
+
+[[c2-open-transaction]]
+*14.4c Review follow-up: an open transaction keeps its operations (Measured
+2026-11-17, local).* The history size limit (10,000 operations unless set)
+dropped the oldest operations whatever they belonged to. A transaction longer
+than the limit therefore lost its first operations, and its rollback was
+refused: the promise of `begin` ... `rollback` failed at the point where it
+was needed, which is most likely for a script or an agent that does many
+operations in one transaction. The limit now leaves the operations of the
+open transaction alone. The history can be longer than the limit while a
+transaction is open, and the first operation after it closes brings it back
+under. Rollback still refuses if an operation of the transaction is missing,
+which this version can no longer cause itself. The trim count is part of each
+record, so a restart replays the same history. `cargo test`: 894 passed, 0
+failed, 15 ignored.
+
+Two smaller faults from the same review were fixed with it: `redo` read a
+file in a way that could change its access time, and after a restart
+single-step `undo` rescanned the run of undone operations at the end of the
+history on every step.
+
+A fourth finding followed. When a reversal was done on the disk but the saved
+state could not be written (a full disk, for one), rollback printed a warning,
+carried on, and reported success, so the saved state could fall behind the
+disk by the whole transaction. Rollback now stops at the first reversal it
+cannot save and returns an error, with the transaction left open; the next
+write that succeeds saves the whole state. The saved state is then at most
+one operation behind the disk. Every other command still only warned when its
+record could not be saved; what they should do was an open decision (section
+14.5), since ruled (OD-49) and done (14.4d). `cargo test`: 896 passed, 0 failed, 15 ignored (898 after the redo fix that followed).
+
+Not proved: the model's `rollback-no-live` speaks of the operations that are
+in the history. That an open transaction's operations all stay there is a
+rule of the writer, tested here and not stated in the model.
+
+Three behaviours changed with it, each following the model. The owner ruled on
+them the same day (OD-38 to OD-40):
+
+* A saved state that cannot be read stops the shell from starting, with the
+  file left as it is. Before, the shell started with an empty history. A
+  recovery command follows (OD-40, step C5).
+* Rollback marks the operations it reverses as undone, so `redo` can bring
+  them back one at a time (OD-38).
+* Rollback first checks that every operation can be reversed, and refuses
+  otherwise with nothing changed. If a reversal then fails on the disk, the
+  transaction stays open, to be rolled back again or committed (OD-39).
+  Before, it was closed with the operation still in place.
+
+Still open in Phase C, and now after Phase B (OD-41): the journal lives in the
+session root (C3), deleted file contents are still inside the history records
+(C4), and there is no recovery command (C5).
+
+One more for C4, from review: the journal is read whole into memory when the
+shell starts, before any limit is checked, so a very large journal in a
+directory someone else prepared can exhaust memory. No useful limit can be set
+while the journal holds the contents of deleted files, since the shell's own
+journal can then be gigabytes, and reading it in pieces would not lower the
+memory needed, because replay keeps every record. Once C4 has moved the
+contents out, the journal is small and a limit can be enforced. The review
+thread is left open for the owner.
+
+Design choices the model fixes for C2:
+
+* The history is append-only. Undo and rollback mark entries; redo records a new
+  operation.
+* Everything that must survive a restart, the open transaction included, is a
+  record in the one file.
+* The loader reports the bytes it did not accept. The writer truncates the file
+  to the accepted part before appending again, and keeps the rejected bytes
+  aside so that nothing is destroyed silently.
+* A record that does not parse is an error, never a skipped line.
+* A record and the history trim it causes at the size cap are one event, so a
+  crash cannot keep one without the other.
+
+*14.4d A record that cannot be saved is an error (OD-49; Measured 2026-11-18,
+local).* The shell does an operation and then writes its record. When the
+write failed, every command except rollback printed a warning and reported
+success. The functions that write a record (`record_operation`,
+`record_redo_operation`, `mark_undone`, and the opening and closing of a
+transaction) now return an error, `NotRecorded`, and the commands pass it on:
+the file commands, `undo`, `redo`, `begin`, `commit`, `obliterate` and a
+redirection. The message says that the change was made and that its record
+could not be saved. The record is in the session's history all the same, and
+the next record that can be written saves the whole history again, so nothing
+is lost unless the shell stops before then.
+
+Two things stay a warning, because they change no file and a shell on a root
+it cannot write to must still work: assigning a variable, and the directory
+that `cd -` returns to. The saved state can still be one operation behind the
+disk after a crash between a change and its record; the write-ahead record of
+Phase E closes that. `cargo test`: 902 passed, 0 failed, 16 ignored, with
+`OLDPWD` and `PWD` set and unset. Five single changes, each making one of the
+five functions swallow the failure again, each fail a test.
+
+=== 14.5 Decisions still open
+
+Ratings are E (elegance and correctness) / D (dependability and security) out of
+10. They are judgements, not measurements.
+
+*Containment mechanism (decided by experiment B1).*
+
+[cols="5,1,4",options="header"]
+|===
+|Option |E / D |Notes
+
+|Capability handles: all filesystem access goes through a root directory handle (`cap-std`), and ambient `std::fs` calls outside one module are banned by a lint |9 / 8 |Makes a path outside the root unrepresentable instead of checked. New dependency
+|A hand-written `openat2` / `O_NOFOLLOW` walk, as E1b describes |6 / 7 |No new dependency; more code to get wrong
+|More lexical path checks |3 / 3 |This is what fails today
+|===
+
+Hard links (hole n) need a link-count check under any option.
+
+*The secret-scanner review thread on #229* (a history pass that skips `.adoc`
+files): fix it in the `standards` reusable workflow (9 / 8, at source), or set
+`cancel-in-progress: false` in this one caller (6 / 8). Owner's call; the
+recommendation is the first.
+
+*Deed migration:* nine owner inputs are listed in
+`archive/a2ml-v1/MIGRATION-LEDGER.adoc` on #229.
+
+*A journal that ends in zero bytes* (raised by the header check, section
+14.4b). The crash model says a crash keeps a prefix of what was appended. Some
+storage can instead leave zero bytes at the end of the file after a power
+loss. Today that is damage, and the shell refuses to start (OD-40).
+
+[cols="5,1,4",options="header"]
+|===
+|Option |E / D |Notes
+
+|Take the zero bytes off the end of the rejected bytes, then classify what is left: empty or a record cut short is an interrupted write. Widen the model's crash to "a prefix, then any number of zero bytes" and prove `crash-tail` for it |8 / 8 |Covers a record cut short and then padded with zeros, which a rule for an all-zero tail alone would report as damage (found in review). The zeros hold no record, so setting them aside loses nothing, and they run to the end of the file, so they cannot hide a good record. Two costs: a record overwritten with zeros is no longer reported as damage, and a damaged last record whose bytes end in a zero byte is read as cut short. The model needs one more assumption, that no record starts with a zero header. The etcd log reader works in a similar way: a zero length ends the log, and a record that fails its check and has a zeroed sector counts as a torn write (https://github.com/etcd-io/etcd/blob/main/server/storage/wal/decoder.go[`decoder.go`], read 2026-11-17)
+|Keep it as damage, and build the recovery command (C5) before the first engine release |7 / 9 |Nothing is ever guessed. Until C5 exists, a user must repair the file by hand
+|Treat every unreadable tail as the end of the journal |4 / 5 |Always starts. Gives up the difference between a crash and damage, which OD-40 ruled against. SQLite's log is read this way: a frame is valid only if its running checksum matches, so the first bad frame ends the log (https://www.sqlite.org/fileformat2.html#walformat[file format], section 4.1, read 2026-11-17)
+|===
+
+The recommendation was the first, with C5 still built. *Ruled 2026-11-17
+(OD-48): the second.* The zero bytes stay damage, and C5 handles them.
+
+*A record that cannot be saved* (raised by review of the rollback, section
+14.4c). The shell does an operation and then writes its record. If the write
+fails, the operation has happened and the saved state does not know. Today
+every command except rollback prints a warning and reports success.
+
+[cols="5,1,4",options="header"]
+|===
+|Option |E / D |Notes
+
+|Write the intent first: a record of what is about to be done, then the operation, then a record that it was done. If the first record cannot be written, the operation is not done. After a crash, an intent without its completion is settled by looking at the files |9 / 9 |The saved state is never behind the disk. It is the write-ahead rule of databases, and it needs each operation to say what the files look like before and after, which is what the change-set engine (Phase E) is to provide. Two records per operation
+|Do the operation, and if its record cannot be saved, return an error that says so. A script or an agent then sees a failure and can stop |7 / 8 |Small. The saved state can still be one operation behind after a crash between the operation and its record
+|Keep the warning |3 / 3 |A script does not see it. This is today's behaviour
+|===
+
+The recommendation was the second now, as part of the first engine release,
+and the first with the change-set engine. *Ruled 2026-11-17 (OD-49): as
+recommended.*
+
+=== 14.6 Stop rules added
+
+The stop rules of section 9 stand. Added:
+
+* Nothing merges into `main` unless its Rust workflows have run on the head
+  commit. A local run is not a substitute.
+* No persistence change lands unless the crash-point harness passes with an
+  empty `KNOWN_OPEN`.
+* An on-disk format change must still load old files; otherwise stop and ask.
+* A review round is fixed as one batch and one push, after a local adversarial
+  check.
+
+=== 14.7 Recurring problems and the more final answer
+
+[cols="3,3,4",options="header"]
+|===
+|Problem seen |Fix used so far |More final answer
+
+|Crash-consistency findings on the journal |Point patches |Checksummed framing, the Agda recovery theorem and the crash-point harness (C1, C2, A3)
+|Sandbox escapes through `cd`, symlinks and hard links |Lexical path checks |Capability handles: no ambient paths, enforced by a lint
+|Redo loses undo data; rollback leaves operations live |Per-command undo capture |One inverse table shared by undo, redo and rollback (OD-25), following `JournalReplay`
+|Obliterate inside a transaction |Report partial failure |Refuse now (OD-3a); later a typed "irrevocable" protocol state (OD-3b)
+|Shell and proofs drift apart |Hand-written correspondence tests |A state-machine property test driving the shell against the oracle (Phase D)
+|===
+
+=== 14.8 Beyond this repo (additions to section 11)
+
+* *Estate Actions policy:* any repository that calls the
+  `metadatastician/standards` reusable workflows or the Rust setup actions will
+  fail to start under the same allowed-actions list (Inferred).
+* *standards, secret-scanner reusable:* the history pass skips `.adoc`.
+* *standards / rsr-template-repo:* the workflow linter's "SPDX on line 1" rule
+  disagreed with the governance check's "leading comment block" rule. Fixed in
+  valence-shell on #229; the template should carry the same fix.
+* *Hypatia:* rule CSA001 re-reports code-scanning alerts that the PR head
+  already fixes.
+* *Deed tooling:* the converter the canon names (kyX) was not available; the
+  migration on #229 was done by hand from the mapping specifications.
+* *januskey:* the blob store in C4 overlaps `reversible-core` (OD-6). No
+  dependency is added; the API frictions are to be recorded.
+* *Review bots:* Codex has no credits for security review, and CodeRabbit's free
+  tier allows about one review an hour.
+* *Journal model reuse:* `JournalFraming` is independent of this shell. Any
+  estate project with an append-only log could reuse it; echo-types or a shared
+  library would be the place if a second user appears.
+* *atoma:* the owner's note of 2026-11-17 (OD-50): the Zig work is in
+  development in the `atoma` repository. This shell's own Zig FFI layer
+  (`impl/zig/`) builds and is not connected to the shell, and the `proofs`
+  command now says so. How the two relate has not been read from `atoma`; it is
+  to be checked there before anything here is changed or claimed.
+* *Obliterate and file identity:* hole p (OD-46) is a case of a general
+  question, how a saved record identifies its file across renames and links.
+  januskey's `reversible-core` has the same question for its own store.
+
+=== 14.9 What was not verified
+
+* Why the workflows fail to start, and what blocks auto-merge on #229: the
+  repository settings are not readable from the working session.
+* Holes a, b, d, e, i, l and n on the 2026-11-17 build.
+* That a state file written before the journal work loads under the journal
+  branch's code (no fixture test yet; it is part of C2).
+* The stress suite on CI, on macOS, or under a release build.
+* Anything about the Rust code following the journal model.
+* The E / D ratings.
+
+=== 14.10 Product review (2026-11-17)
+
+The owner asked for a review of the whole plan as a product before ruling on
+hole (b). It is in `VSH-PRODUCT-REVIEW-2026-11-17.adoc`.
+
+* It measures the shell against bash on everyday use, compares it with other
+  shells and with existing tools for undo, containment, audit and deletion,
+  rates each aspect, and sets out routes with their costs.
+* Its main finding for this plan: gates G1 to G11 say nothing about use as a
+  shell. It proposes a gate G0 (what is claimed equals what a battery shows)
+  and a staged model in which each step is a product.
+* The owner ruled on its section 10 the same day: OD-42 to OD-45, in "Owner
+  rulings (2026-11-17)" above. Hole (b) stays open until the change-set engine
+  (OD-45).

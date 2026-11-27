@@ -401,14 +401,16 @@ impl ExecutableCommand for Command {
                     anyhow::bail!("cd: {}: Not a directory", target.display());
                 }
 
-                // Store current directory as previous before changing
-                state.previous_dir = Some(state.root.clone());
-
-                // Change the shell's working directory
-                std::env::set_current_dir(&target)?;
+                // Change first. The directory that was left is recorded only
+                // once the change has succeeded: a `cd` that fails must not
+                // alter what `cd -` returns to, now or after a restart.
+                let previous = state.root.clone();
+                let canonical = std::fs::canonicalize(&target)?;
+                std::env::set_current_dir(&canonical)?;
 
                 // Update state root to track current directory
-                state.root = std::fs::canonicalize(target)?;
+                state.root = canonical;
+                state.set_previous_dir(previous);
 
                 Ok(ExecutionResult::Success)
             }
