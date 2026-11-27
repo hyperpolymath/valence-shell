@@ -183,3 +183,36 @@ fn function_body_with_brace_in_quoted_string_parses() -> Result<()> {
     assert!(state.resolve_path("ran").exists());
     Ok(())
 }
+
+// -------------------------------------------------------------------------
+// A body line that cannot be read
+// -------------------------------------------------------------------------
+
+/// A function whose last body line cannot be read fails. The call used to
+/// return the result of the line before it, so it counted as a success.
+#[test]
+fn a_body_line_that_cannot_be_read_fails_the_function() -> Result<()> {
+    use vsh::executable::ExecutionResult;
+    use vsh::functions::{FunctionDef, SourceLocation};
+
+    let temp = tempdir()?;
+    let mut state = ShellState::new(temp.path().to_str().unwrap())?;
+    let raw_body = "true\necho \"unclosed".to_string();
+    state.functions.define(FunctionDef {
+        name: "broken".to_string(),
+        body: vec![raw_body.clone()],
+        raw_body,
+        source_location: SourceLocation {
+            source: "test".to_string(),
+            line: 1,
+        },
+    });
+
+    let result = parse_command("broken")?.execute(&mut state)?;
+
+    assert!(
+        matches!(result, ExecutionResult::ExternalCommand { exit_code: 1 }),
+        "the call returned {result:?}"
+    );
+    Ok(())
+}

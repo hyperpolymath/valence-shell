@@ -14,7 +14,7 @@ mod e2e_script_execution {
     use std::fs;
     use tempfile::TempDir;
     use vsh::commands::mkdir;
-    use vsh::parser::parse_command;
+    use vsh::parser::{parse_command, Command};
     use vsh::state::ShellState;
 
     // ================================================================
@@ -143,7 +143,9 @@ mkdir test_dir
         let temp = TempDir::new().unwrap();
         let script_path = temp.path().join("build.sh");
 
-        let script = "mkdir -p src/main\ntouch src/main/lib.rs\n";
+        // The built-in mkdir has no `-p` (it is refused, not taken for a name),
+        // so the script makes each directory in turn.
+        let script = "mkdir src\nmkdir src/main\ntouch src/main/lib.rs\n";
         fs::write(&script_path, script).unwrap();
 
         let content = fs::read_to_string(&script_path).unwrap();
@@ -297,16 +299,22 @@ mkdir test_dir
         let root = temp.path().to_str().unwrap();
         let mut state = ShellState::new(root).unwrap();
 
-        // Parse: mkdir -p build (conditional create)
+        // The built-in mkdir has no `-p`. It used to take `-p` for the name of
+        // the directory; it now refuses the option (see
+        // `builtin_strictness_tests.rs`).
+        // The refusal is a command that fails when it is run, so that
+        // `mkdir -p build || ...` can go on to its second command.
         let result = parse_command("mkdir -p build");
-        assert!(result.is_ok());
+        assert!(matches!(result, Ok(Command::Refused { .. })), "{result:?}");
 
-        // Execute
+        // Without the option it parses and runs.
+        assert!(parse_command("mkdir build").is_ok());
         let exec_result = mkdir(&mut state, "build", false);
         assert!(exec_result.is_ok());
 
-        // Try again (should still work due to -p flag semantics)
-        let _exec_result2 = mkdir(&mut state, "build", false);
+        // A second attempt fails, because the directory is there.
+        let exec_result2 = mkdir(&mut state, "build", false);
+        assert!(exec_result2.is_err());
     }
 
     #[test]

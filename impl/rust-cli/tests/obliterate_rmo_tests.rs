@@ -47,11 +47,17 @@ fn obliterate_is_wired_into_dispatch() {
     }
 }
 
-/// obliterate with no operand is a clean error, not a panic.
+/// obliterate with no operand is a clean refusal, not a panic. It is read
+/// as a command that fails when it is run, and it obliterates nothing.
 #[test]
 fn obliterate_requires_operand() {
-    assert!(parse_command("obliterate").is_err());
-    assert!(parse_command("obliterate --force").is_err());
+    for line in ["obliterate", "obliterate --force"] {
+        let parsed = parse_command(line);
+        assert!(
+            matches!(parsed, Ok(vsh::parser::Command::Refused { .. })),
+            "{line}: {parsed:?}"
+        );
+    }
 }
 
 /// End-to-end: parse + execute actually destroys the file.

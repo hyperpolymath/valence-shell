@@ -58,6 +58,15 @@ where
     // Setup redirections (validates, opens files, records original state)
     let redirect_setup = RedirectSetup::setup(redirects, state)?;
 
+    // Only a redirection of standard output needs the output captured.
+    // With `2> file` or `< file` alone, capturing it threw it away:
+    // `echo hi 2>err` printed nothing.
+    if resolved_redirects.is_empty() {
+        f(state)?;
+        redirect_setup.record_for_undo(state)?;
+        return Ok(());
+    }
+
     // Capture stdout
     let mut buffer = gag::BufferRedirect::stdout()?;
 

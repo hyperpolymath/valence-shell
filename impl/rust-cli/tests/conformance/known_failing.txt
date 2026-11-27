@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+#
+# Cases of battery.jsonl that do not match the reference today.
+# This list is a ratchet: it may only shrink. A case that starts to pass
+# must be removed here, and the test fails until it is. Never add a case to
+# make a failing build pass; fix the shell or, if the reference expectation
+# is wrong, correct the case and say why in the commit.
+#
+# Format: one case id per line; text after `#` is a note (here, the command).
+
+vars-05  # x=abcdef; echo ${x#abc} ${x%def} ${#x}
+vars-06  # x=hello; echo ${x^^} ${x:1:3}
+vars-07  # export FOO=bar; sh -c 'echo $FOO'
+vars-08  # FOO=tmp sh -c 'echo $FOO'
+vars-11  # echo "$$" | grep -c '[0-9]'
+arith-01  # echo $((1+2*3))
+arith-02  # x=7; echo $((x % 4)) $((x ** 2))
+arith-04  # ((x=3+4)); echo $x
+arith-05  # let y=2*5; echo $y
+subst-01  # echo $(echo nested)
+subst-02  # echo "today: $(date +%Y | cut -c1-2)"
+subst-03  # x=`echo back`; echo $x
+subst-04  # echo $(echo $(echo deep))
+pipe-05  # seq 1 5 | awk '{s+=$1} END{print s}'
+redir-03  # ls /nonexistent 2>/dev/null; echo rc=$?
+redir-04  # ls /nonexistent > out 2>&1; grep -c . out
+logic-05  # [[ abc == a* ]] && echo match
+logic-07  # ! false && echo negated
+if-03  # x=3; if (( x > 2 )); then echo big; fi
+loop-02  # for i in $(seq 3); do echo n$i; done
+loop-03  # mkdir zzdir; touch zzdir/p1 zzdir/p2; for f in zzdir/p*; do echo ${f##*/}; done
+loop-05  # for ((i=0;i<3;i++)); do echo $i; done
+loop-06  # for i in 1 2 3; do [ $i = 2 ] && continue; echo $i; done
+loop-07  # for i in 1 2 3; do [ $i = 2 ] && break; echo $i; done
+loop-08  # until false; do echo once; break; done
+loop-09  # while read l; do echo "got $l"; done <<< "line"
+func-06  # fact() { [ $1 -le 1 ] && echo 1 || echo $(( $1 * $(fact $(($1-1))) )); }; fact 5
+glob-01  # touch a.txt b.txt c.md; echo *.txt
+glob-02  # touch a1 a2 b1; echo a?
+glob-04  # mkdir -p d/e; touch d/e/f; echo d/*/f
+glob-05  # echo {a,b}{1,2}
+glob-06  # echo {1..5}
+quote-03  # x='*'; echo "$x"
+quote-04  # echo $'tab\there'
+array-01  # a=(x y z); echo ${a[1]} ${#a[@]}
+array-02  # a=(1 2 3); for v in "${a[@]}"; do echo $v; done
+array-03  # declare -A m; m[k]=v; echo ${m[k]}
+sub-01  # mkdir zzdir; (cd zzdir; pwd | grep -c zzdir); pwd | grep -c zzdir
+sub-03  # { echo a; echo b; } | wc -l
+sub-04  # echo a & wait; echo done
+builtin-03  # read a b <<< "one two"; echo $b
+builtin-06  # x=1; unset x; echo "[${x}]"
+builtin-07  # type echo | head -1 | grep -c echo
+builtin-12  # mkdir zzdir; pushd zzdir >/dev/null; pwd | grep -c zzdir; popd >/dev/null
+builtin-16  # command -v ls | grep -c ls
+builtin-17  # true; echo ${PIPESTATUS[0]}
+fs-01  # mkdir -p a/b/c && ls a/b
+ext-08  # X=1 Y=2 env | grep -c '^[XY]='
+redir-07  # cat <<EOF2\nheredoc $((1+1))\nEOF2
+quote-05  # echo "a[b]c" '*' "?"
+ext-09  # sh -c 'echo "$1"' _ '{p}'
+ext-10  # echo one > a.txt; echo two > b.txt; cat *.txt
+loop-10  # for i in a b; do for j in 1 2; do echo $i$j; done; done
+subst-05  # x=$(echo hi); echo $x
+fs-09  # touch a b c; ls | wc -l
+fs-10  # mkdir x y; ls | wc -l
+rm-03  # rm -f nosuch; echo rc=$?
+rm-04  # mkdir d; touch d/x; rm -r d; ls | wc -l
+rm-05  # touch a; touch b; rm a b; ls | wc -l

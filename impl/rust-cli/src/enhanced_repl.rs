@@ -241,6 +241,8 @@ impl Prompt for VshPrompt {
 
 /// Run enhanced REPL
 pub fn run(state: &mut ShellState) -> Result<()> {
+    state.interactive = true;
+
     // Set up history file
     let history_file = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
@@ -406,6 +408,7 @@ fn execute_segments(state: &mut ShellState, input: &str) -> Result<bool> {
             Ok(false) => {}
             Err(e) => {
                 eprintln!("{} {}", Color::Red.paint("Error:"), e);
+                state.last_exit_code = 1;
                 // POSIX: continue executing remaining commands after error
             }
         }
@@ -437,6 +440,50 @@ fn execute_line(state: &mut ShellState, input: &str) -> Result<bool> {
             state.last_exit_code = exit_code;
             Ok(false)
         }
-        ExecutionResult::Success => Ok(false),
+        ExecutionResult::Success => {
+            // A command that succeeded leaves status 0, as it does in a
+            // script. Without this `$?`, and the status `exit` hands on,
+            // stayed at whatever the last failing command left.
+            state.last_exit_code = 0;
+            Ok(false)
+        }
+    }
+}
+
+#[cfg(test)]
+mod status_tests {
+    use super::*;
+
+    fn state() -> (tempfile::TempDir, ShellState) {
+        let root = tempfile::tempdir().expect("temporary directory");
+        let state = ShellState::new(root.path().to_str().expect("a UTF-8 path"))
+            .expect("open the shell state");
+        (root, state)
+    }
+
+    /// A command that succeeds leaves status 0. It used to leave whatever
+    /// the last failing command had set, which `$?` and `exit` then showed.
+    #[test]
+    fn a_command_that_succeeds_resets_the_status() {
+        let (_root, mut state) = state();
+        state.last_exit_code = 7;
+
+        let leave = execute_line(&mut state, "mkdir made").expect("mkdir runs");
+
+        assert!(!leave);
+        assert_eq!(state.last_exit_code, 0);
+    }
+
+    /// Typed at a prompt, `exit` with too many operands is reported and the
+    /// shell stays open, as in bash.
+    #[test]
+    fn exit_with_too_many_operands_keeps_an_interactive_shell_open() {
+        let (_root, mut state) = state();
+        state.interactive = true;
+
+        let leave = execute_line(&mut state, "exit 1 2").expect("exit is handled");
+
+        assert!(!leave);
+        assert_eq!(state.last_exit_code, 1);
     }
 }
