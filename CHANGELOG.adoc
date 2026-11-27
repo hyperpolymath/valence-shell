@@ -47,6 +47,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   row can be `proven`; the Mizar target swallows failure (`|| echo`). Both are
   logged as AP-6, AP-7 and AP-8 in the audit.
 
+=== Fixed — 2026-11-17 (redo keeps undo data; undo of redirections)
+
+- `redo` recorded the re-applied operation with no undo data, so
+  `rm f; undo; redo; undo` restored `f` empty, a redone `chmod`/`chown` changed
+  nothing and could not be undone, and a second redo of `cp`/`ln -s` failed.
+  Each operation now has one function that checks its preconditions, captures
+  its undo data and applies it; the command and `redo` both call it.
+- `redo` now restores what an operation produced (the mode of a `chmod`, the
+  owner of a `chown`, the bytes a `>`/`>>` redirection wrote, a variable's
+  value). `undo` reads that state just before reversing it and keeps it in
+  memory with the redo entry. File content over `VSH_REDO_CAPTURE_LIMIT` bytes
+  (shell or environment variable; default 10 MiB; `0` = no limit) is not kept,
+  and redo of that entry says so. The limit is enforced while reading, so a
+  file that grows during the undo cannot take more memory than the limit.
+- A `redo` that fails records nothing and stays on the redo stack. It also
+  leaves the filesystem as it found it, including when a file write fails
+  part-way: the partial file is removed, the overwritten bytes are put back,
+  or the partial append is cut off. The one exception is when that clean-up
+  fails too (an I/O error, or no space on a copy-on-write filesystem): the
+  file is then left changed, the error says so, and a retry would record the
+  damaged content as undo data. `redo` of
+  `cp`, `mv` and `touch` no longer overwrites a path that reappeared after the
+  undo.
+- `rm` (and redo of `rm`) no longer deletes a file whose content it cannot
+  read. It used to delete it and record empty undo data, so undo brought the
+  file back empty. It now fails, leaves the file in place and points to
+  `obliterate` for irreversible deletion.
+- `redo` refuses to recreate a file whose content undo could not read
+  (recorded as not captured, with the reason), where it used to recreate it
+  empty. A `cp` whose copy fails part-way removes the partial destination, for
+  the command and for its redo. Redo of an assignment restores the exported
+  flag as well as the value.
+- Undo of a `>`/`>>` redirection failed whenever the sandbox root was not `/`
+  (the default root is the current directory): the history held an absolute
+  path that undo resolved under the root a second time. History paths for
+  redirections are now relative to the root.
+- `touch` creates its file with `create_new`, so it no longer writes through a
+  dangling symbolic link.
+- `chmod` and `chown` on a symbolic link recorded the link's own mode and
+  owner while changing the file it points to. Undo of that `chmod` set the
+  file to mode 0777, and redo of either restored the wrong value. Both now
+  record the mode and owner of the file they change.
+- Redo of `touch`, or of a `>` redirection that created a file, brings the
+  file back with the mode it had when it was undone. It used to come back
+  with the default mode, so a file made private in between returned readable
+  by others. The owner is not restored.
+- Redo of a redirection that replaced or appended to a file now reads,
+  measures and writes through one open file. Before, a file renamed over the
+  path between the read and the write was overwritten, and the undo data
+  recorded was the other file's.
+- Redo of an assignment whose variable was no longer set when it was undone
+  (a function's local, removed when the function returned) failed with "not
+  captured". It now restores the variable as not set.
+- Undo of a `>>` redirection no longer grows a file that was cut shorter
+  outside the history in the meantime. It used to extend the file to its
+  earlier size with zero bytes.
+- Redo of `unset` succeeds when the variable is already not set, where it
+  failed and stayed on the redo stack.
+- Idris2 model: `redoUndoIdentity`, `undoRedoUndoIdentity`,
+  `redoUndoComposition` added to `Filesystem.Composition`. Their status is
+  the proof ledger's row for the undo/redo stack laws
+  (`proven-with-postulates`); the Rust link stays `tested-only`.
+- Known and *not* fixed here (tests exclude them, see
+  `impl/rust-cli/tests/redo_roundtrip_tests.rs`): undo of `rm`/`rmdir` does
+  not restore the mode; undo of `unset` does not restore the exported flag;
+  `rm` and redirections follow symbolic links and their undo does not account
+  for it. Undo and redo identify a file by its path only: a file replaced
+  outside the history between an operation and its undo is overwritten or cut
+  by that undo.
+
 === Planned
 - Glob expansion (*.txt, ?.rs, [a-z]*)
 - Quote processing (proper escaping, single/double quotes)

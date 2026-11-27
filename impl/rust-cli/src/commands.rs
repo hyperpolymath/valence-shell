@@ -8,10 +8,11 @@
 use anyhow::{Context, Result};
 use colored::Colorize;
 use std::fs;
+use std::io::Write;
 use thiserror::Error;
 
 use crate::proof_refs;
-use crate::state::{Operation, OperationType, ShellState};
+use crate::state::{Operation, OperationType, RedoData, ShellState};
 use crate::verification;
 
 // Secure deletion (RMO - Remove-Match-Obliterate)
@@ -76,26 +77,7 @@ pub enum CommandError {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
-    let full_path = state.resolve_path(path);
-
-    // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_mkdir(state.root(), path)?;
-
-    // Check preconditions (matching Coq)
-    if full_path.exists() {
-        anyhow::bail!("Path already exists (EEXIST)");
-    }
-
-    let parent = full_path.parent().context("Invalid path")?;
-    if !parent.exists() {
-        anyhow::bail!("Parent directory does not exist (ENOENT)");
-    }
-
-    // Execute operation
-    fs::create_dir(&full_path).context("mkdir failed")?;
-
-    // Record in history
-    let op = Operation::new(OperationType::Mkdir, path.to_string(), None);
+    let op = apply_mkdir(state, path)?;
     let op_id = op.id;
     state.record_operation(op);
 
@@ -114,6 +96,34 @@ pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Check, execute and describe a `mkdir`, without recording it.
+///
+/// The `apply_*` functions are the single place each operation checks its
+/// preconditions, captures its undo data and touches the filesystem. The
+/// command and [`redo`] both go through them, so a redone operation is checked
+/// and recorded exactly like the original.
+fn apply_mkdir(state: &ShellState, path: &str) -> Result<Operation> {
+    let full_path = state.resolve_path(path);
+
+    // Runtime check of the Lean 4 precondition (see verification.rs)
+    verification::verify_mkdir(state.root(), path)?;
+
+    // Check preconditions (matching Coq)
+    if full_path.exists() {
+        anyhow::bail!("Path already exists (EEXIST)");
+    }
+
+    let parent = full_path.parent().context("Invalid path")?;
+    if !parent.exists() {
+        anyhow::bail!("Parent directory does not exist (ENOENT)");
+    }
+
+    // Execute operation
+    fs::create_dir(&full_path).context("mkdir failed")?;
+
+    Ok(Operation::new(OperationType::Mkdir, path.to_string(), None))
 }
 
 /// Remove an empty directory at the specified path.
@@ -143,6 +153,27 @@ pub fn mkdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn rmdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
+    let op = apply_rmdir(state, path)?;
+    let op_id = op.id;
+    state.record_operation(op);
+
+    println!(
+        "{} {} {}",
+        format!("[op:{}]", &op_id.to_string()[..8]).bright_black(),
+        "rmdir".bright_yellow(),
+        path
+    );
+
+    if verbose {
+        let proof = OperationType::Rmdir.proof_reference();
+        println!("    {} {}", "Proof:".bright_black(), proof.format_short());
+    }
+
+    Ok(())
+}
+
+/// Check, execute and describe an `rmdir`, without recording it.
+fn apply_rmdir(state: &ShellState, path: &str) -> Result<Operation> {
     let full_path = state.resolve_path(path);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
@@ -162,24 +193,7 @@ pub fn rmdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     // Execute
     fs::remove_dir(&full_path).context("rmdir failed")?;
 
-    // Record
-    let op = Operation::new(OperationType::Rmdir, path.to_string(), None);
-    let op_id = op.id;
-    state.record_operation(op);
-
-    println!(
-        "{} {} {}",
-        format!("[op:{}]", &op_id.to_string()[..8]).bright_black(),
-        "rmdir".bright_yellow(),
-        path
-    );
-
-    if verbose {
-        let proof = OperationType::Rmdir.proof_reference();
-        println!("    {} {}", "Proof:".bright_black(), proof.format_short());
-    }
-
-    Ok(())
+    Ok(Operation::new(OperationType::Rmdir, path.to_string(), None))
 }
 
 /// Create an empty file at the specified path.
@@ -207,23 +221,7 @@ pub fn rmdir(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
-    let full_path = state.resolve_path(path);
-
-    // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_create_file(state.root(), path)?;
-
-    if full_path.exists() {
-        anyhow::bail!("Path already exists (EEXIST)");
-    }
-
-    let parent = full_path.parent().context("Invalid path")?;
-    if !parent.exists() {
-        anyhow::bail!("Parent directory does not exist (ENOENT)");
-    }
-
-    fs::write(&full_path, "").context("touch failed")?;
-
-    let op = Operation::new(OperationType::CreateFile, path.to_string(), None);
+    let op = apply_create_file(state, path, &[], None)?;
     let op_id = op.id;
     state.record_operation(op);
 
@@ -241,6 +239,71 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Check, execute and describe the creation of a new file holding `content`,
+/// without recording it. `touch` creates it empty; redo of a file that a `>`
+/// redirection created puts back the bytes undo removed.
+fn apply_create_file(
+    state: &ShellState,
+    path: &str,
+    content: &[u8],
+    mode: Option<u32>,
+) -> Result<Operation> {
+    let full_path = state.resolve_path(path);
+
+    // Runtime check of the Lean 4 precondition (see verification.rs)
+    verification::verify_create_file(state.root(), path)?;
+
+    if full_path.exists() {
+        anyhow::bail!("Path already exists (EEXIST)");
+    }
+
+    let parent = full_path.parent().context("Invalid path")?;
+    if !parent.exists() {
+        anyhow::bail!("Parent directory does not exist (ENOENT)");
+    }
+
+    // `create_new` so a file that appeared since the check is never truncated.
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    // A mode to restore is also the creation mode, so the file is never
+    // wider than it, even before the exact mode is set below.
+    #[cfg(unix)]
+    if let Some(mode) = mode {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(mode & 0o777);
+    }
+    let mut file = options.open(&full_path).context("touch failed")?;
+    let written = file.write_all(content).and_then(|()| {
+        // After the write: the creation mode is cut down by the umask, and
+        // writing can clear the set-user-ID and set-group-ID bits.
+        #[cfg(unix)]
+        if let Some(mode) = mode {
+            use std::os::unix::fs::PermissionsExt;
+            file.set_permissions(fs::Permissions::from_mode(mode & 0o7777))?;
+        }
+        Ok(())
+    });
+    if let Err(e) = written {
+        // A partial file must not outlive the failure: it was not there
+        // before, and it would block a retry.
+        drop(file);
+        let error = anyhow::Error::new(e).context("touch failed");
+        return Err(match fs::remove_file(&full_path) {
+            Ok(()) => error,
+            Err(cleanup_error) => error.context(format!(
+                "the partial file {} could not be removed: {}",
+                path, cleanup_error
+            )),
+        });
+    }
+
+    Ok(Operation::new(
+        OperationType::CreateFile,
+        path.to_string(),
+        None,
+    ))
 }
 
 /// Remove a file at the specified path.
@@ -270,26 +333,7 @@ pub fn touch(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
-    let full_path = state.resolve_path(path);
-
-    // Runtime check of the Lean 4 precondition (see verification.rs)
-    verification::verify_delete_file(state.root(), path)?;
-
-    if !full_path.exists() {
-        anyhow::bail!("Path does not exist (ENOENT)");
-    }
-    if full_path.is_dir() {
-        anyhow::bail!("Path is a directory - use rmdir (EISDIR)");
-    }
-
-    // Store content for undo (pure read of the soon-to-be-deleted file;
-    // routed through fs_pure to honour the noatime discipline).
-    let content = crate::fs_pure::read_to_end(&full_path).unwrap_or_default();
-
-    fs::remove_file(&full_path).context("rm failed")?;
-
-    let op =
-        Operation::new(OperationType::DeleteFile, path.to_string(), None).with_undo_data(content);
+    let op = apply_rm(state, path)?;
     let op_id = op.id;
     state.record_operation(op);
 
@@ -306,6 +350,38 @@ pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Check, execute and describe an `rm`, without recording it. The returned
+/// operation carries the deleted file's content as its undo data.
+fn apply_rm(state: &ShellState, path: &str) -> Result<Operation> {
+    let full_path = state.resolve_path(path);
+
+    // Runtime check of the Lean 4 precondition (see verification.rs)
+    verification::verify_delete_file(state.root(), path)?;
+
+    if !full_path.exists() {
+        anyhow::bail!("Path does not exist (ENOENT)");
+    }
+    if full_path.is_dir() {
+        anyhow::bail!("Path is a directory - use rmdir (EISDIR)");
+    }
+
+    // Store content for undo (pure read of the soon-to-be-deleted file;
+    // routed through fs_pure to honour the noatime discipline). If it cannot
+    // be read it cannot be restored, so nothing is deleted: recording empty
+    // undo data would make a later undo bring the file back empty.
+    let content = crate::fs_pure::read_to_end(&full_path).with_context(|| {
+        format!(
+            "rm: cannot read '{}' to keep it for undo, so it was not deleted \
+             (use obliterate to delete it irreversibly)",
+            path
+        )
+    })?;
+
+    fs::remove_file(&full_path).context("rm failed")?;
+
+    Ok(Operation::new(OperationType::DeleteFile, path.to_string(), None).with_undo_data(content))
 }
 
 /// Copy a file from source to destination.
@@ -337,6 +413,30 @@ pub fn rm(state: &mut ShellState, path: &str, verbose: bool) -> Result<()> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn cp(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result<()> {
+    let op = apply_cp(state, src, dst)?;
+    let op_id = op.id;
+    state.record_operation(op);
+
+    println!(
+        "{} {} {} → {}",
+        format!("[op:{}]", &op_id.to_string()[..8]).bright_black(),
+        "cp".bright_green(),
+        src,
+        dst
+    );
+
+    if verbose {
+        let proof = OperationType::CopyFile.proof_reference();
+        println!("    {} {}", "Proof:".bright_black(), proof.format_short());
+        println!("    {} rm {}", "Undo:".bright_black(), dst);
+    }
+
+    Ok(())
+}
+
+/// Check, execute and describe a `cp`, without recording it. The returned
+/// operation carries the source path, which is what a redo copies from.
+fn apply_cp(state: &ShellState, src: &str, dst: &str) -> Result<Operation> {
     let src_path = state.resolve_path(src);
     let dst_path = state.resolve_path(dst);
 
@@ -358,31 +458,41 @@ pub fn cp(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
         anyhow::bail!("Parent of destination does not exist (ENOENT)");
     }
 
-    // Execute operation
-    fs::copy(&src_path, &dst_path).context("cp failed")?;
-
-    // Record in history: path = dst, undo_data = src path for reference
-    // Undo = delete the destination file
-    let op = Operation::new(OperationType::CopyFile, dst.to_string(), None)
-        .with_undo_data(src.as_bytes().to_vec());
-    let op_id = op.id;
-    state.record_operation(op);
-
-    println!(
-        "{} {} {} → {}",
-        format!("[op:{}]", &op_id.to_string()[..8]).bright_black(),
-        "cp".bright_green(),
-        src,
-        dst
-    );
-
-    if verbose {
-        let proof = OperationType::CopyFile.proof_reference();
-        println!("    {} {}", "Proof:".bright_black(), proof.format_short());
-        println!("    {} rm {}", "Undo:".bright_black(), dst);
+    // Execute operation. The destination is created exclusively, so this call
+    // owns it: a file that appeared since the checks above is never written
+    // over, and the clean-up below can only remove what was created here.
+    let mut source = fs::File::open(&src_path).context("cp failed")?;
+    let permissions = source.metadata().context("cp failed")?.permissions();
+    let mut create = fs::OpenOptions::new();
+    create.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        // Never wider than the source, even while the copy is in progress.
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        create.mode(permissions.mode() & 0o7777);
+    }
+    let mut destination = create.open(&dst_path).context("cp failed")?;
+    let copied = std::io::copy(&mut source, &mut destination)
+        .and_then(|_| destination.set_permissions(permissions));
+    if let Err(e) = copied {
+        // Whatever part of the copy landed would block a retry.
+        drop(destination);
+        let error = anyhow::Error::new(e).context("cp failed");
+        return Err(match fs::remove_file(&dst_path) {
+            Ok(()) => error,
+            Err(cleanup_error) => error.context(format!(
+                "the partial copy {} could not be removed: {}",
+                dst, cleanup_error
+            )),
+        });
     }
 
-    Ok(())
+    // path = dst, undo_data = src path for reference
+    // Undo = delete the destination file
+    Ok(
+        Operation::new(OperationType::CopyFile, dst.to_string(), None)
+            .with_undo_data(src.as_bytes().to_vec()),
+    )
 }
 
 /// Move/rename a file or directory.
@@ -414,6 +524,29 @@ pub fn cp(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn mv(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result<()> {
+    let op = apply_mv(state, src, dst)?;
+    let op_id = op.id;
+    state.record_operation(op);
+
+    println!(
+        "{} {} {} → {}",
+        format!("[op:{}]", &op_id.to_string()[..8]).bright_black(),
+        "mv".bright_green(),
+        src,
+        dst
+    );
+
+    if verbose {
+        let proof = OperationType::Move.proof_reference();
+        println!("    {} {}", "Proof:".bright_black(), proof.format_short());
+        println!("    {} mv {} {}", "Undo:".bright_black(), dst, src);
+    }
+
+    Ok(())
+}
+
+/// Check, execute and describe an `mv`, without recording it.
+fn apply_mv(state: &ShellState, src: &str, dst: &str) -> Result<Operation> {
     let src_path = state.resolve_path(src);
     let dst_path = state.resolve_path(dst);
 
@@ -442,28 +575,10 @@ pub fn mv(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
     // Execute operation
     fs::rename(&src_path, &dst_path).context("mv failed")?;
 
-    // Record: store both paths null-separated for undo
+    // Store both paths null-separated for undo:
     // path = "src\0dst" so undo can move dst back to src
     let combined_path = format!("{}\0{}", src, dst);
-    let op = Operation::new(OperationType::Move, combined_path, None);
-    let op_id = op.id;
-    state.record_operation(op);
-
-    println!(
-        "{} {} {} → {}",
-        format!("[op:{}]", &op_id.to_string()[..8]).bright_black(),
-        "mv".bright_green(),
-        src,
-        dst
-    );
-
-    if verbose {
-        let proof = OperationType::Move.proof_reference();
-        println!("    {} {}", "Proof:".bright_black(), proof.format_short());
-        println!("    {} mv {} {}", "Undo:".bright_black(), dst, src);
-    }
-
-    Ok(())
+    Ok(Operation::new(OperationType::Move, combined_path, None))
 }
 
 /// Create a symbolic link.
@@ -493,6 +608,30 @@ pub fn mv(state: &mut ShellState, src: &str, dst: &str, verbose: bool) -> Result
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn symlink(state: &mut ShellState, target: &str, link: &str, verbose: bool) -> Result<()> {
+    let op = apply_symlink(state, target, link)?;
+    let op_id = op.id;
+    state.record_operation(op);
+
+    println!(
+        "{} {} {} → {}",
+        format!("[op:{}]", &op_id.to_string()[..8]).bright_black(),
+        "ln -s".bright_green(),
+        target,
+        link
+    );
+
+    if verbose {
+        let proof = OperationType::Symlink.proof_reference();
+        println!("    {} {}", "Proof:".bright_black(), proof.format_short());
+        println!("    {} unlink {}", "Undo:".bright_black(), link);
+    }
+
+    Ok(())
+}
+
+/// Check, execute and describe an `ln -s`, without recording it. The returned
+/// operation carries the link target, which is what a redo links to.
+fn apply_symlink(state: &ShellState, target: &str, link: &str) -> Result<Operation> {
     let link_path = state.resolve_path(link);
 
     // Runtime check of the Lean 4 precondition (see verification.rs)
@@ -514,27 +653,11 @@ pub fn symlink(state: &mut ShellState, target: &str, link: &str, verbose: bool) 
     #[cfg(not(unix))]
     anyhow::bail!("Symbolic links not supported on this platform");
 
-    // Record: path = link path, undo_data = target for re-creation
-    let op = Operation::new(OperationType::Symlink, link.to_string(), None)
-        .with_undo_data(target.as_bytes().to_vec());
-    let op_id = op.id;
-    state.record_operation(op);
-
-    println!(
-        "{} {} {} → {}",
-        format!("[op:{}]", &op_id.to_string()[..8]).bright_black(),
-        "ln -s".bright_green(),
-        target,
-        link
-    );
-
-    if verbose {
-        let proof = OperationType::Symlink.proof_reference();
-        println!("    {} {}", "Proof:".bright_black(), proof.format_short());
-        println!("    {} unlink {}", "Undo:".bright_black(), link);
-    }
-
-    Ok(())
+    // path = link path, undo_data = target for re-creation
+    Ok(
+        Operation::new(OperationType::Symlink, link.to_string(), None)
+            .with_undo_data(target.as_bytes().to_vec()),
+    )
 }
 
 /// Change file permissions (reversible — captures old mode for undo).
@@ -545,40 +668,10 @@ pub fn symlink(state: &mut ShellState, target: &str, link: &str, verbose: bool) 
 /// # Proof Reference
 /// PermissionOperations.lean: chmod_reversible
 pub fn chmod(state: &mut ShellState, mode_str: &str, path: &str, verbose: bool) -> Result<()> {
-    let file_path = state.resolve_path(path);
-
-    if !file_path.exists() && file_path.symlink_metadata().is_err() {
-        anyhow::bail!("chmod: cannot access '{}': No such file or directory", path);
-    }
-
-    // Capture current permissions for undo
-    #[cfg(unix)]
-    let old_mode = {
-        use std::os::unix::fs::PermissionsExt;
-        let metadata =
-            fs::symlink_metadata(&file_path).context("chmod: failed to read metadata")?;
-        metadata.permissions().mode()
-    };
-    #[cfg(not(unix))]
-    let old_mode: u32 = 0;
-
-    // Parse mode
-    let new_mode = parse_chmod_mode(mode_str, old_mode)
-        .context(format!("chmod: invalid mode: '{}'", mode_str))?;
-
-    // Apply permissions
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let perms = fs::Permissions::from_mode(new_mode);
-        fs::set_permissions(&file_path, perms).context("chmod failed")?;
-    }
-    #[cfg(not(unix))]
-    anyhow::bail!("chmod not supported on this platform");
-
-    // Record operation with old mode for undo
-    let op = Operation::new(OperationType::Chmod, path.to_string(), None)
-        .with_undo_data(old_mode.to_le_bytes().to_vec());
+    let (op, old_mode, new_mode) = apply_chmod(state, path, |old_mode| {
+        parse_chmod_mode(mode_str, old_mode)
+            .with_context(|| format!("chmod: invalid mode: '{}'", mode_str))
+    })?;
     let op_id = op.id;
     state.record_operation(op);
 
@@ -602,6 +695,53 @@ pub fn chmod(state: &mut ShellState, mode_str: &str, path: &str, verbose: bool) 
     }
 
     Ok(())
+}
+
+/// Check, execute and describe a `chmod`, without recording it.
+///
+/// `new_mode` maps the file's current mode to the mode to set: the command
+/// parses its mode string against it, redo returns the mode undo replaced.
+/// Returns the operation (carrying the old mode as undo data), the old mode
+/// and the new mode.
+fn apply_chmod(
+    state: &ShellState,
+    path: &str,
+    new_mode: impl FnOnce(u32) -> Result<u32>,
+) -> Result<(Operation, u32, u32)> {
+    let file_path = state.resolve_path(path);
+
+    if !file_path.exists() && file_path.symlink_metadata().is_err() {
+        anyhow::bail!("chmod: cannot access '{}': No such file or directory", path);
+    }
+
+    // Capture current permissions for undo
+    #[cfg(unix)]
+    let old_mode = {
+        use std::os::unix::fs::PermissionsExt;
+        // Through a symbolic link, as `set_permissions` below goes: the mode
+        // to put back is the target's, not the link's own.
+        let metadata = fs::metadata(&file_path).context("chmod: failed to read metadata")?;
+        metadata.permissions().mode()
+    };
+    #[cfg(not(unix))]
+    let old_mode: u32 = 0;
+
+    let new_mode = new_mode(old_mode)?;
+
+    // Apply permissions
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = fs::Permissions::from_mode(new_mode);
+        fs::set_permissions(&file_path, perms).context("chmod failed")?;
+    }
+    #[cfg(not(unix))]
+    anyhow::bail!("chmod not supported on this platform");
+
+    // Old mode is the undo data
+    let op = Operation::new(OperationType::Chmod, path.to_string(), None)
+        .with_undo_data(old_mode.to_le_bytes().to_vec());
+    Ok((op, old_mode, new_mode))
 }
 
 /// Parse chmod mode string — supports octal (755) and symbolic (u+x, go-w, a=rwx).
@@ -701,29 +841,9 @@ fn parse_chmod_mode(mode_str: &str, current_mode: u32) -> Result<u32> {
 /// PermissionOperations.lean: chown_reversible
 #[cfg(unix)]
 pub fn chown(state: &mut ShellState, owner_str: &str, path: &str, verbose: bool) -> Result<()> {
-    let file_path = state.resolve_path(path);
-
-    if !file_path.exists() && file_path.symlink_metadata().is_err() {
-        anyhow::bail!("chown: cannot access '{}': No such file or directory", path);
-    }
-
-    // Capture current ownership for undo
-    use std::os::unix::fs::MetadataExt;
-    let metadata = fs::symlink_metadata(&file_path).context("chown: failed to read metadata")?;
-    let old_uid = metadata.uid();
-    let old_gid = metadata.gid();
-
-    // Parse owner[:group]
-    let (new_uid, new_gid) = parse_chown_spec(owner_str, old_uid, old_gid)?;
-
-    // Apply ownership via libc
-    std::os::unix::fs::chown(&file_path, Some(new_uid), Some(new_gid))
-        .map_err(|e| anyhow::anyhow!("chown failed: {}", e))?;
-
-    // Record operation with old uid:gid for undo
-    let undo_str = format!("{}:{}", old_uid, old_gid);
-    let op = Operation::new(OperationType::Chown, path.to_string(), None)
-        .with_undo_data(undo_str.into_bytes());
+    let (op, (old_uid, old_gid)) = apply_chown(state, path, |old_uid, old_gid| {
+        parse_chown_spec(owner_str, old_uid, old_gid)
+    })?;
     let op_id = op.id;
     state.record_operation(op);
 
@@ -748,6 +868,45 @@ pub fn chown(state: &mut ShellState, owner_str: &str, path: &str, verbose: bool)
     }
 
     Ok(())
+}
+
+/// Check, execute and describe a `chown`, without recording it.
+///
+/// `new_owner` maps the file's current `(uid, gid)` to the ownership to set:
+/// the command parses its owner spec against it, redo returns the ownership
+/// undo replaced. Returns the operation (carrying the old `uid:gid` as undo
+/// data) and the old `(uid, gid)`.
+#[cfg(unix)]
+fn apply_chown(
+    state: &ShellState,
+    path: &str,
+    new_owner: impl FnOnce(u32, u32) -> Result<(u32, u32)>,
+) -> Result<(Operation, (u32, u32))> {
+    let file_path = state.resolve_path(path);
+
+    if !file_path.exists() && file_path.symlink_metadata().is_err() {
+        anyhow::bail!("chown: cannot access '{}': No such file or directory", path);
+    }
+
+    // Capture current ownership for undo
+    use std::os::unix::fs::MetadataExt;
+    // Through a symbolic link, as `chown` below goes: the owner to put back
+    // is the target's, not the link's own.
+    let metadata = fs::metadata(&file_path).context("chown: failed to read metadata")?;
+    let old_uid = metadata.uid();
+    let old_gid = metadata.gid();
+
+    let (new_uid, new_gid) = new_owner(old_uid, old_gid)?;
+
+    // Apply ownership via libc
+    std::os::unix::fs::chown(&file_path, Some(new_uid), Some(new_gid))
+        .map_err(|e| anyhow::anyhow!("chown failed: {}", e))?;
+
+    // Old uid:gid is the undo data
+    let undo_str = format!("{}:{}", old_uid, old_gid);
+    let op = Operation::new(OperationType::Chown, path.to_string(), None)
+        .with_undo_data(undo_str.into_bytes());
+    Ok((op, (old_uid, old_gid)))
 }
 
 /// Parse chown owner spec: `user`, `user:group`, `:group`, `user:`.
@@ -848,6 +1007,9 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
 
         let path = state.resolve_path(&op.path);
 
+        // Read what this undo is about to replace, so redo can put it back.
+        let redo_data = capture_redo_data(state, op);
+
         // Execute inverse operation
         match inverse_type {
             OperationType::Rmdir => {
@@ -881,8 +1043,7 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
                     .write(true)
                     .open(&path)
                     .context("Failed to open file for truncation")?;
-                file.set_len(original_size)
-                    .context("Undo append (truncate) failed")?;
+                cut_back_to(&file, original_size).context("Undo append (truncate) failed")?;
             }
             OperationType::Move => {
                 // Undo move = move it back (dst -> src)
@@ -993,6 +1154,29 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
         let orig_id = op.id;
 
         state.mark_undone(orig_id, undo_id);
+        if let Some(RedoData::OverLimit { size, limit }) = redo_data {
+            eprintln!(
+                "{} {} was {} bytes, over the {} byte {} limit: this undo cannot be redone",
+                "Warning:".bright_yellow(),
+                op.path,
+                size,
+                limit,
+                REDO_CAPTURE_LIMIT_VAR
+            );
+        }
+        if let Some(RedoData::NotCaptured(reason)) = &redo_data {
+            eprintln!(
+                "{} {} could not be read ({}): this undo cannot be redone",
+                "Warning:".bright_yellow(),
+                op.path,
+                reason
+            );
+        }
+        if let Some(entry) = state.redo_stack.front_mut() {
+            if entry.id == orig_id {
+                entry.redo_data = redo_data;
+            }
+        }
 
         println!(
             "{} {} {} {} {}",
@@ -1017,15 +1201,33 @@ pub fn undo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
 /// Re-applies operations that were reversed with [`undo`]. Redo moves forward
 /// in the operation history, restoring the previous state.
 ///
+/// Each operation is re-applied through the same function the original
+/// command used, so its preconditions are checked again and its undo data is
+/// captured again from the current state. The state an operation produced
+/// (the mode a `chmod` set, the bytes a redirection wrote) is what [`undo`]
+/// read just before reversing it. A redone operation can therefore be undone
+/// and redone again any number of times.
+///
+/// The redo stack is held in memory only, so redo is not available after a
+/// restart.
+///
 /// # Arguments
 /// * `state` - Mutable shell state for accessing redo stack
 /// * `count` - Number of operations to redo (default: 1)
 /// * `verbose` - Whether to show proof references
 ///
 /// # Errors
-/// Returns error if:
-/// - No operations to redo
-/// - Re-executing operation fails (filesystem changed externally)
+/// Returns error if re-applying an operation fails, for example because a
+/// precondition no longer holds (the destination of a `cp` exists again).
+/// Nothing is recorded for that operation, and it stays on the redo stack.
+/// Redoing with nothing to redo is not an error.
+///
+/// A failed redo leaves the filesystem as it found it, with one exception.
+/// If a file write fails part-way, redo removes the partial file, puts the
+/// overwritten bytes back or cuts off the partial append. If that clean-up
+/// fails as well (an I/O error, or no space on a copy-on-write filesystem),
+/// the file is left changed and the error says so. Retrying the redo would
+/// then record the damaged content as undo data, so repair the file first.
 ///
 /// # Examples
 /// ```no_run
@@ -1047,112 +1249,17 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
             }
         };
 
-        let path = state.resolve_path(&op.path);
-
-        // Re-execute the original operation
-        match op.op_type {
-            OperationType::Mkdir => {
-                fs::create_dir(&path).context("Redo mkdir failed")?;
+        // Re-apply through the same path the original command took, so the
+        // new record carries freshly captured undo data.
+        let new_op = match reapply(state, &op) {
+            Ok(new_op) => new_op,
+            Err(e) => {
+                // The operation was not re-applied: keep the entry so redo
+                // can be retried once whatever blocked it is resolved.
+                state.redo_stack.push_front(op);
+                return Err(e);
             }
-            OperationType::Rmdir => {
-                fs::remove_dir(&path).context("Redo rmdir failed")?;
-            }
-            OperationType::CreateFile => {
-                fs::write(&path, "").context("Redo touch failed")?;
-            }
-            OperationType::DeleteFile => {
-                fs::remove_file(&path).context("Redo rm failed")?;
-            }
-            OperationType::WriteFile => {
-                // Would need new content
-                anyhow::bail!("WriteFile redo not yet implemented");
-            }
-            OperationType::FileTruncated => {
-                // Redo truncate: truncate file (original undo_data was the old content)
-                fs::write(&path, "").context("Redo truncate failed")?;
-            }
-            OperationType::FileAppended => {
-                // Cannot redo append without knowing what was appended
-                anyhow::bail!(
-                    "FileAppended redo not yet implemented (would need appended content)"
-                );
-            }
-            OperationType::CopyFile => {
-                // Redo copy: copy again from src (stored in undo_data) to dst (path)
-                let src = op
-                    .undo_data
-                    .as_ref()
-                    .map(|d| String::from_utf8_lossy(d).to_string())
-                    .context("Missing source path for redo cp")?;
-                let src_path = state.resolve_path(&src);
-                fs::copy(&src_path, &path).context("Redo cp failed")?;
-            }
-            OperationType::Move => {
-                // Redo move: move src -> dst again
-                let parts: Vec<&str> = op.path.splitn(2, '\0').collect();
-                if parts.len() != 2 {
-                    anyhow::bail!("Invalid move operation record for redo");
-                }
-                let src_path = state.resolve_path(parts[0]);
-                let dst_path = state.resolve_path(parts[1]);
-                fs::rename(&src_path, &dst_path).context("Redo mv failed")?;
-            }
-            OperationType::Symlink => {
-                // Redo symlink: create symlink again
-                let target = op
-                    .undo_data
-                    .as_ref()
-                    .map(|d| String::from_utf8_lossy(d).to_string())
-                    .context("Missing symlink target for redo")?;
-                #[cfg(unix)]
-                std::os::unix::fs::symlink(&target, &path).context("Redo ln -s failed")?;
-                #[cfg(not(unix))]
-                anyhow::bail!("Symbolic links not supported on this platform");
-            }
-            OperationType::Unlink => {
-                // Redo unlink: remove the symlink again
-                fs::remove_file(&path).context("Redo unlink failed")?;
-            }
-            OperationType::SetVariable => {
-                // Redo set: re-apply the variable value
-                // The undo_data stores the PREVIOUS value, not the new one.
-                // For redo, we need the value that was set, but we don't have it.
-                // Redo of SetVariable is a no-op — variable state has moved on.
-                // This is correct: variable redo is best-effort; filesystem redo is exact.
-                println!(
-                    "{}",
-                    "Variable set cannot be exactly redone (state-dependent)".bright_yellow()
-                );
-            }
-            OperationType::UnsetVariable => {
-                // Redo unset: unset the variable again
-                state.variables.remove(&op.path);
-                state.exported_vars.remove(&op.path);
-            }
-            OperationType::Chmod => {
-                // Redo chmod: cannot exactly redo without storing new mode
-                println!(
-                    "{}",
-                    "chmod cannot be exactly redone (state-dependent)".bright_yellow()
-                );
-            }
-            OperationType::Chown => {
-                // Redo chown: cannot exactly redo without storing new uid:gid
-                println!(
-                    "{}",
-                    "chown cannot be exactly redone (state-dependent)".bright_yellow()
-                );
-            }
-            OperationType::HardwareErase | OperationType::Obliterate => {
-                // Cannot redo - irreversible operations
-                anyhow::bail!(
-                    "{:?} cannot be redone - operation is irreversible",
-                    op.op_type
-                );
-            }
-        }
-
-        let new_op = Operation::new(op.op_type, op.path.clone(), None);
+        };
         let new_id = new_op.id;
         state.record_redo_operation(new_op);
 
@@ -1170,6 +1277,460 @@ pub fn redo(state: &mut ShellState, count: usize, verbose: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Shell or environment variable that bounds how many bytes of file content
+/// one undo keeps in memory for redo. A plain number of bytes; `0` means no
+/// limit.
+pub const REDO_CAPTURE_LIMIT_VAR: &str = "VSH_REDO_CAPTURE_LIMIT";
+
+/// Limit used when [`REDO_CAPTURE_LIMIT_VAR`] is unset or not a number: 10 MiB,
+/// the size at which a redirection already warns about saving a file for undo.
+pub const DEFAULT_REDO_CAPTURE_LIMIT: u64 = 10 * 1024 * 1024;
+
+/// Turn the setting's text into a limit in bytes; `None` is no limit.
+fn parse_redo_capture_limit(setting: Option<&str>) -> Option<u64> {
+    match setting.map(str::trim).map(str::parse::<u64>) {
+        Some(Ok(0)) => None,
+        Some(Ok(limit)) => Some(limit),
+        Some(Err(_)) | None => Some(DEFAULT_REDO_CAPTURE_LIMIT),
+    }
+}
+
+/// The capture limit in force: the shell variable if set, else the
+/// environment variable, else the default.
+fn redo_capture_limit(state: &ShellState) -> Option<u64> {
+    let setting = state
+        .get_variable(REDO_CAPTURE_LIMIT_VAR)
+        .map(str::to_string)
+        .or_else(|| std::env::var(REDO_CAPTURE_LIMIT_VAR).ok());
+    parse_redo_capture_limit(setting.as_deref())
+}
+
+/// Cut `file` back to `size` bytes to reverse an append. A file that is
+/// already that short or shorter is left alone: `set_len` would grow it with
+/// zero bytes that were never in it.
+fn cut_back_to(file: &fs::File, size: u64) -> std::io::Result<()> {
+    if file.metadata()?.len() > size {
+        file.set_len(size)?;
+    }
+    Ok(())
+}
+
+/// Read `reader` to its end, or return `None` once it has given more than
+/// `limit` bytes. At most `limit + 1` bytes are held, however long the stream
+/// turns out to be; with no limit, everything is read.
+fn read_within_limit(
+    reader: impl std::io::Read,
+    limit: Option<u64>,
+) -> std::io::Result<Option<Vec<u8>>> {
+    use std::io::Read;
+    let mut content = Vec::new();
+    let Some(limit) = limit else {
+        let mut reader = reader;
+        reader.read_to_end(&mut content)?;
+        return Ok(Some(content));
+    };
+    reader
+        .take(limit.saturating_add(1))
+        .read_to_end(&mut content)?;
+    Ok((content.len() as u64 <= limit).then_some(content))
+}
+
+/// Read the state an undo of `op` is about to replace.
+///
+/// `undo_data` holds the state before an operation; redo needs the state after
+/// it. For operations whose record does not already say what that was, read it
+/// here, immediately before undo reverses it. Returns `None` when the record
+/// is enough (or when the state cannot be read, in which case redo of that
+/// operation reports that it has nothing to restore).
+///
+/// File content is held in memory until the redo stack is cleared, so content
+/// larger than the capture limit is not kept; redo of that entry then says so.
+fn capture_redo_data(state: &ShellState, op: &Operation) -> Option<RedoData> {
+    let path = state.resolve_path(&op.path);
+    let limit = redo_capture_limit(state);
+    // Read what is left of `file`, or say that it is over the limit. `skip` is
+    // how many bytes at the start of the file are not part of the capture.
+    let read = |mut file: fs::File, skip: u64| -> std::io::Result<RedoData> {
+        // The size is only a way to skip the read: the file can grow after
+        // this, and some files report no size, so the read is bounded too.
+        let size = file.metadata()?.len().saturating_sub(skip);
+        match limit {
+            Some(limit) if size > limit => Ok(RedoData::OverLimit { size, limit }),
+            _ => match read_within_limit(&mut file, limit)? {
+                Some(content) => Ok(RedoData::Content(content)),
+                None => {
+                    let limit = limit.unwrap_or(u64::MAX);
+                    let now = file.metadata()?.len().saturating_sub(skip);
+                    Ok(RedoData::OverLimit {
+                        size: now.max(limit.saturating_add(1)),
+                        limit,
+                    })
+                }
+            },
+        }
+    };
+    match op.op_type {
+        // A file that cannot be read is recorded as such, never as empty:
+        // redo must refuse it, not recreate the file without its content.
+        OperationType::CreateFile => {
+            // Undo deletes this file, so its mode goes with its content.
+            let capture = || -> std::io::Result<RedoData> {
+                let file = crate::fs_pure::open_pure(&path)?;
+                #[cfg(unix)]
+                let mode = {
+                    use std::os::unix::fs::PermissionsExt;
+                    Some(file.metadata()?.permissions().mode() & 0o7777)
+                };
+                #[cfg(not(unix))]
+                let mode = None;
+                Ok(match read(file, 0)? {
+                    RedoData::Content(content) => RedoData::Created { content, mode },
+                    other => other,
+                })
+            };
+            Some(capture().unwrap_or_else(|e| RedoData::NotCaptured(e.to_string())))
+        }
+        OperationType::FileTruncated | OperationType::WriteFile => {
+            let capture = || read(crate::fs_pure::open_pure(&path)?, 0);
+            Some(capture().unwrap_or_else(|e| RedoData::NotCaptured(e.to_string())))
+        }
+        OperationType::FileAppended => {
+            use std::io::{Seek, SeekFrom};
+            let original_size =
+                u64::from_le_bytes(op.undo_data.as_ref()?.get(..8)?.try_into().ok()?);
+            let capture = || -> std::io::Result<RedoData> {
+                let mut file = crate::fs_pure::open_pure(&path)?;
+                file.seek(SeekFrom::Start(original_size))?;
+                Ok(match read(file, original_size)? {
+                    RedoData::Content(appended) => RedoData::Appended(appended),
+                    other => other,
+                })
+            };
+            Some(capture().unwrap_or_else(|e| RedoData::NotCaptured(e.to_string())))
+        }
+        OperationType::Chmod => {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                // Through a symbolic link, as `chmod` itself goes.
+                let mode = fs::metadata(&path).ok()?.permissions().mode();
+                Some(RedoData::Mode(mode))
+            }
+            #[cfg(not(unix))]
+            None
+        }
+        OperationType::Chown => {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+                // Through a symbolic link, as `chown` itself goes.
+                let metadata = fs::metadata(&path).ok()?;
+                Some(RedoData::Owner {
+                    uid: metadata.uid(),
+                    gid: metadata.gid(),
+                })
+            }
+            #[cfg(not(unix))]
+            None
+        }
+        OperationType::SetVariable => {
+            // A variable that is no longer set is a state too, not a failed
+            // capture: something outside the history removed it.
+            Some(RedoData::Variable {
+                value: state.variables.get(&op.path).cloned(),
+                exported: state.is_exported(&op.path),
+            })
+        }
+        OperationType::Mkdir
+        | OperationType::Rmdir
+        | OperationType::DeleteFile
+        | OperationType::CopyFile
+        | OperationType::Move
+        | OperationType::Symlink
+        | OperationType::Unlink
+        | OperationType::UnsetVariable
+        | OperationType::HardwareErase
+        | OperationType::Obliterate => None,
+    }
+}
+
+/// Re-apply an undone operation and return the record of doing so.
+///
+/// Every arm goes through the function the original command used, so the
+/// preconditions are checked again and the undo data is captured again from
+/// the current state. Nothing is recorded here.
+fn reapply(state: &mut ShellState, op: &Operation) -> Result<Operation> {
+    // What undo saved for this entry, or an error naming what is missing.
+    let missing = || match &op.redo_data {
+        Some(RedoData::OverLimit { size, limit }) => anyhow::anyhow!(
+            "Cannot redo {} {}: its {} bytes were over the {} byte limit when it was undone \
+             (set {} to raise it, 0 for no limit)",
+            op.op_type,
+            op.path,
+            size,
+            limit,
+            REDO_CAPTURE_LIMIT_VAR
+        ),
+        Some(RedoData::NotCaptured(reason)) => anyhow::anyhow!(
+            "Cannot redo {} {}: its content could not be read when it was undone ({})",
+            op.op_type,
+            op.path,
+            reason
+        ),
+        _ => anyhow::anyhow!(
+            "Cannot redo {} {}: the state to restore was not captured when it was undone",
+            op.op_type,
+            op.path
+        ),
+    };
+    // The text an operation keeps in `undo_data` (cp source, ln -s target).
+    let recorded_text = |what: &str| -> Result<String> {
+        op.undo_data
+            .as_ref()
+            .map(|d| String::from_utf8_lossy(d).to_string())
+            .with_context(|| format!("Missing {} for redo", what))
+    };
+
+    match op.op_type {
+        OperationType::Mkdir => apply_mkdir(state, &op.path),
+        OperationType::Rmdir => apply_rmdir(state, &op.path),
+        OperationType::CreateFile => {
+            // Empty for `touch`; the redirected output for a file `>` created.
+            // Anything but captured content is refused: recreating the file
+            // empty would silently lose what the redirection wrote.
+            let Some(RedoData::Created { content, mode }) = &op.redo_data else {
+                return Err(missing());
+            };
+            apply_create_file(state, &op.path, content, *mode)
+        }
+        OperationType::DeleteFile => apply_rm(state, &op.path),
+        OperationType::WriteFile | OperationType::FileTruncated => {
+            let Some(RedoData::Content(content)) = &op.redo_data else {
+                return Err(missing());
+            };
+            apply_replace_content(state, op.op_type, &op.path, content)
+        }
+        OperationType::FileAppended => {
+            let Some(RedoData::Appended(appended)) = &op.redo_data else {
+                return Err(missing());
+            };
+            apply_append(state, &op.path, appended)
+        }
+        OperationType::CopyFile => {
+            let src = recorded_text("source path")?;
+            apply_cp(state, &src, &op.path)
+        }
+        OperationType::Move => {
+            let Some((src, dst)) = op.path.split_once('\0') else {
+                anyhow::bail!("Invalid move operation record for redo");
+            };
+            apply_mv(state, src, dst)
+        }
+        OperationType::Symlink => {
+            let target = recorded_text("symlink target")?;
+            apply_symlink(state, &target, &op.path)
+        }
+        OperationType::Unlink => apply_unlink(state, &op.path),
+        OperationType::SetVariable => {
+            let Some(RedoData::Variable { value, exported }) = &op.redo_data else {
+                return Err(missing());
+            };
+            let new_op = state.apply_variable_state(op.path.clone(), value.clone());
+            // Put the export state back as undo found it, whichever way that
+            // was: undo of an assignment drops the export, and something
+            // outside the history may have set it since.
+            if *exported {
+                state.export_variable(op.path.clone());
+            } else {
+                state.exported_vars.remove(&op.path);
+            }
+            Ok(new_op)
+        }
+        // A variable that is already not set (removed outside the history
+        // since the undo) is the state this redo is for. The record then
+        // says there was nothing to restore, so undo of it changes nothing.
+        OperationType::UnsetVariable => Ok(state
+            .apply_unset_variable(&op.path)
+            .unwrap_or_else(|| state.apply_variable_absent(&op.path))),
+        OperationType::Chmod => {
+            let Some(RedoData::Mode(mode)) = op.redo_data else {
+                return Err(missing());
+            };
+            apply_chmod(state, &op.path, |_| Ok(mode)).map(|(new_op, _, _)| new_op)
+        }
+        OperationType::Chown => {
+            let Some(RedoData::Owner { uid, gid }) = op.redo_data else {
+                return Err(missing());
+            };
+            #[cfg(unix)]
+            {
+                apply_chown(state, &op.path, |_, _| Ok((uid, gid))).map(|(new_op, _)| new_op)
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = (uid, gid);
+                anyhow::bail!("chown not supported on this platform")
+            }
+        }
+        OperationType::HardwareErase | OperationType::Obliterate => {
+            // Cannot redo - irreversible operations
+            anyhow::bail!(
+                "{:?} cannot be redone - operation is irreversible",
+                op.op_type
+            );
+        }
+    }
+}
+
+/// Replace a file's whole content and describe it, without recording it. The
+/// returned operation (`FileTruncated` or `WriteFile`) carries the content
+/// that was replaced as its undo data, as the redirection that first recorded
+/// it did.
+fn apply_replace_content(
+    state: &ShellState,
+    op_type: OperationType,
+    path: &str,
+    content: &[u8],
+) -> Result<Operation> {
+    let full_path = state.resolve_path(path);
+    if !full_path.is_file() {
+        anyhow::bail!("Cannot redo {}: {} is not a file", op_type, path);
+    }
+
+    let mut file = crate::fs_pure::open_pure_read_write(&full_path)
+        .with_context(|| format!("Redo {} failed", op_type))?;
+    match replace_through(&mut file, content) {
+        Ok(original) => {
+            Ok(Operation::new(op_type, path.to_string(), None).with_undo_data(original))
+        }
+        Err(failure) => {
+            let error =
+                anyhow::Error::new(failure.error).context(format!("Redo {} failed", op_type));
+            Err(match failure.cleanup {
+                None => error,
+                Some(restore_error) => error.context(format!(
+                    "{} could not be restored after a failed redo and may be damaged: {}",
+                    path, restore_error
+                )),
+            })
+        }
+    }
+}
+
+/// A write through an open file that failed, and the error from putting the
+/// file back as it was, if that failed too.
+struct WriteFailure {
+    error: std::io::Error,
+    cleanup: Option<std::io::Error>,
+}
+
+/// Replace the whole content of `file` and return what it held before.
+///
+/// It takes a handle, not a path, so the content it returns and the content
+/// it replaces belong to the same file whatever happens to the path meanwhile.
+///
+/// The new content is written over the old and the file is cut to length
+/// afterwards, with no truncation first. The old bytes are then still in
+/// place if the write fails, and putting them back never grows the file. On
+/// a filesystem that overwrites in place, that needs none of the space or
+/// quota the failed write ran out of. It is not a guarantee: a copy-on-write
+/// filesystem can need new space even for an overwrite, and an I/O error can
+/// fail any write, which is why a failed restore is reported.
+fn replace_through(
+    file: &mut fs::File,
+    content: &[u8],
+) -> std::result::Result<Vec<u8>, WriteFailure> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut original = Vec::new();
+    file.seek(SeekFrom::Start(0))
+        .and_then(|_| file.read_to_end(&mut original))
+        .map_err(|error| WriteFailure {
+            error,
+            cleanup: None,
+        })?;
+    let written = file
+        .seek(SeekFrom::Start(0))
+        .and_then(|_| file.write_all(content))
+        .and_then(|()| file.set_len(content.len() as u64));
+    match written {
+        Ok(()) => Ok(original),
+        Err(error) => {
+            // Only the bytes before the current position can have changed.
+            let restored = file.stream_position().and_then(|position| {
+                let changed = original.len().min(position as usize);
+                file.seek(SeekFrom::Start(0))?;
+                file.write_all(&original[..changed])?;
+                file.set_len(original.len() as u64)
+            });
+            Err(WriteFailure {
+                error,
+                cleanup: restored.err(),
+            })
+        }
+    }
+}
+
+/// Append to `file`, which must be open for appending, and return the size
+/// it had before. The size comes from the handle, so it is the size of the
+/// file that was appended to. A partial append is cut off again.
+fn append_through(file: &mut fs::File, appended: &[u8]) -> std::result::Result<u64, WriteFailure> {
+    let original_size = file
+        .metadata()
+        .map_err(|error| WriteFailure {
+            error,
+            cleanup: None,
+        })?
+        .len();
+    match file.write_all(appended) {
+        Ok(()) => Ok(original_size),
+        Err(error) => Err(WriteFailure {
+            error,
+            cleanup: file.set_len(original_size).err(),
+        }),
+    }
+}
+
+fn apply_append(state: &ShellState, path: &str, appended: &[u8]) -> Result<Operation> {
+    let full_path = state.resolve_path(path);
+    if !full_path.is_file() {
+        anyhow::bail!("Cannot redo append: {} is not a file", path);
+    }
+
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(&full_path)
+        .context("Redo append failed")?;
+    let original_size = append_through(&mut file, appended).map_err(|failure| {
+        let error = anyhow::Error::new(failure.error).context("Redo append failed");
+        match failure.cleanup {
+            None => error,
+            Some(cleanup_error) => error.context(format!(
+                "the partial append to {} could not be cut off: {}",
+                path, cleanup_error
+            )),
+        }
+    })?;
+
+    Ok(
+        Operation::new(OperationType::FileAppended, path.to_string(), None)
+            .with_undo_data(original_size.to_le_bytes().to_vec()),
+    )
+}
+
+/// Remove a symbolic link and describe it, without recording it. The returned
+/// `Unlink` operation carries the link's target as its undo data.
+fn apply_unlink(state: &ShellState, path: &str) -> Result<Operation> {
+    let full_path = state.resolve_path(path);
+    let target = fs::read_link(&full_path)
+        .with_context(|| format!("Cannot redo unlink: {} is not a symbolic link", path))?;
+    fs::remove_file(&full_path).context("Redo unlink failed")?;
+
+    Ok(
+        Operation::new(OperationType::Unlink, path.to_string(), None)
+            .with_undo_data(target.to_string_lossy().as_bytes().to_vec()),
+    )
 }
 
 /// Show operation history with optional proof references.
@@ -1380,7 +1941,7 @@ pub fn rollback_transaction(state: &mut ShellState) -> Result<()> {
                             OpenOptions::new()
                                 .write(true)
                                 .open(&path)
-                                .and_then(|file| file.set_len(original_size))
+                                .and_then(|file| cut_back_to(&file, original_size))
                                 .context("Failed to truncate file")
                         } else {
                             Err(anyhow::anyhow!("Invalid size data in undo_data"))
@@ -2666,6 +3227,148 @@ mod tests {
     #[test]
     fn test_parse_chmod_invalid_mode() {
         assert!(parse_chmod_mode("xyz", 0o100644).is_err());
+    }
+
+    /// Undo records content it cannot read as `NotCaptured`, never as empty.
+    /// (A directory in the file's place stands in for an unreadable file,
+    /// which root cannot produce with permissions alone.)
+    #[test]
+    fn test_capture_redo_data_records_unreadable_content() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
+        fs::create_dir(temp.path().join("f")).unwrap();
+
+        for op_type in [OperationType::CreateFile, OperationType::FileTruncated] {
+            let op = Operation::new(op_type, "f".to_string(), None);
+            assert!(
+                matches!(
+                    capture_redo_data(&state, &op),
+                    Some(RedoData::NotCaptured(_))
+                ),
+                "{op_type}"
+            );
+        }
+
+        let appended = Operation::new(OperationType::FileAppended, "f".to_string(), None)
+            .with_undo_data(0u64.to_le_bytes().to_vec());
+        assert!(matches!(
+            capture_redo_data(&state, &appended),
+            Some(RedoData::NotCaptured(_))
+        ));
+    }
+
+    /// `replace_through` and `append_through` take an open file, so what they
+    /// read, measure and change is that file, whatever the path names by
+    /// then. Here another file is renamed over the path after the open.
+    #[test]
+    fn test_redo_writes_go_to_the_file_that_was_opened() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let path = temp.path().join("f");
+        let other = temp.path().join("other");
+
+        fs::write(&path, b"opened").unwrap();
+        let mut file = crate::fs_pure::open_pure_read_write(&path).unwrap();
+        fs::write(&other, b"renamed over the path").unwrap();
+        fs::rename(&other, &path).unwrap();
+        let original = replace_through(&mut file, b"new").ok().unwrap();
+        assert_eq!(original, b"opened");
+        assert_eq!(fs::read(&path).unwrap(), b"renamed over the path");
+
+        fs::write(&path, b"12345").unwrap();
+        let mut file = fs::OpenOptions::new().append(true).open(&path).unwrap();
+        fs::write(&other, b"renamed over the path").unwrap();
+        fs::rename(&other, &path).unwrap();
+        let original_size = append_through(&mut file, b"678").ok().unwrap();
+        assert_eq!(original_size, 5);
+        assert_eq!(fs::read(&path).unwrap(), b"renamed over the path");
+    }
+
+    /// Without a rename in the way: the content and size returned are the
+    /// ones before the write, and the file holds the new content.
+    #[test]
+    fn test_replace_through_and_append_through() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let path = temp.path().join("f");
+
+        fs::write(&path, b"a longer original").unwrap();
+        let mut file = crate::fs_pure::open_pure_read_write(&path).unwrap();
+        assert_eq!(
+            replace_through(&mut file, b"short").ok().unwrap(),
+            b"a longer original"
+        );
+        assert_eq!(fs::read(&path).unwrap(), b"short");
+        // A second call on the same handle starts from the beginning again.
+        assert_eq!(replace_through(&mut file, b"").ok().unwrap(), b"short");
+        assert_eq!(fs::read(&path).unwrap(), b"");
+
+        fs::write(&path, b"12345").unwrap();
+        let mut file = fs::OpenOptions::new().append(true).open(&path).unwrap();
+        assert_eq!(append_through(&mut file, b"678").ok().unwrap(), 5);
+        assert_eq!(fs::read(&path).unwrap(), b"12345678");
+    }
+
+    #[test]
+    fn test_read_within_limit() {
+        let read = |bytes: &[u8], limit| read_within_limit(bytes, limit).unwrap();
+        assert_eq!(read(b"abcd", Some(4)), Some(b"abcd".to_vec()));
+        assert_eq!(read(b"abcde", Some(4)), None);
+        assert_eq!(read(b"", Some(4)), Some(Vec::new()));
+        assert_eq!(read(b"abcde", None), Some(b"abcde".to_vec()));
+        assert_eq!(read(b"a", Some(u64::MAX)), Some(b"a".to_vec()));
+        // A stream with no end stops at the limit instead of filling memory.
+        assert_eq!(
+            read_within_limit(std::io::repeat(0), Some(16)).unwrap(),
+            None
+        );
+    }
+
+    /// The limit holds when the size reported before the read is too small:
+    /// `/dev/zero` reports no size and never ends, which is the worst case of
+    /// a file that another process grows between the size check and the read.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_capture_redo_data_limit_holds_when_the_size_is_wrong() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let mut state = ShellState::new(temp.path().to_str().unwrap()).unwrap();
+        state.set_variable(REDO_CAPTURE_LIMIT_VAR, "64");
+        std::os::unix::fs::symlink("/dev/zero", temp.path().join("f")).unwrap();
+
+        let created = Operation::new(OperationType::CreateFile, "f".to_string(), None);
+        let appended = Operation::new(OperationType::FileAppended, "f".to_string(), None)
+            .with_undo_data(8u64.to_le_bytes().to_vec());
+        for op in [created, appended] {
+            assert_eq!(
+                capture_redo_data(&state, &op),
+                Some(RedoData::OverLimit {
+                    size: 65,
+                    limit: 64
+                }),
+                "{}",
+                op.op_type
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_redo_capture_limit() {
+        // Unset or unreadable: the default.
+        assert_eq!(
+            parse_redo_capture_limit(None),
+            Some(DEFAULT_REDO_CAPTURE_LIMIT)
+        );
+        assert_eq!(
+            parse_redo_capture_limit(Some("lots")),
+            Some(DEFAULT_REDO_CAPTURE_LIMIT)
+        );
+        assert_eq!(
+            parse_redo_capture_limit(Some("-1")),
+            Some(DEFAULT_REDO_CAPTURE_LIMIT)
+        );
+        // Zero: no limit.
+        assert_eq!(parse_redo_capture_limit(Some("0")), None);
+        // A number of bytes, surrounding whitespace ignored.
+        assert_eq!(parse_redo_capture_limit(Some("4096")), Some(4096));
+        assert_eq!(parse_redo_capture_limit(Some(" 1 \n")), Some(1));
     }
 
     #[test]

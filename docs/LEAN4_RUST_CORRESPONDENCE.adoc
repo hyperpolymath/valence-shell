@@ -478,6 +478,75 @@ let op = Operation::new(OperationType::DeleteFile, path.to_string(), None)
 * ✅ Restored on undo
 * ✅ Correspondence maintained
 
+==== Redo, and redo followed by undo (added 2026-11-17)
+
+The redo stack is modelled only in Idris2
+(`+proofs/idris2/src/Filesystem/Composition.idr+`); the Lean and Coq
+developments state single-step and sequence undo, with no redo stack.
+
+[cols="2,3",options="header"]
+|===
+| Model statement (Idris2) | What it says
+
+| `+undoRedoIdentity+`
+| `+undo (execute op s) >>= redo = Just (execute op s)+`. The equality is on
+the whole `+UndoState+`: filesystem, undo stack and redo stack.
+
+| `+undoRedoUndoIdentity+`
+| Undo, redo, undo equals undo. Corollary of the above.
+
+| `+redoUndoIdentity+`
+| From any state with an operation to redo, redo then undo is the identity,
+given that the operation inverts at the current filesystem.
+
+| `+redoUndoComposition+`
+| `+n+` redos followed by `+n+` undos is the identity, over a `+Redoable+`
+witness (mirror of `+undoRedoComposition+`).
+|===
+
+Status: recorded in the proof ledger, `EXPLAINME.adoc#proof-ledger` (the row
+for the undo/redo stack model); it is not restated here. The model has five
+operations (mkdir, rmdir, touch, rm, write) on a flat path map. The link to
+the Rust code is `tested-only`.
+
+The model re-applies the *same* operation value on redo, so the redone entry
+on the undo stack is identical to the original. The Rust `+redo+` did not do
+that before 2026-11-17: it re-executed the operation and recorded it with no
+undo data, so the filesystem matched after a redo but the history record did
+not, and the next undo restored an empty file (`+rm f; undo; redo; undo+`).
+The existing tests compared only the filesystem after a redo, so they did not
+see it.
+
+What the Rust does now (`+impl/rust-cli/src/commands.rs+`):
+
+* Each operation has one `+apply_*+` function that checks its preconditions,
+captures its undo data and changes the filesystem. The command and `+redo+`
+both call it, so a redone record carries freshly captured undo data.
+* What an operation *produced* (the mode a `+chmod+` set, the bytes a
+redirection wrote, a variable's new value) is read by `+undo+` just before it
+reverses the operation and kept on the in-memory redo entry
+(`+state::RedoData+`). File content over `+VSH_REDO_CAPTURE_LIMIT+` bytes
+(default 10 MiB, `+0+` for no limit) is not kept; redo of that entry fails
+with the reason.
+* A redo that fails records nothing and stays on the redo stack. It also
+leaves the filesystem as it found it, including when a file write fails
+part-way: the partial file is removed, the overwritten bytes are put back, or
+the partial append is cut off. The one exception is when that clean-up fails
+too (an I/O error, or no space on a copy-on-write filesystem): the file is
+then left changed, the error says so, and a retry would record the damaged
+content as undo data. That double failure is not tested; it needs fault
+injection below the filesystem calls.
+
+Tests (`tested-only`): `+impl/rust-cli/tests/redo_roundtrip_tests.rs+`
+(every operation type, random sequences, the capture limit) and
+`+test_redo_then_undo_correspondence+` in `+correspondence_tests.rs+`, which
+compares the history records as well as the filesystem.
+
+Not covered by the model: cp, mv, symbolic links, chmod, chown, variables,
+redirections, nested directories. Known undo defects that these tests
+exclude are listed in the test file (`+undo_is_exact: false+` and the note on
+symbolic links).
+
 '''''
 
 === Composition Theorems
