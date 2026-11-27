@@ -1,0 +1,169 @@
+;; SPDX-License-Identifier: MPL-2.0
+;
+; The repo deed of valence-shell: the machine-readable description of this
+; repository (standards#837, one deed per repo, D312). It replaces the retired
+; A2ML descriptiles that lived in .machine_readable/6a2/ (AGENTIC, ECOSYSTEM,
+; META, NEUROSYM, PLAYBOOK, STATE, the directory 0-AI-MANIFEST, anchor/ANCHOR
+; and the directory README). They are archived verbatim, with git history,
+; under archive/a2ml-v1/6a2-*.txt (D99, D269c, D312, D313).
+;
+; Migration ledger, fail-closed items and per-field provenance:
+;   archive/a2ml-v1/MIGRATION-LEDGER.adoc  (row IDs below cite it)
+; Mapping specs followed, from metadatastician/standards at 151276d6:
+;   1-formats/deed/mappings/{meta-ecosystem-to-repo-deed,
+;   agentic-neurosym-playbook-to-repo-deed, state-v1-decision (option B),
+;   ai-manifest-decision (option A)}.adoc, and the A7 section 6.4 anchor table.
+; Worked precedent: hyperpolymath/absolute-zero absolute-zero_chora.deed.
+;
+; Target form (ledger T-1): the descriptiles are clauses of this chora deed,
+; as the absolute-zero precedent and Hypatia SD004 name them. The A7 split
+; into .machine_readable/descriptiles/{META,ECOSYSTEM,AGENTIC,NEUROSYM}.deed
+; is the long-term canonical form, but A7 is a draft and those heads need an
+; owner affirmation (:affirmed, :affirmed-by) that no translator may supply.
+;
+; Anything with no mapping-table row is kept as a comment in the clause it
+; belonged to, with a ledger row. Nothing was invented to fill a field.
+; Out of scope for this change (ledger O-1 to O-9): .machine_readable/CLADE.a2ml,
+; the contractiles, bot_directives, ECHO_TYPES_OCHRANCE_BRIDGE.a2ml,
+; IDRIS2_AXIOMS.a2ml, integrations/*.a2ml, the root 0-AI-MANIFEST.a2ml,
+; audits/assail-classifications.a2ml and alkahest-shell-transmuter/.
+(repo-deed
+  :schema-version "1.0.0"
+  :canonical-name "valence-shell"
+
+  ; Identity (ledger I-1, I-2). Both values are opaque v8 chora ids (U4, V8),
+  ; copied, never minted here.
+  ; :repo-uuid is the registry's id for the birth path hyperpolymath/valence-shell,
+  ; :minted-in gv-clade-index, read from gv-clade-index
+  ; verisim/seed/chora-registry_praxis.deed at 09ef2838 and re-derived with the
+  ; ADR-008 profile C recipe (they agree).
+  ; :beholding-chora is the hyperpolymath estate id, CHORA-SPEC section 9 table.
+  :beholding-chora #uuid"0889b37b-defb-831f-973c-e119500db00e"
+  :repo-uuid #uuid"4f114668-94c6-8a71-a7b1-cd69345c08ad"
+
+  ; The canon pin (vocabulary/canon.adoc): standards canon.lock [canon] version
+  ; and the [canon.artifacts] criteria and gates hashes, copied from
+  ; metadatastician/standards at 151276d6. :lockstep-since is not emitted: it
+  ; is a per-repo adoption date with no source here (ledger C-1).
+  (canon
+    :version "2.1.5"
+    :criteria-sha256 "6a5aa8857bd0d0d58ef48827938ca17c251b6b854dacf59d306388d61694d82a"
+    :gates-sha256 "5c510bba025be718deebb12d0333bfe7db2da43c66578b728b1a334df65290b1")
+
+  ; ---- META.a2ml (family 2) ------------------------------------------------
+  ; No (meta …) clause: every source key sits under [metadata], and the family-2
+  ; table carries only version and last-updated there, which the source lacks.
+  ; The keys fail closed (ledger M-1 to M-5). Verbatim, for reference:
+  ;   [metadata] project = "valence-shell"   (the deed's :canonical-name)
+  ;   [metadata] author = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
+  ;   [metadata] license = "MPL-2.0"          (licence surface: owner only)
+  ;   [metadata] standard = "RSR 2026"
+  ;   header: "Converted from META.scm on 2026-03-15"
+
+  ; ---- ECOSYSTEM.a2ml (family 2) -------------------------------------------
+  ; [position] role "operational-shell-layer" has no table row (ledger E-2).
+  ; [architecture] (layer 1 "operational-shell"; semantics-layer echo-types;
+  ; receipts-layer ochrance), [bridges.echo-types], [bridges.ochrance] and
+  ; [bridge-entry-points] have no table row and are not [related-projects]
+  ; entries, so they fail closed (ledger E-3 to E-5). Their authority is
+  ; docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc and
+  ; .machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml: the bridge is
+  ; documentation-and-orientation-only, mechanised = false, for both
+  ; hyperpolymath/echo-types and hyperpolymath/ochrance.
+  (ecosystem
+    :project "valence-shell"
+    :ecosystem "hyperpolymath"
+    :position-type "component")
+
+  ; ---- AGENTIC.a2ml (family 4) ---------------------------------------------
+  ; The source has no [maintenance-integrity], [methodology] or
+  ; [automation-hooks], so no (integrity …), (methodology …) or (hooks …) is
+  ; emitted (ledger A-4).
+  ; [agent-constraints] is comment-carried and DIVERGES from template canon
+  ; (it adds the bridge forbidden moves), so D4-1 fails it closed. A populated
+  ; constraint is an edict for Mustfile.deed (A7 YL3), which is out of scope.
+  ; Kept verbatim (ledger A-2):
+  ;   - Never use banned language patterns (believe_me, unsafeCoerce, etc.)
+  ;   - Never commit secrets or credentials
+  ;   - Never use banned languages (TypeScript, Python, Go, etc.)
+  ;   - Never place state files in repository root (must be in .machine_readable/)
+  ;   - Never use AGPL license (use MPL-2.0)
+  ;   - Never violate the Echo Types / Ochrance bridge forbidden-moves:
+  ;       no "production-ready", no "mechanised Lean-to-Rust", no "RMO/GDPR beyond stubs",
+  ;       no "Echo Types proves Valence Shell implementation correctness",
+  ;       no "Ochrance cryptographic integrity" while upstream gaps remain.
+  ;     See docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc + MUST.contractile invariants-bridge.
+  ;     CI-enforced via .github/scripts/check-bridge-forbidden-phrases.sh.
+  ; [bridge-aware-rules] has no table row (ledger A-3). Verbatim:
+  ;   read-first = "docs/ECHO-TYPES-OCHRANCE-BRIDGE.adoc"
+  ;   manifest = ".machine_readable/ECHO_TYPES_OCHRANCE_BRIDGE.a2ml"
+  ;   status = "documentation-and-orientation-only"; mechanised = false
+  ;   echo-types-audit-required = true
+  ;   ci-enforcement-script = ".github/scripts/check-bridge-forbidden-phrases.sh"
+  ;   ci-workflow = ".github/workflows/bridge-forbidden-phrases.yml"
+  (agentic
+    :version "0.1.0"
+    :last-updated "2026-03-16"
+    (permissions :source #t :tests #t :docs #t :config #t :create-files #t))
+
+  ; ---- NEUROSYM.a2ml (family 4) --------------------------------------------
+  ; report-format: the source value "logtalk" is a retired format. The
+  ; family-4 migration rule rewrites it to "json" and never carries it across
+  ; (ledger N-2).
+  (neurosym
+    :version "0.1.0"
+    :last-updated "2026-03-16"
+    (hypatia
+      :scan-enabled #t
+      :scan-depth standard
+      :report-format "json"))
+
+  ; ---- PLAYBOOK.a2ml (family 4) --------------------------------------------
+  ; The three source sections hold no keys, only commented text, so they are
+  ; slot-preserved as empty clauses. Their comments, verbatim (ledger P-2, P-4):
+  ;   [deployment]        # method = "gitops"  # target = "container"
+  ;   [incident-response] 1. Check .machine_readable/STATE.a2ml for current status
+  ;                       2. Review recent commits and CI results
+  ;                       3. Run just validate to check compliance
+  ;   [release-process]   1. Update version in STATE.a2ml, META.a2ml
+  ;                       2. Run just quality (format, lint, test)
+  ;                       3. Tag and push
+  ; The source has no [docs-format] or [maintenance-operations] section and no
+  ; @profile line, so neither slot nor (profile …) is emitted (ledger P-3).
+  (playbook
+    :version "0.1.0"
+    :last-updated "2026-03-16"
+    (deployment)
+    (incident-response)
+    (release-process))
+
+  ; ---- STATE.a2ml (family 3, option B) -------------------------------------
+  ; Nothing is emitted (ledger S-1 to S-9). The lifecycle claim
+  ; ([metadata] status "active") duplicates the CLADE phase and belongs to the
+  ; (status …) clause of STATE.deed (A7 J15), fed from CLADE, which is out of
+  ; scope. [project-context] phase "advanced-research-prototype" is not a
+  ; maturity level (experimental alpha beta production lts), so no
+  ; (maturity …) is emitted: the owner picks the level. The journal sections,
+  ; [coq-proof-status], [dogfooding-status] and [crg] are archived, not
+  ; translated. Live proof status: docs/PROOF_HOLES_AUDIT.adoc and
+  ; EXPLAINME.adoc (Proof Ledger).
+
+  ; ---- 6a2/0-AI-MANIFEST.a2ml and 6a2/README.adoc ---------------------------
+  ; Directory manifest and directory README for the retired 6a2/ layout.
+  ; Archived only; they describe a layout that no longer exists (ledger G-1, R-1).
+
+  ; ---- 6a2/anchor/ANCHOR.a2ml (A7 section 6.4) ------------------------------
+  ; No (anchor …) clause yet: the legacy anchor has no `authority`, which the
+  ; clause requires exactly once, and the translator never invents one. The
+  ; translation is incomplete until the owner supplies it (ledger AN-1).
+  ; Legacy fields and their A7 6.4 destinations:
+  ;   id "org.hyperpolymath.valence-shell" -> dropped; :repo-uuid is the id (AN-2)
+  ;   version "0.9.0" -> (anchor (metadata :version "0.9.0")) once the clause lands (AN-3)
+  ;   clade "unknown" -> dropped; placements come from chora-registry (AN-4)
+  ;   status "active" -> dropped; lifecycle is STATE.deed's (AN-5)
+  ;   ssg engine "casket", output_dir "public", boj_trigger true, cartridge "ssg-mcp"
+  ;     -> META.deed (ssg …) under J29; not emitted here (AN-6)
+  ;   parents "org.hyperpolymath.boj-server" -> ECOSYSTEM (related … :relationship parent);
+  ;     not emitted: the registry records valence-shell as standalone with no
+  ;     parent, so the owner rules first (AN-7)
+)
